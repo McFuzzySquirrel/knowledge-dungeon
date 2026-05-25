@@ -1,0 +1,24 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <rect width="256" height="256" fill="none"/>
+
+  <ellipse cx="128" cy="220" rx="45" ry="12" fill="rgba(0,0,0,0.25)"/>
+
+  <rect x="120" y="60" width="16" height="150" rx="6" fill="#5a3a1e"/>
+  <rect x="124" y="60" width="5" height="150" fill="#6b4524" opacity="0.6"/>
+
+  <rect x="114" y="48" width="28" height="14" rx="4" fill="#3f2a16"/>
+  <rect x="118" y="50" width="20" height="4" fill="#6b4524" opacity="0.5"/>
+
+  <g transform="translate(128,110) rotate(-8)">
+    <rect x="-70" y="-18" width="140" height="34" rx="8" fill="#7a4f2a" stroke="#2b1a0d" stroke-width="3"/>
+
+    <path d="M-65 -6 L60 -6" stroke="#3a2413" stroke-width="2" opacity="0.35"/>
+    <path d="M-65 6 L50 6" stroke="#3a2413" stroke-width="2" opacity="0.25"/>
+
+    <text x="0" y="5" text-anchor="middle" font-family="monospace" font-size="14" fill="#f2e2c4">EXIT</text>
+  </g>
+
+  <circle cx="110" cy="112" r="3" fill="#2b1a0d"/>
+  <circle cx="146" cy="112" r="3" fill="#2b1a0d"/>
+  <circle cx="128" cy="140" r="3" fill="#2b1a0d"/>
+</svg>

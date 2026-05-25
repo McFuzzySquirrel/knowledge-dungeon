@@ -2,11 +2,13 @@ import Phaser from 'phaser';
 import { DungeonScene } from '@/game/scenes/DungeonScene';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 import type { DungeonSceneEvents } from '@/game/scenes/DungeonScene';
+import type { PlayerClassId } from '@/game/systems/playerClasses';
 
 export interface CreateGameOptions {
   parent: HTMLElement;
   dungeonMap: DungeonMap;
   callbacks: DungeonSceneEvents;
+  playerClass?: PlayerClassId | null;
 }
 
 export function createGame(options: CreateGameOptions): Phaser.Game {
@@ -30,6 +32,7 @@ export function createGame(options: CreateGameOptions): Phaser.Game {
   game.scene.start('DungeonScene', {
     dungeonMap: options.dungeonMap,
     callbacks: options.callbacks,
+    playerClass: options.playerClass ?? null,
   });
 
   return game;

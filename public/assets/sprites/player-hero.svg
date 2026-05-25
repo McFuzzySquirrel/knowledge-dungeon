@@ -1,0 +1,120 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .outline {
+      stroke: #1a1a1a;
+      stroke-width: 2;
+      stroke-linejoin: round;
+      stroke-linecap: round;
+    }
+
+    #left-leg {
+      transform-origin: 50px 92px;
+      animation: walkLeft 0.5s infinite alternate ease-in-out;
+    }
+
+    #right-leg {
+      transform-origin: 78px 92px;
+      animation: walkRight 0.5s infinite alternate ease-in-out;
+    }
+
+    #left-arm {
+      transform-origin: 44px 62px;
+      animation: armLeft 0.5s infinite alternate ease-in-out;
+    }
+
+    #right-arm {
+      transform-origin: 84px 62px;
+      animation: armRight 0.5s infinite alternate ease-in-out;
+    }
+
+    @keyframes walkLeft {
+      from { transform: rotate(-10deg); }
+      to { transform: rotate(10deg); }
+    }
+
+    @keyframes walkRight {
+      from { transform: rotate(10deg); }
+      to { transform: rotate(-10deg); }
+    }
+
+    @keyframes armLeft {
+      from { transform: rotate(8deg); }
+      to { transform: rotate(-8deg); }
+    }
+
+    @keyframes armRight {
+      from { transform: rotate(-8deg); }
+      to { transform: rotate(8deg); }
+    }
+  </style>
+
+  <ellipse cx="64" cy="112" rx="22" ry="8" fill="#00000033"/>
+
+  <g id="character">
+    <g id="legs">
+      <g id="left-leg">
+        <rect x="46" y="78" width="12" height="28" rx="3" fill="#5c4033" class="outline"/>
+        <rect x="44" y="102" width="16" height="8" rx="2" fill="#2f2f2f" class="outline"/>
+      </g>
+
+      <g id="right-leg">
+        <rect x="70" y="78" width="12" height="28" rx="3" fill="#5c4033" class="outline"/>
+        <rect x="68" y="102" width="16" height="8" rx="2" fill="#2f2f2f" class="outline"/>
+      </g>
+    </g>
+
+    <g id="torso">
+      <path
+        d="M44 42
+           L84 42
+           L92 82
+           L36 82 Z"
+        fill="#2e6b5c"
+        class="outline"
+      />
+    </g>
+
+    <rect x="40" y="68" width="48" height="8" rx="2" fill="#7b4a1e" class="outline"/>
+
+    <g id="arms">
+      <g id="left-arm">
+        <rect x="30" y="46" width="12" height="34" rx="4" fill="#2e6b5c" class="outline"/>
+      </g>
+
+      <g id="right-arm">
+        <rect x="86" y="46" width="12" height="34" rx="4" fill="#2e6b5c" class="outline"/>
+
+        <g id="weapon">
+          <rect x="102" y="34" width="4" height="44" fill="#bfc7ce" class="outline"/>
+          <rect x="98" y="74" width="12" height="5" rx="1" fill="#8b6b2e" class="outline"/>
+          <rect x="100" y="78" width="8" height="10" rx="2" fill="#5c4033" class="outline"/>
+        </g>
+      </g>
+    </g>
+
+    <g id="head">
+      <path
+        d="M64 12
+           C48 12 38 24 38 40
+           L38 52
+           C38 58 90 58 90 52
+           L90 40
+           C90 24 80 12 64 12 Z"
+        fill="#1f3d35"
+        class="outline"
+      />
+
+      <ellipse cx="64" cy="38" rx="18" ry="18" fill="#d9b08c" class="outline"/>
+      <circle cx="57" cy="38" r="2.5" fill="#111"/>
+      <circle cx="71" cy="38" r="2.5" fill="#111"/>
+
+      <path
+        d="M58 47 Q64 51 70 47"
+        stroke="#5a2d2d"
+        stroke-width="2"
+        fill="none"
+        stroke-linecap="round"
+      />
+    </g>
+  </g>
+</svg>

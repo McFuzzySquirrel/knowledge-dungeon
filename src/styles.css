@@ -158,25 +158,31 @@ textarea {
 
 .game-shell {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 360px;
-  grid-template-rows: auto 1fr auto;
-  grid-template-areas:
-    'hud hud'
-    'game panel'
-    'touch touch';
-  gap: 0;
+  position: relative;
+  display: block;
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .hud-rail {
-  grid-area: hud;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 20;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 10px 18px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-soft);
+  padding: 10px 14px;
+  background: rgba(22, 26, 38, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
 }
 
 .hud-stat {
@@ -197,10 +203,9 @@ textarea {
 }
 
 .game-canvas {
-  grid-area: game;
-  position: relative;
+  position: absolute;
+  inset: 0;
   background: #10131a;
-  min-height: 360px;
 }
 
 .game-canvas-host {
@@ -217,12 +222,22 @@ textarea {
   border-radius: 8px;
   padding: 8px;
   pointer-events: none;
+  z-index: 15;
 }
 
 .room-panel {
-  grid-area: panel;
-  background: var(--bg-panel);
-  border-left: 1px solid var(--border-soft);
+  position: absolute;
+  top: 80px;
+  right: 12px;
+  bottom: 12px;
+  width: min(360px, 38vw);
+  z-index: 20;
+  background: rgba(22, 26, 38, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -271,12 +286,18 @@ textarea {
 }
 
 .touch-rail {
-  grid-area: touch;
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 15;
   display: flex;
   justify-content: space-between;
-  padding: 10px 18px;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--border-soft);
+  padding: 8px 12px;
+  background: rgba(22, 26, 38, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
   gap: 8px;
 }
 
@@ -408,13 +429,20 @@ textarea {
 }
 
 @media (max-width: 900px) {
-  .game-shell {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'hud'
-      'game'
-      'panel'
-      'touch';
-    grid-template-rows: auto 320px 240px auto;
+  .room-panel {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: 45vh;
+  }
+
+  .hud-rail {
+    flex-wrap: wrap;
+  }
+
+  .touch-rail {
+    bottom: calc(45vh + 24px);
   }
 }

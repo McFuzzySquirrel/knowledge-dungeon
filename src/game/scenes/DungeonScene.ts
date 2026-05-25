@@ -6,6 +6,8 @@
  */
 import Phaser from 'phaser';
 import type { DungeonMap, DungeonRoom } from '@/game/systems/dungeonTypes';
+import type { PlayerClassId } from '@/game/systems/playerClasses';
+import { isEditableElementFocused } from '@/ui/utils/editableElement';
 
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
@@ -14,10 +16,31 @@ export interface DungeonSceneEvents {
 
 const PLAYER_SPEED = 160;
 
+/**
+ * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
+ * (copied from the repo-dungeon project) and are served at the absolute
+ * URL `/assets/sprites/...` by Vite. Fall back to `player.svg` when no
+ * class is selected.
+ */
+const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
+  scholar: '/assets/sprites/player-hero.svg',
+  cartographer: '/assets/sprites/player-explorer.svg',
+  archivist: '/assets/sprites/player-archivist.svg',
+};
+const PLAYER_SPRITE_FALLBACK = '/assets/sprites/player.svg';
+const SIGNPOST_SPRITE = '/assets/sprites/signpost.svg';
+
+const PLAYER_TEXTURE_KEY = 'kd-player';
+const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
+const PLAYER_SPRITE_SIZE = 32;
+const SIGNPOST_SPRITE_SIZE = 28;
+// Square collider, tighter than the rendered sprite so movement feels right.
+const PLAYER_COLLIDER_SIZE = 16;
+
 export class DungeonScene extends Phaser.Scene {
   private dungeonMap: DungeonMap | null = null;
   private callbacks: DungeonSceneEvents | null = null;
-  private player: Phaser.GameObjects.Rectangle | null = null;
+  private player: Phaser.GameObjects.Image | null = null;
   private playerBody: Phaser.Physics.Arcade.Body | null = null;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
   private wasdKeys: Record<string, Phaser.Input.Keyboard.Key> = {};
@@ -26,14 +49,36 @@ export class DungeonScene extends Phaser.Scene {
   private roomLabels = new Map<string, Phaser.GameObjects.Text>();
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
+  private playerClass: PlayerClassId | null = null;
 
   constructor() {
     super({ key: 'DungeonScene' });
   }
 
-  init(data: { dungeonMap: DungeonMap; callbacks: DungeonSceneEvents }): void {
+  init(data: {
+    dungeonMap: DungeonMap;
+    callbacks: DungeonSceneEvents;
+    playerClass?: PlayerClassId | null;
+  }): void {
     this.dungeonMap = data.dungeonMap;
     this.callbacks = data.callbacks;
+    this.playerClass = data.playerClass ?? null;
+  }
+
+  preload(): void {
+    const playerSprite = this.playerClass
+      ? PLAYER_SPRITE_BY_CLASS[this.playerClass]
+      : PLAYER_SPRITE_FALLBACK;
+    // Phaser auto-detects SVG when the URL ends in `.svg`. Use `svg` loader
+    // explicitly so the rasterised size matches our target render dimensions.
+    this.load.svg(PLAYER_TEXTURE_KEY, playerSprite, {
+      width: PLAYER_SPRITE_SIZE,
+      height: PLAYER_SPRITE_SIZE,
+    });
+    this.load.svg(SIGNPOST_TEXTURE_KEY, SIGNPOST_SPRITE, {
+      width: SIGNPOST_SPRITE_SIZE,
+      height: SIGNPOST_SPRITE_SIZE,
+    });
   }
 
   create(): void {
@@ -52,18 +97,48 @@ export class DungeonScene extends Phaser.Scene {
     if (!root) return;
     const start = this.roomCenter(root, map.tileSize);
 
-    this.player = this.add.rectangle(start.x, start.y, 16, 16, 0xf2c879).setDepth(10);
+    // Mark the root room with a signpost so the spawn location is obvious.
+    this.add
+      .image(start.x, start.y - root.height * map.tileSize * 0.3, SIGNPOST_TEXTURE_KEY)
+      .setDepth(4);
+
+    this.player = this.add.image(start.x, start.y, PLAYER_TEXTURE_KEY).setDepth(10);
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+    // Keep the collider tighter than the rendered sprite for nicer movement.
+    this.playerBody.setSize(PLAYER_COLLIDER_SIZE, PLAYER_COLLIDER_SIZE);
+    this.playerBody.setOffset(
+      (this.player.width - PLAYER_COLLIDER_SIZE) / 2,
+      (this.player.height - PLAYER_COLLIDER_SIZE) / 2,
+    );
     this.playerBody.setCollideWorldBounds(false);
 
     if (this.input.keyboard) {
+      // `enableCapture = false` so Phaser does not call preventDefault on these
+      // keys at the window level. Otherwise typing W/A/S/D/E or arrow keys in
+      // a focused <input>/<textarea> would be swallowed by the game.
       this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasdKeys = this.input.keyboard.addKeys('W,A,S,D') as Record<
+      this.wasdKeys = this.input.keyboard.addKeys('W,A,S,D', false) as Record<
         string,
         Phaser.Input.Keyboard.Key
       >;
-      this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+      this.interactKey = this.input.keyboard.addKey(
+        Phaser.Input.Keyboard.KeyCodes.E,
+        false,
+      );
+      // Belt and suspenders: explicitly clear any pre-registered captures for
+      // movement / interact keys so focused form fields receive them too.
+      this.input.keyboard.removeCapture([
+        Phaser.Input.Keyboard.KeyCodes.W,
+        Phaser.Input.Keyboard.KeyCodes.A,
+        Phaser.Input.Keyboard.KeyCodes.S,
+        Phaser.Input.Keyboard.KeyCodes.D,
+        Phaser.Input.Keyboard.KeyCodes.E,
+        Phaser.Input.Keyboard.KeyCodes.UP,
+        Phaser.Input.Keyboard.KeyCodes.DOWN,
+        Phaser.Input.Keyboard.KeyCodes.LEFT,
+        Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      ]);
     }
 
     // Configure world & camera bounds based on the dungeon layout.
@@ -86,10 +161,19 @@ export class DungeonScene extends Phaser.Scene {
     let vx = 0;
     let vy = 0;
 
-    const left = this.cursors?.left?.isDown || this.wasdKeys.A?.isDown;
-    const right = this.cursors?.right?.isDown || this.wasdKeys.D?.isDown;
-    const up = this.cursors?.up?.isDown || this.wasdKeys.W?.isDown;
-    const down = this.cursors?.down?.isDown || this.wasdKeys.S?.isDown;
+    // Suspend movement & interact handling when the user is typing into a text
+    // input, textarea, select, or contenteditable element. Without this guard
+    // movement keys ("wasd", arrow keys) and the "e" interact key would
+    // double-fire as both gameplay input and text input.
+    const typingInTextField = isEditableElementFocused();
+
+    const left =
+      !typingInTextField && (this.cursors?.left?.isDown || this.wasdKeys.A?.isDown);
+    const right =
+      !typingInTextField && (this.cursors?.right?.isDown || this.wasdKeys.D?.isDown);
+    const up = !typingInTextField && (this.cursors?.up?.isDown || this.wasdKeys.W?.isDown);
+    const down =
+      !typingInTextField && (this.cursors?.down?.isDown || this.wasdKeys.S?.isDown);
 
     if (left) vx -= 1;
     if (right) vx += 1;
@@ -112,7 +196,11 @@ export class DungeonScene extends Phaser.Scene {
       this.enterRoom(room.roomId);
     }
 
-    if (this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+    if (
+      !typingInTextField &&
+      this.interactKey &&
+      Phaser.Input.Keyboard.JustDown(this.interactKey)
+    ) {
       if (this.currentRoomId) {
         this.callbacks?.onInteract(this.currentRoomId);
       }

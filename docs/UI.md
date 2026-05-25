@@ -18,13 +18,22 @@ This is the entry point for every session and determines how the rest of the UI 
 
 ![Main game shell](./assets/ui/game-screen.png)
 
-The game shell combines several persistent UI regions:
+The game shell combines several persistent UI regions, all rendered as
+**floating overlays** above a full-canvas Phaser scene so the dungeon map
+gets the maximum amount of screen space:
 
-- **Top HUD:** subject, room count, XP/rank, active phase, help button.
-- **Center gameplay canvas:** Phaser dungeon movement and interactions.
-- **Minimap:** quick room-location awareness while navigating.
-- **Right room panel:** topic metadata, child-room creation, and encounter access.
-- **Touch controls:** mobile-friendly directional/input buttons.
+- **Top HUD (floating):** subject, room count, XP/rank, active phase, help button.
+- **Center gameplay canvas:** Phaser dungeon movement and interactions. The
+  player is drawn with a class-themed SVG sprite (Scholar / Cartographer /
+  Archivist) and the spawn room is marked with a signpost.
+- **Minimap (bottom-left, floating):** quick room-location awareness.
+- **Right room panel (floating):** topic metadata, child-room creation, and
+  encounter access.
+- **Touch controls (bottom-right, floating):** mobile-friendly directional /
+  interact buttons.
+
+See [`CUSTOMIZATION.md`](./CUSTOMIZATION.md) for how to swap in your own
+sprites and tilesets.
 
 ## 3) Help overlay
 
