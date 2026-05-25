@@ -54,6 +54,10 @@ npm run package:electron  # local Electron package (no signing)
 | Interact (open encounter / mark reviewed) | `E` | `Interact` button |
 | Toggle help | `?` | — |
 
+## UI docs
+
+- [UI walkthrough with screenshots](./docs/UI.md)
+
 ## Project structure
 
 ```
