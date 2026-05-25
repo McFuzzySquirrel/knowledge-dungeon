@@ -232,6 +232,22 @@ export class DungeonScene extends Phaser.Scene {
   }
 }
 
+// Input types that aren't text-like; focusing one of these should NOT
+// suppress gameplay keys. Hoisted out of the per-frame check to avoid
+// re-allocating the Set on every game tick.
+const NON_TEXT_INPUT_TYPES = new Set([
+  'checkbox',
+  'radio',
+  'button',
+  'submit',
+  'reset',
+  'range',
+  'color',
+  'file',
+  'image',
+  'hidden',
+]);
+
 /**
  * True when the active DOM element is a user-editable form control —
  * `<input>` (except non-text types like checkbox/button), `<textarea>`,
@@ -247,20 +263,6 @@ function isEditableElementFocused(): boolean {
   if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
   if (tag === 'INPUT') {
     const type = (el as HTMLInputElement).type?.toLowerCase();
-    // Treat any text-like input as editable. Non-text inputs (checkbox,
-    // radio, button, submit, range, etc.) should not suppress gameplay keys.
-    const NON_TEXT_INPUT_TYPES = new Set([
-      'checkbox',
-      'radio',
-      'button',
-      'submit',
-      'reset',
-      'range',
-      'color',
-      'file',
-      'image',
-      'hidden',
-    ]);
     return !NON_TEXT_INPUT_TYPES.has(type ?? '');
   }
   return false;
