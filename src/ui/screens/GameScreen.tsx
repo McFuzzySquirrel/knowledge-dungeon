@@ -12,16 +12,23 @@ import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { TouchControls } from '@/ui/components/TouchControls';
 import { Minimap } from '@/ui/components/Minimap';
 import { HelpOverlay } from '@/ui/components/HelpOverlay';
+import { FullMapView } from '@/ui/components/FullMapView';
 import { isEditableElement } from '@/ui/utils/editableElement';
+import { setActiveSubjectId as persistActiveSubjectId } from '@/services/persistence/subjectPersistence';
 
 export function GameScreen(): JSX.Element {
   const snapshot = useSubjectStore((s) => s.snapshot);
+  const setSnapshot = useSubjectStore((s) => s.setSnapshot);
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
   const openNoteEditor = useSessionStore((s) => s.openNoteEditor);
   const focusedRoomId = useSessionStore((s) => s.focusedRoomId);
   const phase = useSessionStore((s) => s.phase);
   const setPhase = useSessionStore((s) => s.setPhase);
   const selectedClass = useSessionStore((s) => s.selectedClass);
+  const setActiveSubjectId = useSessionStore((s) => s.setActiveSubjectId);
+  const isMapViewOpen = useSessionStore((s) => s.isMapViewOpen);
+  const openMapView = useSessionStore((s) => s.openMapView);
+  const closeMapView = useSessionStore((s) => s.closeMapView);
   const recordReviewPass = useSubjectStore((s) => s.recordReviewPass);
   const xpTotal = useProgressionStore((s) => s.xpTotal);
   const rank = useProgressionStore((s) => s.rank);
@@ -76,11 +83,28 @@ export function GameScreen(): JSX.Element {
       if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setHelpOpen((open) => !open);
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        if (useSessionStore.getState().isMapViewOpen) {
+          closeMapView();
+        } else {
+          openMapView();
+        }
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [closeMapView, openMapView]);
+
+  function handleHome() {
+    // Clear the active subject so <App> falls back to <WelcomeScreen>, where
+    // the user can pick an existing subject or create a new one.
+    closeMapView();
+    setFocusedRoomId(null);
+    setActiveSubjectId(null);
+    persistActiveSubjectId(null);
+    setSnapshot(null);
+  }
 
   if (!snapshot || !dungeonMap) {
     return <div>Loading dungeon…</div>;
@@ -98,6 +122,8 @@ export function GameScreen(): JSX.Element {
         phase={phase}
         onPhaseChange={setPhase}
         onHelp={() => setHelpOpen(true)}
+        onOpenMap={openMapView}
+        onHome={handleHome}
       />
 
       <div className="game-canvas">
@@ -114,6 +140,13 @@ export function GameScreen(): JSX.Element {
       <TouchControls onInteract={() => sceneRef.current?.triggerInteract()} />
 
       <NoteEditorModal />
+      {isMapViewOpen ? (
+        <FullMapView
+          dungeonMap={dungeonMap}
+          focusedRoomId={focusedRoomId}
+          onClose={closeMapView}
+        />
+      ) : null}
       {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
     </div>
   );

@@ -9,6 +9,8 @@ interface HudProps {
   phase: GamePhase;
   onPhaseChange: (phase: GamePhase) => void;
   onHelp: () => void;
+  onOpenMap: () => void;
+  onHome: () => void;
 }
 
 const PHASE_LABELS: Record<GamePhase, string> = {
@@ -25,6 +27,8 @@ export function Hud({
   phase,
   onPhaseChange,
   onHelp,
+  onOpenMap,
+  onHome,
 }: HudProps): JSX.Element {
   return (
     <div className="hud-rail" role="banner">
@@ -59,6 +63,12 @@ export function Hud({
             {PHASE_LABELS[p]}
           </button>
         ))}
+        <button type="button" onClick={onOpenMap} aria-label="Open full map">
+          Map
+        </button>
+        <button type="button" onClick={onHome} aria-label="Return to subject selection">
+          Home
+        </button>
         <button type="button" onClick={onHelp} aria-label="Open help">
           ?
         </button>

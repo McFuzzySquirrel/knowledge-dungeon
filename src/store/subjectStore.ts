@@ -15,6 +15,7 @@ import {
   addCrossLink,
   addLinkedRooms,
   createRootDungeon,
+  removeRoom,
   setRoomStatus,
   propagateRevalidationAfterGraphMutation,
 } from '@/core/graph';
@@ -33,6 +34,7 @@ export interface SubjectState {
   initSubject: (input: { subjectName: string; rootTopic: string }) => Promise<SubjectSnapshot>;
   loadSubject: (subjectId: string) => Promise<SubjectSnapshot | null>;
   addChildRoom: (parentRoomId: string, topic: string) => Promise<void>;
+  removeRoom: (roomId: string) => Promise<void>;
   addCrossLinkBetween: (fromRoomId: string, toRoomId: string) => Promise<void>;
   submitNote: (
     roomId: string,
@@ -147,6 +149,28 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     });
     const finalDungeon = propagated.ok ? propagated.value.dungeon : result.value.dungeon;
     const next = withRooms(current, finalDungeon, [newRoom]);
+    set({ snapshot: next, lastError: null });
+    await persist(next);
+  },
+
+  async removeRoom(roomId) {
+    const current = get().snapshot;
+    if (!current) return;
+    const result = removeRoom(current.dungeon, { roomId, nowIso: nowIso() });
+    if (!result.ok) {
+      set({ lastError: result.error.message });
+      return;
+    }
+    const propagated = propagateRevalidationAfterGraphMutation({
+      dungeon: result.value.dungeon,
+      touchedRoomIds: result.value.touchedRoomIds,
+      nowIso: nowIso(),
+    });
+    const finalDungeon = propagated.ok ? propagated.value.dungeon : result.value.dungeon;
+    // withRooms drops metadata for any rooms that are no longer in the
+    // dungeon (including cascade-removed descendants), so we only need to
+    // pass in the updated dungeon.
+    const next = withRooms(current, finalDungeon);
     set({ snapshot: next, lastError: null });
     await persist(next);
   },

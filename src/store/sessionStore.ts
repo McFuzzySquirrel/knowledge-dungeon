@@ -15,12 +15,15 @@ export interface SessionState {
   focusedRoomId: string | null;
   isNoteEditorOpen: boolean;
   noteEditorRoomId: string | null;
+  isMapViewOpen: boolean;
   setActiveSubjectId: (id: string | null) => void;
   setPhase: (phase: GamePhase) => void;
   setSelectedClass: (id: PlayerClassId | null) => void;
   setFocusedRoomId: (id: string | null) => void;
   openNoteEditor: (roomId: string) => void;
   closeNoteEditor: () => void;
+  openMapView: () => void;
+  closeMapView: () => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -30,6 +33,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   focusedRoomId: null,
   isNoteEditorOpen: false,
   noteEditorRoomId: null,
+  isMapViewOpen: false,
   setActiveSubjectId: (activeSubjectId) => set({ activeSubjectId }),
   setPhase: (phase) => set({ phase }),
   setSelectedClass: (selectedClass) => set({ selectedClass }),
@@ -37,4 +41,6 @@ export const useSessionStore = create<SessionState>((set) => ({
   openNoteEditor: (noteEditorRoomId) =>
     set({ noteEditorRoomId, isNoteEditorOpen: true }),
   closeNoteEditor: () => set({ isNoteEditorOpen: false, noteEditorRoomId: null }),
+  openMapView: () => set({ isMapViewOpen: true }),
+  closeMapView: () => set({ isMapViewOpen: false }),
 }));

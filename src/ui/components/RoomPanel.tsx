@@ -20,7 +20,9 @@ interface RoomPanelProps {
 export function RoomPanel({ snapshot, focusedRoom, onInteract }: RoomPanelProps): JSX.Element {
   const [tab, setTab] = useState<RoomTab>('topic');
   const addChildRoom = useSubjectStore((s) => s.addChildRoom);
+  const removeRoom = useSubjectStore((s) => s.removeRoom);
   const phase = useSessionStore((s) => s.phase);
+  const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
   const [draftTopic, setDraftTopic] = useState('');
 
   const unlock = useMemo(
@@ -142,6 +144,28 @@ export function RoomPanel({ snapshot, focusedRoom, onInteract }: RoomPanelProps)
                 >
                   Add child room
                 </button>
+                {focusedRoom.roomId !== snapshot.dungeon.rootRoomId ? (
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => {
+                      const ok = window.confirm(
+                        `Delete "${focusedRoom.topic}"? Any child topics that become disconnected will also be removed.`,
+                      );
+                      if (!ok) return;
+                      const id = focusedRoom.roomId;
+                      void removeRoom(id).then(() => {
+                        setFocusedRoomId(null);
+                      });
+                    }}
+                  >
+                    Delete topic
+                  </button>
+                ) : (
+                  <p style={{ color: 'var(--text-muted)', fontSize: 12, margin: 0 }}>
+                    The root topic cannot be deleted.
+                  </p>
+                )}
               </div>
             ) : null}
             <div style={{ marginTop: 16 }}>
