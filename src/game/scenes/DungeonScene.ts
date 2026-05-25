@@ -7,6 +7,7 @@
 import Phaser from 'phaser';
 import type { DungeonMap, DungeonRoom } from '@/game/systems/dungeonTypes';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
+import { isEditableElementFocused } from '@/ui/utils/editableElement';
 
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
@@ -31,6 +32,10 @@ const SIGNPOST_SPRITE = '/assets/sprites/signpost.svg';
 
 const PLAYER_TEXTURE_KEY = 'kd-player';
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
+const PLAYER_SPRITE_SIZE = 32;
+const SIGNPOST_SPRITE_SIZE = 28;
+// Square collider, tighter than the rendered sprite so movement feels right.
+const PLAYER_COLLIDER_SIZE = 16;
 
 export class DungeonScene extends Phaser.Scene {
   private dungeonMap: DungeonMap | null = null;
@@ -66,8 +71,14 @@ export class DungeonScene extends Phaser.Scene {
       : PLAYER_SPRITE_FALLBACK;
     // Phaser auto-detects SVG when the URL ends in `.svg`. Use `svg` loader
     // explicitly so the rasterised size matches our target render dimensions.
-    this.load.svg(PLAYER_TEXTURE_KEY, playerSprite, { width: 32, height: 32 });
-    this.load.svg(SIGNPOST_TEXTURE_KEY, SIGNPOST_SPRITE, { width: 28, height: 28 });
+    this.load.svg(PLAYER_TEXTURE_KEY, playerSprite, {
+      width: PLAYER_SPRITE_SIZE,
+      height: PLAYER_SPRITE_SIZE,
+    });
+    this.load.svg(SIGNPOST_TEXTURE_KEY, SIGNPOST_SPRITE, {
+      width: SIGNPOST_SPRITE_SIZE,
+      height: SIGNPOST_SPRITE_SIZE,
+    });
   }
 
   create(): void {
@@ -95,10 +106,10 @@ export class DungeonScene extends Phaser.Scene {
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     // Keep the collider tighter than the rendered sprite for nicer movement.
-    this.playerBody.setSize(16, 16);
+    this.playerBody.setSize(PLAYER_COLLIDER_SIZE, PLAYER_COLLIDER_SIZE);
     this.playerBody.setOffset(
-      (this.player.width - 16) / 2,
-      (this.player.height - 16) / 2,
+      (this.player.width - PLAYER_COLLIDER_SIZE) / 2,
+      (this.player.height - PLAYER_COLLIDER_SIZE) / 2,
     );
     this.playerBody.setCollideWorldBounds(false);
 
@@ -275,42 +286,6 @@ export class DungeonScene extends Phaser.Scene {
     this.currentRoomId = roomId;
     this.callbacks?.onRoomEntered(roomId);
   }
-}
-
-// Input types that aren't text-like; focusing one of these should NOT
-// suppress gameplay keys. Hoisted out of the per-frame check to avoid
-// re-allocating the Set on every game tick.
-const NON_TEXT_INPUT_TYPES = new Set([
-  'checkbox',
-  'radio',
-  'button',
-  'submit',
-  'reset',
-  'range',
-  'color',
-  'file',
-  'image',
-  'hidden',
-]);
-
-/**
- * True when the active DOM element is a user-editable form control —
- * `<input>` (except non-text types like checkbox/button), `<textarea>`,
- * `<select>`, or any element marked `contenteditable`. Used to suppress
- * gameplay keyboard handling while the user is typing into a panel field.
- */
-function isEditableElementFocused(): boolean {
-  if (typeof document === 'undefined') return false;
-  const el = document.activeElement as HTMLElement | null;
-  if (!el) return false;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName;
-  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (tag === 'INPUT') {
-    const type = (el as HTMLInputElement).type?.toLowerCase();
-    return !NON_TEXT_INPUT_TYPES.has(type ?? '');
-  }
-  return false;
 }
 
 function statusColor(status: string): number {

@@ -12,6 +12,7 @@ import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { TouchControls } from '@/ui/components/TouchControls';
 import { Minimap } from '@/ui/components/Minimap';
 import { HelpOverlay } from '@/ui/components/HelpOverlay';
+import { isEditableElement } from '@/ui/utils/editableElement';
 
 export function GameScreen(): JSX.Element {
   const snapshot = useSubjectStore((s) => s.snapshot);
@@ -71,18 +72,7 @@ export function GameScreen(): JSX.Element {
     function onKey(e: KeyboardEvent) {
       // Ignore the help shortcut while typing in any text-input/textarea/
       // contenteditable so users can actually type a `?` character.
-      const target = e.target as HTMLElement | null;
-      if (target) {
-        const tag = target.tagName;
-        if (
-          target.isContentEditable ||
-          tag === 'INPUT' ||
-          tag === 'TEXTAREA' ||
-          tag === 'SELECT'
-        ) {
-          return;
-        }
-      }
+      if (isEditableElement(e.target)) return;
       if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setHelpOpen((open) => !open);

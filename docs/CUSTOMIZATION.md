@@ -82,11 +82,15 @@ preload() {
   live in `src/ui/`. Drop an `<img>` or background-image CSS into the
   appropriate component there.
 - **In-dungeon visuals** (room walls, player sprite, decorations) are drawn
-  by `src/game/scenes/DungeonScene.ts`. Today the scene draws rooms and the
-  player as solid `Phaser.GameObjects.Rectangle` / `Graphics` shapes. To use
-  custom artwork, add a `preload()` method to the scene that loads your
-  textures, then replace the `add.rectangle(...)` calls with
-  `add.image(...)` / `add.sprite(...)`.
+  by `src/game/scenes/DungeonScene.ts`. Room walls and corridors are still
+  drawn as `Phaser.GameObjects.Graphics` shapes, but the player and the
+  spawn-room signpost are loaded as SVGs in `DungeonScene.preload()` (via
+  `this.load.svg(textureKey, url, { width, height })`) and rendered with
+  `add.image(...)`. To swap in your own artwork, drop a replacement file
+  into `public/assets/sprites/` and either reuse the existing texture keys
+  or add a new `this.load.svg(...)` call and a matching `add.image(...)`
+  in `create()`. See `PLAYER_SPRITE_BY_CLASS` near the top of
+  `DungeonScene.ts` for the per-class sprite mapping.
 
 ### Tips
 
