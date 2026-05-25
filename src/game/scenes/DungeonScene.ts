@@ -58,12 +58,31 @@ export class DungeonScene extends Phaser.Scene {
     this.playerBody.setCollideWorldBounds(false);
 
     if (this.input.keyboard) {
+      // `enableCapture = false` so Phaser does not call preventDefault on these
+      // keys at the window level. Otherwise typing W/A/S/D/E or arrow keys in
+      // a focused <input>/<textarea> would be swallowed by the game.
       this.cursors = this.input.keyboard.createCursorKeys();
-      this.wasdKeys = this.input.keyboard.addKeys('W,A,S,D') as Record<
+      this.wasdKeys = this.input.keyboard.addKeys('W,A,S,D', false) as Record<
         string,
         Phaser.Input.Keyboard.Key
       >;
-      this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+      this.interactKey = this.input.keyboard.addKey(
+        Phaser.Input.Keyboard.KeyCodes.E,
+        false,
+      );
+      // Belt and suspenders: explicitly clear any pre-registered captures for
+      // movement / interact keys so focused form fields receive them too.
+      this.input.keyboard.removeCapture([
+        Phaser.Input.Keyboard.KeyCodes.W,
+        Phaser.Input.Keyboard.KeyCodes.A,
+        Phaser.Input.Keyboard.KeyCodes.S,
+        Phaser.Input.Keyboard.KeyCodes.D,
+        Phaser.Input.Keyboard.KeyCodes.E,
+        Phaser.Input.Keyboard.KeyCodes.UP,
+        Phaser.Input.Keyboard.KeyCodes.DOWN,
+        Phaser.Input.Keyboard.KeyCodes.LEFT,
+        Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      ]);
     }
 
     // Configure world & camera bounds based on the dungeon layout.
@@ -86,10 +105,19 @@ export class DungeonScene extends Phaser.Scene {
     let vx = 0;
     let vy = 0;
 
-    const left = this.cursors?.left?.isDown || this.wasdKeys.A?.isDown;
-    const right = this.cursors?.right?.isDown || this.wasdKeys.D?.isDown;
-    const up = this.cursors?.up?.isDown || this.wasdKeys.W?.isDown;
-    const down = this.cursors?.down?.isDown || this.wasdKeys.S?.isDown;
+    // Suspend movement & interact handling when the user is typing into a text
+    // input, textarea, select, or contenteditable element. Without this guard
+    // movement keys ("wasd", arrow keys) and the "e" interact key would
+    // double-fire as both gameplay input and text input.
+    const typingInTextField = isEditableElementFocused();
+
+    const left =
+      !typingInTextField && (this.cursors?.left?.isDown || this.wasdKeys.A?.isDown);
+    const right =
+      !typingInTextField && (this.cursors?.right?.isDown || this.wasdKeys.D?.isDown);
+    const up = !typingInTextField && (this.cursors?.up?.isDown || this.wasdKeys.W?.isDown);
+    const down =
+      !typingInTextField && (this.cursors?.down?.isDown || this.wasdKeys.S?.isDown);
 
     if (left) vx -= 1;
     if (right) vx += 1;
@@ -112,7 +140,11 @@ export class DungeonScene extends Phaser.Scene {
       this.enterRoom(room.roomId);
     }
 
-    if (this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+    if (
+      !typingInTextField &&
+      this.interactKey &&
+      Phaser.Input.Keyboard.JustDown(this.interactKey)
+    ) {
       if (this.currentRoomId) {
         this.callbacks?.onInteract(this.currentRoomId);
       }
@@ -198,6 +230,40 @@ export class DungeonScene extends Phaser.Scene {
     this.currentRoomId = roomId;
     this.callbacks?.onRoomEntered(roomId);
   }
+}
+
+/**
+ * True when the active DOM element is a user-editable form control —
+ * `<input>` (except non-text types like checkbox/button), `<textarea>`,
+ * `<select>`, or any element marked `contenteditable`. Used to suppress
+ * gameplay keyboard handling while the user is typing into a panel field.
+ */
+function isEditableElementFocused(): boolean {
+  if (typeof document === 'undefined') return false;
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') {
+    const type = (el as HTMLInputElement).type?.toLowerCase();
+    // Treat any text-like input as editable. Non-text inputs (checkbox,
+    // radio, button, submit, range, etc.) should not suppress gameplay keys.
+    const NON_TEXT_INPUT_TYPES = new Set([
+      'checkbox',
+      'radio',
+      'button',
+      'submit',
+      'reset',
+      'range',
+      'color',
+      'file',
+      'image',
+      'hidden',
+    ]);
+    return !NON_TEXT_INPUT_TYPES.has(type ?? '');
+  }
+  return false;
 }
 
 function statusColor(status: string): number {

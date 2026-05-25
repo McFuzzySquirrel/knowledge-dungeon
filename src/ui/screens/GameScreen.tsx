@@ -67,6 +67,20 @@ export function GameScreen(): JSX.Element {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Ignore the help shortcut while typing in any text-input/textarea/
+      // contenteditable so users can actually type a `?` character.
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          target.isContentEditable ||
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT'
+        ) {
+          return;
+        }
+      }
       if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setHelpOpen((open) => !open);

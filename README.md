@@ -57,6 +57,7 @@ npm run package:electron  # local Electron package (no signing)
 ## UI docs
 
 - [UI walkthrough with screenshots](./docs/UI.md)
+- [Customization: adding images and where subjects are saved](./docs/CUSTOMIZATION.md)
 
 ## Project structure
 
