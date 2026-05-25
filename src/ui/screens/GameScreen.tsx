@@ -20,6 +20,7 @@ export function GameScreen(): JSX.Element {
   const focusedRoomId = useSessionStore((s) => s.focusedRoomId);
   const phase = useSessionStore((s) => s.phase);
   const setPhase = useSessionStore((s) => s.setPhase);
+  const selectedClass = useSessionStore((s) => s.selectedClass);
   const recordReviewPass = useSubjectStore((s) => s.recordReviewPass);
   const xpTotal = useProgressionStore((s) => s.xpTotal);
   const rank = useProgressionStore((s) => s.rank);
@@ -39,6 +40,7 @@ export function GameScreen(): JSX.Element {
     const game = createGame({
       parent: containerRef.current,
       dungeonMap,
+      playerClass: selectedClass,
       callbacks: {
         onRoomEntered: (roomId) => setFocusedRoomId(roomId),
         onInteract: (roomId) => {
@@ -63,7 +65,7 @@ export function GameScreen(): JSX.Element {
     // We intentionally do NOT depend on `phase` here — phase reads happen at
     // interact-time via the closure update below; rebuilding Phaser on phase
     // changes would tear down the game state unnecessarily.
-  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, setFocusedRoomId]);
+  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

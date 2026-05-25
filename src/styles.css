@@ -161,6 +161,7 @@ textarea {
   position: relative;
   display: block;
   min-height: 0;
+  height: 100vh;
   overflow: hidden;
 }
 

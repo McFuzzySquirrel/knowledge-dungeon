@@ -6,6 +6,7 @@
  */
 import Phaser from 'phaser';
 import type { DungeonMap, DungeonRoom } from '@/game/systems/dungeonTypes';
+import type { PlayerClassId } from '@/game/systems/playerClasses';
 
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
@@ -14,10 +15,27 @@ export interface DungeonSceneEvents {
 
 const PLAYER_SPEED = 160;
 
+/**
+ * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
+ * (copied from the repo-dungeon project) and are served at the absolute
+ * URL `/assets/sprites/...` by Vite. Fall back to `player.svg` when no
+ * class is selected.
+ */
+const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
+  scholar: '/assets/sprites/player-hero.svg',
+  cartographer: '/assets/sprites/player-explorer.svg',
+  archivist: '/assets/sprites/player-archivist.svg',
+};
+const PLAYER_SPRITE_FALLBACK = '/assets/sprites/player.svg';
+const SIGNPOST_SPRITE = '/assets/sprites/signpost.svg';
+
+const PLAYER_TEXTURE_KEY = 'kd-player';
+const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
+
 export class DungeonScene extends Phaser.Scene {
   private dungeonMap: DungeonMap | null = null;
   private callbacks: DungeonSceneEvents | null = null;
-  private player: Phaser.GameObjects.Rectangle | null = null;
+  private player: Phaser.GameObjects.Image | null = null;
   private playerBody: Phaser.Physics.Arcade.Body | null = null;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
   private wasdKeys: Record<string, Phaser.Input.Keyboard.Key> = {};
@@ -26,14 +44,30 @@ export class DungeonScene extends Phaser.Scene {
   private roomLabels = new Map<string, Phaser.GameObjects.Text>();
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
+  private playerClass: PlayerClassId | null = null;
 
   constructor() {
     super({ key: 'DungeonScene' });
   }
 
-  init(data: { dungeonMap: DungeonMap; callbacks: DungeonSceneEvents }): void {
+  init(data: {
+    dungeonMap: DungeonMap;
+    callbacks: DungeonSceneEvents;
+    playerClass?: PlayerClassId | null;
+  }): void {
     this.dungeonMap = data.dungeonMap;
     this.callbacks = data.callbacks;
+    this.playerClass = data.playerClass ?? null;
+  }
+
+  preload(): void {
+    const playerSprite = this.playerClass
+      ? PLAYER_SPRITE_BY_CLASS[this.playerClass]
+      : PLAYER_SPRITE_FALLBACK;
+    // Phaser auto-detects SVG when the URL ends in `.svg`. Use `svg` loader
+    // explicitly so the rasterised size matches our target render dimensions.
+    this.load.svg(PLAYER_TEXTURE_KEY, playerSprite, { width: 32, height: 32 });
+    this.load.svg(SIGNPOST_TEXTURE_KEY, SIGNPOST_SPRITE, { width: 28, height: 28 });
   }
 
   create(): void {
@@ -52,9 +86,20 @@ export class DungeonScene extends Phaser.Scene {
     if (!root) return;
     const start = this.roomCenter(root, map.tileSize);
 
-    this.player = this.add.rectangle(start.x, start.y, 16, 16, 0xf2c879).setDepth(10);
+    // Mark the root room with a signpost so the spawn location is obvious.
+    this.add
+      .image(start.x, start.y - root.height * map.tileSize * 0.3, SIGNPOST_TEXTURE_KEY)
+      .setDepth(4);
+
+    this.player = this.add.image(start.x, start.y, PLAYER_TEXTURE_KEY).setDepth(10);
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+    // Keep the collider tighter than the rendered sprite for nicer movement.
+    this.playerBody.setSize(16, 16);
+    this.playerBody.setOffset(
+      (this.player.width - 16) / 2,
+      (this.player.height - 16) / 2,
+    );
     this.playerBody.setCollideWorldBounds(false);
 
     if (this.input.keyboard) {

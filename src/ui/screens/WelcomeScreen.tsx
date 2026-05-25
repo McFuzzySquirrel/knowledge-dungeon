@@ -1,7 +1,7 @@
 import { useState, type JSX } from 'react';
 import { useSessionStore, type GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
-import { PLAYER_CLASSES } from '@/game/systems/playerClasses';
+import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
 import { listSubjectIds } from '@/services/persistence/subjectPersistence';
 import { getElectronEnvironmentLabel } from '@/services/electronBridge';
 
@@ -22,6 +22,12 @@ const PHASES: { id: GamePhase; title: string; description: string }[] = [
     description: 'Once every room is cleared, revisit artifacts and self-check prompts.',
   },
 ];
+
+const CLASS_SPRITES: Record<PlayerClassId, string> = {
+  scholar: '/assets/sprites/player-hero.svg',
+  cartographer: '/assets/sprites/player-explorer.svg',
+  archivist: '/assets/sprites/player-archivist.svg',
+};
 
 export function WelcomeScreen(): JSX.Element {
   const phase = useSessionStore((s) => s.phase);
@@ -68,13 +74,22 @@ export function WelcomeScreen(): JSX.Element {
 
   return (
     <div className="welcome-screen">
-      <header>
-        <h1>Knowledge Dungeon</h1>
-        <p>
-          A local-first study dungeon-crawler. Build a subject as a mindmap of topic-rooms,
-          then defeat each room&rsquo;s encounter by writing structured notes. Currently running
-          in <strong>{env}</strong> mode.
-        </p>
+      <header style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <img
+          src="/assets/sprites/objects/readme-scroll.svg"
+          alt=""
+          width={72}
+          height={72}
+          style={{ flex: '0 0 auto' }}
+        />
+        <div>
+          <h1>Knowledge Dungeon</h1>
+          <p>
+            A local-first study dungeon-crawler. Build a subject as a mindmap of topic-rooms,
+            then defeat each room&rsquo;s encounter by writing structured notes. Currently running
+            in <strong>{env}</strong> mode.
+          </p>
+        </div>
       </header>
 
       <section>
@@ -106,7 +121,16 @@ export function WelcomeScreen(): JSX.Element {
               aria-pressed={selectedClass === cls.id}
               onClick={() => setSelectedClass(cls.id)}
             >
-              <h4>{cls.name}</h4>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <img
+                  src={CLASS_SPRITES[cls.id]}
+                  alt=""
+                  width={48}
+                  height={48}
+                  style={{ flex: '0 0 auto' }}
+                />
+                <h4 style={{ margin: 0 }}>{cls.name}</h4>
+              </div>
               <p>{cls.tagline}</p>
               <div className="perk">Perk: {cls.perk}</div>
             </button>
