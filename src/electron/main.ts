@@ -26,10 +26,6 @@ function sanitizeSubjectId(id: string): string {
   if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
     throw new Error('Invalid subject id');
   }
-
-  function exportStamp(): string {
-    return new Date().toISOString().replace(/[:.]/g, '-');
-  }
   return id;
 }
 
@@ -106,7 +102,8 @@ function registerKnowledgeBridgeHandlers(): void {
 
     const sourceRoot = dungeonDataRoot();
     await fs.mkdir(sourceRoot, { recursive: true });
-    const destination = path.join(result.filePaths[0], `knowledge-dungeon-subjects-${exportStamp()}`);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const destination = path.join(result.filePaths[0], `knowledge-dungeon-subjects-${stamp}`);
     await fs.cp(sourceRoot, destination, { recursive: true, force: true });
     return destination;
   });
@@ -123,7 +120,8 @@ function registerKnowledgeBridgeHandlers(): void {
     });
     if (result.canceled || result.filePaths.length === 0) return null;
 
-    const destination = path.join(result.filePaths[0], `${safeSubjectId}-${exportStamp()}`);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const destination = path.join(result.filePaths[0], `${safeSubjectId}-${stamp}`);
     await fs.cp(source, destination, { recursive: true, force: true });
     return destination;
   });
