@@ -11,6 +11,30 @@ quality gates. Defeated rooms drop loot, XP, and a generated artifact. When
 every room is cleared, the **Archaeologist** phase unlocks self-check prompts
 and review-streak tracking.
 
+## Screenshots
+
+### Home / subject management
+
+![Welcome screen showing phase selection, class selection, saved subject browsing, and admin section](./docs/assets/ui/welcome-screen.png)
+
+The home screen is where you:
+
+- choose the current phase and study archetype
+- create a new subject from a root topic
+- browse previously created subjects by **name** and room count
+- refresh the local subject list before jumping back in
+- access desktop-only admin/export helpers from the Admin section
+
+### In-dungeon study view
+
+![Main game shell with HUD, minimap, dungeon view, and room panel](./docs/assets/ui/game-screen.png)
+
+Once a subject is loaded, the in-dungeon view keeps the study loop visible in one place:
+
+- HUD for phase, progression, map, home, and help
+- Phaser dungeon canvas for movement and room navigation
+- minimap and room panel for topic context while exploring
+
 ## Tech stack
 
 - React 19, Phaser 3, Zustand
@@ -57,7 +81,7 @@ npm run package:electron  # local Electron package (no signing)
 ## UI docs
 
 - [UI walkthrough with screenshots](./docs/UI.md)
-- [Customization: adding images and where subjects are saved](./docs/CUSTOMIZATION.md)
+- [Customization: adding images, where subjects are saved, and desktop export helpers](./docs/CUSTOMIZATION.md)
 
 ## Project structure
 
@@ -83,7 +107,9 @@ docs/                    # PRD + progress notes
 
 - **Electron**: subjects are written to
   `<userData>/dungeon-data/<subject-id>/dungeon.json`, with timestamped
-  backups under `.backups/`.
+  backups under `.backups/`. The home-screen **Admin** section can open the
+  subjects root or export either the full subjects directory or an individual
+  subject folder for migration between machines.
 - **Web**: subjects fall back to `localStorage`; import/export is supported
   via the persistence facade.
 

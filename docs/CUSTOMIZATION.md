@@ -155,6 +155,15 @@ to the standard location for your platform:
 The directory is created on demand the first time you save a subject — see
 `dungeonDataRoot()` and `ensureSubjectRoot()` in `src/electron/main.ts`.
 
+If you're using the desktop build, the welcome screen's **Admin** section can
+help you work with this data without manually hunting for the folder:
+
+- **Open subjects folder** opens the local `dungeon-data` root in your file manager.
+- **Export subjects root** copies the entire local subjects directory into a
+  timestamped export folder you choose.
+- **Export &lt;subject&gt;** copies a single subject folder for moving one study
+  dungeon between machines.
+
 #### Web build (browser / `npm run dev`)
 
 There is no filesystem, so subjects are written to `localStorage` under a
