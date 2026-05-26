@@ -1,0 +1,111 @@
+# Persistence Strategies
+
+## Web (localStorage)
+
+Knowledge Dungeon works offline in the browser via `localStorage`.
+
+### How It Works
+
+1. **Session load** — Read subjects from localStorage keys
+2. **Session save** — Write dungeon.json to localStorage on every change
+3. **Session export** — Download subjects as ZIP file
+4. **Session import** — Upload ZIP to restore subjects
+
+### Storage Structure
+
+```
+localStorage['dungeon-{subjectId}'] = JSON.stringify(subjectSnapshot)
+```
+
+Each subject is a separate localStorage key, up to ~5MB total per domain.
+
+### Limitations
+
+- **Quota**: ~5–10MB per domain (browser-dependent)
+- **Persistence**: Cleared if user clears browser cache
+- **Sync**: No automatic backup
+- **Sharing**: Manual export/import between browsers
+
+### When to Use Web Storage
+
+- **Quick experiments** — Test the app before installing
+- **Privacy-first** — No server, all data stays local
+- **No installation** — Works anywhere with a browser
+- **Tablets/iPads** — When Electron isn't available
+
+## Electron (Filesystem)
+
+The desktop app stores subjects directly on disk.
+
+### How It Works
+
+1. **Load** — Read `dungeon-data` folder on startup
+2. **Save** — Write dungeon.json on every change
+3. **Backup** — Create timestamped backups in `.backups/`
+4. **Export** — Select subjects and save to external disk
+5. **Import** — Load subjects from external disk
+
+### Storage Structure
+
+```
+~<userData>/dungeon-data/
+  {subjectId}/
+    dungeon.json
+    rooms/
+      room-{roomId}/
+        notes.txt
+        artifact.md
+    .backups/
+      dungeon.json.20250115-103000
+```
+
+### Benefits
+
+- **Unlimited storage** — Filesystem has no quota
+- **Automatic backups** — Timestamped copies in `.backups/`
+- **Fast I/O** — No serialization overhead
+- **Transparent** — You can browse files directly
+
+### Persistence Service
+
+The app abstracts storage via `services/persistence/`:
+
+```typescript
+interface PersistenceAdapter {
+  loadSubjects(): Promise<SubjectSnapshot[]>;
+  saveSubject(subject: SubjectSnapshot): Promise<void>;
+  deleteSubject(id: string): Promise<void>;
+  exportSubject(id: string, path: string): Promise<void>;
+  importSubject(path: string): Promise<void>;
+}
+```
+
+Web uses localStorage adapter. Electron uses filesystem adapter. The core code doesn't care which.
+
+### Backups
+
+Electron automatically creates backups:
+
+```bash
+dungeon-data/{subjectId}/.backups/
+  dungeon.json.20250115-080000
+  dungeon.json.20250115-090000
+  dungeon.json.20250115-100000
+```
+
+Keeps 10 most recent. Older ones are pruned.
+
+## Future Strategies
+
+Possible future persistence layers:
+
+- **Cloud sync** — iCloud Drive, OneDrive, Dropbox integration
+- **Git-based** — Store subjects in a git repo, sync via GitHub
+- **Database** — Server-side storage for multi-device sync
+- **OPFS** — Origin Private File System (future web standard)
+
+The abstraction layer makes these feasible without rewriting core logic.
+
+## Design Insight
+
+Persistence is **abstracted away** from the domain logic. The graph, validation, and progression modules never directly call localStorage or filesystem APIs. This means we can swap storage backends without changing the app's core logic. It's a textbook application of the Adapter Pattern.

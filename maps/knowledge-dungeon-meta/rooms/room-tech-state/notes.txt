@@ -1,0 +1,60 @@
+# State Management: Zustand
+
+## Why Zustand?
+
+We chose Zustand over Redux or Context API because it:
+
+- **No boilerplate** — Define a store in 10 lines, not 100
+- **Works great with TypeScript** — Automatic type inference
+- **Small bundle** — ~2KB minified
+- **Devtools compatible** — Redux DevTools support if needed
+- **Flexible** — Use hooks, classes, or plain functions
+
+## The Three Stores
+
+### SessionStore
+Tracks the current play session:
+- Current subject ID
+- Current phase (Creator, Scribe, Archaeologist)
+- Current room being explored
+- Is a modal open?
+- Is help showing?
+
+**Used by:** Phaser for rendering, React for UI updates
+
+### SubjectStore
+Manages the dungeon graph and metadata:
+- Full `SubjectSnapshot` (dungeon + rooms)
+- Operations to add rooms, create edges, update room state
+- Derived selectors for "rooms by state"
+
+**Used by:** Game scenes (what room are we in?), panels (what's the current topic?), operations (apply validation)
+
+### ProgressionStore
+Tracks XP, ranks, badges:
+- Current XP total
+- Current rank
+- Badges earned
+- History of cleared rooms
+
+**Used by:** HUD to display progression, operations to award XP
+
+## Store Updates
+
+Stores use a **pure reducer pattern**:
+
+```
+store.setState((state) => ({
+  ...state,
+  newField: newValue
+}))
+```
+
+This ensures:
+- Immutability (no accidental mutations)
+- Predictability (old state → action → new state)
+- Debuggability (can replay actions)
+
+## Design Insight
+
+Zustand keeps state management **simple and obvious**. No middleware, no complex selectors, just stores and hooks. This makes the app easier to understand for new contributors.

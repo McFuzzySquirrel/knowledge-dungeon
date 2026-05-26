@@ -1,0 +1,36 @@
+# Overview
+
+## What is This?
+
+This mindmap explores the architecture, design, and implementation of Knowledge Dungeon—a study application that combines game mechanics with learning. You're literally learning *about* the game by playing *through* the game itself.
+
+## The Big Picture
+
+Knowledge Dungeon is a **local-first dungeon-crawler** where you:
+
+1. **Create** a subject as a mindmap of topic-rooms (Creator phase)
+2. **Explore** each room and write structured notes to "defeat" encounters (Scribe phase)  
+3. **Review** your work and track learning streaks (Archaeologist phase)
+
+## Key Insight
+
+The app is built in layers:
+
+- **Core domain** (graph, validation, progression) — pure domain logic, no dependencies
+- **Game systems** (Phaser scenes) — rendering, navigation, encounters
+- **UI & storage** (React, Zustand, electron bridge) — user interface and persistence
+
+## How to Explore This Map
+
+Follow the edges to discover:
+
+- **Architecture & Core Domains** — the brains of the app
+- **Technology Stack** — what we built it with  
+- **The Three Phases** — the study loop
+- **Game Systems** — how it renders and feels
+- **Features & Mechanics** — what you actually interact with
+- **Development Workflow** — how we maintain it
+
+## Key Design Pattern
+
+All learning happens via **structured notes with deterministic validation**. Every defeated room generates an artifact, tracks XP and ranks, and unlocks review opportunities in the final phase.

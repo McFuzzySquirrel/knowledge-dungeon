@@ -1,0 +1,97 @@
+# Note Validation System
+
+## How Validation Works
+
+When you submit notes in Scribe phase:
+
+1. **Input validation** — Check basic sanity (not empty, reasonable length)
+2. **Content analysis** — Parse the note text
+3. **Section detection** — Find required sections using regex + normalization
+4. **Criterion scoring** — Score each of five criteria (0–2 each)
+5. **Final decision** — Pass if all sections present OR manual confirmed
+6. **Feedback** — Show detailed breakdown
+
+## The Five Criteria
+
+### 1. Section Completeness
+- Required sections: Overview, Key Concepts, Key Operations, Design Insight
+- Scored by counting present sections
+- Perfect: all four present (score 2)
+
+### 2. Concept Term Coverage
+- Derives expected terms from room topic (e.g., "React" → ["React", "component", ...])
+- Scans note text for these terms
+- Perfect: most terms mentioned (score 2)
+
+### 3. Link References
+- Detects cross-links: `[[topic]]`, markdown links `[text](url)`, URLs, "see also"
+- Perfect: multiple references throughout (score 2)
+
+### 4. Recall Question Quality
+- Checks for interrogative sentences (?, "how", "why", "what")
+- Perfect: several recall questions indicating self-testing (score 2)
+
+### 5. Clarity & Readability
+- Average sentence length, vocabulary complexity
+- Perfect: clear, moderate sentences (score 2)
+
+## Scoring Breakdown
+
+Each criterion is scored 0–2:
+- **2** — Excellent, fully meets the criterion
+- **1** — Partial, somewhat meets it
+- **0** — Missing or failing
+
+**Example Output**:
+```
+Criterion Scores:
+  sectionCompleteness: 2 ✓
+  conceptTermCoverage: 1 (missing some key terms)
+  linkReferences: 2 ✓
+  recallQuestionQuality: 1 (few recall questions)
+  clarityReadability: 2 ✓
+
+Total: 8/10 → Quality Bonus: 8
+```
+
+## Pass/Fail Logic
+
+**Automatic Pass**:
+- All sections present AND word count ≥ 100
+
+**Manual Confirmation**:
+- If automatic check fails, use "I'm confident this is good" button
+- Overrides automatic fail, marks room as cleared
+- Still tracks score for reference
+
+## Why This Design
+
+The rubric is **designed to surface lazy submissions while rewarding depth**:
+
+- Forcing all sections ensures structure
+- Word count ensures substance
+- Concept coverage ensures topical relevance
+- Link references encourage connecting ideas
+- Clarity checks encourage good writing
+
+None of these are arbitrary—they reflect **learning science**: structured notes with connections and reflection are more memorable.
+
+## Integration
+
+`validateNote()` is called from the encounter system. Returns:
+
+```typescript
+{
+  wordCount: number,
+  requiredSectionsPresent: boolean,
+  criterionScores: {
+    sectionCompleteness: 0 | 1 | 2,
+    // ... etc
+  },
+  failedChecks: string[],
+  qualityBonus: 0–10,
+  finalPass: boolean
+}
+```
+
+The encounter modal displays this breakdown and lets you revise.

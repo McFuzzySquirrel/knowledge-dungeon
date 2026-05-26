@@ -1,0 +1,45 @@
+# Technology Stack
+
+## Overview
+
+Knowledge Dungeon uses a modern, integrated tech stack chosen for:
+
+- **Developer experience** — TypeScript, Vite, hot reload
+- **Performance** — Phaser for graphics, Zustand for state
+- **Distribution** — Electron for desktop packaging
+- **Quality** — Vitest, ESLint, TypeScript strict mode
+- **Maintainability** — Small dependencies, clear patterns
+
+## Key Choices
+
+### Frontend
+- **React 19** — Component-based UI, hooks for state
+- **Phaser 3** — 2D game engine for dungeon rendering
+- Together they create a hybrid: React for menus/panels, Phaser for the game world
+
+### State Management
+- **Zustand** — Lightweight alternative to Redux
+- Small bundle size, minimal boilerplate, easy to understand
+- Stores for session, subjects, and progression
+
+### Build Tooling
+- **Vite 8** — Lightning-fast bundler, near-instant hot reload
+- **TypeScript 5** — Full static typing with strict mode
+- **ESLint 9** — Flat config, modern linting rules
+- **Vitest** — Fast unit testing, compatible with Vite
+
+### Desktop
+- **Electron 42** — Package web app as native executable
+- **electron-builder** — Cross-platform packaging (macOS DMG, Windows NSIS, Linux AppImage/deb)
+
+## The Build Pipeline
+
+1. **Development** — Vite dev server with hot reload
+2. **Testing** — Run Vitest, ESLint checks
+3. **Production** — Vite builds web assets
+4. **Desktop** — Electron bundles web assets into native app
+5. **Distribution** — electron-builder creates platform-specific installers
+
+## Why This Stack
+
+This stack prioritizes **simplicity and developer joy** over maximum performance. A study app doesn't need cutting-edge performance, but it needs reliability and maintainability so the content creators can focus on learning design.

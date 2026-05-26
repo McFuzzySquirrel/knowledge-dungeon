@@ -1,0 +1,83 @@
+# Progression Tracking
+
+## XP System
+
+Every cleared room earns **experience points (XP)**:
+
+```
+Total XP Earned = Base XP (100) + Quality Bonus (0–10) + Streak Bonus (0–20)
+```
+
+### Base XP
+- Fixed per room: 100 XP
+- Same for all difficulty levels (not difficulty-scaled)
+- Encourages clearing all rooms equally
+
+### Quality Bonus
+- From validation rubric (0–10)
+- Reflects how well you explained the topic
+- High quality → more reward
+
+### Streak Bonus (Optional)
+- Bonus for clearing 3+ rooms in one session
+- Encourages focused study
+- Capped to prevent exploits
+
+## Rank Tiers
+
+As you earn XP, you unlock ranks:
+
+| Rank | XP Threshold | Badge Color |
+| --- | --- | --- |
+| Novice | 0 | Gray |
+| Apprentice | ~500 | Bronze |
+| Journeyman | ~2,000 | Silver |
+| Expert | ~5,000 | Gold |
+| Master | ~10,000 | Platinum |
+| Sage | ~20,000 | Diamond |
+
+Ranks are **cosmetic but motivating**. They show progress and provide achievable milestones.
+
+## Badges
+
+Special achievements unlock badges:
+
+### Phase Badges
+- **Creator Badge** — 90%+ of rooms designed (created during Creator phase)
+- **Scribe Badge** — All rooms cleared with passing notes (Scribe phase complete)
+- **Archaeologist Badge** — 2+ full review passes (Archaeologist phase complete)
+
+### Optional Skill Badges
+- **Consistency** — Maintain 5+ room quality streak (all 2/2 on multiple criteria)
+- **Connector** — Create 10+ cross-topic links
+- **Speedrunner** — Clear all rooms in one day
+
+Badges are **visible in HUD** and saved with the subject.
+
+## HUD Display
+
+The heads-up display shows:
+
+- **XP bar** — Progress toward next rank
+- **Current rank** — Large, prominent
+- **Badges earned** — Icons showing achievements
+- **Subject completion %** — How many rooms cleared?
+- **Time investment** — Estimated hours spent
+
+## Progression Snapshot
+
+Stored in `dungeon.json`:
+
+```json
+"progression": {
+  "xpTotal": 2500,
+  "rank": "Journeyman",
+  "badges": ["creator-badge", "scribe-badge"]
+}
+```
+
+Allows **cross-subject comparison** (if you're taking multiple classes).
+
+## Design Insight
+
+Progression tracking is **intrinsic motivation**, not external pressure. Ranks and badges celebrate achievement, not demand perfection. You always know how you're doing, and progress is steady and achievable—no sudden walls or arbitrary caps.
