@@ -58,20 +58,22 @@ export function WelcomeScreen(): JSX.Element {
   const env = getElectronEnvironmentLabel();
   const electronAvailable = isElectronAvailable();
 
-  async function refreshExistingSubjects() {
-    setLoadingExisting(true);
+  async function fetchExistingSubjects() {
     const ids = await listSubjectIds();
     const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
-    setExistingSubjects(
-      ids.map((id, index) => {
-        const snapshotAtIndex = snapshots[index];
-        return {
-          id,
-          subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
-          roomCount: snapshotAtIndex?.dungeon.rooms.length ?? 0,
-        };
-      }),
-    );
+    return ids.map((id, index) => {
+      const snapshotAtIndex = snapshots[index];
+      return {
+        id,
+        subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
+        roomCount: snapshotAtIndex?.dungeon.rooms.length ?? 0,
+      };
+    });
+  }
+
+  async function refreshExistingSubjects() {
+    setLoadingExisting(true);
+    setExistingSubjects(await fetchExistingSubjects());
     setLoadingExisting(false);
   }
 
@@ -79,19 +81,9 @@ export function WelcomeScreen(): JSX.Element {
     let cancelled = false;
     async function loadExisting() {
       setLoadingExisting(true);
-      const ids = await listSubjectIds();
-      const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
+      const subjects = await fetchExistingSubjects();
       if (cancelled) return;
-      setExistingSubjects(
-        ids.map((id, index) => {
-          const snapshotAtIndex = snapshots[index];
-          return {
-            id,
-            subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
-            roomCount: snapshotAtIndex?.dungeon.rooms.length ?? 0,
-          };
-        }),
-      );
+      setExistingSubjects(subjects);
       setLoadingExisting(false);
     }
     void loadExisting();
@@ -277,7 +269,7 @@ export function WelcomeScreen(): JSX.Element {
       </section>
 
       <section>
-        <h2>4. Admin</h2>
+        <h2>Admin</h2>
         {electronAvailable ? (
           <>
             <p>Use these tools to export your local subject data between machines.</p>
