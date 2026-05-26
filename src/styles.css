@@ -419,6 +419,76 @@ textarea {
   margin-top: 0;
 }
 
+button.danger {
+  background: rgba(255, 118, 118, 0.12);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+button.danger:hover {
+  background: rgba(255, 118, 118, 0.22);
+  border-color: var(--bad);
+}
+
+.full-map {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  width: min(1100px, 96vw);
+  height: min(800px, 90vh);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+
+.full-map-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.full-map-header h2 {
+  margin: 0;
+}
+
+.full-map-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.full-map-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.full-map-viewport:active {
+  cursor: grabbing;
+}
+
+.full-map-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: 0 0;
+  /* The transform set inline overrides this; translate(-50%, -50%) is just
+     a fallback so the map starts roughly centered before any pan. */
+  will-change: transform;
+}
+
+.full-map-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .help-overlay kbd {
   background: var(--bg-panel-soft);
   border: 1px solid var(--border-soft);

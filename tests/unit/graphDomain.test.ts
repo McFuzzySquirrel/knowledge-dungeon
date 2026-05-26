@@ -5,6 +5,7 @@ import {
   createRootDungeon,
   deriveTraversalSnapshot,
   propagateRevalidationAfterGraphMutation,
+  removeRoom,
 } from '@/core/graph';
 
 const NOW = '2026-01-01T00:00:00.000Z';
@@ -93,5 +94,67 @@ describe('graphDomain', () => {
     const snap = deriveTraversalSnapshot(dungeon);
     expect(snap.roomIdsByStatus.Created).toContain('room-root');
     expect(snap.unvisitedRoomIds).toContain('room-root');
+  });
+
+  it('removes a non-root room and any orphaned descendants', () => {
+    const dungeon = bootstrap();
+    const a = addLinkedRooms(dungeon, {
+      fromRoomId: 'room-root',
+      drafts: [{ roomId: 'room-a', topic: 'Subspaces' }],
+      nowIso: NOW,
+    });
+    if (!a.ok) throw new Error('add a failed');
+    const b = addLinkedRooms(a.value.dungeon, {
+      fromRoomId: 'room-a',
+      drafts: [{ roomId: 'room-b', topic: 'Bases' }],
+      nowIso: NOW,
+    });
+    if (!b.ok) throw new Error('add b failed');
+
+    const removed = removeRoom(b.value.dungeon, { roomId: 'room-a', nowIso: NOW });
+    expect(removed.ok).toBe(true);
+    if (!removed.ok) return;
+    // room-b is only reachable via room-a, so it should be cascade-removed.
+    expect(removed.value.removedRoomIds).toEqual(['room-a', 'room-b']);
+    expect(removed.value.dungeon.rooms.map((r) => r.roomId)).toEqual(['room-root']);
+    expect(removed.value.dungeon.edges).toHaveLength(0);
+  });
+
+  it('refuses to remove the root room', () => {
+    const dungeon = bootstrap();
+    const result = removeRoom(dungeon, { roomId: 'room-root', nowIso: NOW });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('INVALID_OPERATION');
+  });
+
+  it('keeps descendants that remain reachable via a cross-link when a room is removed', () => {
+    const dungeon = bootstrap();
+    const a = addLinkedRooms(dungeon, {
+      fromRoomId: 'room-root',
+      drafts: [{ roomId: 'room-a', topic: 'A' }],
+      nowIso: NOW,
+    });
+    if (!a.ok) throw new Error('add a failed');
+    const b = addLinkedRooms(a.value.dungeon, {
+      fromRoomId: 'room-a',
+      drafts: [{ roomId: 'room-b', topic: 'B' }],
+      nowIso: NOW,
+    });
+    if (!b.ok) throw new Error('add b failed');
+    // Cross-link from root → b, so b stays reachable when a is removed.
+    const linked = addCrossLink(b.value.dungeon, {
+      fromRoomId: 'room-root',
+      toRoomId: 'room-b',
+      nowIso: NOW,
+    });
+    if (!linked.ok) throw new Error('cross-link failed');
+
+    const removed = removeRoom(linked.value.dungeon, { roomId: 'room-a', nowIso: NOW });
+    expect(removed.ok).toBe(true);
+    if (!removed.ok) return;
+    expect(removed.value.removedRoomIds).toEqual(['room-a']);
+    const remainingIds = removed.value.dungeon.rooms.map((r) => r.roomId).sort();
+    expect(remainingIds).toEqual(['room-b', 'room-root']);
   });
 });

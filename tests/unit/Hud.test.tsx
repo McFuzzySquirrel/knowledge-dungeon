@@ -13,6 +13,8 @@ describe('Hud', () => {
         phase="creator"
         onPhaseChange={() => undefined}
         onHelp={() => undefined}
+        onOpenMap={() => undefined}
+        onHome={() => undefined}
       />,
     );
 

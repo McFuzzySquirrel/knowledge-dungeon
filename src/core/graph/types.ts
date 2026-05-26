@@ -72,6 +72,17 @@ export interface CreatorTraversalSnapshot {
   revalidationNeededRoomIds: string[];
 }
 
+export interface RemoveRoomInput {
+  roomId: string;
+  nowIso: string;
+}
+
+export interface RemoveRoomOutput {
+  dungeon: DungeonMetadata;
+  removedRoomIds: string[];
+  touchedRoomIds: string[];
+}
+
 export interface RevalidationPropagationInput {
   dungeon: DungeonMetadata;
   touchedRoomIds: readonly string[];

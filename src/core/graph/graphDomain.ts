@@ -15,6 +15,8 @@ import {
   type CreatorTraversalSnapshot,
   type GraphDomainError,
   type GraphDomainResult,
+  type RemoveRoomInput,
+  type RemoveRoomOutput,
   type RevalidationPropagationInput,
   type RevalidationPropagationOutput,
   type RootDungeonInitInput,
@@ -266,6 +268,88 @@ export function setRoomStatus(
   const next = cloneDungeon(dungeon);
   next.rooms = upsertRoomStatus(next.rooms, roomId, status);
   return { ok: true, value: next };
+}
+
+/**
+ * Remove a room (and any descendants that become unreachable from the root
+ * as a result). The root room itself cannot be removed. Returns the updated
+ * dungeon, the list of removed room ids, and the neighboring rooms whose
+ * outgoing/incoming edges were touched (useful for revalidation
+ * propagation in the Scribe+ phases).
+ */
+export function removeRoom(
+  dungeon: DungeonMetadata,
+  input: RemoveRoomInput,
+): GraphDomainResult<RemoveRoomOutput> {
+  if (!hasRoom(dungeon, input.roomId)) {
+    return graphError('ROOM_NOT_FOUND', 'Room not found for removal.', {
+      roomId: input.roomId,
+    });
+  }
+  if (input.roomId === dungeon.rootRoomId) {
+    return graphError('INVALID_OPERATION', 'Cannot remove the root room.', {
+      roomId: input.roomId,
+    });
+  }
+
+  // Build adjacency, then determine which rooms remain reachable from the
+  // root once we drop `input.roomId`. Anything not reachable is cascade-
+  // removed so we don't leave orphan subtrees behind.
+  const adj = new Map<string, Set<string>>();
+  for (const room of dungeon.rooms) {
+    adj.set(room.roomId, new Set());
+  }
+  for (const edge of dungeon.edges) {
+    if (edge.fromRoomId === input.roomId || edge.toRoomId === input.roomId) continue;
+    adj.get(edge.fromRoomId)?.add(edge.toRoomId);
+    adj.get(edge.toRoomId)?.add(edge.fromRoomId);
+  }
+
+  const reachable = new Set<string>();
+  const queue: string[] = [dungeon.rootRoomId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (reachable.has(current)) continue;
+    if (current === input.roomId) continue;
+    reachable.add(current);
+    const neighbors = adj.get(current);
+    if (!neighbors) continue;
+    for (const neighbor of neighbors) {
+      if (!reachable.has(neighbor)) queue.push(neighbor);
+    }
+  }
+
+  const removedRoomIds = dungeon.rooms
+    .map((room) => room.roomId)
+    .filter((id) => !reachable.has(id));
+
+  // Track which surviving rooms had edges to anything we removed; the caller
+  // can re-validate those if needed.
+  const removedSet = new Set(removedRoomIds);
+  const touchedRoomIds = new Set<string>();
+  for (const edge of dungeon.edges) {
+    if (removedSet.has(edge.fromRoomId) && !removedSet.has(edge.toRoomId)) {
+      touchedRoomIds.add(edge.toRoomId);
+    } else if (removedSet.has(edge.toRoomId) && !removedSet.has(edge.fromRoomId)) {
+      touchedRoomIds.add(edge.fromRoomId);
+    }
+  }
+
+  const next = cloneDungeon(dungeon);
+  next.rooms = next.rooms.filter((room) => !removedSet.has(room.roomId));
+  next.edges = next.edges.filter(
+    (edge) => !removedSet.has(edge.fromRoomId) && !removedSet.has(edge.toRoomId),
+  );
+  next.updatedAt = input.nowIso;
+
+  return {
+    ok: true,
+    value: {
+      dungeon: next,
+      removedRoomIds: [...removedRoomIds].sort((a, b) => a.localeCompare(b)),
+      touchedRoomIds: [...touchedRoomIds].sort((a, b) => a.localeCompare(b)),
+    },
+  };
 }
 
 export function deriveTraversalSnapshot(dungeon: DungeonMetadata): CreatorTraversalSnapshot {

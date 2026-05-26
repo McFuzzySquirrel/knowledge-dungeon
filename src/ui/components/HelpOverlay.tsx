@@ -31,7 +31,8 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             interact button records a review pass on the room.
           </li>
           <li>
-            Press <kbd>?</kbd> to toggle this help overlay.
+            Press <kbd>?</kbd> to toggle this help overlay, or <kbd>M</kbd> to open the
+            full mindmap view.
           </li>
         </ul>
         <button type="button" onClick={onClose}>

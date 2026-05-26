@@ -16,6 +16,13 @@ export interface DungeonSceneEvents {
 
 const PLAYER_SPEED = 160;
 
+// Camera zoom levels. Higher = zoomed in. We zoom in when the player is
+// standing inside a room so the room feels focused, and zoom out while
+// traveling along a corridor between rooms so more of the map is visible.
+const ZOOM_INSIDE_ROOM = 1.6;
+const ZOOM_ON_PATH = 0.85;
+const ZOOM_TWEEN_MS = 320;
+
 /**
  * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
  * (copied from the repo-dungeon project) and are served at the absolute
@@ -46,6 +53,8 @@ export class DungeonScene extends Phaser.Scene {
   private wasdKeys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private interactKey: Phaser.Input.Keyboard.Key | null = null;
   private currentRoomId: string | null = null;
+  private insideRoom = false;
+  private currentZoomTarget: number = ZOOM_INSIDE_ROOM;
   private roomLabels = new Map<string, Phaser.GameObjects.Text>();
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
@@ -138,6 +147,12 @@ export class DungeonScene extends Phaser.Scene {
         Phaser.Input.Keyboard.KeyCodes.DOWN,
         Phaser.Input.Keyboard.KeyCodes.LEFT,
         Phaser.Input.Keyboard.KeyCodes.RIGHT,
+        // `createCursorKeys()` auto-captures SPACE and SHIFT at the window
+        // level, which prevents them from reaching focused <input>/<textarea>
+        // elements. Explicitly release them so users can type spaces (and
+        // hold shift) while editing notes.
+        Phaser.Input.Keyboard.KeyCodes.SPACE,
+        Phaser.Input.Keyboard.KeyCodes.SHIFT,
       ]);
     }
 
@@ -149,6 +164,9 @@ export class DungeonScene extends Phaser.Scene {
     this.physics.world.setBounds(left, top, width, height);
     this.cameras.main.setBounds(left, top, width, height);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    this.cameras.main.setZoom(ZOOM_INSIDE_ROOM);
+    this.insideRoom = true;
+    this.currentZoomTarget = ZOOM_INSIDE_ROOM;
 
     this.enterRoom(root.roomId);
   }
@@ -194,6 +212,12 @@ export class DungeonScene extends Phaser.Scene {
     const room = this.findRoomAtWorld(player.x, player.y, map);
     if (room && room.roomId !== this.currentRoomId) {
       this.enterRoom(room.roomId);
+    }
+    // Auto-zoom: zoom in when inside any room, zoom out when on a corridor.
+    const shouldBeInsideRoom = room !== null;
+    if (shouldBeInsideRoom !== this.insideRoom) {
+      this.insideRoom = shouldBeInsideRoom;
+      this.setZoomTarget(shouldBeInsideRoom ? ZOOM_INSIDE_ROOM : ZOOM_ON_PATH);
     }
 
     if (
@@ -285,6 +309,18 @@ export class DungeonScene extends Phaser.Scene {
   private enterRoom(roomId: string): void {
     this.currentRoomId = roomId;
     this.callbacks?.onRoomEntered(roomId);
+  }
+
+  private setZoomTarget(zoom: number): void {
+    if (this.currentZoomTarget === zoom) return;
+    this.currentZoomTarget = zoom;
+    // Tween the camera zoom so transitions are smooth instead of snapping.
+    this.tweens.add({
+      targets: this.cameras.main,
+      zoom,
+      duration: ZOOM_TWEEN_MS,
+      ease: 'Sine.easeInOut',
+    });
   }
 }
 
