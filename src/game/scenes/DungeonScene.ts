@@ -26,16 +26,18 @@ const ZOOM_TWEEN_MS = 320;
 /**
  * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
  * (copied from the repo-dungeon project) and are served at the absolute
- * URL `/assets/sprites/...` by Vite. Fall back to `player.svg` when no
+ * URL `assets/sprites/...` relative to the Vite base URL, which is `./` in
+ * Electron and `/` in the web build. Fall back to `player.svg` when no
  * class is selected.
  */
+const BASE = import.meta.env.BASE_URL;
 const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
-  scholar: '/assets/sprites/player-hero.svg',
-  cartographer: '/assets/sprites/player-explorer.svg',
-  archivist: '/assets/sprites/player-archivist.svg',
+  scholar: `${BASE}assets/sprites/player-hero.svg`,
+  cartographer: `${BASE}assets/sprites/player-explorer.svg`,
+  archivist: `${BASE}assets/sprites/player-archivist.svg`,
 };
-const PLAYER_SPRITE_FALLBACK = '/assets/sprites/player.svg';
-const SIGNPOST_SPRITE = '/assets/sprites/signpost.svg';
+const PLAYER_SPRITE_FALLBACK = `${BASE}assets/sprites/player.svg`;
+const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
 
 const PLAYER_TEXTURE_KEY = 'kd-player';
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';

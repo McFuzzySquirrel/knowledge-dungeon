@@ -29,10 +29,11 @@ const PHASES: { id: GamePhase; title: string; description: string }[] = [
   },
 ];
 
+const BASE = import.meta.env.BASE_URL;
 const CLASS_SPRITES: Record<PlayerClassId, string> = {
-  scholar: '/assets/sprites/player-hero.svg',
-  cartographer: '/assets/sprites/player-explorer.svg',
-  archivist: '/assets/sprites/player-archivist.svg',
+  scholar: `${BASE}assets/sprites/player-hero.svg`,
+  cartographer: `${BASE}assets/sprites/player-explorer.svg`,
+  archivist: `${BASE}assets/sprites/player-archivist.svg`,
 };
 
 export function WelcomeScreen(): JSX.Element {
@@ -154,7 +155,7 @@ export function WelcomeScreen(): JSX.Element {
     <div className="welcome-screen">
       <header style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
         <img
-          src="/assets/sprites/objects/readme-scroll.svg"
+          src={`${import.meta.env.BASE_URL}assets/sprites/objects/readme-scroll.svg`}
           alt=""
           width={72}
           height={72}
