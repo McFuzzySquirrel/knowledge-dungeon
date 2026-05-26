@@ -64,6 +64,14 @@ function safeRemove(key: string): void {
   }
 }
 
+async function invokeBridge<T>(operation: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await operation();
+  } catch {
+    return fallback;
+  }
+}
+
 export async function loadSubjectSnapshot(subjectId: string): Promise<SubjectSnapshot | null> {
   if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.readSubject) {
     try {
@@ -161,34 +169,25 @@ export function getActiveSubjectId(): string | null {
 }
 
 export async function openSubjectsFolder(): Promise<boolean> {
-  if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.openSubjectsFolder) {
-    try {
-      return await window.electronKnowledgeBridge.openSubjectsFolder();
-    } catch {
-      return false;
-    }
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  if (bridge?.openSubjectsFolder) {
+    return invokeBridge(() => bridge.openSubjectsFolder(), false);
   }
   return false;
 }
 
 export async function exportSubjectsRoot(): Promise<string | null> {
-  if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.exportSubjectsRoot) {
-    try {
-      return await window.electronKnowledgeBridge.exportSubjectsRoot();
-    } catch {
-      return null;
-    }
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  if (bridge?.exportSubjectsRoot) {
+    return invokeBridge(() => bridge.exportSubjectsRoot(), null);
   }
   return null;
 }
 
 export async function exportSubjectFolder(subjectId: string): Promise<string | null> {
-  if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.exportSubjectFolder) {
-    try {
-      return await window.electronKnowledgeBridge.exportSubjectFolder(subjectId);
-    } catch {
-      return null;
-    }
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  if (bridge?.exportSubjectFolder) {
+    return invokeBridge(() => bridge.exportSubjectFolder(subjectId), null);
   }
   return null;
 }

@@ -59,16 +59,20 @@ export function WelcomeScreen(): JSX.Element {
   const electronAvailable = isElectronAvailable();
 
   async function fetchExistingSubjects() {
-    const ids = await listSubjectIds();
-    const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
-    return ids.map((id, index) => {
-      const snapshotAtIndex = snapshots[index];
-      return {
-        id,
-        subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
-        roomCount: snapshotAtIndex?.dungeon.rooms.length ?? 0,
-      };
-    });
+    try {
+      const ids = await listSubjectIds();
+      const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
+      return ids.map((id, index) => {
+        const snapshotAtIndex = snapshots[index];
+        return {
+          id,
+          subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
+          roomCount: snapshotAtIndex?.dungeon.rooms.length ?? 0,
+        };
+      });
+    } catch {
+      return [];
+    }
   }
 
   async function refreshExistingSubjects() {
@@ -245,7 +249,12 @@ export function WelcomeScreen(): JSX.Element {
         </div>
 
         <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-          <button type="button" onClick={() => void refreshExistingSubjects()} disabled={loadingExisting}>
+          <button
+            type="button"
+            onClick={() => void refreshExistingSubjects()}
+            disabled={loadingExisting}
+            aria-label="Refresh subject list"
+          >
             Refresh subjects
           </button>
         </div>
@@ -273,11 +282,21 @@ export function WelcomeScreen(): JSX.Element {
         {electronAvailable ? (
           <>
             <p>Use these tools to export your local subject data between machines.</p>
-            <div className="welcome-actions">
-              <button type="button" onClick={() => void handleOpenSubjectsFolder()} disabled={adminBusy}>
+            <div className="welcome-actions" aria-busy={adminBusy}>
+              <button
+                type="button"
+                onClick={() => void handleOpenSubjectsFolder()}
+                disabled={adminBusy}
+                aria-disabled={adminBusy}
+              >
                 Open subjects folder
               </button>
-              <button type="button" onClick={() => void handleExportSubjectsRoot()} disabled={adminBusy}>
+              <button
+                type="button"
+                onClick={() => void handleExportSubjectsRoot()}
+                disabled={adminBusy}
+                aria-disabled={adminBusy}
+              >
                 Export subjects root
               </button>
               {existingSubjects.map((subject) => (
@@ -286,6 +305,7 @@ export function WelcomeScreen(): JSX.Element {
                   type="button"
                   onClick={() => void handleExportSubject(subject.id)}
                   disabled={adminBusy}
+                  aria-disabled={adminBusy}
                 >
                   Export {subject.subjectName}
                 </button>
