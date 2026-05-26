@@ -70,6 +70,51 @@ npm run check:bundle-size # bundle-size guard used in CI
 npm run package:electron  # local Electron package (no signing)
 ```
 
+## Building an Electron install package
+
+The commands below produce a distributable installer in the `release/` folder.
+
+**Prerequisites**
+
+- `npm install` already run
+- On **macOS**, code-signing requires an Apple Developer certificate in your
+  Keychain; without one, omit `--mac dmg` targets or set
+  `CSC_IDENTITY_AUTO_DISCOVERY=false`.
+- On **Windows** (cross-compilation from another OS is not supported by
+  NSIS), signing requires a `CSC_LINK` / `CSC_KEY_PASSWORD` code-signing
+  certificate; unsigned builds work without those env vars.
+
+**Platform-specific commands**
+
+| Target | Command |
+|--------|---------|
+| Current platform only (unpacked, no installer — fast for testing) | `npm run package:electron` |
+| macOS `.dmg` + `.zip` | `npm run package:electron:mac` |
+| Windows NSIS installer + `.zip` | `npm run package:electron:win` |
+| Linux `.AppImage` + `.deb` | `npm run package:electron:linux` |
+| All three platforms at once | `npm run package:electron:full` |
+
+**Step-by-step (example: macOS)**
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Build web assets and the Electron main process
+npm run build:electron
+
+# 3. Package into a distributable (output goes to release/)
+npm run package:electron:mac
+```
+
+The finished installer appears under `release/` as
+`Knowledge Dungeon-<version>-mac-<arch>.dmg` (and a `.zip` companion).
+Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
+
+> **Linux `.deb` only** (no `.AppImage`): replace step 3 with
+> `npm run package:electron:linux`.
+> **Linux `.AppImage` only**: use `npm run package:electron:linux:appimage`.
+
 ## Controls
 
 | Action | Keyboard | Touch |
