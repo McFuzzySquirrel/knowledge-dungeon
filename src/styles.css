@@ -32,6 +32,9 @@ body,
 button {
   font: inherit;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
   border: 1px solid var(--border-soft);
   background: var(--bg-panel-soft);
   color: var(--text-primary);

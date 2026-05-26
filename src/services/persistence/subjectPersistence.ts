@@ -29,6 +29,9 @@ declare global {
       writeSubject?: (subjectId: string, snapshot: SubjectSnapshot) => Promise<void>;
       listSubjects?: () => Promise<string[]>;
       deleteSubject?: (subjectId: string) => Promise<void>;
+      openSubjectsFolder?: () => Promise<boolean>;
+      exportSubjectsRoot?: () => Promise<string | null>;
+      exportSubjectFolder?: (subjectId: string) => Promise<string | null>;
     };
   }
 }
@@ -58,6 +61,14 @@ function safeRemove(key: string): void {
     }
   } catch {
     // storage unavailable — silently ignore
+  }
+}
+
+async function invokeBridge<T>(operation: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await operation();
+  } catch {
+    return fallback;
   }
 }
 
@@ -155,6 +166,33 @@ export function setActiveSubjectId(subjectId: string | null): void {
 
 export function getActiveSubjectId(): string | null {
   return safeGet(STORAGE_KEYS.activeSubjectId);
+}
+
+export async function openSubjectsFolder(): Promise<boolean> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const openSubjectsFolderBridge = bridge?.openSubjectsFolder;
+  if (openSubjectsFolderBridge) {
+    return invokeBridge(() => openSubjectsFolderBridge(), false);
+  }
+  return false;
+}
+
+export async function exportSubjectsRoot(): Promise<string | null> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const exportSubjectsRootBridge = bridge?.exportSubjectsRoot;
+  if (exportSubjectsRootBridge) {
+    return invokeBridge(() => exportSubjectsRootBridge(), null);
+  }
+  return null;
+}
+
+export async function exportSubjectFolder(subjectId: string): Promise<string | null> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const exportSubjectFolderBridge = bridge?.exportSubjectFolder;
+  if (exportSubjectFolderBridge) {
+    return invokeBridge(() => exportSubjectFolderBridge(subjectId), null);
+  }
+  return null;
 }
 
 export function exportSubjectToJson(snapshot: SubjectSnapshot): string {

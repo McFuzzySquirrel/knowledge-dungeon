@@ -1,9 +1,15 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { useSessionStore, type GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
-import { listSubjectIds } from '@/services/persistence/subjectPersistence';
-import { getElectronEnvironmentLabel } from '@/services/electronBridge';
+import {
+  exportSubjectFolder,
+  exportSubjectsRoot,
+  listSubjectIds,
+  loadSubjectSnapshot,
+  openSubjectsFolder,
+} from '@/services/persistence/subjectPersistence';
+import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
 
 const PHASES: { id: GamePhase; title: string; description: string }[] = [
   {
@@ -43,13 +49,52 @@ export function WelcomeScreen(): JSX.Element {
   const [subjectName, setSubjectName] = useState('');
   const [rootTopic, setRootTopic] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [existingIds, setExistingIds] = useState<string[]>([]);
+  const [existingSubjects, setExistingSubjects] = useState<
+    { id: string; subjectName: string; roomCount: number }[]
+  >([]);
+  const [loadingExisting, setLoadingExisting] = useState(true);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminBusy, setAdminBusy] = useState(false);
   const env = getElectronEnvironmentLabel();
+  const electronAvailable = isElectronAvailable();
 
-  void useState(() => {
-    void listSubjectIds().then(setExistingIds);
-    return 0;
-  });
+  async function fetchExistingSubjects() {
+    try {
+      const ids = await listSubjectIds();
+      const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
+      return ids.map((id, index) => {
+        const snapshotAtIndex = snapshots[index];
+        return {
+          id,
+          subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
+          roomCount: snapshotAtIndex?.dungeon.rooms.length ?? 0,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  async function refreshExistingSubjects() {
+    setLoadingExisting(true);
+    setExistingSubjects(await fetchExistingSubjects());
+    setLoadingExisting(false);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExisting() {
+      setLoadingExisting(true);
+      const subjects = await fetchExistingSubjects();
+      if (cancelled) return;
+      setExistingSubjects(subjects);
+      setLoadingExisting(false);
+    }
+    void loadExisting();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleCreate() {
     if (!subjectName.trim() || !rootTopic.trim()) return;
@@ -69,6 +114,39 @@ export function WelcomeScreen(): JSX.Element {
     const loaded = await loadSubject(id);
     if (loaded) {
       setActiveSubjectId(loaded.dungeon.dungeonId);
+    }
+  }
+
+  async function handleOpenSubjectsFolder() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const opened = await openSubjectsFolder();
+      setAdminMessage(opened ? 'Opened local subjects folder.' : 'Unable to open subjects folder.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportSubjectsRoot() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const exportedTo = await exportSubjectsRoot();
+      setAdminMessage(exportedTo ? `Exported subjects root to: ${exportedTo}` : 'Export cancelled.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportSubject(subjectId: string) {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const exportedTo = await exportSubjectFolder(subjectId);
+      setAdminMessage(exportedTo ? `Exported ${subjectId} to: ${exportedTo}` : 'Export cancelled.');
+    } finally {
+      setAdminBusy(false);
     }
   }
 
@@ -170,17 +248,77 @@ export function WelcomeScreen(): JSX.Element {
           </div>
         </div>
 
-        {existingIds.length > 0 ? (
+        <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => void refreshExistingSubjects()}
+            disabled={loadingExisting}
+            aria-label="Refresh subject list"
+          >
+            Refresh subjects
+          </button>
+        </div>
+
+        {loadingExisting ? <p>Loading subjects…</p> : null}
+        {existingSubjects.length > 0 ? (
           <div style={{ marginTop: 16 }}>
             <h3>Previously created</h3>
             <div className="welcome-actions">
-              {existingIds.map((id) => (
-                <button key={id} type="button" onClick={() => void handleLoad(id)}>
-                  {id}
+              {existingSubjects.map((subject) => (
+                <button key={subject.id} type="button" onClick={() => void handleLoad(subject.id)}>
+                  {subject.subjectName}
+                  <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 12 }}>
+                    ({subject.roomCount} rooms)
+                  </span>
                 </button>
               ))}
             </div>
           </div>
+        ) : null}
+      </section>
+
+      <section>
+        <h2>Admin</h2>
+        {electronAvailable ? (
+          <>
+            <p>Use these tools to export your local subject data between machines.</p>
+            <div className="welcome-actions" aria-busy={adminBusy}>
+              <button
+                type="button"
+                onClick={() => void handleOpenSubjectsFolder()}
+                disabled={adminBusy}
+                aria-disabled={adminBusy}
+              >
+                Open subjects folder
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleExportSubjectsRoot()}
+                disabled={adminBusy}
+                aria-disabled={adminBusy}
+              >
+                Export subjects root
+              </button>
+              {existingSubjects.map((subject) => (
+                <button
+                  key={`export-${subject.id}`}
+                  type="button"
+                  onClick={() => void handleExportSubject(subject.id)}
+                  disabled={adminBusy}
+                  aria-disabled={adminBusy}
+                >
+                  Export {subject.subjectName}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p>Admin export tools are available in desktop mode.</p>
+        )}
+        {adminMessage ? (
+          <p style={{ marginTop: 8, color: 'var(--text-muted)', wordBreak: 'break-word' }}>
+            {adminMessage}
+          </p>
         ) : null}
       </section>
     </div>

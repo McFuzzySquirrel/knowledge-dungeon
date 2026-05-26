@@ -10,7 +10,10 @@ Use this screen to:
 
 - Choose the current phase (Create, Scribe, Review), which controls the active gameplay loop.
 - Pick a study archetype (Scholar, Cartographer, Archivist), which applies your class/perk identity.
-- Create a new subject or load a previously saved subject.
+- Create a new subject from a root topic.
+- Browse previously created subjects by **subject name** instead of raw id, with room counts visible from home.
+- Refresh the saved subject list if you want to rescan local data before loading one.
+- Access the **Admin** section, which in desktop mode exposes local subject export/open-folder tools.
 
 This is the entry point for every session and determines how the rest of the UI behaves.
 
@@ -41,7 +44,7 @@ gets the maximum amount of screen space:
   / interact buttons.
 
 See [`CUSTOMIZATION.md`](./CUSTOMIZATION.md) for how to swap in your own
-sprites and tilesets.
+sprites and tilesets, and for where desktop subject exports are written from.
 
 ## 3) Auto-zoom (room ↔ corridor)
 
