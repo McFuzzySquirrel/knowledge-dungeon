@@ -29,6 +29,9 @@ declare global {
       writeSubject?: (subjectId: string, snapshot: SubjectSnapshot) => Promise<void>;
       listSubjects?: () => Promise<string[]>;
       deleteSubject?: (subjectId: string) => Promise<void>;
+      openSubjectsFolder?: () => Promise<boolean>;
+      exportSubjectsRoot?: () => Promise<string | null>;
+      exportSubjectFolder?: (subjectId: string) => Promise<string | null>;
     };
   }
 }
@@ -155,6 +158,39 @@ export function setActiveSubjectId(subjectId: string | null): void {
 
 export function getActiveSubjectId(): string | null {
   return safeGet(STORAGE_KEYS.activeSubjectId);
+}
+
+export async function openSubjectsFolder(): Promise<boolean> {
+  if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.openSubjectsFolder) {
+    try {
+      return await window.electronKnowledgeBridge.openSubjectsFolder();
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+export async function exportSubjectsRoot(): Promise<string | null> {
+  if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.exportSubjectsRoot) {
+    try {
+      return await window.electronKnowledgeBridge.exportSubjectsRoot();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export async function exportSubjectFolder(subjectId: string): Promise<string | null> {
+  if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.exportSubjectFolder) {
+    try {
+      return await window.electronKnowledgeBridge.exportSubjectFolder(subjectId);
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 export function exportSubjectToJson(snapshot: SubjectSnapshot): string {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,10 @@ function dungeonDataRoot(): string {
 function sanitizeSubjectId(id: string): string {
   if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
     throw new Error('Invalid subject id');
+  }
+
+  function exportStamp(): string {
+    return new Date().toISOString().replace(/[:.]/g, '-');
   }
   return id;
 }
@@ -84,6 +88,44 @@ function registerKnowledgeBridgeHandlers(): void {
   ipcMain.handle('knowledge:delete-subject', async (_event, subjectId: string) => {
     const dir = await ensureSubjectRoot(subjectId);
     await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  ipcMain.handle('knowledge:open-subjects-folder', async () => {
+    const root = dungeonDataRoot();
+    await fs.mkdir(root, { recursive: true });
+    const openError = await shell.openPath(root);
+    return openError.length === 0;
+  });
+
+  ipcMain.handle('knowledge:export-subjects-root', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Select export destination',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const sourceRoot = dungeonDataRoot();
+    await fs.mkdir(sourceRoot, { recursive: true });
+    const destination = path.join(result.filePaths[0], `knowledge-dungeon-subjects-${exportStamp()}`);
+    await fs.cp(sourceRoot, destination, { recursive: true, force: true });
+    return destination;
+  });
+
+  ipcMain.handle('knowledge:export-subject-folder', async (_event, subjectId: string) => {
+    const safeSubjectId = sanitizeSubjectId(subjectId);
+    const source = path.join(dungeonDataRoot(), safeSubjectId);
+    const stat = await fs.stat(source).catch(() => null);
+    if (!stat?.isDirectory()) return null;
+
+    const result = await dialog.showOpenDialog({
+      title: `Export ${safeSubjectId}`,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+
+    const destination = path.join(result.filePaths[0], `${safeSubjectId}-${exportStamp()}`);
+    await fs.cp(source, destination, { recursive: true, force: true });
+    return destination;
   });
 }
 
