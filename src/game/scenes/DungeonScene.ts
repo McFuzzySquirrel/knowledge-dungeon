@@ -25,10 +25,9 @@ const ZOOM_TWEEN_MS = 320;
 
 /**
  * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
- * (copied from the repo-dungeon project) and are served at the absolute
- * URL `assets/sprites/...` relative to the Vite base URL, which is `./` in
- * Electron and `/` in the web build. Fall back to `player.svg` when no
- * class is selected.
+ * (copied from the repo-dungeon project) and are served at a path relative
+ * to the Vite base URL, which is `./` in Electron and `/` in the web build.
+ * Fall back to `player.svg` when no class is selected.
  */
 const BASE = import.meta.env.BASE_URL;
 const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
