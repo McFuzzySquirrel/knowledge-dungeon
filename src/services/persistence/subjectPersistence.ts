@@ -170,24 +170,27 @@ export function getActiveSubjectId(): string | null {
 
 export async function openSubjectsFolder(): Promise<boolean> {
   const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
-  if (bridge?.openSubjectsFolder) {
-    return invokeBridge(() => bridge.openSubjectsFolder(), false);
+  const openSubjectsFolderBridge = bridge?.openSubjectsFolder;
+  if (openSubjectsFolderBridge) {
+    return invokeBridge(() => openSubjectsFolderBridge(), false);
   }
   return false;
 }
 
 export async function exportSubjectsRoot(): Promise<string | null> {
   const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
-  if (bridge?.exportSubjectsRoot) {
-    return invokeBridge(() => bridge.exportSubjectsRoot(), null);
+  const exportSubjectsRootBridge = bridge?.exportSubjectsRoot;
+  if (exportSubjectsRootBridge) {
+    return invokeBridge(() => exportSubjectsRootBridge(), null);
   }
   return null;
 }
 
 export async function exportSubjectFolder(subjectId: string): Promise<string | null> {
   const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
-  if (bridge?.exportSubjectFolder) {
-    return invokeBridge(() => bridge.exportSubjectFolder(subjectId), null);
+  const exportSubjectFolderBridge = bridge?.exportSubjectFolder;
+  if (exportSubjectFolderBridge) {
+    return invokeBridge(() => exportSubjectFolderBridge(subjectId), null);
   }
   return null;
 }
