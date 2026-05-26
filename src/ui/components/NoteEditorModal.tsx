@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useState, type JSX } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -28,6 +28,12 @@ export function NoteEditorModal(): JSX.Element | null {
   const [noteText, setNoteText] = useState(TEMPLATE);
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !room) return;
+    setNoteText(room.noteText || TEMPLATE);
+    setConfirm(false);
+  }, [isOpen, room]);
 
   const preview = useMemo(() => {
     if (!room) return null;
