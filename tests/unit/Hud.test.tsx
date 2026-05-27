@@ -11,9 +11,13 @@ describe('Hud', () => {
         xpTotal={120}
         rank="Novice"
         phase="creator"
+        currentFloorLabel="Linear Algebra"
+        teleportRemainingMs={0}
+        teleportModeArmed={false}
         onPhaseChange={() => undefined}
         onHelp={() => undefined}
         onOpenMap={() => undefined}
+        onTeleport={() => undefined}
         onHome={() => undefined}
       />,
     );

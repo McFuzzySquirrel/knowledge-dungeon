@@ -239,6 +239,18 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
+  teleportToRoom(roomId: string): void {
+    if (!this.player || !this.playerBody || !this.dungeonMap) return;
+    const room = this.dungeonMap.rooms.find((entry) => entry.roomId === roomId);
+    if (!room) return;
+    const destination = this.roomCenter(room, this.dungeonMap.tileSize);
+    this.playerBody.stop();
+    this.player.setPosition(destination.x, destination.y);
+    this.insideRoom = true;
+    this.setZoomTarget(ZOOM_INSIDE_ROOM);
+    this.enterRoom(room.roomId);
+  }
+
   private drawRooms(map: DungeonMap): void {
     if (!this.roomGraphics) return;
     const g = this.roomGraphics;

@@ -32,8 +32,9 @@ The home screen is where you:
 Once a subject is loaded, the in-dungeon view keeps the study loop visible in one place:
 
 - HUD for phase, progression, map, home, and help
+- HUD teleport spell for floor/room jumps with cooldown tracking
 - Phaser dungeon canvas for movement and room navigation
-- minimap and room panel for topic context while exploring
+- minimap and room panel for topic context, breadcrumbs, portals, and creator edits
 
 ## Tech stack
 
@@ -47,7 +48,7 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
 
 | Phase | Mode | What you do |
 | ----- | ---- | ----------- |
-| **Creator** | Architect | Author the dungeon by adding topic-rooms and linking them. |
+| **Creator** | Architect | Author the dungeon by bulk-adding topic-rooms, reparenting them, and editing the mindmap. |
 | **Scribe** | Explore | Walk into rooms and submit notes that pass the validation rubric. |
 | **Archaeologist** | Review | Once every room is cleared, revisit artifacts and self-check prompts. |
 

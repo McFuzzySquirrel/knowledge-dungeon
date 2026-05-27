@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type Phaser from 'phaser';
-import { useSessionStore } from '@/store/sessionStore';
+import { deriveGraphHierarchy } from '@/core/graph';
+import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { createGame } from '@/game/createGame';
@@ -29,6 +30,11 @@ export function GameScreen(): JSX.Element {
   const isMapViewOpen = useSessionStore((s) => s.isMapViewOpen);
   const openMapView = useSessionStore((s) => s.openMapView);
   const closeMapView = useSessionStore((s) => s.closeMapView);
+  const teleportModeArmed = useSessionStore((s) => s.teleportModeArmed);
+  const lastTeleportAt = useSessionStore((s) => s.lastTeleportAt);
+  const armTeleportMode = useSessionStore((s) => s.armTeleportMode);
+  const cancelTeleportMode = useSessionStore((s) => s.cancelTeleportMode);
+  const markTeleported = useSessionStore((s) => s.markTeleported);
   const recordReviewPass = useSubjectStore((s) => s.recordReviewPass);
   const xpTotal = useProgressionStore((s) => s.xpTotal);
   const rank = useProgressionStore((s) => s.rank);
@@ -37,11 +43,25 @@ export function GameScreen(): JSX.Element {
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<DungeonScene | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [clockMs, setClockMs] = useState(() => Date.now());
 
   const dungeonMap = useMemo(() => {
     if (!snapshot) return null;
     return generateDungeonMap(snapshot.dungeon);
   }, [snapshot]);
+  const hierarchy = useMemo(
+    () => (snapshot ? deriveGraphHierarchy(snapshot.dungeon) : null),
+    [snapshot],
+  );
+
+  const teleportRemainingMs =
+    lastTeleportAt === null ? 0 : Math.max(0, TELEPORT_COOLDOWN_MS - (clockMs - lastTeleportAt));
+
+  useEffect(() => {
+    if (teleportRemainingMs <= 0) return;
+    const interval = window.setInterval(() => setClockMs(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [teleportRemainingMs]);
 
   useEffect(() => {
     if (!dungeonMap || !containerRef.current) return;
@@ -100,10 +120,11 @@ export function GameScreen(): JSX.Element {
     // Clear the active subject so <App> falls back to <WelcomeScreen>, where
     // the user can pick an existing subject or create a new one.
     closeMapView();
-    setFocusedRoomId(null);
-    setActiveSubjectId(null);
-    persistActiveSubjectId(null);
-    setSnapshot(null);
+      setFocusedRoomId(null);
+      setActiveSubjectId(null);
+      persistActiveSubjectId(null);
+      cancelTeleportMode();
+      setSnapshot(null);
   }
 
   if (!snapshot || !dungeonMap) {
@@ -111,6 +132,33 @@ export function GameScreen(): JSX.Element {
   }
 
   const focusedRoom = focusedRoomId ? snapshot.rooms[focusedRoomId] ?? null : null;
+  const currentFloorLabel =
+    focusedRoom && hierarchy
+      ? hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[focusedRoom.roomId]]
+      : snapshot.dungeon.subjectName;
+
+  function handleTravelToRoom(roomId: string) {
+    sceneRef.current?.teleportToRoom(roomId);
+  }
+
+  function handleTeleport() {
+    setClockMs(Date.now());
+    if (teleportModeArmed) {
+      cancelTeleportMode();
+      return;
+    }
+    if (teleportRemainingMs > 0) return;
+    armTeleportMode();
+  }
+
+  function handleTeleportToRoom(roomId: string) {
+    if (teleportRemainingMs > 0) return;
+    sceneRef.current?.teleportToRoom(roomId);
+    const now = Date.now();
+    setClockMs(now);
+    markTeleported(now);
+    closeMapView();
+  }
 
   return (
     <div className="game-shell">
@@ -120,9 +168,13 @@ export function GameScreen(): JSX.Element {
         xpTotal={xpTotal}
         rank={rank}
         phase={phase}
+        currentFloorLabel={currentFloorLabel}
+        teleportRemainingMs={teleportRemainingMs}
+        teleportModeArmed={teleportModeArmed}
         onPhaseChange={setPhase}
         onHelp={() => setHelpOpen(true)}
         onOpenMap={openMapView}
+        onTeleport={handleTeleport}
         onHome={handleHome}
       />
 
@@ -135,6 +187,7 @@ export function GameScreen(): JSX.Element {
         snapshot={snapshot}
         focusedRoom={focusedRoom}
         onInteract={() => focusedRoom && openNoteEditor(focusedRoom.roomId)}
+        onTravelToRoom={handleTravelToRoom}
       />
 
       <TouchControls onInteract={() => sceneRef.current?.triggerInteract()} />
@@ -142,8 +195,14 @@ export function GameScreen(): JSX.Element {
       <NoteEditorModal />
       {isMapViewOpen ? (
         <FullMapView
+          snapshot={snapshot}
           dungeonMap={dungeonMap}
           focusedRoomId={focusedRoomId}
+          phase={phase}
+          teleportModeArmed={teleportModeArmed}
+          teleportRemainingMs={teleportRemainingMs}
+          onTravelToRoom={handleTravelToRoom}
+          onTeleportToRoom={handleTeleportToRoom}
           onClose={closeMapView}
         />
       ) : null}

@@ -15,6 +15,8 @@ import {
   type CreatorTraversalSnapshot,
   type GraphDomainError,
   type GraphDomainResult,
+  type ReparentRoomInput,
+  type ReparentRoomOutput,
   type RemoveRoomInput,
   type RemoveRoomOutput,
   type RevalidationPropagationInput,
@@ -22,6 +24,7 @@ import {
   type RootDungeonInitInput,
   SCRIBE_STARTED_PHASES,
 } from './types';
+import { isReachableViaSubtopics } from './navigation';
 
 const DEFAULT_EDGE_RELATION: EdgeRelationType = 'subtopic';
 const DEFAULT_CREATED_BY_PHASE: EdgeCreatedByPhase = 'Creator';
@@ -236,6 +239,80 @@ export function addCrossLink(
   return {
     ok: true,
     value: { dungeon: next, touchedRoomIds: [input.fromRoomId, input.toRoomId] },
+  };
+}
+
+export function reparentRoom(
+  dungeon: DungeonMetadata,
+  input: ReparentRoomInput,
+): GraphDomainResult<ReparentRoomOutput> {
+  if (!hasRoom(dungeon, input.roomId) || !hasRoom(dungeon, input.newParentRoomId)) {
+    return graphError('ROOM_NOT_FOUND', 'Reparent endpoints must exist.', {
+      roomId: input.roomId,
+      newParentRoomId: input.newParentRoomId,
+    });
+  }
+
+  if (input.roomId === dungeon.rootRoomId) {
+    return graphError('INVALID_OPERATION', 'Cannot change the parent of the root room.', {
+      roomId: input.roomId,
+    });
+  }
+
+  if (input.roomId === input.newParentRoomId) {
+    return graphError('SELF_LOOP_EDGE', 'A room cannot become its own parent.', {
+      roomId: input.roomId,
+    });
+  }
+
+  if (isReachableViaSubtopics(dungeon, input.roomId, input.newParentRoomId)) {
+    return graphError('INVALID_OPERATION', 'Cannot move a room under one of its descendants.', {
+      roomId: input.roomId,
+      newParentRoomId: input.newParentRoomId,
+    });
+  }
+
+  const incomingSubtopicEdges = dungeon.edges.filter(
+    (edge) => edge.toRoomId === input.roomId && edge.relationType === 'subtopic',
+  );
+  const previousParentRoomId = incomingSubtopicEdges[0]?.fromRoomId ?? null;
+  if (previousParentRoomId === input.newParentRoomId) {
+    return {
+      ok: true,
+      value: {
+        dungeon,
+        previousParentRoomId,
+        touchedRoomIds: [input.roomId, input.newParentRoomId],
+      },
+    };
+  }
+
+  const next = cloneDungeon(dungeon);
+  next.edges = next.edges.filter(
+    (edge) => !(edge.toRoomId === input.roomId && edge.relationType === 'subtopic'),
+  );
+  next.edges.push({
+    fromRoomId: input.newParentRoomId,
+    toRoomId: input.roomId,
+    relationType: 'subtopic',
+    createdAt: input.nowIso,
+    createdByPhase: input.createdByPhase ?? DEFAULT_CREATED_BY_PHASE,
+  });
+  next.updatedAt = input.nowIso;
+
+  const touchedRoomIds = [
+    input.roomId,
+    input.newParentRoomId,
+    ...incomingSubtopicEdges.map((edge) => edge.fromRoomId),
+  ].sort((left, right) => left.localeCompare(right));
+
+  return {
+    ok: true,
+    value: {
+      dungeon: next,
+      previousParentRoomId,
+      touchedRoomIds: [...new Set(touchedRoomIds)],
+    },
   };
 }
 

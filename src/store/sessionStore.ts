@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
 
 export type GamePhase = 'creator' | 'scribe' | 'archaeologist';
+export const TELEPORT_COOLDOWN_MS = 2 * 60 * 1000;
 
 export interface SessionState {
   activeSubjectId: string | null;
@@ -16,6 +17,8 @@ export interface SessionState {
   isNoteEditorOpen: boolean;
   noteEditorRoomId: string | null;
   isMapViewOpen: boolean;
+  teleportModeArmed: boolean;
+  lastTeleportAt: number | null;
   setActiveSubjectId: (id: string | null) => void;
   setPhase: (phase: GamePhase) => void;
   setSelectedClass: (id: PlayerClassId | null) => void;
@@ -24,6 +27,9 @@ export interface SessionState {
   closeNoteEditor: () => void;
   openMapView: () => void;
   closeMapView: () => void;
+  armTeleportMode: () => void;
+  cancelTeleportMode: () => void;
+  markTeleported: (at: number) => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -34,6 +40,8 @@ export const useSessionStore = create<SessionState>((set) => ({
   isNoteEditorOpen: false,
   noteEditorRoomId: null,
   isMapViewOpen: false,
+  teleportModeArmed: false,
+  lastTeleportAt: null,
   setActiveSubjectId: (activeSubjectId) => set({ activeSubjectId }),
   setPhase: (phase) => set({ phase }),
   setSelectedClass: (selectedClass) => set({ selectedClass }),
@@ -42,5 +50,8 @@ export const useSessionStore = create<SessionState>((set) => ({
     set({ noteEditorRoomId, isNoteEditorOpen: true }),
   closeNoteEditor: () => set({ isNoteEditorOpen: false, noteEditorRoomId: null }),
   openMapView: () => set({ isMapViewOpen: true }),
-  closeMapView: () => set({ isMapViewOpen: false }),
+  closeMapView: () => set({ isMapViewOpen: false, teleportModeArmed: false }),
+  armTeleportMode: () => set({ teleportModeArmed: true, isMapViewOpen: true }),
+  cancelTeleportMode: () => set({ teleportModeArmed: false }),
+  markTeleported: (lastTeleportAt) => set({ lastTeleportAt, teleportModeArmed: false }),
 }));

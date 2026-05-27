@@ -5,6 +5,7 @@ import {
   createRootDungeon,
   deriveTraversalSnapshot,
   propagateRevalidationAfterGraphMutation,
+  reparentRoom,
   removeRoom,
 } from '@/core/graph';
 
@@ -34,12 +35,16 @@ describe('graphDomain', () => {
     const dungeon = bootstrap();
     const result = addLinkedRooms(dungeon, {
       fromRoomId: 'room-root',
-      drafts: [{ roomId: 'room-a', topic: 'Subspaces' }],
+      drafts: [
+        { roomId: 'room-a', topic: 'Subspaces' },
+        { roomId: 'room-b', topic: 'Bases' },
+      ],
       nowIso: NOW,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.dungeon.rooms).toHaveLength(2);
+    expect(result.value.dungeon.rooms).toHaveLength(3);
+    expect(result.value.createdRoomIds).toEqual(['room-a', 'room-b']);
     expect(result.value.dungeon.edges[0]?.relationType).toBe('subtopic');
   });
 
@@ -156,5 +161,58 @@ describe('graphDomain', () => {
     expect(removed.value.removedRoomIds).toEqual(['room-a']);
     const remainingIds = removed.value.dungeon.rooms.map((r) => r.roomId).sort();
     expect(remainingIds).toEqual(['room-b', 'room-root']);
+  });
+
+  it('reparents a room without disconnecting it from the root', () => {
+    const dungeon = bootstrap();
+    const a = addLinkedRooms(dungeon, {
+      fromRoomId: 'room-root',
+      drafts: [{ roomId: 'room-a', topic: 'A' }],
+      nowIso: NOW,
+    });
+    if (!a.ok) throw new Error('add a failed');
+    const b = addLinkedRooms(a.value.dungeon, {
+      fromRoomId: 'room-root',
+      drafts: [{ roomId: 'room-b', topic: 'B' }],
+      nowIso: NOW,
+    });
+    if (!b.ok) throw new Error('add b failed');
+
+    const moved = reparentRoom(b.value.dungeon, {
+      roomId: 'room-b',
+      newParentRoomId: 'room-a',
+      nowIso: NOW,
+    });
+    expect(moved.ok).toBe(true);
+    if (!moved.ok) return;
+    expect(moved.value.previousParentRoomId).toBe('room-root');
+    expect(
+      moved.value.dungeon.edges.find((edge) => edge.toRoomId === 'room-b')?.fromRoomId,
+    ).toBe('room-a');
+  });
+
+  it('refuses to reparent a room beneath one of its descendants', () => {
+    const dungeon = bootstrap();
+    const a = addLinkedRooms(dungeon, {
+      fromRoomId: 'room-root',
+      drafts: [{ roomId: 'room-a', topic: 'A' }],
+      nowIso: NOW,
+    });
+    if (!a.ok) throw new Error('add a failed');
+    const b = addLinkedRooms(a.value.dungeon, {
+      fromRoomId: 'room-a',
+      drafts: [{ roomId: 'room-b', topic: 'B' }],
+      nowIso: NOW,
+    });
+    if (!b.ok) throw new Error('add b failed');
+
+    const moved = reparentRoom(b.value.dungeon, {
+      roomId: 'room-a',
+      newParentRoomId: 'room-b',
+      nowIso: NOW,
+    });
+    expect(moved.ok).toBe(false);
+    if (moved.ok) return;
+    expect(moved.error.code).toBe('INVALID_OPERATION');
   });
 });

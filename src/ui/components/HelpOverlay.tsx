@@ -18,8 +18,8 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             you&rsquo;re standing in.
           </li>
           <li>
-            In the <strong>Creator</strong> phase, use the Topic tab&rsquo;s &ldquo;Add child
-            topic&rdquo; form to grow your subject graph.
+            In the <strong>Creator</strong> phase, use the Topic tab or Full Map graph-edit mode
+            to bulk-add child topics and safely change a topic&rsquo;s parent.
           </li>
           <li>
             In the <strong>Scribe</strong> phase, write at least 120 words with Summary, Key
@@ -33,6 +33,10 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
           <li>
             Press <kbd>?</kbd> to toggle this help overlay, or <kbd>M</kbd> to open the
             full mindmap view.
+          </li>
+          <li>
+            Teleport from the HUD to jump to a chosen floor and room, then wait two minutes
+            before using the spell again.
           </li>
         </ul>
         <button type="button" onClick={onClose}>
