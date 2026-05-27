@@ -16,6 +16,7 @@ import {
   addLinkedRooms,
   createRootDungeon,
   removeRoom,
+  reparentRoom,
   setRoomStatus,
   propagateRevalidationAfterGraphMutation,
 } from '@/core/graph';
@@ -34,6 +35,8 @@ export interface SubjectState {
   initSubject: (input: { subjectName: string; rootTopic: string }) => Promise<SubjectSnapshot>;
   loadSubject: (subjectId: string) => Promise<SubjectSnapshot | null>;
   addChildRoom: (parentRoomId: string, topic: string) => Promise<void>;
+  addChildRooms: (parentRoomId: string, topics: readonly string[]) => Promise<void>;
+  reparentRoom: (roomId: string, newParentRoomId: string) => Promise<void>;
   removeRoom: (roomId: string) => Promise<void>;
   addCrossLinkBetween: (fromRoomId: string, toRoomId: string) => Promise<void>;
   submitNote: (
@@ -142,23 +145,33 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
   },
 
   async addChildRoom(parentRoomId, topic) {
+    await get().addChildRooms(parentRoomId, [topic]);
+  },
+
+  async addChildRooms(parentRoomId, topics) {
     const current = get().snapshot;
     if (!current) return;
-    const childId = generateId('room');
+    const normalizedTopics = topics.map((topic) => topic.trim()).filter(Boolean);
+    if (normalizedTopics.length === 0) return;
     const result = addLinkedRooms(current.dungeon, {
       fromRoomId: parentRoomId,
-      drafts: [{ roomId: childId, topic }],
+      drafts: normalizedTopics.map((topic) => ({ roomId: generateId('room'), topic })),
       nowIso: nowIso(),
     });
     if (!result.ok) {
       set({ lastError: result.error.message });
       return;
     }
-    const newRoom = makeEmptyRoomMetadata({
-      roomId: childId,
-      topic: topic.trim(),
-      nowIso: nowIso(),
-    });
+    const createdTopicByRoomId = new Map(
+      result.value.dungeon.rooms.map((room) => [room.roomId, room.topic] as const),
+    );
+    const newRooms = result.value.createdRoomIds.map((roomId) =>
+      makeEmptyRoomMetadata({
+        roomId,
+        topic: createdTopicByRoomId.get(roomId) ?? roomId,
+        nowIso: nowIso(),
+      }),
+    );
     // Phase-aware revalidation propagation.
     const propagated = propagateRevalidationAfterGraphMutation({
       dungeon: result.value.dungeon,
@@ -166,7 +179,30 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
       nowIso: nowIso(),
     });
     const finalDungeon = propagated.ok ? propagated.value.dungeon : result.value.dungeon;
-    const next = withRooms(current, finalDungeon, [newRoom]);
+    const next = withRooms(current, finalDungeon, newRooms);
+    set({ snapshot: next, lastError: null });
+    await persist(next);
+  },
+
+  async reparentRoom(roomId, newParentRoomId) {
+    const current = get().snapshot;
+    if (!current) return;
+    const result = reparentRoom(current.dungeon, {
+      roomId,
+      newParentRoomId,
+      nowIso: nowIso(),
+    });
+    if (!result.ok) {
+      set({ lastError: result.error.message });
+      return;
+    }
+    const propagated = propagateRevalidationAfterGraphMutation({
+      dungeon: result.value.dungeon,
+      touchedRoomIds: result.value.touchedRoomIds,
+      nowIso: nowIso(),
+    });
+    const finalDungeon = propagated.ok ? propagated.value.dungeon : result.value.dungeon;
+    const next = withRooms(current, finalDungeon);
     set({ snapshot: next, lastError: null });
     await persist(next);
   },

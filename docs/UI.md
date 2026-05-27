@@ -26,8 +26,9 @@ The game shell combines several persistent UI regions, all rendered as
 gets the maximum amount of screen space:
 
 - **Top HUD (floating):** subject, room count, XP/rank, active phase, plus
-  **Map**, **Home**, and **Help** buttons. `Map` opens the full mindmap
-  view, `Home` returns to subject selection, `?` opens the help overlay.
+  **Map**, **Teleport**, **Home**, and **Help** buttons. `Map` opens the full
+  mindmap view, `Teleport` opens a floor/room jump flow with a cooldown,
+  `Home` returns to subject selection, `?` opens the help overlay.
 - **Center gameplay canvas:** Phaser dungeon movement and interactions. The
   camera automatically zooms **in** when the player is standing inside a
   room (so the active room feels focused) and **out** when traveling along
@@ -38,8 +39,9 @@ gets the maximum amount of screen space:
 - **Minimap (bottom-left, floating):** quick room-location awareness. The
   current room and any rooms **directly connected** to it are highlighted
   in the accent color (see [§5 Minimap child highlighting](#5-minimap-child-highlighting)).
-- **Right room panel (floating):** topic metadata, child-room creation,
-  topic deletion (Creator phase), and encounter access.
+- **Right room panel (floating):** topic metadata, breadcrumbs, connected-topic
+  travel, portal shortcuts, child-room creation, reparenting, topic deletion
+  (Creator phase), and encounter access.
 - **Touch controls (bottom-right, floating):** mobile-friendly directional
   / interact buttons.
 
@@ -84,8 +86,10 @@ the room you're standing in are immediately visible at a glance.
 
 During the **Create** phase the Topic tab exposes:
 
-- An **Add child topic** form that grows the mindmap from the currently
-  focused room.
+- A **bulk Add child topics** form that grows the mindmap from the currently
+  focused room using either newline-separated or comma-separated topic lists.
+- A **Change parent** control for safely moving a topic under a different
+  parent without creating cycles.
 - A **Delete topic** action (only on non-root rooms) that removes the
   focused room and any descendants that would become disconnected from the
   root once it's gone. Descendants still reachable via a cross-link are
@@ -93,6 +97,10 @@ During the **Create** phase the Topic tab exposes:
 
 The root topic cannot be deleted; the panel replaces the button with a
 short explanatory note in that case.
+
+The **Full Map** overlay now also includes a lightweight **Graph edit** mode
+for these same authoring actions so the mindmap stays the source of truth and
+the dungeon layout remains a generated view over that graph.
 
 ## 7) Help overlay
 

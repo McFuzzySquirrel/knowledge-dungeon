@@ -64,6 +64,19 @@ export interface AddCrossLinkOutput {
   touchedRoomIds: string[];
 }
 
+export interface ReparentRoomInput {
+  roomId: string;
+  newParentRoomId: string;
+  nowIso: string;
+  createdByPhase?: EdgeCreatedByPhase;
+}
+
+export interface ReparentRoomOutput {
+  dungeon: DungeonMetadata;
+  previousParentRoomId: string | null;
+  touchedRoomIds: string[];
+}
+
 export interface CreatorTraversalSnapshot {
   roomIdsByStatus: Record<RoomState, string[]>;
   visitedRoomIds: string[];

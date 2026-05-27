@@ -11,14 +11,18 @@ describe('Hud', () => {
         xpTotal={120}
         rank="Novice"
         phase="creator"
+        currentFloorLabel="Linear Algebra"
+        teleportRemainingMs={0}
+        teleportModeArmed={false}
         onPhaseChange={() => undefined}
         onHelp={() => undefined}
         onOpenMap={() => undefined}
+        onTeleport={() => undefined}
         onHome={() => undefined}
       />,
     );
 
-    expect(screen.getByText('Linear Algebra')).toBeInTheDocument();
+    expect(screen.getAllByText('Linear Algebra')).toHaveLength(2);
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText(/120/)).toBeInTheDocument();
   });
