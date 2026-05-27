@@ -1,0 +1,142 @@
+# Testing Practices
+
+## Philosophy
+
+Tests in Knowledge Dungeon follow a principle: **Test behavior, not implementation.**
+
+A good test asks "Does the app work?" not "Does the code do what I wrote?"
+
+## Test Organization
+
+Tests live in `/tests/unit/`:
+
+```
+tests/unit/
+  core/
+    graph/              # Graph domain logic
+    validation/         # Note validation
+    progression/        # XP and ranks
+    artifacts/          # Artifact generation
+  game/                 # Phaser scenes
+  store/                # Zustand stores
+```
+
+## Writing Tests
+
+### Example: Validation Test
+
+```typescript
+import { validateNote } from '@/core/validation/notes/noteValidation';
+
+describe('Note Validation', () => {
+  it('passes notes with all required sections', () => {
+    const note = `
+      # Overview
+      This is a test.
+
+      # Key Concepts
+      Testing is important.
+
+      # Key Operations
+      You run tests with npm run test.
+
+      # Design Insight
+      Tests catch bugs early.
+    `;
+    
+    const result = validateNote({
+      roomTopic: 'Testing',
+      noteText: note
+    });
+    
+    expect(result.finalPass).toBe(true);
+    expect(result.wordCount).toBeGreaterThan(100);
+  });
+
+  it('fails notes missing sections', () => {
+    const note = `Brief note without sections`;
+    const result = validateNote({ roomTopic: 'Testing', noteText: note });
+    expect(result.finalPass).toBe(false);
+    expect(result.failedChecks).toContain('Missing required sections');
+  });
+});
+```
+
+### Example: Store Test
+
+```typescript
+import { useSubjectStore } from '@/store/subjectStore';
+
+describe('SubjectStore', () => {
+  it('adds a room to the dungeon', () => {
+    const store = useSubjectStore();
+    
+    // Initial state
+    expect(store.getState().dungeon.rooms).toHaveLength(1);
+    
+    // Add a room
+    store.addRoom({ topic: 'New Topic' });
+    
+    // Verify
+    expect(store.getState().dungeon.rooms).toHaveLength(2);
+  });
+});
+```
+
+## Running Tests
+
+```bash
+npm run test                 # Run all once
+npm run test -- --watch     # Watch mode
+npm run test -- --ui        # Dashboard UI
+npm run test -- graph       # Run only graph tests
+npm run test -- --coverage  # Coverage report
+```
+
+## Test Categories
+
+### Unit Tests
+- **Domain logic** — Graph operations, validation, progression
+- Fast, isolated, deterministic
+- Run on every file change
+
+### Integration Tests
+- **Store + components** — How stores and React work together
+- Mock Phaser, use Testing Library
+- Verify data flows through UI
+
+### Snapshot Tests
+- **Generated artifacts** — Verify markdown output format
+- Can catch unexpected changes
+- Use sparingly (implementation detail sensitive)
+
+## Coverage Goals
+
+Target **70%+ line coverage** for:
+- Core domain modules (graph, validation)
+- Store operations
+- Utility functions
+
+Less critical for:
+- Game rendering (Phaser systems)
+- UI components (covered by integration tests)
+
+## Debugging Tests
+
+```bash
+# Run one test file
+npm run test -- graph.test.ts
+
+# Run tests matching pattern
+npm run test -- --grep "validation"
+
+# Debug in Node
+node --inspect-brk ./node_modules/vitest/vitest.mjs
+
+# Add console.log to test
+console.log('state:', store.getState());
+```
+
+## Design Insight
+
+Tests are **evidence that the app works**. A comprehensive test suite means you can refactor confidently. Tests also serve as **executable documentation**—reading a test shows exactly how a function is meant to be used.

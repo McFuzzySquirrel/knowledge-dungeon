@@ -1,0 +1,64 @@
+# Room Panel & HUD
+
+## The Room Panel (Right Side)
+
+When you enter a room, the right panel shows:
+
+- **Topic name** — Large heading
+- **Room description** — Brief overview
+- **Current room state** — Is it cleared? In progress?
+- **XP for clearing** — How much XP will you earn?
+- **Related topics** — Prerequisite, subtopic, etc. (clickable links)
+- **Phase-specific info** — In Archaeologist, shows artifact for review
+
+## The HUD (Top)
+
+The heads-up display shows game state:
+
+- **Current phase** — Creator / Scribe / Archaeologist
+- **Class/Archetype** — Academic role (optional flavor)
+- **Progression bar** — Current XP → next rank
+- **Current rank** — Novice, Apprentice, Journeyman, etc.
+- **Badges earned** — Visual icons for achievements
+- **Home button** — Return to subject selection
+
+## Interaction
+
+### Clicking Topic Links
+- Links in the room panel (e.g., "See also: Authentication") are clickable
+- Jump to that room in the dungeon
+- Camera pans smoothly to follow
+
+### Keyboard Shortcuts
+- `?` — Toggle help overlay
+- `H` — Return home
+- `M` — Toggle minimap focus
+
+## React + Phaser Integration
+
+The panel and HUD are **React components** rendered on top of the Phaser canvas:
+
+```jsx
+<div className="hud-container">
+  <div className="hud">
+    {/* Phase, rank, XP */}
+  </div>
+  <div className="room-panel">
+    {/* Room topic, description, related topics */}
+  </div>
+  <PhaserCanvas />
+</div>
+```
+
+This layout uses CSS Grid to position the canvas, panel, and HUD.
+
+## Styling
+
+- **Dark theme** — Low-light UI for comfort during long study sessions
+- **Large text** — Easy to read at any distance
+- **High contrast** — Accessibility for low-vision users
+- **Responsive** — Adapts to different screen sizes (desktop, tablet)
+
+## Design Insight
+
+The panel and HUD are **always visible but not intrusive**. They provide context without taking focus from the dungeon. The layout keeps the game world central while surrounding it with necessary information.

@@ -1,0 +1,46 @@
+# Validation Engine
+
+## What It Does
+
+The validation engine ensures that notes submitted during the Scribe phase meet **quality standards**. It's deterministic, transparent, and repeatable.
+
+## The Quality Gate
+
+A note passes if:
+
+1. **Section Completeness** — Contains required sections (Overview, Key Concepts, Key Operations, Design Insight)
+2. **Word Count** — Minimum 100 words to ensure substance
+3. **Concept Coverage** — Includes key terms derived from the room topic
+4. **Link References** — Has references to other concepts (e.g., [[cross-links]], markdown links, "see also")
+5. **Clarity & Readability** — Sentences are reasonable length, no excessive jargon
+
+## Scoring Breakdown
+
+Each criterion is scored 0–2:
+- **2** — Excellent (fully meets criterion)
+- **1** — Partial (somewhat meets criterion)
+- **0** — Missing or failing
+
+A note passes if **all sections are present** OR **manual confirmation** is used.
+
+## Quality Bonus
+
+After a note passes, a **quality bonus** (0–10) is awarded based on criterion scores:
+
+- High scores in all five criteria → bonus near 10
+- Mixed scores → bonus near 5
+- Minimal scores → bonus near 0
+
+This bonus feeds into **XP calculation** during progression tracking.
+
+## Why This Design
+
+The validation is:
+- **Deterministic** — Same note → same score always
+- **Transparent** — You see exactly what passed/failed
+- **Flexible** — Manual override available if automation misses nuance
+- **Evolutionary** — Can add/refine criteria without breaking existing data
+
+## Entry Point
+
+`validateNote()` function accepts a room topic, note text, and optional reference terms. Returns detailed breakdown.

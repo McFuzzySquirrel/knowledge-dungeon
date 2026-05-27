@@ -79,6 +79,8 @@ export interface RoomMetadata {
   state: RoomState;
   notePath: string;
   artifactPath: string;
+  noteText: string;
+  artifactMarkdown: string | null;
   validationState: ValidationState;
   reviewPassCount: number;
   attachments: RoomAttachment[];
@@ -160,6 +162,8 @@ export function makeEmptyRoomMetadata(args: {
     state: 'Created',
     notePath: `rooms/${args.roomId}/notes.txt`,
     artifactPath: `rooms/${args.roomId}/artifact.md`,
+    noteText: '',
+    artifactMarkdown: null,
     validationState: makeEmptyValidationState(),
     reviewPassCount: 0,
     attachments: [],

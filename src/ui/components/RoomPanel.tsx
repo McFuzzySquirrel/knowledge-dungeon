@@ -7,7 +7,6 @@ import {
   extractMarkdownHeadings,
   generateSelfCheckPrompts,
 } from '@/core/review';
-import { generateRoomArtifact } from '@/core/artifacts';
 
 type RoomTab = 'topic' | 'notes' | 'artifact' | 'selfcheck';
 
@@ -50,15 +49,7 @@ export function RoomPanel({ snapshot, focusedRoom, onInteract }: RoomPanelProps)
   }
 
   const artifactMarkdown = focusedRoom.validationState.finalPass
-    ? generateRoomArtifact({
-        subjectName: snapshot.dungeon.subjectName,
-        roomId: focusedRoom.roomId,
-        roomTopic: focusedRoom.topic,
-        noteText: '',
-        criterionScores: focusedRoom.validationState.criterionScores,
-        qualityBonus: focusedRoom.validationState.qualityBonus,
-        generatedAtIso: focusedRoom.updatedAt,
-      }).markdown
+    ? focusedRoom.artifactMarkdown
     : null;
 
   const relatedTopics = snapshot.dungeon.edges
@@ -193,6 +184,9 @@ export function RoomPanel({ snapshot, focusedRoom, onInteract }: RoomPanelProps)
                   {focusedRoom.validationState.requiredSectionsPresent ? 'yes' : 'no'}
                 </p>
                 <p>Quality bonus: {focusedRoom.validationState.qualityBonus}/10</p>
+                {focusedRoom.noteText ? (
+                  <pre style={{ whiteSpace: 'pre-wrap' }}>{focusedRoom.noteText}</pre>
+                ) : null}
               </>
             )}
           </>

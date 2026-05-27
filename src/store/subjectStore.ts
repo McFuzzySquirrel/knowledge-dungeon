@@ -79,6 +79,21 @@ function withRooms(
   return { dungeon, rooms };
 }
 
+function normalizeRoomMetadata(room: RoomMetadata): RoomMetadata {
+  return {
+    ...room,
+    noteText: room.noteText ?? '',
+    artifactMarkdown: room.artifactMarkdown ?? null,
+  };
+}
+
+function normalizeSnapshot(snapshot: SubjectSnapshot): SubjectSnapshot {
+  const rooms = Object.fromEntries(
+    Object.entries(snapshot.rooms).map(([roomId, room]) => [roomId, normalizeRoomMetadata(room)]),
+  );
+  return { ...snapshot, rooms };
+}
+
 export const useSubjectStore = create<SubjectState>((set, get) => ({
   snapshot: null,
   lastError: null,
@@ -115,12 +130,15 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
   },
 
   async loadSubject(subjectId) {
-    const snapshot = await loadSubjectSnapshot(subjectId);
-    if (snapshot) {
+    const loaded = await loadSubjectSnapshot(subjectId);
+    if (loaded) {
+      const snapshot = normalizeSnapshot(loaded);
       set({ snapshot, lastError: null });
       setActiveSubjectId(subjectId);
+      await persist(snapshot);
+      return snapshot;
     }
-    return snapshot;
+    return loaded;
   },
 
   async addChildRoom(parentRoomId, topic) {
@@ -218,6 +236,8 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
         ...room,
         state: 'NotesDrafted',
         updatedAt: nowIso(),
+        noteText,
+        artifactMarkdown: null,
         validationState: {
           wordCount: validation.wordCount,
           requiredSectionsPresent: validation.requiredSectionsPresent,
@@ -252,6 +272,8 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
       ...room,
       state: 'ArtifactCollected',
       updatedAt: generatedAt,
+      noteText,
+      artifactMarkdown: artifact.markdown,
       validationState: {
         wordCount: validation.wordCount,
         requiredSectionsPresent: validation.requiredSectionsPresent,
@@ -299,7 +321,8 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
   },
 
   async importSnapshot(snapshot) {
-    set({ snapshot });
-    await persist(snapshot);
+    const normalized = normalizeSnapshot(snapshot);
+    set({ snapshot: normalized });
+    await persist(normalized);
   },
 }));

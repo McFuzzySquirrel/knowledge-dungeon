@@ -1,0 +1,58 @@
+# Code Quality: ESLint
+
+## What ESLint Does
+
+ESLint is a **static code analyzer** that catches bugs and enforces style before code runs.
+
+### Examples of Caught Issues
+- Unused variables or imports
+- Missing return statements
+- Inconsistent naming conventions
+- Import ordering issues
+- Potential null-reference bugs
+
+## Configuration: Flat Config
+
+We use ESLint 9's **flat config** (`eslint.config.js`), the modern approach:
+
+```typescript
+export default [
+  js.configs.recommended,
+  {
+    languageOptions: { globals: globals.browser },
+    rules: {
+      'no-console': 'warn',
+      'prefer-const': 'error'
+    }
+  },
+  ...tseslint.configs.strictTypeChecked
+];
+```
+
+### Running Linting
+
+```bash
+npm run lint                 # Check all files
+npm run lint -- --fix       # Auto-fix issues
+```
+
+## Rules Used
+
+We enforce:
+- **TypeScript strict checking** — All `tseslint.configs.strictTypeChecked`
+- **React best practices** — via `eslint-plugin-react-hooks`
+- **Import ordering** — Alphabetical, organized by source
+- **No-console in production** — Debug logs must be removed
+- **Consistent naming** — camelCase for functions/variables
+
+## Integration
+
+Linting runs in:
+- **Editor** — Real-time feedback if your IDE has ESLint plugin
+- **Pre-commit** — Via git hooks (optional, not currently configured)
+- **CI/CD** — In GitHub Actions before merging
+- **Manual** — `npm run lint` anytime
+
+## Design Insight
+
+ESLint is a **quiet ally**. It doesn't interrupt your work but gently enforces standards. A consistent codebase is easier to maintain and less prone to silly bugs. Combined with TypeScript, ESLint is one of the main reasons the codebase stays healthy as it grows.

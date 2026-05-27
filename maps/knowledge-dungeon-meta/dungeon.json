@@ -1,0 +1,1474 @@
+{
+  "dungeon": {
+    "schemaVersion": "1.0.0",
+    "dungeonId": "knowledge-dungeon-meta",
+    "subjectName": "How We Built Knowledge Dungeon",
+    "createdAt": "2026-05-26T06:00:00Z",
+    "updatedAt": "2026-05-26T06:00:00Z",
+    "phaseState": "SubjectCreated",
+    "rootRoomId": "root-overview",
+    "rooms": [
+      {
+        "roomId": "root-overview",
+        "topic": "How We Built Knowledge Dungeon",
+        "status": "Created"
+      },
+      {
+        "roomId": "arch-core-domains",
+        "topic": "Architecture & Core Domains",
+        "status": "Created"
+      },
+      {
+        "roomId": "arch-graph-module",
+        "topic": "Core Graph Module",
+        "status": "Created"
+      },
+      {
+        "roomId": "arch-validation",
+        "topic": "Validation Engine",
+        "status": "Created"
+      },
+      {
+        "roomId": "arch-progression",
+        "topic": "Progression System",
+        "status": "Created"
+      },
+      {
+        "roomId": "arch-artifacts",
+        "topic": "Artifacts & Review System",
+        "status": "Created"
+      },
+      {
+        "roomId": "arch-persistence",
+        "topic": "Persistence Layer",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-stack",
+        "topic": "Technology Stack",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-frontend",
+        "topic": "Frontend: React & Phaser",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-state",
+        "topic": "State Management: Zustand",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-build",
+        "topic": "Build Tools: Vite & TypeScript",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-desktop",
+        "topic": "Desktop: Electron",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-testing",
+        "topic": "Testing: Vitest & Testing Library",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-linting",
+        "topic": "Code Quality: ESLint",
+        "status": "Created"
+      },
+      {
+        "roomId": "phases-overview",
+        "topic": "The Three Phases",
+        "status": "Created"
+      },
+      {
+        "roomId": "phase-creator",
+        "topic": "Creator Phase",
+        "status": "Created"
+      },
+      {
+        "roomId": "phase-scribe",
+        "topic": "Scribe Phase",
+        "status": "Created"
+      },
+      {
+        "roomId": "phase-archaeologist",
+        "topic": "Archaeologist Phase",
+        "status": "Created"
+      },
+      {
+        "roomId": "game-systems",
+        "topic": "Game Systems",
+        "status": "Created"
+      },
+      {
+        "roomId": "game-rendering",
+        "topic": "Dungeon Rendering & Navigation",
+        "status": "Created"
+      },
+      {
+        "roomId": "game-encounter",
+        "topic": "Encounter System",
+        "status": "Created"
+      },
+      {
+        "roomId": "game-ui",
+        "topic": "Room Panel & HUD",
+        "status": "Created"
+      },
+      {
+        "roomId": "game-minimap",
+        "topic": "Minimap & Controls",
+        "status": "Created"
+      },
+      {
+        "roomId": "features",
+        "topic": "Features & Mechanics",
+        "status": "Created"
+      },
+      {
+        "roomId": "feat-subject-mgmt",
+        "topic": "Subject Management",
+        "status": "Created"
+      },
+      {
+        "roomId": "feat-validation",
+        "topic": "Note Validation System",
+        "status": "Created"
+      },
+      {
+        "roomId": "feat-quality",
+        "topic": "Quality Scoring",
+        "status": "Created"
+      },
+      {
+        "roomId": "feat-artifacts",
+        "topic": "Artifact Generation",
+        "status": "Created"
+      },
+      {
+        "roomId": "feat-review",
+        "topic": "Review Mechanics",
+        "status": "Created"
+      },
+      {
+        "roomId": "feat-progression",
+        "topic": "Progression Tracking",
+        "status": "Created"
+      },
+      {
+        "roomId": "dev-workflow",
+        "topic": "Development Workflow",
+        "status": "Created"
+      },
+      {
+        "roomId": "dev-build",
+        "topic": "Build Scripts & Commands",
+        "status": "Created"
+      },
+      {
+        "roomId": "dev-testing",
+        "topic": "Testing Practices",
+        "status": "Created"
+      },
+      {
+        "roomId": "dev-persistence",
+        "topic": "Persistence Strategies",
+        "status": "Created"
+      },
+      {
+        "roomId": "dev-electron",
+        "topic": "Electron Packaging",
+        "status": "Created"
+      },
+      {
+        "roomId": "dev-performance",
+        "topic": "Performance & Bundle Size",
+        "status": "Created"
+      }
+    ],
+    "edges": [
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "arch-core-domains",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "tech-stack",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "phases-overview",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "game-systems",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "features",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "dev-workflow",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-core-domains",
+        "toRoomId": "arch-graph-module",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-core-domains",
+        "toRoomId": "arch-validation",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-core-domains",
+        "toRoomId": "arch-progression",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-core-domains",
+        "toRoomId": "arch-artifacts",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-core-domains",
+        "toRoomId": "arch-persistence",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-validation",
+        "toRoomId": "feat-validation",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-progression",
+        "toRoomId": "feat-progression",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-artifacts",
+        "toRoomId": "feat-artifacts",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "arch-persistence",
+        "toRoomId": "dev-persistence",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "tech-frontend",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "tech-state",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "tech-build",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "tech-desktop",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "tech-testing",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "tech-linting",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-frontend",
+        "toRoomId": "game-rendering",
+        "relationType": "depends_on",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-state",
+        "toRoomId": "game-ui",
+        "relationType": "depends_on",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "phases-overview",
+        "toRoomId": "phase-creator",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "phases-overview",
+        "toRoomId": "phase-scribe",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "phases-overview",
+        "toRoomId": "phase-archaeologist",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "phase-creator",
+        "toRoomId": "feat-subject-mgmt",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "phase-scribe",
+        "toRoomId": "feat-validation",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "phase-scribe",
+        "toRoomId": "feat-artifacts",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "phase-archaeologist",
+        "toRoomId": "feat-review",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "game-systems",
+        "toRoomId": "game-rendering",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "game-systems",
+        "toRoomId": "game-encounter",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "game-systems",
+        "toRoomId": "game-ui",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "game-systems",
+        "toRoomId": "game-minimap",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "game-encounter",
+        "toRoomId": "feat-validation",
+        "relationType": "depends_on",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "features",
+        "toRoomId": "feat-subject-mgmt",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "features",
+        "toRoomId": "feat-validation",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "features",
+        "toRoomId": "feat-quality",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "features",
+        "toRoomId": "feat-artifacts",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "features",
+        "toRoomId": "feat-review",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "features",
+        "toRoomId": "feat-progression",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "feat-validation",
+        "toRoomId": "feat-quality",
+        "relationType": "related",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "feat-progression",
+        "toRoomId": "feat-quality",
+        "relationType": "analogy",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "dev-workflow",
+        "toRoomId": "dev-build",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "dev-workflow",
+        "toRoomId": "dev-testing",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "dev-workflow",
+        "toRoomId": "dev-persistence",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "dev-workflow",
+        "toRoomId": "dev-electron",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "dev-workflow",
+        "toRoomId": "dev-performance",
+        "relationType": "subtopic",
+        "createdAt": "2026-05-26T06:00:00Z",
+        "createdByPhase": "Creator"
+      }
+    ],
+    "progression": {
+      "xpTotal": 0,
+      "rank": "Novice",
+      "badges": []
+    }
+  },
+  "rooms": {
+    "dev-performance": {
+      "artifactPath": "rooms/room-dev-performance/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "dev-performance",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-dev-performance/notes.txt",
+      "topic": "Performance & Bundle Size"
+    },
+    "game-encounter": {
+      "artifactPath": "rooms/room-game-encounter/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "game-encounter",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-game-encounter/notes.txt",
+      "topic": "Encounter System"
+    },
+    "root-overview": {
+      "artifactPath": "rooms/room-root-overview/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "root-overview",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-root-overview/notes.txt",
+      "topic": "How We Built Knowledge Dungeon"
+    },
+    "feat-progression": {
+      "artifactPath": "rooms/room-feat-progression/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "feat-progression",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-feat-progression/notes.txt",
+      "topic": "Progression Tracking"
+    },
+    "phase-archaeologist": {
+      "artifactPath": "rooms/room-phase-archaeologist/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "phase-archaeologist",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-phase-archaeologist/notes.txt",
+      "topic": "Archaeologist Phase"
+    },
+    "tech-state": {
+      "artifactPath": "rooms/room-tech-state/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "tech-state",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-tech-state/notes.txt",
+      "topic": "State Management: Zustand"
+    },
+    "dev-electron": {
+      "artifactPath": "rooms/room-dev-electron/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "dev-electron",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-dev-electron/notes.txt",
+      "topic": "Electron Packaging"
+    },
+    "tech-linting": {
+      "artifactPath": "rooms/room-tech-linting/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "tech-linting",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-tech-linting/notes.txt",
+      "topic": "Code Quality: ESLint"
+    },
+    "arch-core-domains": {
+      "artifactPath": "rooms/room-arch-core-domains/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "arch-core-domains",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-arch-core-domains/notes.txt",
+      "topic": "Architecture & Core Domains"
+    },
+    "feat-review": {
+      "artifactPath": "rooms/room-feat-review/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "feat-review",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-feat-review/notes.txt",
+      "topic": "Review Mechanics"
+    },
+    "phase-scribe": {
+      "artifactPath": "rooms/room-phase-scribe/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "phase-scribe",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-phase-scribe/notes.txt",
+      "topic": "Scribe Phase"
+    },
+    "arch-artifacts": {
+      "artifactPath": "rooms/room-arch-artifacts/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "arch-artifacts",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-arch-artifacts/notes.txt",
+      "topic": "Artifacts & Review System"
+    },
+    "tech-build": {
+      "artifactPath": "rooms/room-tech-build/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "tech-build",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-tech-build/notes.txt",
+      "topic": "Build Tools: Vite & TypeScript"
+    },
+    "dev-persistence": {
+      "artifactPath": "rooms/room-dev-persistence/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "dev-persistence",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-dev-persistence/notes.txt",
+      "topic": "Persistence Strategies"
+    },
+    "dev-workflow": {
+      "artifactPath": "rooms/room-dev-workflow/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "dev-workflow",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-dev-workflow/notes.txt",
+      "topic": "Development Workflow"
+    },
+    "dev-build": {
+      "artifactPath": "rooms/room-dev-build/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "dev-build",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-dev-build/notes.txt",
+      "topic": "Build Scripts & Commands"
+    },
+    "feat-quality": {
+      "artifactPath": "rooms/room-feat-quality/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "feat-quality",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-feat-quality/notes.txt",
+      "topic": "Quality Scoring"
+    },
+    "tech-stack": {
+      "artifactPath": "rooms/room-tech-stack/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "tech-stack",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-tech-stack/notes.txt",
+      "topic": "Technology Stack"
+    },
+    "feat-artifacts": {
+      "artifactPath": "rooms/room-feat-artifacts/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "feat-artifacts",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-feat-artifacts/notes.txt",
+      "topic": "Artifact Generation"
+    },
+    "tech-desktop": {
+      "artifactPath": "rooms/room-tech-desktop/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "tech-desktop",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-tech-desktop/notes.txt",
+      "topic": "Desktop: Electron"
+    },
+    "arch-graph-module": {
+      "artifactPath": "rooms/room-arch-graph-module/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "arch-graph-module",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-arch-graph-module/notes.txt",
+      "topic": "Core Graph Module"
+    },
+    "phase-creator": {
+      "artifactPath": "rooms/room-phase-creator/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "phase-creator",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-phase-creator/notes.txt",
+      "topic": "Creator Phase"
+    },
+    "game-ui": {
+      "artifactPath": "rooms/room-game-ui/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "game-ui",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-game-ui/notes.txt",
+      "topic": "Room Panel & HUD"
+    },
+    "arch-validation": {
+      "artifactPath": "rooms/room-arch-validation/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "arch-validation",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-arch-validation/notes.txt",
+      "topic": "Validation Engine"
+    },
+    "features": {
+      "artifactPath": "rooms/room-features/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "features",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-features/notes.txt",
+      "topic": "Features & Mechanics"
+    },
+    "arch-persistence": {
+      "artifactPath": "rooms/room-arch-persistence/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "arch-persistence",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-arch-persistence/notes.txt",
+      "topic": "Persistence Layer"
+    },
+    "feat-validation": {
+      "artifactPath": "rooms/room-feat-validation/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "feat-validation",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-feat-validation/notes.txt",
+      "topic": "Note Validation System"
+    },
+    "game-minimap": {
+      "artifactPath": "rooms/room-game-minimap/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "game-minimap",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-game-minimap/notes.txt",
+      "topic": "Minimap & Controls"
+    },
+    "arch-progression": {
+      "artifactPath": "rooms/room-arch-progression/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "arch-progression",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-arch-progression/notes.txt",
+      "topic": "Progression System"
+    },
+    "tech-frontend": {
+      "artifactPath": "rooms/room-tech-frontend/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "tech-frontend",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-tech-frontend/notes.txt",
+      "topic": "Frontend: React & Phaser"
+    },
+    "dev-testing": {
+      "artifactPath": "rooms/room-dev-testing/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "dev-testing",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-dev-testing/notes.txt",
+      "topic": "Testing Practices"
+    },
+    "feat-subject-mgmt": {
+      "artifactPath": "rooms/room-feat-subject-mgmt/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "feat-subject-mgmt",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-feat-subject-mgmt/notes.txt",
+      "topic": "Subject Management"
+    },
+    "tech-testing": {
+      "artifactPath": "rooms/room-tech-testing/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "tech-testing",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-tech-testing/notes.txt",
+      "topic": "Testing: Vitest & Testing Library"
+    },
+    "game-rendering": {
+      "artifactPath": "rooms/room-game-rendering/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "game-rendering",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-game-rendering/notes.txt",
+      "topic": "Dungeon Rendering & Navigation"
+    },
+    "phases-overview": {
+      "artifactPath": "rooms/room-phases-overview/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "phases-overview",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-phases-overview/notes.txt",
+      "topic": "The Three Phases"
+    },
+    "game-systems": {
+      "artifactPath": "rooms/room-game-systems/artifact.md",
+      "validationState": {
+        "requiredSectionsPresent": false,
+        "wordCount": 0,
+        "finalPass": false,
+        "qualityBonus": 0,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "linkReferences": 0,
+          "sectionCompleteness": 0,
+          "clarityReadability": 0,
+          "conceptTermCoverage": 0,
+          "recallQuestionQuality": 0
+        },
+        "failedChecks": []
+      },
+      "state": "Created",
+      "roomId": "game-systems",
+      "attachments": [],
+      "updatedAt": "2026-05-26T06:00:00Z",
+      "reviewPassCount": 0,
+      "createdAt": "2026-05-26T06:00:00Z",
+      "notePath": "rooms/room-game-systems/notes.txt",
+      "topic": "Game Systems"
+    }
+  }
+}

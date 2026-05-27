@@ -1,0 +1,66 @@
+# Minimap & Controls
+
+## The Minimap
+
+A small map in the corner showing:
+
+- **All rooms** — Rendered as small nodes
+- **All edges** — Lines connecting related topics
+- **Player position** — Marker showing where you are
+- **Explored vs. unexplored** — Color difference for visited rooms
+
+### Minimap Interaction
+- **Hover** — Shows room name tooltip
+- **Click** — Jump to that room (in Creator phase)
+- **Drag to move** — Pan the minimap (optional)
+- **Zoom controls** — Scale in/out
+
+## Control Schemes
+
+### Keyboard (Default)
+| Key | Action |
+| --- | --- |
+| W / ↑ | Move up |
+| A / ← | Move left |
+| S / ↓ | Move down |
+| D / → | Move right |
+| E | Interact / Open encounter |
+| ? | Toggle help |
+| M | Focus minimap |
+
+### Touchscreen
+- **On-screen D-pad** — Four buttons for movement
+- **Interact button** — Large center button for E action
+- **Tap on minimap** — Jump to room
+- **Swipe** — Camera pan (optional)
+
+### Accessibility
+
+For accessibility, we support:
+- **Reduced motion** — Disable animations if preferred
+- **Screen reader** — Labels and ARIA attributes for navigation
+- **Keyboard-only** — No mouse required (Tab to navigate)
+- **High contrast** — Alternative color scheme available
+
+## Camera Control
+
+The Phaser camera **follows the player smoothly**:
+
+- **Lerp speed** — Camera eases toward player, doesn't snap
+- **Bounds** — Can't pan beyond the dungeon edges
+- **Zoom** — Can zoom in/out with mouse wheel
+
+In Archaeologist phase, you can also **pan freely** to review the full map.
+
+## Mobile Considerations
+
+On tablets/phones:
+
+- Touch-friendly UI (larger buttons)
+- D-pad buttons are big and responsive
+- Minimap scales appropriately
+- Portrait/landscape orientation supported
+
+## Design Insight
+
+Control schemes are **multiple choice**, not one-size-fits-all. Keyboard players feel at home; touch players have responsive controls; accessibility users have options. This flexibility makes the app usable for everyone.
