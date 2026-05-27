@@ -22,7 +22,7 @@ describe('Hud', () => {
       />,
     );
 
-    expect(screen.getByText('Linear Algebra')).toBeInTheDocument();
+    expect(screen.getAllByText('Linear Algebra')).toHaveLength(2);
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText(/120/)).toBeInTheDocument();
   });
