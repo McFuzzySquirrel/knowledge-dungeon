@@ -140,7 +140,8 @@ export function isReachableViaSubtopics(
   const queue = [...(children.get(fromRoomId) ?? [])];
   const visited = new Set<string>();
   while (queue.length > 0) {
-    const current = queue.shift()!;
+    const current = queue.shift();
+    if (!current) continue;
     if (current === targetRoomId) return true;
     if (visited.has(current)) continue;
     visited.add(current);
