@@ -8,6 +8,7 @@ import {
 import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
+import { Markdown } from '@/ui/utils/markdown';
 import {
   evaluateReviewUnlock,
   extractMarkdownHeadings,
@@ -74,6 +75,20 @@ export function RoomPanel({
     .map((roomId) => snapshot.rooms[roomId])
     .filter((room): room is RoomMetadata => Boolean(room));
   const relatedTopics = connectedRooms.map((room) => room.topic);
+  const focusedFloorId = hierarchy.floorIdByRoomId[focusedRoom.roomId];
+  const sameFloorConnections = connectedRooms.filter(
+    (room) => hierarchy.floorIdByRoomId[room.roomId] === focusedFloorId,
+  );
+  const otherFloorConnections = connectedRooms.filter(
+    (room) => hierarchy.floorIdByRoomId[room.roomId] !== focusedFloorId,
+  );
+  const parentRoomId = hierarchy.parentByRoomId[focusedRoom.roomId];
+  const parentRoom = parentRoomId ? snapshot.rooms[parentRoomId] ?? null : null;
+  const parentFloorId = parentRoom ? hierarchy.floorIdByRoomId[parentRoom.roomId] : null;
+  const parentFloorRoom =
+    parentFloorId && parentFloorId !== focusedFloorId
+      ? snapshot.rooms[parentFloorId] ?? null
+      : null;
 
   const selfCheckPrompts = focusedRoom.validationState.finalPass
     ? generateSelfCheckPrompts({
@@ -157,11 +172,11 @@ export function RoomPanel({
             </p>
             <p className="room-meta-line">Edges: {relatedTopics.length}</p>
 
-            {connectedRooms.length > 0 ? (
+            {sameFloorConnections.length > 0 ? (
               <div className="room-section">
-                <h3>Connected topics</h3>
+                <h3>Connected topics on this floor</h3>
                 <div className="linked-topic-list">
-                  {connectedRooms.map((room) => (
+                  {sameFloorConnections.map((room) => (
                     <button
                       key={room.roomId}
                       type="button"
@@ -171,6 +186,46 @@ export function RoomPanel({
                       Travel to {room.topic}
                     </button>
                   ))}
+                </div>
+              </div>
+            ) : null}
+
+            {parentFloorRoom || otherFloorConnections.length > 0 ? (
+              <div className="room-section">
+                <h3>Travel to related floors</h3>
+                <div className="linked-topic-list">
+                  {parentFloorRoom ? (
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => onTravelToRoom(parentFloorRoom.roomId)}
+                      title={`Back to ${hierarchy.floorLabelByFloorId[parentFloorRoom.roomId]}`}
+                    >
+                      ← Back to {parentFloorRoom.topic}
+                    </button>
+                  ) : null}
+                  {otherFloorConnections
+                    .filter((room) => room.roomId !== parentFloorRoom?.roomId)
+                    .map((room) => (
+                      <button
+                        key={room.roomId}
+                        type="button"
+                        className="ghost"
+                        onClick={() => onTravelToRoom(room.roomId)}
+                        title={`On ${hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[room.roomId]]}`}
+                      >
+                        Travel to {room.topic}{' '}
+                        <small>
+                          (
+                          {
+                            hierarchy.floorLabelByFloorId[
+                              hierarchy.floorIdByRoomId[room.roomId]
+                            ]
+                          }
+                          )
+                        </small>
+                      </button>
+                    ))}
                 </div>
               </div>
             ) : null}
@@ -300,7 +355,7 @@ export function RoomPanel({
                 </p>
                 <p>Quality bonus: {focusedRoom.validationState.qualityBonus}/10</p>
                 {focusedRoom.noteText ? (
-                  <pre style={{ whiteSpace: 'pre-wrap' }}>{focusedRoom.noteText}</pre>
+                  <Markdown source={focusedRoom.noteText} className="markdown-body note-body" />
                 ) : null}
               </>
             )}
@@ -311,7 +366,7 @@ export function RoomPanel({
           <>
             <h2>Artifact</h2>
             {artifactMarkdown ? (
-              <pre style={{ whiteSpace: 'pre-wrap' }}>{artifactMarkdown}</pre>
+              <Markdown source={artifactMarkdown} className="markdown-body artifact-body" />
             ) : (
               <p>Defeat this encounter to generate an artifact.</p>
             )}
