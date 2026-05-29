@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Brazier: stone bowl with a warm flame -->
+  <ellipse cx="12" cy="20" rx="7" ry="2" fill="#1c1108" opacity="0.6"/>
+  <path d="M5 18 L7 13 L17 13 L19 18 Z" fill="#5a4028" stroke="#2a1d10" stroke-width="0.8"/>
+  <rect x="6" y="12.5" width="12" height="1.6" rx="0.4" fill="#7a5a32" stroke="#2a1d10" stroke-width="0.6"/>
+  <!-- flames -->
+  <path d="M9 12 Q10 7 12 9 Q14 5 14 11 Q14 12 12 12 Q10 12 9 12 Z" fill="#f2c879"/>
+  <path d="M10 12 Q11 9 12 10 Q13 7 13 11 Q13 12 12 12 Q11 12 10 12 Z" fill="#ff9b3a"/>
+  <path d="M11.2 12 Q11.6 10 12 10.5 Q12.4 9 12.6 11.5 Q12.6 12 12 12 Q11.4 12 11.2 12 Z" fill="#fff2c2"/>
+</svg>

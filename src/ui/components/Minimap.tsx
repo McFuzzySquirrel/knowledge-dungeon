@@ -1,15 +1,34 @@
 import type { JSX } from 'react';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
+import { usePreferencesStore } from '@/store/preferencesStore';
 
 interface MinimapProps {
   dungeonMap: DungeonMap;
   focusedRoomId: string | null;
+  /**
+   * Optional set of room IDs the player can currently see. When provided the
+   * minimap only renders rooms / corridors inside this set, keeping the
+   * minimap consistent with the in-game floor isolation.
+   */
+  visibleRoomIds?: ReadonlySet<string>;
+  /** Direct parent of the current floor (used for portal-up styling). */
+  portalUpRoomId?: string | null;
+  /** Direct children that are entries to other floors. */
+  portalDownRoomIds?: ReadonlySet<string>;
 }
 
 const SCALE = 4;
 
-export function Minimap({ dungeonMap, focusedRoomId }: MinimapProps): JSX.Element {
+export function Minimap({
+  dungeonMap,
+  focusedRoomId,
+  visibleRoomIds,
+  portalUpRoomId,
+  portalDownRoomIds,
+}: MinimapProps): JSX.Element {
   const { bounds, rooms } = dungeonMap;
+  const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
+  const isRpg = graphicsMode === 'rpg';
   const width = (bounds.maxX - bounds.minX) * SCALE;
   const height = (bounds.maxY - bounds.minY) * SCALE;
 
@@ -24,10 +43,14 @@ export function Minimap({ dungeonMap, focusedRoomId }: MinimapProps): JSX.Elemen
     }
   }
 
+  const isRoomVisible = (roomId: string): boolean =>
+    !visibleRoomIds || visibleRoomIds.has(roomId);
+
   return (
-    <div className="minimap" aria-label="Minimap">
+    <div className="minimap" aria-label="Minimap" data-graphics={graphicsMode}>
       <svg width={Math.min(180, width)} height={Math.min(180, height)} viewBox={`0 0 ${width} ${height}`}>
         {dungeonMap.corridors.map((c, i) => {
+          if (!isRoomVisible(c.fromRoomId) || !isRoomVisible(c.toRoomId)) return null;
           const from = rooms.find((r) => r.roomId === c.fromRoomId);
           const to = rooms.find((r) => r.roomId === c.toRoomId);
           if (!from || !to) return null;
@@ -38,6 +61,11 @@ export function Minimap({ dungeonMap, focusedRoomId }: MinimapProps): JSX.Elemen
           const isConnected =
             focusedRoomId !== null &&
             (c.fromRoomId === focusedRoomId || c.toRoomId === focusedRoomId);
+          const isPortalEdge =
+            c.fromRoomId === portalUpRoomId ||
+            c.toRoomId === portalUpRoomId ||
+            (portalDownRoomIds?.has(c.fromRoomId) ?? false) ||
+            (portalDownRoomIds?.has(c.toRoomId) ?? false);
           return (
             <line
               key={i}
@@ -45,35 +73,83 @@ export function Minimap({ dungeonMap, focusedRoomId }: MinimapProps): JSX.Elemen
               y1={y1}
               x2={x2}
               y2={y2}
-              stroke={isConnected ? '#f2c879' : '#3b455e'}
+              stroke={
+                isConnected
+                  ? '#f2c879'
+                  : isPortalEdge
+                    ? '#7fb2ff'
+                    : isRpg
+                      ? '#6b4a24'
+                      : '#3b455e'
+              }
               strokeWidth={isConnected ? 1.5 : 1}
+              strokeLinecap={isRpg ? 'round' : undefined}
+              strokeDasharray={isPortalEdge ? '3 2' : undefined}
             />
           );
         })}
         {rooms.map((room) => {
+          if (!isRoomVisible(room.roomId)) return null;
           const x = (room.gridX - bounds.minX) * SCALE;
           const y = (room.gridY - bounds.minY) * SCALE;
           const w = room.width * SCALE;
           const h = room.height * SCALE;
           const isFocused = room.roomId === focusedRoomId;
           const isNeighbor = neighborIds.has(room.roomId);
-          const fill = isFocused
-            ? '#f2c879'
-            : isNeighbor
-              ? '#f7d99c'
-              : room.isRoot
-                ? '#7fb2ff'
-                : '#1f2433';
+          const isPortal =
+            room.roomId === portalUpRoomId ||
+            (portalDownRoomIds?.has(room.roomId) ?? false);
+          const rpgFill = isPortal
+            ? '#2a3a5c'
+            : isFocused
+              ? '#f2c879'
+              : isNeighbor
+                ? '#e8c98a'
+                : room.isRoot
+                  ? '#b88a4a'
+                  : '#3d2b1a';
+          const mindmapFill = isPortal
+            ? '#2a3a5c'
+            : isFocused
+              ? '#f2c879'
+              : isNeighbor
+                ? '#f7d99c'
+                : room.isRoot
+                  ? '#7fb2ff'
+                  : '#1f2433';
+          const fill = isRpg ? rpgFill : mindmapFill;
+          const stroke = isPortal
+            ? '#7fb2ff'
+            : isNeighbor && !isFocused
+              ? '#f2c879'
+              : isRpg
+                ? '#6b4a24'
+                : '#a8b0c8';
+          const strokeWidth = isPortal || (isNeighbor && !isFocused) ? 1 : 0.5;
+          if (isRpg) {
+            return (
+              <rect
+                key={room.roomId}
+                x={x}
+                y={y}
+                width={w}
+                height={h}
+                fill={fill}
+                stroke={stroke}
+                strokeWidth={strokeWidth}
+              />
+            );
+          }
           return (
-            <rect
+            <ellipse
               key={room.roomId}
-              x={x}
-              y={y}
-              width={w}
-              height={h}
+              cx={x + w / 2}
+              cy={y + h / 2}
+              rx={w / 2}
+              ry={h / 2}
               fill={fill}
-              stroke={isNeighbor && !isFocused ? '#f2c879' : '#a8b0c8'}
-              strokeWidth={isNeighbor && !isFocused ? 1 : 0.5}
+              stroke={stroke}
+              strokeWidth={strokeWidth}
             />
           );
         })}

@@ -1,21 +1,25 @@
 import Phaser from 'phaser';
-import { DungeonScene } from '@/game/scenes/DungeonScene';
+import { DungeonScene, type FloorVisibilityInput } from '@/game/scenes/DungeonScene';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 import type { DungeonSceneEvents } from '@/game/scenes/DungeonScene';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
+import type { GraphicsMode } from '@/store/preferencesStore';
 
 export interface CreateGameOptions {
   parent: HTMLElement;
   dungeonMap: DungeonMap;
   callbacks: DungeonSceneEvents;
   playerClass?: PlayerClassId | null;
+  graphicsMode?: GraphicsMode;
+  initialFloor?: FloorVisibilityInput;
 }
 
 export function createGame(options: CreateGameOptions): Phaser.Game {
+  const graphicsMode: GraphicsMode = options.graphicsMode ?? 'rpg';
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: options.parent,
-    backgroundColor: '#10131a',
+    backgroundColor: graphicsMode === 'rpg' ? '#1a120a' : '#10131a',
     scale: {
       mode: Phaser.Scale.RESIZE,
       autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -33,6 +37,8 @@ export function createGame(options: CreateGameOptions): Phaser.Game {
     dungeonMap: options.dungeonMap,
     callbacks: options.callbacks,
     playerClass: options.playerClass ?? null,
+    graphicsMode,
+    initialFloor: options.initialFloor,
   });
 
   return game;
