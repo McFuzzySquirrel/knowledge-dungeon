@@ -16,6 +16,7 @@ import {
 import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistence';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 import type { GamePhase } from '@/store/sessionStore';
+import { usePreferencesStore } from '@/store/preferencesStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
 
@@ -50,6 +51,8 @@ export function FullMapView({
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
   const reparentRoom = useSubjectStore((s) => s.reparentRoom);
   const lastError = useSubjectStore((s) => s.lastError);
+  const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
+  const isRpg = graphicsMode === 'rpg';
   const { bounds, rooms, corridors } = dungeonMap;
   const innerWidth = (bounds.maxX - bounds.minX) * SCALE;
   const innerHeight = (bounds.maxY - bounds.minY) * SCALE;
@@ -267,7 +270,12 @@ export function FullMapView({
                 height: innerHeight,
               }}
             >
-              <svg width={innerWidth} height={innerHeight} viewBox={`0 0 ${innerWidth} ${innerHeight}`}>
+              <svg
+                width={innerWidth}
+                height={innerHeight}
+                viewBox={`0 0 ${innerWidth} ${innerHeight}`}
+                data-graphics={graphicsMode}
+              >
                 {visibleCorridors.map((c, i) => {
                   const from = rooms.find((r) => r.roomId === c.fromRoomId);
                   const to = rooms.find((r) => r.roomId === c.toRoomId);
@@ -283,6 +291,13 @@ export function FullMapView({
                     portalRoomId !== null &&
                     floorFilterOn &&
                     (c.fromRoomId === portalRoomId || c.toRoomId === portalRoomId);
+                  const corridorStroke = isConnected
+                    ? '#f2c879'
+                    : isPortalEdge
+                      ? '#7fb2ff'
+                      : isRpg
+                        ? '#7a5a32'
+                        : '#3b455e';
                   return (
                     <line
                       key={i}
@@ -290,10 +305,9 @@ export function FullMapView({
                       y1={y1}
                       x2={x2}
                       y2={y2}
-                      stroke={
-                        isConnected ? '#f2c879' : isPortalEdge ? '#7fb2ff' : '#3b455e'
-                      }
-                      strokeWidth={isConnected ? 3 : isPortalEdge ? 2.5 : 2}
+                      stroke={corridorStroke}
+                      strokeWidth={isConnected ? 3 : isPortalEdge ? 2.5 : isRpg ? 3 : 2}
+                      strokeLinecap={isRpg ? 'round' : undefined}
                       strokeDasharray={isPortalEdge ? '6 4' : undefined}
                     />
                   );
@@ -303,12 +317,23 @@ export function FullMapView({
                   const y = (room.gridY - bounds.minY) * SCALE;
                   const w = room.width * SCALE;
                   const h = room.height * SCALE;
+                  const cx = x + w / 2;
+                  const cy = y + h / 2;
                   const isFocused = room.roomId === focusedRoomId;
                   const isNeighbor = neighborIds.has(room.roomId);
                   const isSelected = room.roomId === selectedRoomId;
                   const isPortal =
                     floorFilterOn && portalRoomId !== null && room.roomId === portalRoomId;
-                  const fill = isPortal
+                  const rpgFill = isPortal
+                    ? '#3a2a1a'
+                    : isFocused
+                      ? '#f2c879'
+                      : isNeighbor
+                        ? '#e8c98a'
+                        : room.isRoot
+                          ? '#b88a4a'
+                          : '#3d2b1a';
+                  const mindmapFill = isPortal
                     ? '#2a3a5c'
                     : isFocused
                       ? '#f2c879'
@@ -317,41 +342,73 @@ export function FullMapView({
                         : room.isRoot
                           ? '#7fb2ff'
                           : '#1f2433';
+                  const fill = isRpg ? rpgFill : mindmapFill;
+                  const stroke = isSelected
+                    ? '#8b5cf6'
+                    : isPortal
+                      ? '#7fb2ff'
+                      : isFocused || isNeighbor
+                        ? '#f2c879'
+                        : isRpg
+                          ? '#6b4a24'
+                          : '#a8b0c8';
+                  const strokeWidth = isSelected
+                    ? 3
+                    : isPortal
+                      ? 2.5
+                      : isFocused
+                        ? 2
+                        : isNeighbor
+                          ? 1.5
+                          : isRpg
+                            ? 1.5
+                            : 1;
+                  const textFill = isRpg
+                    ? isFocused || isNeighbor
+                      ? '#3a2a14'
+                      : '#f4e4c2'
+                    : isFocused || isNeighbor
+                      ? '#14171e'
+                      : '#f5f7ff';
                   return (
                     <g
                       key={room.roomId}
                       onClick={() => setSelectedRoomId(room.roomId)}
                       role="button"
                       tabIndex={0}
+                      data-room-id={room.roomId}
                     >
-                      <rect
-                        x={x}
-                        y={y}
-                        width={w}
-                        height={h}
-                        fill={fill}
-                        stroke={
-                          isSelected
-                            ? '#8b5cf6'
-                            : isPortal
-                              ? '#7fb2ff'
-                              : isFocused || isNeighbor
-                                ? '#f2c879'
-                                : '#a8b0c8'
-                        }
-                        strokeWidth={
-                          isSelected ? 3 : isPortal ? 2.5 : isFocused ? 2 : isNeighbor ? 1.5 : 1
-                        }
-                        strokeDasharray={isPortal ? '4 3' : undefined}
-                        rx={2}
-                      />
+                      {isRpg ? (
+                        <rect
+                          x={x}
+                          y={y}
+                          width={w}
+                          height={h}
+                          fill={fill}
+                          stroke={stroke}
+                          strokeWidth={strokeWidth}
+                          strokeDasharray={isPortal ? '4 3' : undefined}
+                          rx={1}
+                        />
+                      ) : (
+                        <ellipse
+                          cx={cx}
+                          cy={cy}
+                          rx={w / 2}
+                          ry={h / 2}
+                          fill={fill}
+                          stroke={stroke}
+                          strokeWidth={strokeWidth}
+                          strokeDasharray={isPortal ? '4 3' : undefined}
+                        />
+                      )}
                       <text
-                        x={x + w / 2}
-                        y={y + h / 2}
+                        x={cx}
+                        y={cy}
                         textAnchor="middle"
                         dominantBaseline="middle"
                         fontSize={10}
-                        fill={isFocused || isNeighbor ? '#14171e' : '#f5f7ff'}
+                        fill={textFill}
                       >
                         {isPortal ? '↑ ' : ''}
                         {room.topic.length > 18 ? `${room.topic.slice(0, 17)}…` : room.topic}

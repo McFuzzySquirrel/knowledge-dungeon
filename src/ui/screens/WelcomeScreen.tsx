@@ -10,6 +10,7 @@ import {
   openSubjectsFolder,
 } from '@/services/persistence/subjectPersistence';
 import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
+import { GraphicsModeToggle } from '@/ui/components/GraphicsModeToggle';
 
 const PHASES: { id: GamePhase; title: string; description: string }[] = [
   {
@@ -168,6 +169,9 @@ export function WelcomeScreen(): JSX.Element {
             then defeat each room&rsquo;s encounter by writing structured notes. Currently running
             in <strong>{env}</strong> mode.
           </p>
+        </div>
+        <div className="welcome-graphics-mode">
+          <GraphicsModeToggle label="Graphics" compact />
         </div>
       </header>
 

@@ -130,7 +130,26 @@ The help dialog is opened from the `?` button (or keyboard `?`) and summarizes:
 - How encounters and review passes work.
 - The <kbd>M</kbd> shortcut for the full mindmap view.
 
+It also hosts the **Graphics style** toggle (see
+[§7a Graphics style toggle](#7a-graphics-style-toggle)) so players can
+switch the dungeon look without leaving a session.
+
 It is meant to be a quick in-context rules reference while playing.
+
+### 7a) Graphics style toggle
+
+A persistent **Mind map / RPG** segmented control is available from both
+the Welcome screen (top-right header) and the Help overlay. It switches
+the visual treatment of the dungeon, the full map, and the minimap:
+
+- **Mind map** — graph-style nodes (ellipses) connected by thin edges; the
+  HUD/panels use the default cool palette.
+- **RPG** — rectangular dungeon chambers connected by thick passageways,
+  with a parchment-toned HUD/panel skin.
+
+Saved subjects are untouched — only the renderer changes. New users
+default to RPG; existing installs are preserved on the mind-map look they
+already know until they opt in.
 
 ## 8) Note editor modal (encounter resolution)
 

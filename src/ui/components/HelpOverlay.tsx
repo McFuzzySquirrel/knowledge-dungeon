@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { GraphicsModeToggle } from '@/ui/components/GraphicsModeToggle';
 
 interface HelpOverlayProps {
   onClose: () => void;
@@ -39,6 +40,13 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             before using the spell again.
           </li>
         </ul>
+        <div className="help-overlay__settings">
+          <GraphicsModeToggle label="Graphics style" />
+          <p className="help-overlay__settings-hint">
+            Choose between the mind-map graph view and the RPG dungeon view. You can switch
+            at any time — your saved subjects are unchanged.
+          </p>
+        </div>
         <button type="button" onClick={onClose}>
           Close
         </button>

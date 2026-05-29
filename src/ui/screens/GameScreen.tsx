@@ -4,6 +4,7 @@ import { deriveGraphHierarchy } from '@/core/graph';
 import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
+import { usePreferencesStore } from '@/store/preferencesStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene } from '@/game/scenes/DungeonScene';
@@ -38,6 +39,7 @@ export function GameScreen(): JSX.Element {
   const recordReviewPass = useSubjectStore((s) => s.recordReviewPass);
   const xpTotal = useProgressionStore((s) => s.xpTotal);
   const rank = useProgressionStore((s) => s.rank);
+  const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -70,6 +72,7 @@ export function GameScreen(): JSX.Element {
       parent: containerRef.current,
       dungeonMap,
       playerClass: selectedClass,
+      graphicsMode,
       callbacks: {
         onRoomEntered: (roomId) => setFocusedRoomId(roomId),
         onInteract: (roomId) => {
@@ -96,7 +99,7 @@ export function GameScreen(): JSX.Element {
     // We intentionally do NOT depend on `phase` here — phase reads happen at
     // interact-time via the closure update below; rebuilding Phaser on phase
     // changes would tear down the game state unnecessarily.
-  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId]);
+  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId, graphicsMode]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;

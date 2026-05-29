@@ -7,6 +7,7 @@
 import Phaser from 'phaser';
 import type { DungeonMap, DungeonRoom } from '@/game/systems/dungeonTypes';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
+import type { GraphicsMode } from '@/store/preferencesStore';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
 
 export interface DungeonSceneEvents {
@@ -63,6 +64,7 @@ export class DungeonScene extends Phaser.Scene {
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
   private playerClass: PlayerClassId | null = null;
+  private graphicsMode: GraphicsMode = 'rpg';
   private artifactIcons = new Map<string, Phaser.GameObjects.Image>();
   private artifactRoomIds = new Set<string>();
   private showArtifactIcons = false;
@@ -75,10 +77,12 @@ export class DungeonScene extends Phaser.Scene {
     dungeonMap: DungeonMap;
     callbacks: DungeonSceneEvents;
     playerClass?: PlayerClassId | null;
+    graphicsMode?: GraphicsMode;
   }): void {
     this.dungeonMap = data.dungeonMap;
     this.callbacks = data.callbacks;
     this.playerClass = data.playerClass ?? null;
+    this.graphicsMode = data.graphicsMode ?? 'rpg';
   }
 
   preload(): void {
@@ -105,7 +109,7 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.dungeonMap) return;
     const map = this.dungeonMap;
 
-    this.cameras.main.setBackgroundColor(0x10131a);
+    this.cameras.main.setBackgroundColor(this.graphicsMode === 'rpg' ? 0x1a120a : 0x10131a);
 
     this.corridorGraphics = this.add.graphics();
     this.roomGraphics = this.add.graphics();
@@ -305,24 +309,38 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.roomGraphics) return;
     const g = this.roomGraphics;
     g.clear();
+    const isRpg = this.graphicsMode === 'rpg';
     for (const room of map.rooms) {
       const x = room.gridX * map.tileSize;
       const y = room.gridY * map.tileSize;
       const w = room.width * map.tileSize;
       const h = room.height * map.tileSize;
 
-      const fill = room.isRoot ? 0x223259 : 0x1a2032;
-      g.fillStyle(fill, 1);
-      g.fillRect(x, y, w, h);
-
-      g.lineStyle(2, statusColor(room.status), 1);
-      g.strokeRect(x, y, w, h);
+      if (isRpg) {
+        // Stone-floor chamber with a thick mortared wall border.
+        const fill = room.isRoot ? 0x4a3520 : 0x2a1f12;
+        g.fillStyle(fill, 1);
+        g.fillRect(x, y, w, h);
+        // Inner floor tile band to suggest a tiled chamber.
+        g.fillStyle(0x3b2a18, 0.65);
+        g.fillRect(x + 4, y + 4, w - 8, h - 8);
+        g.lineStyle(3, statusColor(room.status), 1);
+        g.strokeRect(x, y, w, h);
+      } else {
+        // Mind-map flavour: flat node, rounded by an outlined ellipse on top
+        // of a soft-fill rectangle so room collision still maps to the grid.
+        const fill = room.isRoot ? 0x223259 : 0x1a2032;
+        g.fillStyle(fill, 1);
+        g.fillRect(x, y, w, h);
+        g.lineStyle(2, statusColor(room.status), 1);
+        g.strokeEllipse(x + w / 2, y + h / 2, w, h);
+      }
 
       const label = this.add
         .text(x + w / 2, y + h - 12, room.topic, {
           fontFamily: 'Inter, system-ui, sans-serif',
           fontSize: '12px',
-          color: '#f5f7ff',
+          color: isRpg ? '#f4e4c2' : '#f5f7ff',
           align: 'center',
           wordWrap: { width: w - 8 },
         })
@@ -336,7 +354,8 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.corridorGraphics) return;
     const g = this.corridorGraphics;
     g.clear();
-    g.lineStyle(4, 0x3b455e, 1);
+    const isRpg = this.graphicsMode === 'rpg';
+    g.lineStyle(isRpg ? 5 : 4, isRpg ? 0x6b4a24 : 0x3b455e, 1);
 
     const roomById = new Map(map.rooms.map((room) => [room.roomId, room] as const));
     for (const corridor of map.corridors) {

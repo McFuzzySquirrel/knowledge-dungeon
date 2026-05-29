@@ -47,6 +47,10 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
 - during the **Archaeologist** phase, every room that has produced an
   artifact is marked with a loot-chest icon on the dungeon canvas so
   cleared topics are easy to revisit
+- the **Graphics style** toggle (Welcome screen header and Help overlay)
+  switches between the mind-map view and an RPG dungeon view at any
+  time — the dungeon, full map, and minimap all re-skin together while
+  saved subjects stay untouched
 
 ## Tech stack
 
