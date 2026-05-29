@@ -39,9 +39,13 @@ gets the maximum amount of screen space:
 - **Minimap (bottom-left, floating):** quick room-location awareness. The
   current room and any rooms **directly connected** to it are highlighted
   in the accent color (see [§5 Minimap child highlighting](#5-minimap-child-highlighting)).
-- **Right room panel (floating):** topic metadata, breadcrumbs, connected-topic
-  travel, portal shortcuts, child-room creation, reparenting, topic deletion
-  (Creator phase), and encounter access.
+- **Right room panel (floating):** topic metadata, breadcrumbs, and travel
+  shortcuts split into two sections — **Connected topics on this floor**
+  (siblings/neighbors on the same floor) and **Travel to related floors**
+  (a `← Back to <parent>` shortcut plus jumps to topics that live on other
+  floors). The panel also exposes portal shortcuts into deeper floors,
+  child-room creation, reparenting, topic deletion (Creator phase), and
+  encounter access.
 - **Touch controls (bottom-right, floating):** mobile-friendly directional
   / interact buttons.
 
@@ -62,14 +66,26 @@ on screen.
 
 ## 4) Full map view
 
-![Full pannable / zoomable mindmap](./assets/ui/full-map-view.png)
+![Full pannable / zoomable mindmap with per-floor filter](./assets/ui/full-map-view.png)
 
 Opened from the HUD `Map` button or by pressing <kbd>M</kbd>. The full map
-view renders the entire dungeon mindmap with **drag-to-pan** and
+view renders the dungeon mindmap with **drag-to-pan** and
 **scroll-to-zoom**, plus `+` / `−` / `Reset` controls. It's intended for
 inspecting the broader topic graph without leaving the dungeon. Rooms
 directly connected to your currently focused room (and the edges to them)
 are tinted in the accent color so children/related topics stand out.
+
+A **Show current floor only** toggle (top of the dialog, on by default)
+narrows the view to the floor you're currently on so deep subjects stay
+readable. When the filter is on, the entry room from the parent floor is
+drawn as a **dashed blue portal** with a dashed edge so you can still
+navigate back up the hierarchy. Turn the toggle off to inspect the whole
+graph at once.
+
+In Creator phase, switch from **Navigate** to **Graph edit** mode to
+rename, add, delete, or reparent topics directly from the mindmap so the
+graph stays the source of truth and the dungeon layout remains a
+generated view over it.
 
 ## 5) Minimap child highlighting
 
@@ -100,7 +116,8 @@ short explanatory note in that case.
 
 The **Full Map** overlay now also includes a lightweight **Graph edit** mode
 for these same authoring actions so the mindmap stays the source of truth and
-the dungeon layout remains a generated view over that graph.
+the dungeon layout remains a generated view over that graph (see
+[§4](#4-full-map-view)).
 
 ## 7) Help overlay
 
@@ -117,13 +134,28 @@ It is meant to be a quick in-context rules reference while playing.
 
 ## 8) Note editor modal (encounter resolution)
 
-![Note editor modal](./assets/ui/note-editor-modal.png)
+![Note editor modal in rich-text preview mode](./assets/ui/note-editor-modal.png)
 
 This modal appears when opening a room encounter. It provides:
 
-- A structured notes input area.
-- Manual confirmation checkbox.
+- A structured notes input area with an **Edit / Preview** toggle.
+- Lightweight Markdown support — `**bold**`, `*italic*`, `` `code` ``,
+  `-` bullet lists, and `[label](https://example.com)` links — rendered
+  live in the Preview tab and persisted on submit.
+- A manual confirmation checkbox.
 - Deterministic validation checklist (word count + required sections).
 - Quality bonus preview and submit/defeat action state.
 
-This is the core learning loop UI where players convert study notes into room completion progress.
+This is the core learning loop UI where players convert study notes into
+room completion progress. Saved notes are re-rendered as rich text in the
+room panel's Notes tab so links and formatting stay live after the
+encounter is defeated.
+
+## 9) Archaeologist phase loot icons
+
+During the **Archaeologist** phase, every room that has produced an
+artifact (i.e. its encounter has been defeated) is decorated with a small
+loot-chest sprite in the dungeon view. The icons make it easy to scan the
+map for rooms whose artifacts and self-check prompts are ready to revisit;
+they disappear automatically when you switch back to the Create or Scribe
+phase so they don't clutter authoring/exploration.

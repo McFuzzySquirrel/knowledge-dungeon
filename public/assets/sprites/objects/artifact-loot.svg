@@ -1,0 +1,20 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="128" cy="220" rx="78" ry="14" fill="rgba(0,0,0,0.3)"/>
+  <!-- chest body -->
+  <rect x="46" y="108" width="164" height="100" rx="10" fill="#8a5a2b" stroke="#3b2a16" stroke-width="6"/>
+  <rect x="46" y="108" width="164" height="20" fill="#6b4520"/>
+  <!-- chest lid -->
+  <path d="M46 108 Q46 56 128 56 Q210 56 210 108 Z" fill="#a36a32" stroke="#3b2a16" stroke-width="6"/>
+  <!-- iron bands -->
+  <rect x="40" y="100" width="176" height="10" fill="#3b2a16"/>
+  <rect x="40" y="148" width="176" height="8" fill="#3b2a16"/>
+  <!-- lock -->
+  <rect x="112" y="120" width="32" height="36" rx="4" fill="#f2c14e" stroke="#3b2a16" stroke-width="4"/>
+  <circle cx="128" cy="138" r="5" fill="#3b2a16"/>
+  <!-- gold sparkles -->
+  <circle cx="80" cy="90" r="6" fill="#f2c14e" opacity="0.9"/>
+  <circle cx="170" cy="86" r="5" fill="#f2c14e" opacity="0.9"/>
+  <circle cx="200" cy="98" r="4" fill="#f7d99c" opacity="0.9"/>
+  <circle cx="60" cy="100" r="3" fill="#f7d99c" opacity="0.9"/>
+  <path d="M130 40 L134 50 L144 52 L136 60 L138 72 L128 66 L118 72 L120 60 L112 52 L122 50 Z" fill="#f2c14e" stroke="#3b2a16" stroke-width="2"/>
+</svg>

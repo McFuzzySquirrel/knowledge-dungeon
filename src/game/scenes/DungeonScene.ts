@@ -37,11 +37,14 @@ const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
 };
 const PLAYER_SPRITE_FALLBACK = `${BASE}assets/sprites/player.svg`;
 const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
+const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
 
 const PLAYER_TEXTURE_KEY = 'kd-player';
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
+const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
 const PLAYER_SPRITE_SIZE = 32;
 const SIGNPOST_SPRITE_SIZE = 28;
+const ARTIFACT_LOOT_SPRITE_SIZE = 26;
 // Square collider, tighter than the rendered sprite so movement feels right.
 const PLAYER_COLLIDER_SIZE = 16;
 
@@ -60,6 +63,9 @@ export class DungeonScene extends Phaser.Scene {
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
   private playerClass: PlayerClassId | null = null;
+  private artifactIcons = new Map<string, Phaser.GameObjects.Image>();
+  private artifactRoomIds = new Set<string>();
+  private showArtifactIcons = false;
 
   constructor() {
     super({ key: 'DungeonScene' });
@@ -88,6 +94,10 @@ export class DungeonScene extends Phaser.Scene {
     this.load.svg(SIGNPOST_TEXTURE_KEY, SIGNPOST_SPRITE, {
       width: SIGNPOST_SPRITE_SIZE,
       height: SIGNPOST_SPRITE_SIZE,
+    });
+    this.load.svg(ARTIFACT_LOOT_TEXTURE_KEY, ARTIFACT_LOOT_SPRITE, {
+      width: ARTIFACT_LOOT_SPRITE_SIZE,
+      height: ARTIFACT_LOOT_SPRITE_SIZE,
     });
   }
 
@@ -170,6 +180,7 @@ export class DungeonScene extends Phaser.Scene {
     this.currentZoomTarget = ZOOM_INSIDE_ROOM;
 
     this.enterRoom(root.roomId);
+    this.refreshArtifactIcons();
   }
 
   update(_time: number, delta: number): void {
@@ -249,6 +260,45 @@ export class DungeonScene extends Phaser.Scene {
     this.insideRoom = true;
     this.setZoomTarget(ZOOM_INSIDE_ROOM);
     this.enterRoom(room.roomId);
+  }
+
+  /**
+   * Show or hide a collectible loot icon in each room that has produced an
+   * artifact. Called by the React layer whenever the active phase or the
+   * subject snapshot changes; safe to call before/after `create()` has run.
+   */
+  setArtifactRooms(roomIds: readonly string[], visible: boolean): void {
+    this.artifactRoomIds = new Set(roomIds);
+    this.showArtifactIcons = visible;
+    this.refreshArtifactIcons();
+  }
+
+  private refreshArtifactIcons(): void {
+    if (!this.dungeonMap || !this.textures.exists(ARTIFACT_LOOT_TEXTURE_KEY)) {
+      // Defer to after `create()`/preload finishes. `create()` will call
+      // refreshArtifactIcons again once textures are loaded.
+      return;
+    }
+    const map = this.dungeonMap;
+    // Drop any icons that no longer belong (room removed or hidden).
+    for (const [roomId, icon] of this.artifactIcons) {
+      if (!this.showArtifactIcons || !this.artifactRoomIds.has(roomId)) {
+        icon.destroy();
+        this.artifactIcons.delete(roomId);
+      }
+    }
+    if (!this.showArtifactIcons) return;
+    for (const room of map.rooms) {
+      if (!this.artifactRoomIds.has(room.roomId)) continue;
+      if (this.artifactIcons.has(room.roomId)) continue;
+      const center = this.roomCenter(room, map.tileSize);
+      // Place the loot icon in the upper portion of the room so it doesn't
+      // overlap the topic label rendered at the bottom edge.
+      const icon = this.add
+        .image(center.x, center.y - room.height * map.tileSize * 0.25, ARTIFACT_LOOT_TEXTURE_KEY)
+        .setDepth(6);
+      this.artifactIcons.set(room.roomId, icon);
+    }
   }
 
   private drawRooms(map: DungeonMap): void {

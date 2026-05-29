@@ -579,3 +579,81 @@ button.danger:hover {
     bottom: calc(45vh + 24px);
   }
 }
+
+.markdown-body {
+  display: grid;
+  gap: 10px;
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5 {
+  margin: 4px 0;
+  color: var(--text-primary);
+}
+
+.markdown-body p {
+  margin: 0;
+  color: var(--text-primary);
+  white-space: normal;
+}
+
+.markdown-body ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.markdown-body a:hover {
+  color: var(--accent-soft);
+}
+
+.markdown-body code {
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.note-body,
+.artifact-body {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+}
+
+.note-editor-toolbar {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.note-editor-toolbar button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: rgba(242, 200, 121, 0.15);
+}
+
+.note-preview {
+  min-height: 220px;
+}
+
+.full-map-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 8px;
+}

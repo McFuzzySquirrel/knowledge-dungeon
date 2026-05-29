@@ -31,10 +31,22 @@ The home screen is where you:
 
 Once a subject is loaded, the in-dungeon view keeps the study loop visible in one place:
 
-- HUD for phase, progression, map, home, and help
+- HUD for phase, progression, current floor, map, home, and help
 - HUD teleport spell for floor/room jumps with cooldown tracking
 - Phaser dungeon canvas for movement and room navigation
 - minimap and room panel for topic context, breadcrumbs, portals, and creator edits
+- the room panel splits travel options into **connected topics on this
+  floor** and **travel to related floors** (with a one-click `← Back to <parent>`
+  shortcut) so deep mindmaps stay navigable
+- the full **Map** overlay (<kbd>M</kbd>) defaults to a per-floor view that
+  greys out unrelated floors and renders the parent entry room as a dashed
+  blue portal — toggle **Show current floor only** off to see the whole
+  mindmap at once
+- encounter notes accept lightweight Markdown (links, bold, italic, code,
+  bullets) with a live Edit/Preview toggle
+- during the **Archaeologist** phase, every room that has produced an
+  artifact is marked with a loot-chest icon on the dungeon canvas so
+  cleared topics are easy to revisit
 
 ## Tech stack
 

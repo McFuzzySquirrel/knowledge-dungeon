@@ -3,6 +3,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { evaluateNoteValidation, REQUIRED_NOTE_SECTIONS } from '@/core/validation/notes';
+import { Markdown } from '@/ui/utils/markdown';
 
 const TEMPLATE = `Summary
 (Write at least one paragraph summarising the topic in your own words.)
@@ -28,11 +29,13 @@ export function NoteEditorModal(): JSX.Element | null {
   const [noteText, setNoteText] = useState(TEMPLATE);
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !room) return;
     setNoteText(room.noteText || TEMPLATE);
     setConfirm(false);
+    setShowPreview(false);
   }, [isOpen, room]);
 
   const preview = useMemo(() => {
@@ -78,11 +81,41 @@ export function NoteEditorModal(): JSX.Element | null {
           Write at least 120 words including {REQUIRED_NOTE_SECTIONS.join(', ')} sections to
           defeat this encounter and generate its artifact.
         </p>
-        <textarea
-          rows={14}
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-        />
+        <p className="room-help-text">
+          Rich text: use <code>[label](https://example.com)</code> for clickable links,
+          <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, and{' '}
+          <code>-</code> for bullets.
+        </p>
+        <div className="note-editor-toolbar">
+          <button
+            type="button"
+            aria-pressed={!showPreview}
+            onClick={() => setShowPreview(false)}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            aria-pressed={showPreview}
+            onClick={() => setShowPreview(true)}
+          >
+            Preview
+          </button>
+        </div>
+        {showPreview ? (
+          <div
+            className="markdown-body note-body note-preview"
+            aria-label="Notes preview"
+          >
+            <Markdown source={noteText} />
+          </div>
+        ) : (
+          <textarea
+            rows={14}
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+          />
+        )}
 
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
           <input

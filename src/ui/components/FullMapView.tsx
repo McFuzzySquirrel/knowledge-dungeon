@@ -81,6 +81,7 @@ export function FullMapView({
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: -innerWidth / 2, y: -innerHeight / 2 });
+  const [floorFilterOn, setFloorFilterOn] = useState(true);
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -96,6 +97,32 @@ export function FullMapView({
       else if (c.toRoomId === focusedRoomId) neighborIds.add(c.fromRoomId);
     }
   }
+
+  // When the floor filter is on, only rooms belonging to the currently
+  // selected floor are drawn, plus the parent-floor entry room so the user
+  // can navigate back. Corridors are filtered to endpoints in this set.
+  const floorRoomIdSet = useMemo(
+    () => new Set(hierarchy.roomIdsByFloorId[floorId] ?? []),
+    [hierarchy.roomIdsByFloorId, floorId],
+  );
+  const portalRoomId =
+    floorId && floorId !== snapshot.dungeon.rootRoomId
+      ? hierarchy.parentByRoomId[floorId] ?? null
+      : null;
+  const visibleRoomIdSet = useMemo(() => {
+    if (!floorFilterOn) return new Set(rooms.map((room) => room.roomId));
+    const set = new Set(floorRoomIdSet);
+    if (portalRoomId) set.add(portalRoomId);
+    return set;
+  }, [floorFilterOn, floorRoomIdSet, portalRoomId, rooms]);
+  const visibleRooms = floorFilterOn
+    ? rooms.filter((room) => visibleRoomIdSet.has(room.roomId))
+    : rooms;
+  const visibleCorridors = floorFilterOn
+    ? corridors.filter(
+        (c) => visibleRoomIdSet.has(c.fromRoomId) && visibleRoomIdSet.has(c.toRoomId),
+      )
+    : corridors;
 
   const selectedRoom = selectedRoomId ? snapshot.rooms[selectedRoomId] ?? null : null;
   const selectedBreadcrumbs = selectedRoom
@@ -182,6 +209,14 @@ export function FullMapView({
             </p>
           </div>
           <div className="full-map-actions">
+            <label className="full-map-toggle">
+              <input
+                type="checkbox"
+                checked={floorFilterOn}
+                onChange={(e) => setFloorFilterOn(e.target.checked)}
+              />
+              Show current floor only
+            </label>
             {phase === 'creator' ? (
               <>
                 <button
@@ -233,7 +268,7 @@ export function FullMapView({
               }}
             >
               <svg width={innerWidth} height={innerHeight} viewBox={`0 0 ${innerWidth} ${innerHeight}`}>
-                {corridors.map((c, i) => {
+                {visibleCorridors.map((c, i) => {
                   const from = rooms.find((r) => r.roomId === c.fromRoomId);
                   const to = rooms.find((r) => r.roomId === c.toRoomId);
                   if (!from || !to) return null;
@@ -244,6 +279,10 @@ export function FullMapView({
                   const isConnected =
                     focusedRoomId !== null &&
                     (c.fromRoomId === focusedRoomId || c.toRoomId === focusedRoomId);
+                  const isPortalEdge =
+                    portalRoomId !== null &&
+                    floorFilterOn &&
+                    (c.fromRoomId === portalRoomId || c.toRoomId === portalRoomId);
                   return (
                     <line
                       key={i}
@@ -251,12 +290,15 @@ export function FullMapView({
                       y1={y1}
                       x2={x2}
                       y2={y2}
-                      stroke={isConnected ? '#f2c879' : '#3b455e'}
-                      strokeWidth={isConnected ? 3 : 2}
+                      stroke={
+                        isConnected ? '#f2c879' : isPortalEdge ? '#7fb2ff' : '#3b455e'
+                      }
+                      strokeWidth={isConnected ? 3 : isPortalEdge ? 2.5 : 2}
+                      strokeDasharray={isPortalEdge ? '6 4' : undefined}
                     />
                   );
                 })}
-                {rooms.map((room) => {
+                {visibleRooms.map((room) => {
                   const x = (room.gridX - bounds.minX) * SCALE;
                   const y = (room.gridY - bounds.minY) * SCALE;
                   const w = room.width * SCALE;
@@ -264,13 +306,17 @@ export function FullMapView({
                   const isFocused = room.roomId === focusedRoomId;
                   const isNeighbor = neighborIds.has(room.roomId);
                   const isSelected = room.roomId === selectedRoomId;
-                  const fill = isFocused
-                    ? '#f2c879'
-                    : isNeighbor
-                      ? '#f7d99c'
-                      : room.isRoot
-                        ? '#7fb2ff'
-                        : '#1f2433';
+                  const isPortal =
+                    floorFilterOn && portalRoomId !== null && room.roomId === portalRoomId;
+                  const fill = isPortal
+                    ? '#2a3a5c'
+                    : isFocused
+                      ? '#f2c879'
+                      : isNeighbor
+                        ? '#f7d99c'
+                        : room.isRoot
+                          ? '#7fb2ff'
+                          : '#1f2433';
                   return (
                     <g
                       key={room.roomId}
@@ -284,8 +330,19 @@ export function FullMapView({
                         width={w}
                         height={h}
                         fill={fill}
-                        stroke={isSelected ? '#8b5cf6' : isFocused || isNeighbor ? '#f2c879' : '#a8b0c8'}
-                        strokeWidth={isSelected ? 3 : isFocused ? 2 : isNeighbor ? 1.5 : 1}
+                        stroke={
+                          isSelected
+                            ? '#8b5cf6'
+                            : isPortal
+                              ? '#7fb2ff'
+                              : isFocused || isNeighbor
+                                ? '#f2c879'
+                                : '#a8b0c8'
+                        }
+                        strokeWidth={
+                          isSelected ? 3 : isPortal ? 2.5 : isFocused ? 2 : isNeighbor ? 1.5 : 1
+                        }
+                        strokeDasharray={isPortal ? '4 3' : undefined}
                         rx={2}
                       />
                       <text
@@ -296,6 +353,7 @@ export function FullMapView({
                         fontSize={10}
                         fill={isFocused || isNeighbor ? '#14171e' : '#f5f7ff'}
                       >
+                        {isPortal ? '↑ ' : ''}
                         {room.topic.length > 18 ? `${room.topic.slice(0, 17)}…` : room.topic}
                       </text>
                     </g>
@@ -425,7 +483,8 @@ export function FullMapView({
 
         <p className="full-map-hint">
           Drag to pan · scroll to zoom · highlighted rooms are directly connected to the current
-          room · purple border marks the selected room.
+          room · purple border marks the selected room
+          {floorFilterOn ? ' · dashed blue room is the portal back to the parent floor' : ''}.
         </p>
       </div>
     </div>

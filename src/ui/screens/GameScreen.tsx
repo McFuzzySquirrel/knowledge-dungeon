@@ -44,6 +44,7 @@ export function GameScreen(): JSX.Element {
   const sceneRef = useRef<DungeonScene | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [clockMs, setClockMs] = useState(() => Date.now());
+  const [sceneReady, setSceneReady] = useState(false);
 
   const dungeonMap = useMemo(() => {
     if (!snapshot) return null;
@@ -84,16 +85,28 @@ export function GameScreen(): JSX.Element {
     gameRef.current = game;
     game.events.once('ready', () => {
       sceneRef.current = game.scene.getScene('DungeonScene') as DungeonScene;
+      setSceneReady(true);
     });
     return () => {
       game.destroy(true);
       gameRef.current = null;
       sceneRef.current = null;
+      setSceneReady(false);
     };
     // We intentionally do NOT depend on `phase` here — phase reads happen at
     // interact-time via the closure update below; rebuilding Phaser on phase
     // changes would tear down the game state unnecessarily.
   }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId]);
+
+  useEffect(() => {
+    if (!sceneReady || !snapshot) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const artifactRoomIds = Object.values(snapshot.rooms)
+      .filter((room) => room.validationState.finalPass)
+      .map((room) => room.roomId);
+    scene.setArtifactRooms(artifactRoomIds, phase === 'archaeologist');
+  }, [sceneReady, snapshot, phase]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
