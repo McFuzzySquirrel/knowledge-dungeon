@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Bookshelf: wooden frame with three shelves of colored book spines -->
+  <rect x="2" y="2" width="20" height="20" rx="1" fill="#3a2814" stroke="#1c1108" stroke-width="1"/>
+  <rect x="3" y="3" width="18" height="5" fill="#2a1d10"/>
+  <rect x="3" y="9" width="18" height="5" fill="#2a1d10"/>
+  <rect x="3" y="15" width="18" height="5" fill="#2a1d10"/>
+  <!-- top shelf books -->
+  <rect x="4" y="3.5" width="2" height="4" fill="#7a3a2a"/>
+  <rect x="6.5" y="3.5" width="2" height="4" fill="#4a6a8a"/>
+  <rect x="9" y="3.5" width="2" height="4" fill="#7a6a3a"/>
+  <rect x="11.5" y="3.5" width="2" height="4" fill="#5a3a7a"/>
+  <rect x="14" y="3.5" width="2" height="4" fill="#3a7a5a"/>
+  <rect x="16.5" y="3.5" width="2" height="4" fill="#7a4a2a"/>
+  <!-- middle shelf books -->
+  <rect x="4" y="9.5" width="2" height="4" fill="#4a6a8a"/>
+  <rect x="6.5" y="9.5" width="2" height="4" fill="#7a3a2a"/>
+  <rect x="9" y="9.5" width="2" height="4" fill="#3a7a5a"/>
+  <rect x="11.5" y="9.5" width="2" height="4" fill="#7a6a3a"/>
+  <rect x="14" y="9.5" width="2" height="4" fill="#5a3a7a"/>
+  <rect x="16.5" y="9.5" width="2" height="4" fill="#7a4a2a"/>
+  <!-- bottom shelf books -->
+  <rect x="4" y="15.5" width="2" height="4" fill="#5a3a7a"/>
+  <rect x="6.5" y="15.5" width="2" height="4" fill="#7a6a3a"/>
+  <rect x="9" y="15.5" width="2" height="4" fill="#4a6a8a"/>
+  <rect x="11.5" y="15.5" width="2" height="4" fill="#7a3a2a"/>
+  <rect x="14" y="15.5" width="2" height="4" fill="#3a7a5a"/>
+  <rect x="16.5" y="15.5" width="2" height="4" fill="#7a4a2a"/>
+</svg>

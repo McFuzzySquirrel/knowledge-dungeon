@@ -58,6 +58,39 @@ const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
 const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
 const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
 const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
+const DECOR_SPRITES = {
+  bookshelf: `${BASE}assets/sprites/objects/bookshelf.svg`,
+  brazier: `${BASE}assets/sprites/objects/brazier.svg`,
+  scrollPile: `${BASE}assets/sprites/objects/scroll-pile.svg`,
+} as const;
+type DecorKey = keyof typeof DECOR_SPRITES;
+const DECOR_TEXTURE_KEYS: Record<DecorKey, string> = {
+  bookshelf: 'kd-decor-bookshelf',
+  brazier: 'kd-decor-brazier',
+  scrollPile: 'kd-decor-scroll-pile',
+};
+const DECOR_KEYS: readonly DecorKey[] = ['bookshelf', 'brazier', 'scrollPile'];
+const DECOR_SPRITE_SIZE = 24;
+
+// Tileset textures used as RPG-mode floor backgrounds. Cycled deterministically
+// per floor so each floor has its own visual identity.
+const TILESET_SPRITES = {
+  ancientLibrary: `${BASE}assets/tilesets/ancient-library.svg`,
+  lostArchive: `${BASE}assets/tilesets/lost-archive.svg`,
+  deepDungeon: `${BASE}assets/tilesets/deep-dungeon.svg`,
+} as const;
+type TilesetKey = keyof typeof TILESET_SPRITES;
+const TILESET_TEXTURE_KEYS: Record<TilesetKey, string> = {
+  ancientLibrary: 'kd-tileset-ancient-library',
+  lostArchive: 'kd-tileset-lost-archive',
+  deepDungeon: 'kd-tileset-deep-dungeon',
+};
+const TILESET_KEYS: readonly TilesetKey[] = [
+  'ancientLibrary',
+  'lostArchive',
+  'deepDungeon',
+];
+const TILESET_TILE_SIZE = 32;
 
 const PLAYER_TEXTURE_KEY = 'kd-player';
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
@@ -96,6 +129,12 @@ export class DungeonScene extends Phaser.Scene {
   private portalDownRoomIds = new Set<string>();
   private portalIcons = new Map<string, Phaser.GameObjects.Image>();
   private portalHintText: Phaser.GameObjects.Text | null = null;
+  private floorTileSprites: Phaser.GameObjects.TileSprite[] = [];
+  private decorIcons: Phaser.GameObjects.Image[] = [];
+  /** Per-room floor id, captured when visibility is applied — used to seed
+   * decor placement and tileset selection so the layout is stable across
+   * redraws on the same floor. */
+  private floorSeed = 0;
 
   constructor() {
     super({ key: 'DungeonScene' });
@@ -143,6 +182,18 @@ export class DungeonScene extends Phaser.Scene {
       width: PORTAL_SPRITE_SIZE,
       height: PORTAL_SPRITE_SIZE,
     });
+    for (const key of DECOR_KEYS) {
+      this.load.svg(DECOR_TEXTURE_KEYS[key], DECOR_SPRITES[key], {
+        width: DECOR_SPRITE_SIZE,
+        height: DECOR_SPRITE_SIZE,
+      });
+    }
+    for (const key of TILESET_KEYS) {
+      this.load.svg(TILESET_TEXTURE_KEYS[key], TILESET_SPRITES[key], {
+        width: TILESET_TILE_SIZE,
+        height: TILESET_TILE_SIZE,
+      });
+    }
   }
 
   create(): void {
@@ -154,8 +205,10 @@ export class DungeonScene extends Phaser.Scene {
     this.corridorGraphics = this.add.graphics();
     this.roomGraphics = this.add.graphics();
 
+    this.renderFloorTiles();
     this.drawCorridors(map);
     this.drawRooms(map);
+    this.refreshDecor();
 
     const root = map.rooms.find((r) => r.isRoot) ?? map.rooms[0];
     if (!root) return;
@@ -450,9 +503,11 @@ export class DungeonScene extends Phaser.Scene {
   setFloorVisibility(input: FloorVisibilityInput): void {
     this.applyFloorVisibility(input);
     if (this.dungeonMap && this.roomGraphics && this.corridorGraphics) {
+      this.renderFloorTiles();
       this.drawCorridors(this.dungeonMap);
       this.drawRooms(this.dungeonMap);
       this.refreshPortalIcons();
+      this.refreshDecor();
       this.refreshArtifactIcons();
       this.refreshPortalHint();
     }
@@ -463,6 +518,89 @@ export class DungeonScene extends Phaser.Scene {
     this.visibleRoomIds = new Set(input.visibleRoomIds);
     this.portalUpRoomId = input.portalUpRoomId;
     this.portalDownRoomIds = new Set(input.portalDownRoomIds);
+    this.floorSeed = hashString(input.floorId);
+  }
+
+  /**
+   * Render an RPG-mode tiled floor inside each visible room. Mindmap mode
+   * intentionally leaves rooms as flat shapes so the floor tile texture
+   * doesn't compete with the abstract node look.
+   */
+  private renderFloorTiles(): void {
+    for (const tile of this.floorTileSprites) tile.destroy();
+    this.floorTileSprites = [];
+    if (!this.dungeonMap || this.graphicsMode !== 'rpg') return;
+    // Pick a single tileset per floor so each floor reads as a distinct
+    // location (Ancient Library vs Lost Archive vs Deep Dungeon).
+    const tilesetKey = TILESET_KEYS[this.floorSeed % TILESET_KEYS.length];
+    const textureKey = TILESET_TEXTURE_KEYS[tilesetKey];
+    if (!this.textures.exists(textureKey)) return;
+    const map = this.dungeonMap;
+    for (const room of map.rooms) {
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
+      const x = room.gridX * map.tileSize;
+      const y = room.gridY * map.tileSize;
+      const w = room.width * map.tileSize;
+      const h = room.height * map.tileSize;
+      // Inset slightly so the room outline border still reads clearly.
+      const inset = 3;
+      const tile = this.add
+        .tileSprite(
+          x + inset,
+          y + inset,
+          w - inset * 2,
+          h - inset * 2,
+          textureKey,
+        )
+        .setOrigin(0, 0)
+        .setAlpha(0.7)
+        .setDepth(0);
+      this.floorTileSprites.push(tile);
+    }
+  }
+
+  /**
+   * Sprinkle 0–3 decor icons (bookshelf / brazier / scroll pile) into each
+   * visible room. Placement is deterministic per (floorId, roomId) so the
+   * layout is stable across redraws. RPG-mode only — mindmap mode would
+   * look noisy with object sprites layered onto its abstract nodes.
+   */
+  private refreshDecor(): void {
+    for (const icon of this.decorIcons) icon.destroy();
+    this.decorIcons = [];
+    if (!this.dungeonMap || this.graphicsMode !== 'rpg') return;
+    const map = this.dungeonMap;
+    for (const room of map.rooms) {
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
+      // Don't clutter portal rooms — the stairs sprite should read clearly.
+      if (
+        room.roomId === this.portalUpRoomId ||
+        this.portalDownRoomIds.has(room.roomId)
+      ) {
+        continue;
+      }
+      const roomSeed = hashString(`${this.currentFloorId ?? ''}::${room.roomId}`);
+      const prng = mulberry32(roomSeed);
+      // 2 decor pieces per room, picked from the four corners (top-left,
+      // top-right, bottom-left only — bottom-right reserved for the topic
+      // label / artifact loot icon).
+      const corners: ReadonlyArray<{ ax: number; ay: number }> = [
+        { ax: 0.18, ay: 0.22 },
+        { ax: 0.82, ay: 0.22 },
+        { ax: 0.18, ay: 0.6 },
+      ];
+      // For each corner independently decide whether to place an item.
+      for (const corner of corners) {
+        if (prng() > 0.55) continue;
+        const decorKey = DECOR_KEYS[Math.floor(prng() * DECOR_KEYS.length)];
+        const textureKey = DECOR_TEXTURE_KEYS[decorKey];
+        if (!this.textures.exists(textureKey)) continue;
+        const px = (room.gridX + room.width * corner.ax) * map.tileSize;
+        const py = (room.gridY + room.height * corner.ay) * map.tileSize;
+        const icon = this.add.image(px, py, textureKey).setDepth(2);
+        this.decorIcons.push(icon);
+      }
+    }
   }
 
   private drawRooms(map: DungeonMap): void {
@@ -608,4 +746,26 @@ function statusColor(status: string): number {
     default:
       return 0x636b85;
   }
+}
+
+/** Tiny FNV-1a-style string hash, used to seed per-floor/per-room PRNGs. */
+function hashString(value: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Mulberry32 PRNG — small, deterministic, good enough for layout jitter. */
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return function next(): number {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }

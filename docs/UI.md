@@ -145,11 +145,28 @@ the visual treatment of the dungeon, the full map, and the minimap:
 - **Mind map** — graph-style nodes (ellipses) connected by thin edges; the
   HUD/panels use the default cool palette.
 - **RPG** — rectangular dungeon chambers connected by thick passageways,
-  with a parchment-toned HUD/panel skin.
+  with a parchment-toned HUD/panel skin. In RPG mode the in-game scene
+  also paints a tiled floor texture per floor (cycling between the three
+  bundled tilesets so each floor reads as a distinct location — Ancient
+  Library, Lost Archive, Deep Dungeon) and sprinkles decor (bookshelves,
+  braziers, scroll piles) deterministically into each room.
 
 Saved subjects are untouched — only the renderer changes. New users
 default to RPG; existing installs are preserved on the mind-map look they
 already know until they opt in.
+
+### 7b) In-game floor isolation and stairs portals
+
+The in-game dungeon scene now mirrors the **Full Map**'s per-floor view:
+only rooms on the player's current floor are rendered, and the minimap
+filters to match. On non-root floors the parent room is drawn with a
+**stairs-up (↑)** portal marker; on the root floor each top-level
+subtopic is drawn with a **stairs-down (↓)** marker so you can descend
+into its sub-floor. Stand inside a portal room and press <kbd>E</kbd>
+(or tap the on-screen interact button) to traverse — non-portal rooms
+keep their existing interact behavior (open the note editor / record a
+review pass). Travelling and teleporting from the room panel / map keep
+the in-game floor in sync automatically.
 
 ## 8) Note editor modal (encounter resolution)
 
