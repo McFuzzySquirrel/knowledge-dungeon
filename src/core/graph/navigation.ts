@@ -121,6 +121,62 @@ export function deriveGraphHierarchy(dungeon: DungeonMetadata): GraphHierarchy {
   };
 }
 
+/**
+ * Computes what is visible when the player is "on" a single floor.
+ *
+ * Mirrors {@link deriveGraphHierarchy}'s flat floor model: every non-root
+ * room belongs to its top-level-subtopic ancestor's floor. From any non-root
+ * floor every descendant therefore stays on the same floor, so only the root
+ * floor exposes "down" portals (one per top-level subtopic).
+ *
+ * - `floorRoomIds` — rooms that natively live on this floor.
+ * - `portalUpRoomId` — the parent room used to ascend (null on root floor).
+ * - `portalDownRoomIds` — direct child rooms that are themselves the entry
+ *   to a different floor (only populated on the root floor today, but the
+ *   computation is general).
+ * - `visibleRoomIds` — union of the three above, the full set the scene /
+ *   minimap should render for this floor.
+ * - `visibleCorridorPredicate` — convenience predicate for filtering edges.
+ */
+export interface FloorVisibility {
+  floorId: string;
+  floorRoomIds: Set<string>;
+  portalUpRoomId: string | null;
+  portalDownRoomIds: Set<string>;
+  visibleRoomIds: Set<string>;
+}
+
+export function computeFloorVisibility(
+  hierarchy: GraphHierarchy,
+  dungeon: DungeonMetadata,
+  floorId: string,
+): FloorVisibility {
+  const floorRoomIds = new Set(hierarchy.roomIdsByFloorId[floorId] ?? []);
+  const portalUpRoomId =
+    floorId && floorId !== dungeon.rootRoomId
+      ? hierarchy.parentByRoomId[floorId] ?? null
+      : null;
+  const portalDownRoomIds = new Set<string>();
+  for (const roomId of floorRoomIds) {
+    for (const childRoomId of hierarchy.childRoomIdsByParentId[roomId] ?? []) {
+      const childFloor = hierarchy.floorIdByRoomId[childRoomId];
+      if (childFloor && childFloor !== floorId) {
+        portalDownRoomIds.add(childRoomId);
+      }
+    }
+  }
+  const visibleRoomIds = new Set<string>(floorRoomIds);
+  if (portalUpRoomId) visibleRoomIds.add(portalUpRoomId);
+  for (const id of portalDownRoomIds) visibleRoomIds.add(id);
+  return {
+    floorId,
+    floorRoomIds,
+    portalUpRoomId,
+    portalDownRoomIds,
+    visibleRoomIds,
+  };
+}
+
 export function getConnectedRoomIds(dungeon: DungeonMetadata, roomId: string): string[] {
   const connected = new Set<string>();
   for (const edge of dungeon.edges) {

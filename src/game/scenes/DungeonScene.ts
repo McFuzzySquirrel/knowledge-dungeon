@@ -13,6 +13,23 @@ import { isEditableElementFocused } from '@/ui/utils/editableElement';
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
   onInteract: (roomId: string) => void;
+  /**
+   * Fired when the player presses E inside a portal room (up or down).
+   * The React layer is responsible for choosing the destination floor,
+   * calling {@link DungeonScene.setFloorVisibility}, then
+   * {@link DungeonScene.teleportToRoom}.
+   */
+  onFloorTransition?: (info: {
+    fromRoomId: string;
+    direction: 'up' | 'down';
+  }) => void;
+}
+
+export interface FloorVisibilityInput {
+  floorId: string;
+  visibleRoomIds: ReadonlySet<string> | readonly string[];
+  portalUpRoomId: string | null;
+  portalDownRoomIds: ReadonlySet<string> | readonly string[];
 }
 
 const PLAYER_SPEED = 160;
@@ -39,13 +56,18 @@ const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
 const PLAYER_SPRITE_FALLBACK = `${BASE}assets/sprites/player.svg`;
 const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
 const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
+const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
+const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
 
 const PLAYER_TEXTURE_KEY = 'kd-player';
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
 const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
+const STAIRS_UP_TEXTURE_KEY = 'kd-stairs-up';
+const STAIRS_DOWN_TEXTURE_KEY = 'kd-stairs-down';
 const PLAYER_SPRITE_SIZE = 32;
 const SIGNPOST_SPRITE_SIZE = 28;
 const ARTIFACT_LOOT_SPRITE_SIZE = 26;
+const PORTAL_SPRITE_SIZE = 28;
 // Square collider, tighter than the rendered sprite so movement feels right.
 const PLAYER_COLLIDER_SIZE = 16;
 
@@ -68,6 +90,12 @@ export class DungeonScene extends Phaser.Scene {
   private artifactIcons = new Map<string, Phaser.GameObjects.Image>();
   private artifactRoomIds = new Set<string>();
   private showArtifactIcons = false;
+  private currentFloorId: string | null = null;
+  private visibleRoomIds: Set<string> | null = null;
+  private portalUpRoomId: string | null = null;
+  private portalDownRoomIds = new Set<string>();
+  private portalIcons = new Map<string, Phaser.GameObjects.Image>();
+  private portalHintText: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super({ key: 'DungeonScene' });
@@ -78,11 +106,15 @@ export class DungeonScene extends Phaser.Scene {
     callbacks: DungeonSceneEvents;
     playerClass?: PlayerClassId | null;
     graphicsMode?: GraphicsMode;
+    initialFloor?: FloorVisibilityInput;
   }): void {
     this.dungeonMap = data.dungeonMap;
     this.callbacks = data.callbacks;
     this.playerClass = data.playerClass ?? null;
     this.graphicsMode = data.graphicsMode ?? 'rpg';
+    if (data.initialFloor) {
+      this.applyFloorVisibility(data.initialFloor);
+    }
   }
 
   preload(): void {
@@ -102,6 +134,14 @@ export class DungeonScene extends Phaser.Scene {
     this.load.svg(ARTIFACT_LOOT_TEXTURE_KEY, ARTIFACT_LOOT_SPRITE, {
       width: ARTIFACT_LOOT_SPRITE_SIZE,
       height: ARTIFACT_LOOT_SPRITE_SIZE,
+    });
+    this.load.svg(STAIRS_UP_TEXTURE_KEY, STAIRS_UP_SPRITE, {
+      width: PORTAL_SPRITE_SIZE,
+      height: PORTAL_SPRITE_SIZE,
+    });
+    this.load.svg(STAIRS_DOWN_TEXTURE_KEY, STAIRS_DOWN_SPRITE, {
+      width: PORTAL_SPRITE_SIZE,
+      height: PORTAL_SPRITE_SIZE,
     });
   }
 
@@ -185,6 +225,7 @@ export class DungeonScene extends Phaser.Scene {
 
     this.enterRoom(root.roomId);
     this.refreshArtifactIcons();
+    this.refreshPortalIcons();
   }
 
   update(_time: number, delta: number): void {
@@ -242,14 +283,37 @@ export class DungeonScene extends Phaser.Scene {
       Phaser.Input.Keyboard.JustDown(this.interactKey)
     ) {
       if (this.currentRoomId) {
-        this.callbacks?.onInteract(this.currentRoomId);
+        if (this.currentRoomId === this.portalUpRoomId) {
+          this.callbacks?.onFloorTransition?.({
+            fromRoomId: this.currentRoomId,
+            direction: 'up',
+          });
+        } else if (this.portalDownRoomIds.has(this.currentRoomId)) {
+          this.callbacks?.onFloorTransition?.({
+            fromRoomId: this.currentRoomId,
+            direction: 'down',
+          });
+        } else {
+          this.callbacks?.onInteract(this.currentRoomId);
+        }
       }
     }
   }
 
   /** Programmatic interact, used by on-screen touch button. */
   triggerInteract(): void {
-    if (this.currentRoomId) {
+    if (!this.currentRoomId) return;
+    if (this.currentRoomId === this.portalUpRoomId) {
+      this.callbacks?.onFloorTransition?.({
+        fromRoomId: this.currentRoomId,
+        direction: 'up',
+      });
+    } else if (this.portalDownRoomIds.has(this.currentRoomId)) {
+      this.callbacks?.onFloorTransition?.({
+        fromRoomId: this.currentRoomId,
+        direction: 'down',
+      });
+    } else {
       this.callbacks?.onInteract(this.currentRoomId);
     }
   }
@@ -284,9 +348,14 @@ export class DungeonScene extends Phaser.Scene {
       return;
     }
     const map = this.dungeonMap;
-    // Drop any icons that no longer belong (room removed or hidden).
+    // Drop any icons that no longer belong (room removed, hidden by floor
+    // filter, or icon turned off).
     for (const [roomId, icon] of this.artifactIcons) {
-      if (!this.showArtifactIcons || !this.artifactRoomIds.has(roomId)) {
+      const stillVisible =
+        this.showArtifactIcons &&
+        this.artifactRoomIds.has(roomId) &&
+        (!this.visibleRoomIds || this.visibleRoomIds.has(roomId));
+      if (!stillVisible) {
         icon.destroy();
         this.artifactIcons.delete(roomId);
       }
@@ -294,6 +363,7 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.showArtifactIcons) return;
     for (const room of map.rooms) {
       if (!this.artifactRoomIds.has(room.roomId)) continue;
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
       if (this.artifactIcons.has(room.roomId)) continue;
       const center = this.roomCenter(room, map.tileSize);
       // Place the loot icon in the upper portion of the room so it doesn't
@@ -305,45 +375,144 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Re-render the per-room portal sprites (stairs up / stairs down) to
+   * match the current floor visibility. Called whenever the floor changes.
+   */
+  private refreshPortalIcons(): void {
+    if (
+      !this.dungeonMap ||
+      !this.textures.exists(STAIRS_UP_TEXTURE_KEY) ||
+      !this.textures.exists(STAIRS_DOWN_TEXTURE_KEY)
+    ) {
+      return;
+    }
+    const map = this.dungeonMap;
+    for (const icon of this.portalIcons.values()) icon.destroy();
+    this.portalIcons.clear();
+    const placePortal = (roomId: string, textureKey: string) => {
+      const room = map.rooms.find((r) => r.roomId === roomId);
+      if (!room) return;
+      const center = this.roomCenter(room, map.tileSize);
+      const icon = this.add
+        .image(center.x, center.y - room.height * map.tileSize * 0.25, textureKey)
+        .setDepth(6);
+      this.portalIcons.set(roomId, icon);
+    };
+    if (this.portalUpRoomId) placePortal(this.portalUpRoomId, STAIRS_UP_TEXTURE_KEY);
+    for (const id of this.portalDownRoomIds) placePortal(id, STAIRS_DOWN_TEXTURE_KEY);
+  }
+
+  /**
+   * Update the in-canvas hint that nudges the player to press E when
+   * standing inside a portal room. We anchor it to the camera so it stays
+   * legible regardless of zoom.
+   */
+  private refreshPortalHint(): void {
+    const isOnPortal =
+      this.currentRoomId !== null &&
+      (this.currentRoomId === this.portalUpRoomId ||
+        this.portalDownRoomIds.has(this.currentRoomId));
+    if (!isOnPortal) {
+      if (this.portalHintText) {
+        this.portalHintText.destroy();
+        this.portalHintText = null;
+      }
+      return;
+    }
+    const message =
+      this.currentRoomId === this.portalUpRoomId
+        ? 'Press E to ascend'
+        : 'Press E to descend';
+    if (!this.portalHintText) {
+      this.portalHintText = this.add
+        .text(0, 0, message, {
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: '14px',
+          color: '#cfe1ff',
+          backgroundColor: '#1f2a3acc',
+          padding: { left: 8, right: 8, top: 4, bottom: 4 },
+        })
+        .setScrollFactor(0)
+        .setDepth(20);
+    } else {
+      this.portalHintText.setText(message);
+    }
+    const cam = this.cameras.main;
+    this.portalHintText.setPosition(cam.width / 2, cam.height - 48);
+    this.portalHintText.setOrigin(0.5, 0.5);
+  }
+
+  /**
+   * Switch the visible floor. Safe to call before `create()` — the scene
+   * caches the request and applies it once textures/graphics objects exist.
+   */
+  setFloorVisibility(input: FloorVisibilityInput): void {
+    this.applyFloorVisibility(input);
+    if (this.dungeonMap && this.roomGraphics && this.corridorGraphics) {
+      this.drawCorridors(this.dungeonMap);
+      this.drawRooms(this.dungeonMap);
+      this.refreshPortalIcons();
+      this.refreshArtifactIcons();
+      this.refreshPortalHint();
+    }
+  }
+
+  private applyFloorVisibility(input: FloorVisibilityInput): void {
+    this.currentFloorId = input.floorId;
+    this.visibleRoomIds = new Set(input.visibleRoomIds);
+    this.portalUpRoomId = input.portalUpRoomId;
+    this.portalDownRoomIds = new Set(input.portalDownRoomIds);
+  }
+
   private drawRooms(map: DungeonMap): void {
     if (!this.roomGraphics) return;
     const g = this.roomGraphics;
     g.clear();
+    // Tear down any text labels we drew previously so a redraw doesn't leak
+    // game objects when the floor is switched.
+    for (const label of this.roomLabels.values()) label.destroy();
+    this.roomLabels.clear();
     const isRpg = this.graphicsMode === 'rpg';
     for (const room of map.rooms) {
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
       const x = room.gridX * map.tileSize;
       const y = room.gridY * map.tileSize;
       const w = room.width * map.tileSize;
       const h = room.height * map.tileSize;
+      const isPortalUp = room.roomId === this.portalUpRoomId;
+      const isPortalDown = this.portalDownRoomIds.has(room.roomId);
+      const isPortal = isPortalUp || isPortalDown;
 
       if (isRpg) {
         // Stone-floor chamber with a thick mortared wall border.
-        const fill = room.isRoot ? 0x4a3520 : 0x2a1f12;
+        const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x4a3520 : 0x2a1f12;
         g.fillStyle(fill, 1);
         g.fillRect(x, y, w, h);
         // Inner floor tile band to suggest a tiled chamber.
-        g.fillStyle(0x3b2a18, 0.65);
+        g.fillStyle(isPortal ? 0x2a3a5c : 0x3b2a18, 0.65);
         g.fillRect(x + 4, y + 4, w - 8, h - 8);
-        g.lineStyle(3, statusColor(room.status), 1);
+        g.lineStyle(3, isPortal ? 0x7fb2ff : statusColor(room.status), 1);
         g.strokeRect(x, y, w, h);
       } else {
         // Mind-map flavour: flat node, rounded by an outlined ellipse on top
         // of a soft-fill rectangle so room collision still maps to the grid.
-        const fill = room.isRoot ? 0x223259 : 0x1a2032;
+        const fill = isPortal ? 0x2a3a5c : room.isRoot ? 0x223259 : 0x1a2032;
         g.fillStyle(fill, 1);
         g.fillRect(x, y, w, h);
-        g.lineStyle(2, statusColor(room.status), 1);
+        g.lineStyle(2, isPortal ? 0x7fb2ff : statusColor(room.status), 1);
         // Phaser's `strokeEllipse(cx, cy, width, height)` takes the FULL
         // ellipse dimensions (not radii), so passing `w` and `h` here makes
         // the ellipse exactly fill the room's grid footprint.
         g.strokeEllipse(x + w / 2, y + h / 2, w, h);
       }
 
+      const labelPrefix = isPortalUp ? '↑ ' : isPortalDown ? '↓ ' : '';
       const label = this.add
-        .text(x + w / 2, y + h - 12, room.topic, {
+        .text(x + w / 2, y + h - 12, `${labelPrefix}${room.topic}`, {
           fontFamily: 'Inter, system-ui, sans-serif',
           fontSize: '12px',
-          color: isRpg ? '#f4e4c2' : '#f5f7ff',
+          color: isPortal ? '#cfe1ff' : isRpg ? '#f4e4c2' : '#f5f7ff',
           align: 'center',
           wordWrap: { width: w - 8 },
         })
@@ -358,13 +527,27 @@ export class DungeonScene extends Phaser.Scene {
     const g = this.corridorGraphics;
     g.clear();
     const isRpg = this.graphicsMode === 'rpg';
-    g.lineStyle(isRpg ? 5 : 4, isRpg ? 0x6b4a24 : 0x3b455e, 1);
+    const baseColor = isRpg ? 0x6b4a24 : 0x3b455e;
+    const portalColor = 0x7fb2ff;
 
     const roomById = new Map(map.rooms.map((room) => [room.roomId, room] as const));
     for (const corridor of map.corridors) {
+      if (
+        this.visibleRoomIds &&
+        (!this.visibleRoomIds.has(corridor.fromRoomId) ||
+          !this.visibleRoomIds.has(corridor.toRoomId))
+      ) {
+        continue;
+      }
       const from = roomById.get(corridor.fromRoomId);
       const to = roomById.get(corridor.toRoomId);
       if (!from || !to) continue;
+      const isPortalEdge =
+        corridor.fromRoomId === this.portalUpRoomId ||
+        corridor.toRoomId === this.portalUpRoomId ||
+        this.portalDownRoomIds.has(corridor.fromRoomId) ||
+        this.portalDownRoomIds.has(corridor.toRoomId);
+      g.lineStyle(isRpg ? 5 : 4, isPortalEdge ? portalColor : baseColor, 1);
       const a = this.roomCenter(from, map.tileSize);
       const b = this.roomCenter(to, map.tileSize);
       g.strokeLineShape(new Phaser.Geom.Line(a.x, a.y, b.x, b.y));
@@ -380,6 +563,7 @@ export class DungeonScene extends Phaser.Scene {
 
   private findRoomAtWorld(x: number, y: number, map: DungeonMap): DungeonRoom | null {
     for (const room of map.rooms) {
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
       const left = room.gridX * map.tileSize;
       const top = room.gridY * map.tileSize;
       const right = left + room.width * map.tileSize;
@@ -394,6 +578,7 @@ export class DungeonScene extends Phaser.Scene {
   private enterRoom(roomId: string): void {
     this.currentRoomId = roomId;
     this.callbacks?.onRoomEntered(roomId);
+    this.refreshPortalHint();
   }
 
   private setZoomTarget(zoom: number): void {

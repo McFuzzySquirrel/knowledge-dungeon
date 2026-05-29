@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type Phaser from 'phaser';
-import { deriveGraphHierarchy } from '@/core/graph';
+import { computeFloorVisibility, deriveGraphHierarchy } from '@/core/graph';
 import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -57,6 +57,21 @@ export function GameScreen(): JSX.Element {
     [snapshot],
   );
 
+  // The floor the in-game scene is currently rendering. Defaults to the
+  // root floor and changes when the player triggers a portal (E on a stairs
+  // room) or teleports via the map.
+  const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
+  useEffect(() => {
+    if (snapshot && currentFloorId === null) {
+      setCurrentFloorId(snapshot.dungeon.rootRoomId);
+    }
+  }, [snapshot, currentFloorId]);
+
+  const floorVisibility = useMemo(() => {
+    if (!snapshot || !hierarchy || !currentFloorId) return null;
+    return computeFloorVisibility(hierarchy, snapshot.dungeon, currentFloorId);
+  }, [snapshot, hierarchy, currentFloorId]);
+
   const teleportRemainingMs =
     lastTeleportAt === null ? 0 : Math.max(0, TELEPORT_COOLDOWN_MS - (clockMs - lastTeleportAt));
 
@@ -68,11 +83,27 @@ export function GameScreen(): JSX.Element {
 
   useEffect(() => {
     if (!dungeonMap || !containerRef.current) return;
+    const initialFloor =
+      hierarchy && snapshot
+        ? computeFloorVisibility(
+            hierarchy,
+            snapshot.dungeon,
+            currentFloorId ?? snapshot.dungeon.rootRoomId,
+          )
+        : null;
     const game = createGame({
       parent: containerRef.current,
       dungeonMap,
       playerClass: selectedClass,
       graphicsMode,
+      initialFloor: initialFloor
+        ? {
+            floorId: initialFloor.floorId,
+            visibleRoomIds: initialFloor.visibleRoomIds,
+            portalUpRoomId: initialFloor.portalUpRoomId,
+            portalDownRoomIds: initialFloor.portalDownRoomIds,
+          }
+        : undefined,
       callbacks: {
         onRoomEntered: (roomId) => setFocusedRoomId(roomId),
         onInteract: (roomId) => {
@@ -82,6 +113,31 @@ export function GameScreen(): JSX.Element {
           } else {
             openNoteEditor(roomId);
           }
+        },
+        onFloorTransition: ({ fromRoomId, direction }) => {
+          const liveSnapshot = useSubjectStore.getState().snapshot;
+          if (!liveSnapshot) return;
+          const liveHierarchy = deriveGraphHierarchy(liveSnapshot.dungeon);
+          // For both directions the destination room is the very portal the
+          // player is standing on — we just swap which floor is "active" so
+          // that room's neighbors become visible.
+          const destinationFloorId =
+            direction === 'up'
+              ? liveHierarchy.floorIdByRoomId[fromRoomId] ?? liveSnapshot.dungeon.rootRoomId
+              : liveHierarchy.floorIdByRoomId[fromRoomId] ?? fromRoomId;
+          const nextVisibility = computeFloorVisibility(
+            liveHierarchy,
+            liveSnapshot.dungeon,
+            destinationFloorId,
+          );
+          setCurrentFloorId(destinationFloorId);
+          sceneRef.current?.setFloorVisibility({
+            floorId: nextVisibility.floorId,
+            visibleRoomIds: nextVisibility.visibleRoomIds,
+            portalUpRoomId: nextVisibility.portalUpRoomId,
+            portalDownRoomIds: nextVisibility.portalDownRoomIds,
+          });
+          sceneRef.current?.teleportToRoom(fromRoomId);
         },
       },
     });
@@ -96,9 +152,10 @@ export function GameScreen(): JSX.Element {
       sceneRef.current = null;
       setSceneReady(false);
     };
-    // We intentionally do NOT depend on `phase` here — phase reads happen at
-    // interact-time via the closure update below; rebuilding Phaser on phase
-    // changes would tear down the game state unnecessarily.
+    // We intentionally do NOT depend on `phase` or `currentFloorId` here —
+    // phase reads happen at interact-time via the closure update below, and
+    // floor changes are pushed via `scene.setFloorVisibility` to avoid
+    // tearing down the Phaser game on every transition.
   }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId, graphicsMode]);
 
   useEffect(() => {
@@ -154,7 +211,27 @@ export function GameScreen(): JSX.Element {
       : snapshot.dungeon.subjectName;
 
   function handleTravelToRoom(roomId: string) {
+    syncFloorForRoom(roomId);
     sceneRef.current?.teleportToRoom(roomId);
+  }
+
+  function syncFloorForRoom(roomId: string) {
+    if (!hierarchy || !snapshot) return;
+    const targetFloorId =
+      hierarchy.floorIdByRoomId[roomId] ?? snapshot.dungeon.rootRoomId;
+    if (targetFloorId === currentFloorId) return;
+    const nextVisibility = computeFloorVisibility(
+      hierarchy,
+      snapshot.dungeon,
+      targetFloorId,
+    );
+    setCurrentFloorId(targetFloorId);
+    sceneRef.current?.setFloorVisibility({
+      floorId: nextVisibility.floorId,
+      visibleRoomIds: nextVisibility.visibleRoomIds,
+      portalUpRoomId: nextVisibility.portalUpRoomId,
+      portalDownRoomIds: nextVisibility.portalDownRoomIds,
+    });
   }
 
   function handleTeleport() {
@@ -169,6 +246,7 @@ export function GameScreen(): JSX.Element {
 
   function handleTeleportToRoom(roomId: string) {
     if (teleportRemainingMs > 0) return;
+    syncFloorForRoom(roomId);
     sceneRef.current?.teleportToRoom(roomId);
     const now = Date.now();
     setClockMs(now);
@@ -196,7 +274,13 @@ export function GameScreen(): JSX.Element {
 
       <div className="game-canvas">
         <div className="game-canvas-host" ref={containerRef} />
-        <Minimap dungeonMap={dungeonMap} focusedRoomId={focusedRoomId} />
+        <Minimap
+          dungeonMap={dungeonMap}
+          focusedRoomId={focusedRoomId}
+          visibleRoomIds={floorVisibility?.visibleRoomIds}
+          portalUpRoomId={floorVisibility?.portalUpRoomId ?? null}
+          portalDownRoomIds={floorVisibility?.portalDownRoomIds}
+        />
       </div>
 
       <RoomPanel
