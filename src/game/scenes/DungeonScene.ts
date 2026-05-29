@@ -333,6 +333,9 @@ export class DungeonScene extends Phaser.Scene {
         g.fillStyle(fill, 1);
         g.fillRect(x, y, w, h);
         g.lineStyle(2, statusColor(room.status), 1);
+        // Phaser's `strokeEllipse(cx, cy, width, height)` takes the FULL
+        // ellipse dimensions (not radii), so passing `w` and `h` here makes
+        // the ellipse exactly fill the room's grid footprint.
         g.strokeEllipse(x + w / 2, y + h / 2, w, h);
       }
 

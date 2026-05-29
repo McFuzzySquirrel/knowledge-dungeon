@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import { useId, type JSX } from 'react';
 import { usePreferencesStore, type GraphicsMode } from '@/store/preferencesStore';
 
 interface GraphicsModeToggleProps {
@@ -32,15 +32,16 @@ export function GraphicsModeToggle({
 }: GraphicsModeToggleProps): JSX.Element {
   const mode = usePreferencesStore((s) => s.graphicsMode);
   const setMode = usePreferencesStore((s) => s.setGraphicsMode);
+  const labelId = useId();
 
   return (
     <div
       className={`graphics-mode-toggle${compact ? ' graphics-mode-toggle--compact' : ''}`}
     >
-      <span id="graphics-mode-toggle-label" className="graphics-mode-toggle__label">
+      <span id={labelId} className="graphics-mode-toggle__label">
         {label}
       </span>
-      <div role="radiogroup" aria-labelledby="graphics-mode-toggle-label">
+      <div role="radiogroup" aria-labelledby={labelId}>
         {OPTIONS.map((option) => {
           const isSelected = option.id === mode;
           return (
