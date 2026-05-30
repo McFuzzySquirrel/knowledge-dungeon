@@ -17,6 +17,13 @@ Use this screen to:
 
 This is the entry point for every session and determines how the rest of the UI behaves.
 
+### 1a) Selection readiness state
+
+![Welcome screen with readiness summary](./assets/ui/welcome-selections-ready.png)
+
+The **Current selections** card echoes the active phase and archetype, and
+shows a readiness line that turns green once an archetype is selected.
+
 ## 2) Main game shell (HUD + minimap + room panel)
 
 ![Main game shell](./assets/ui/game-screen.png)
@@ -43,10 +50,10 @@ gets the maximum amount of screen space:
 - **Minimap (bottom-left, floating):** quick room-location awareness. The
   current room and any rooms **directly connected** to it are highlighted
   in the accent color (see [§5 Minimap child highlighting](#5-minimap-child-highlighting)).
-- **Right room panel (floating):** topic metadata, breadcrumbs, and travel
-  plus a quick-access **Collections** row for **Inventory**, **Badges**, and
-  **Diary** so progression actions stay reachable without crowding the HUD.
-  The room panel also includes topic metadata, breadcrumbs, and travel
+- **Right room panel (floating):** a quick-access **Collections** row for
+  **Inventory**, **Badges**, and **Diary** keeps progression actions visible
+  without crowding the HUD. The panel also includes topic metadata,
+  breadcrumbs, and travel
   shortcuts split into two sections — **Connected topics on this floor**
   (siblings/neighbors on the same floor) and **Travel to related floors**
   (a `← Back to <parent>` shortcut plus jumps to topics that live on other
@@ -58,6 +65,8 @@ gets the maximum amount of screen space:
 
 See [`CUSTOMIZATION.md`](./CUSTOMIZATION.md) for how to swap in your own
 sprites and tilesets, and for where desktop subject exports are written from.
+
+![Room panel collections shortcuts](./assets/ui/room-panel-collections.png)
 
 ## 3) Auto-zoom (room ↔ corridor)
 

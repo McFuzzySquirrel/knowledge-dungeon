@@ -52,10 +52,14 @@ function loadPersisted(): PersistedProgression {
     if (typeof localStorage === 'undefined') return DEFAULT_PROGRESSION;
     const raw = localStorage.getItem(STORAGE_KEYS.progression);
     if (!raw) return DEFAULT_PROGRESSION;
-    const parsed = JSON.parse(raw) as PersistedProgression;
-    const collectedNotes = Array.isArray(parsed.collectedNotes)
-      ? parsed.collectedNotes
-          .filter((entry): entry is Partial<CollectedNoteEntry> => Boolean(entry))
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      return DEFAULT_PROGRESSION;
+    }
+    const parsedRecord = parsed as Record<string, unknown>;
+    const collectedNotes = Array.isArray(parsedRecord.collectedNotes)
+      ? parsedRecord.collectedNotes
+          .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
           .map((entry) => ({
             noteId: typeof entry.noteId === 'string' ? entry.noteId : '',
             dungeonId: typeof entry.dungeonId === 'string' ? entry.dungeonId : '',
@@ -74,13 +78,17 @@ function loadPersisted(): PersistedProgression {
           .filter((entry) => entry.noteId.length > 0)
       : [];
 
+    const xpTotal = typeof parsedRecord.xpTotal === 'number' ? parsedRecord.xpTotal : 0;
+
     return {
-      xpTotal: typeof parsed.xpTotal === 'number' ? parsed.xpTotal : 0,
-      rank: assignRankTier(parsed.xpTotal ?? 0),
-      badges: Array.isArray(parsed.badges) ? parsed.badges : [],
-      inventory: Array.isArray(parsed.inventory) ? parsed.inventory : [],
+      xpTotal,
+      rank: assignRankTier(xpTotal),
+      badges: Array.isArray(parsedRecord.badges)
+        ? parsedRecord.badges.filter((badge): badge is string => typeof badge === 'string')
+        : [],
+      inventory: Array.isArray(parsedRecord.inventory) ? (parsedRecord.inventory as LootItem[]) : [],
       collectedNotes,
-      streakCount: typeof parsed.streakCount === 'number' ? parsed.streakCount : 0,
+      streakCount: typeof parsedRecord.streakCount === 'number' ? parsedRecord.streakCount : 0,
     };
   } catch {
     return DEFAULT_PROGRESSION;
