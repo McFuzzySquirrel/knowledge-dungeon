@@ -10,6 +10,8 @@ describe('Hud', () => {
         roomCount={3}
         xpTotal={120}
         rank="Novice"
+        inventoryCount={0}
+        badgeCount={0}
         phase="creator"
         currentFloorLabel="Linear Algebra"
         teleportRemainingMs={0}
@@ -19,6 +21,8 @@ describe('Hud', () => {
         onOpenMap={() => undefined}
         onTeleport={() => undefined}
         onHome={() => undefined}
+        onOpenInventory={() => undefined}
+        onOpenBadges={() => undefined}
       />,
     );
 

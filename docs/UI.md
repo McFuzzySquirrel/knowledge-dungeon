@@ -26,7 +26,10 @@ The game shell combines several persistent UI regions, all rendered as
 gets the maximum amount of screen space:
 
 - **Top HUD (floating):** subject, room count, XP/rank, active phase, plus
-  **Map**, **Teleport**, **Home**, and **Help** buttons. `Map` opens the full
+  **Inventory** (🎒), **Badges** (🏅), **Map**, **Teleport**, **Home**, and
+  **Help** buttons. Inventory and Badges open a tabbed modal that lists
+  collected loot and earned milestone badges (mirroring the icon-driven
+  rail used by the Repo Dungeon HUD). `Map` opens the full
   mindmap view, `Teleport` opens a floor/room jump flow with a cooldown,
   `Home` returns to subject selection, `?` opens the help overlay.
 - **Center gameplay canvas:** Phaser dungeon movement and interactions. The
@@ -35,7 +38,11 @@ gets the maximum amount of screen space:
   a corridor between rooms (so more of the map is visible — see
   [§3 Auto-zoom](#3-auto-zoom-roomcorridor) below). The player is drawn
   with a class-themed SVG sprite (Scholar / Cartographer / Archivist) and
-  the spawn room is marked with a signpost.
+  the spawn room is marked with a signpost, accompanied by a friendly
+  **guide NPC** with a hint speech bubble that points first-time players
+  at the WASD/E controls. In RPG mode, corridors between rooms are
+  decorated with a stone pathway tile texture so the dungeon reads as
+  connected chambers rather than a graph.
 - **Minimap (bottom-left, floating):** quick room-location awareness. The
   current room and any rooms **directly connected** to it are highlighted
   in the accent color (see [§5 Minimap child highlighting](#5-minimap-child-highlighting)).
@@ -144,12 +151,14 @@ the visual treatment of the dungeon, the full map, and the minimap:
 
 - **Mind map** — graph-style nodes (ellipses) connected by thin edges; the
   HUD/panels use the default cool palette.
-- **RPG** — rectangular dungeon chambers connected by thick passageways,
-  with a parchment-toned HUD/panel skin. In RPG mode the in-game scene
-  also paints a tiled floor texture per floor (cycling between the three
-  bundled tilesets so each floor reads as a distinct location — Ancient
-  Library, Lost Archive, Deep Dungeon) and sprinkles decor (bookshelves,
-  braziers, scroll piles) deterministically into each room.
+- **RPG** — rectangular dungeon chambers connected by thick passageways
+  decorated with stone pathway tiles, with a parchment-toned HUD/panel
+  skin. In RPG mode the in-game scene also paints a tiled floor texture
+  per floor (cycling between the bundled tilesets — Ancient Library, Lost
+  Archive, Deep Dungeon, Garden Ruins, Iron Forge, Utility Vault, Wind
+  Temple, Neon Circuit City — so each floor reads as a distinct location)
+  and sprinkles decor (bookshelves, braziers, scroll piles)
+  deterministically into each room.
 
 Saved subjects are untouched — only the renderer changes. New users
 default to RPG; existing installs are preserved on the mind-map look they
@@ -190,8 +199,24 @@ encounter is defeated.
 ## 9) Archaeologist phase loot icons
 
 During the **Archaeologist** phase, every room that has produced an
-artifact (i.e. its encounter has been defeated) is decorated with a small
-loot-chest sprite in the dungeon view. The icons make it easy to scan the
-map for rooms whose artifacts and self-check prompts are ready to revisit;
-they disappear automatically when you switch back to the Create or Scribe
-phase so they don't clutter authoring/exploration.
+artifact (i.e. its encounter has been defeated) is decorated with a
+glowing, pulsing loot-chest sprite in the dungeon view — two stacked
+additive halos pulse around the chest so collectables are immediately
+visible as you scan the map. The icons make it easy to find rooms whose
+artifacts and self-check prompts are ready to revisit; they disappear
+automatically when you switch back to the Create or Scribe phase so they
+don't clutter authoring/exploration.
+
+## 10) Inventory & Badges panel
+
+![Inventory and badges modal opened from the HUD](./assets/ui/inventory-badges.png)
+
+The **🎒 Inventory** and **🏅 Badges** HUD buttons open a tabbed modal
+that surfaces the player's progression rewards:
+
+- **Inventory** lists collected loot artifacts, each rendered as a card
+  showing its name, rarity (common/rare/epic, color-coded), and flavour
+  description.
+- **Badges** lists earned milestone badges as compact pill chips.
+- The header also shows the player's current XP total and rank tier so
+  progression context is always one click away.

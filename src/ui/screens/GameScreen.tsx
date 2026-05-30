@@ -9,6 +9,7 @@ import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene } from '@/game/scenes/DungeonScene';
 import { Hud } from '@/ui/components/Hud';
+import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { TouchControls } from '@/ui/components/TouchControls';
@@ -39,12 +40,15 @@ export function GameScreen(): JSX.Element {
   const recordReviewPass = useSubjectStore((s) => s.recordReviewPass);
   const xpTotal = useProgressionStore((s) => s.xpTotal);
   const rank = useProgressionStore((s) => s.rank);
+  const inventory = useProgressionStore((s) => s.inventory);
+  const badges = useProgressionStore((s) => s.badges);
   const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<DungeonScene | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges'>(null);
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [sceneReady, setSceneReady] = useState(false);
 
@@ -261,6 +265,8 @@ export function GameScreen(): JSX.Element {
         roomCount={snapshot.dungeon.rooms.length}
         xpTotal={xpTotal}
         rank={rank}
+        inventoryCount={inventory.length}
+        badgeCount={badges.length}
         phase={phase}
         currentFloorLabel={currentFloorLabel}
         teleportRemainingMs={teleportRemainingMs}
@@ -270,6 +276,8 @@ export function GameScreen(): JSX.Element {
         onOpenMap={openMapView}
         onTeleport={handleTeleport}
         onHome={handleHome}
+        onOpenInventory={() => setInventoryView('inventory')}
+        onOpenBadges={() => setInventoryView('badges')}
       />
 
       <div className="game-canvas">
@@ -307,6 +315,17 @@ export function GameScreen(): JSX.Element {
         />
       ) : null}
       {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
+      {inventoryView ? (
+        <InventoryBadgesPanel
+          view={inventoryView}
+          inventory={inventory}
+          badges={badges}
+          xpTotal={xpTotal}
+          rank={rank}
+          onSwitchView={(v) => setInventoryView(v)}
+          onClose={() => setInventoryView(null)}
+        />
+      ) : null}
     </div>
   );
 }

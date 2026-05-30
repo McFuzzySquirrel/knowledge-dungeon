@@ -6,6 +6,8 @@ interface HudProps {
   roomCount: number;
   xpTotal: number;
   rank: string;
+  inventoryCount: number;
+  badgeCount: number;
   phase: GamePhase;
   currentFloorLabel: string;
   teleportRemainingMs: number;
@@ -15,6 +17,8 @@ interface HudProps {
   onOpenMap: () => void;
   onTeleport: () => void;
   onHome: () => void;
+  onOpenInventory: () => void;
+  onOpenBadges: () => void;
 }
 
 const PHASE_LABELS: Record<GamePhase, string> = {
@@ -28,6 +32,8 @@ export function Hud({
   roomCount,
   xpTotal,
   rank,
+  inventoryCount,
+  badgeCount,
   phase,
   currentFloorLabel,
   teleportRemainingMs,
@@ -37,6 +43,8 @@ export function Hud({
   onOpenMap,
   onTeleport,
   onHome,
+  onOpenInventory,
+  onOpenBadges,
 }: HudProps): JSX.Element {
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
   const teleportLabel =
@@ -83,6 +91,28 @@ export function Hud({
             {PHASE_LABELS[p]}
           </button>
         ))}
+        <button
+          type="button"
+          className="hud-icon-button"
+          onClick={onOpenInventory}
+          aria-label={`Open inventory (${inventoryCount} item${inventoryCount === 1 ? '' : 's'})`}
+        >
+          <span className="hud-icon-glyph" aria-hidden="true">
+            🎒
+          </span>
+          <span className="hud-icon-count">{inventoryCount}</span>
+        </button>
+        <button
+          type="button"
+          className="hud-icon-button"
+          onClick={onOpenBadges}
+          aria-label={`Open badges (${badgeCount} earned)`}
+        >
+          <span className="hud-icon-glyph" aria-hidden="true">
+            🏅
+          </span>
+          <span className="hud-icon-count">{badgeCount}</span>
+        </button>
         <button type="button" onClick={onOpenMap} aria-label="Open full map">
           Map
         </button>

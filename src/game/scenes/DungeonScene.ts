@@ -55,7 +55,9 @@ const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
 };
 const PLAYER_SPRITE_FALLBACK = `${BASE}assets/sprites/player.svg`;
 const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
+const NPC_GUIDE_SPRITE = `${BASE}assets/sprites/npc-scribe.svg`;
 const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
+const PATHWAY_STRAIGHT_SPRITE = `${BASE}assets/sprites/pathways/straight.svg`;
 const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
 const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
 const DECOR_SPRITES = {
@@ -78,29 +80,48 @@ const TILESET_SPRITES = {
   ancientLibrary: `${BASE}assets/tilesets/ancient-library.svg`,
   lostArchive: `${BASE}assets/tilesets/lost-archive.svg`,
   deepDungeon: `${BASE}assets/tilesets/deep-dungeon.svg`,
+  gardenRuins: `${BASE}assets/tilesets/garden-ruins.svg`,
+  ironForge: `${BASE}assets/tilesets/iron-forge.svg`,
+  utilityVault: `${BASE}assets/tilesets/utility-vault.svg`,
+  windTemple: `${BASE}assets/tilesets/wind-temple.svg`,
+  neonCircuitCity: `${BASE}assets/tilesets/neon-circuit-city.svg`,
 } as const;
 type TilesetKey = keyof typeof TILESET_SPRITES;
 const TILESET_TEXTURE_KEYS: Record<TilesetKey, string> = {
   ancientLibrary: 'kd-tileset-ancient-library',
   lostArchive: 'kd-tileset-lost-archive',
   deepDungeon: 'kd-tileset-deep-dungeon',
+  gardenRuins: 'kd-tileset-garden-ruins',
+  ironForge: 'kd-tileset-iron-forge',
+  utilityVault: 'kd-tileset-utility-vault',
+  windTemple: 'kd-tileset-wind-temple',
+  neonCircuitCity: 'kd-tileset-neon-circuit-city',
 };
 const TILESET_KEYS: readonly TilesetKey[] = [
   'ancientLibrary',
   'lostArchive',
   'deepDungeon',
+  'gardenRuins',
+  'ironForge',
+  'utilityVault',
+  'windTemple',
+  'neonCircuitCity',
 ];
 const TILESET_TILE_SIZE = 32;
 
 const PLAYER_TEXTURE_KEY = 'kd-player';
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
+const NPC_GUIDE_TEXTURE_KEY = 'kd-npc-guide';
 const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
+const PATHWAY_STRAIGHT_TEXTURE_KEY = 'kd-pathway-straight';
 const STAIRS_UP_TEXTURE_KEY = 'kd-stairs-up';
 const STAIRS_DOWN_TEXTURE_KEY = 'kd-stairs-down';
 const PLAYER_SPRITE_SIZE = 32;
 const SIGNPOST_SPRITE_SIZE = 28;
+const NPC_GUIDE_SPRITE_SIZE = 28;
 const ARTIFACT_LOOT_SPRITE_SIZE = 26;
 const PORTAL_SPRITE_SIZE = 28;
+const PATHWAY_TILE_SIZE = 32;
 // Square collider, tighter than the rendered sprite so movement feels right.
 const PLAYER_COLLIDER_SIZE = 16;
 
@@ -120,7 +141,7 @@ export class DungeonScene extends Phaser.Scene {
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
   private playerClass: PlayerClassId | null = null;
   private graphicsMode: GraphicsMode = 'rpg';
-  private artifactIcons = new Map<string, Phaser.GameObjects.Image>();
+  private artifactIcons = new Map<string, Phaser.GameObjects.Container>();
   private artifactRoomIds = new Set<string>();
   private showArtifactIcons = false;
   private currentFloorId: string | null = null;
@@ -130,7 +151,10 @@ export class DungeonScene extends Phaser.Scene {
   private portalIcons = new Map<string, Phaser.GameObjects.Image>();
   private portalHintText: Phaser.GameObjects.Text | null = null;
   private floorTileSprites: Phaser.GameObjects.TileSprite[] = [];
+  private corridorTileSprites: Phaser.GameObjects.TileSprite[] = [];
   private decorIcons: Phaser.GameObjects.Image[] = [];
+  private guideNpc: Phaser.GameObjects.Image | null = null;
+  private guideBubble: Phaser.GameObjects.Container | null = null;
   /** Per-room floor id, captured when visibility is applied — used to seed
    * decor placement and tileset selection so the layout is stable across
    * redraws on the same floor. */
@@ -169,6 +193,14 @@ export class DungeonScene extends Phaser.Scene {
     this.load.svg(SIGNPOST_TEXTURE_KEY, SIGNPOST_SPRITE, {
       width: SIGNPOST_SPRITE_SIZE,
       height: SIGNPOST_SPRITE_SIZE,
+    });
+    this.load.svg(NPC_GUIDE_TEXTURE_KEY, NPC_GUIDE_SPRITE, {
+      width: NPC_GUIDE_SPRITE_SIZE,
+      height: NPC_GUIDE_SPRITE_SIZE,
+    });
+    this.load.svg(PATHWAY_STRAIGHT_TEXTURE_KEY, PATHWAY_STRAIGHT_SPRITE, {
+      width: PATHWAY_TILE_SIZE,
+      height: PATHWAY_TILE_SIZE,
     });
     this.load.svg(ARTIFACT_LOOT_TEXTURE_KEY, ARTIFACT_LOOT_SPRITE, {
       width: ARTIFACT_LOOT_SPRITE_SIZE,
@@ -218,6 +250,10 @@ export class DungeonScene extends Phaser.Scene {
     this.add
       .image(start.x, start.y - root.height * map.tileSize * 0.3, SIGNPOST_TEXTURE_KEY)
       .setDepth(4);
+
+    // Add a guidance NPC near the signpost with a floating hint bubble so
+    // first-time players know what to do (move with WASD, press E to interact).
+    this.spawnGuideNpc(start.x, start.y, root, map);
 
     this.player = this.add.image(start.x, start.y, PLAYER_TEXTURE_KEY).setDepth(10);
     this.physics.add.existing(this.player);
@@ -421,11 +457,106 @@ export class DungeonScene extends Phaser.Scene {
       const center = this.roomCenter(room, map.tileSize);
       // Place the loot icon in the upper portion of the room so it doesn't
       // overlap the topic label rendered at the bottom edge.
-      const icon = this.add
-        .image(center.x, center.y - room.height * map.tileSize * 0.25, ARTIFACT_LOOT_TEXTURE_KEY)
-        .setDepth(6);
-      this.artifactIcons.set(room.roomId, icon);
+      const cx = center.x;
+      const cy = center.y - room.height * map.tileSize * 0.25;
+      const container = this.add.container(cx, cy).setDepth(6);
+      // Two stacked additive-blended halos give the artifact a warm,
+      // pulsing "loot" glow similar to repo-dungeon's collectibles.
+      const glowOuter = this.add.circle(0, 0, 22, 0xf2c879, 0.18);
+      glowOuter.setBlendMode(Phaser.BlendModes.ADD);
+      const glowInner = this.add.circle(0, 0, 14, 0xffe9b3, 0.32);
+      glowInner.setBlendMode(Phaser.BlendModes.ADD);
+      const icon = this.add.image(0, 0, ARTIFACT_LOOT_TEXTURE_KEY);
+      container.add([glowOuter, glowInner, icon]);
+      this.tweens.add({
+        targets: [glowOuter, glowInner],
+        alpha: { from: 0.18, to: 0.55 },
+        duration: 950,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+      this.tweens.add({
+        targets: icon,
+        scale: { from: 0.94, to: 1.06 },
+        duration: 1100,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+      this.artifactIcons.set(room.roomId, container);
     }
+  }
+
+  /**
+   * Place a friendly NPC next to the spawn signpost with a small speech
+   * bubble explaining the basic controls. The NPC is purely cosmetic — it
+   * gives newcomers a visible "what do I do?" cue.
+   */
+  private spawnGuideNpc(
+    spawnX: number,
+    spawnY: number,
+    root: DungeonRoom,
+    map: DungeonMap,
+  ): void {
+    if (this.guideNpc) {
+      this.guideNpc.destroy();
+      this.guideNpc = null;
+    }
+    if (this.guideBubble) {
+      this.guideBubble.destroy();
+      this.guideBubble = null;
+    }
+    if (!this.textures.exists(NPC_GUIDE_TEXTURE_KEY)) return;
+    const npcX = spawnX + root.width * map.tileSize * 0.18;
+    const npcY = spawnY - root.height * map.tileSize * 0.2;
+    this.guideNpc = this.add.image(npcX, npcY, NPC_GUIDE_TEXTURE_KEY).setDepth(5);
+    // Subtle bobbing tween so the NPC reads as alive.
+    this.tweens.add({
+      targets: this.guideNpc,
+      y: { from: npcY, to: npcY - 3 },
+      duration: 1400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Build a small parchment-style speech bubble with movement / interact
+    // hints. Anchored above the NPC so it's clearly attributed to them.
+    const text = this.add
+      .text(0, 0, 'Welcome, scholar!\nWASD to move · E to interact', {
+        fontFamily: 'Inter, system-ui, sans-serif',
+        fontSize: '11px',
+        color: '#1a120a',
+        align: 'center',
+        wordWrap: { width: 160 },
+      })
+      .setOrigin(0.5, 0.5);
+    const padX = 8;
+    const padY = 6;
+    const bgWidth = text.width + padX * 2;
+    const bgHeight = text.height + padY * 2;
+    const bg = this.add.graphics();
+    bg.fillStyle(0xf4e4c2, 0.95);
+    bg.fillRoundedRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, 6);
+    bg.lineStyle(1.5, 0x6b4a24, 1);
+    bg.strokeRoundedRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, 6);
+    // Tail pointing down toward the NPC.
+    bg.fillStyle(0xf4e4c2, 0.95);
+    bg.fillTriangle(-6, bgHeight / 2 - 1, 6, bgHeight / 2 - 1, 0, bgHeight / 2 + 7);
+    bg.lineStyle(1.5, 0x6b4a24, 1);
+    bg.strokeTriangle(-6, bgHeight / 2 - 1, 6, bgHeight / 2 - 1, 0, bgHeight / 2 + 7);
+
+    const bubbleY = npcY - NPC_GUIDE_SPRITE_SIZE / 2 - bgHeight / 2 - 10;
+    this.guideBubble = this.add.container(npcX, bubbleY, [bg, text]).setDepth(7);
+    this.tweens.add({
+      targets: this.guideBubble,
+      y: { from: bubbleY, to: bubbleY - 3 },
+      duration: 1800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   /**
@@ -664,9 +795,15 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.corridorGraphics) return;
     const g = this.corridorGraphics;
     g.clear();
+    // Tear down any pathway tile-sprites from a previous render (floor swap,
+    // teleport, etc.) so we don't leak game objects.
+    for (const tile of this.corridorTileSprites) tile.destroy();
+    this.corridorTileSprites = [];
     const isRpg = this.graphicsMode === 'rpg';
     const baseColor = isRpg ? 0x6b4a24 : 0x3b455e;
     const portalColor = 0x7fb2ff;
+    const canTilePath =
+      isRpg && this.textures.exists(PATHWAY_STRAIGHT_TEXTURE_KEY);
 
     const roomById = new Map(map.rooms.map((room) => [room.roomId, room] as const));
     for (const corridor of map.corridors) {
@@ -689,6 +826,27 @@ export class DungeonScene extends Phaser.Scene {
       const a = this.roomCenter(from, map.tileSize);
       const b = this.roomCenter(to, map.tileSize);
       g.strokeLineShape(new Phaser.Geom.Line(a.x, a.y, b.x, b.y));
+
+      if (canTilePath) {
+        // In RPG mode, lay a stone-tile pathway texture along the corridor
+        // between rooms. We orient a single tileSprite to the corridor's
+        // angle and use its full length as the sprite width so the texture
+        // tiles seamlessly along the path.
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const length = Math.hypot(dx, dy);
+        if (length > 0) {
+          const cx = (a.x + b.x) / 2;
+          const cy = (a.y + b.y) / 2;
+          const angle = Math.atan2(dy, dx);
+          const tile = this.add
+            .tileSprite(cx, cy, length, PATHWAY_TILE_SIZE, PATHWAY_STRAIGHT_TEXTURE_KEY)
+            .setRotation(angle)
+            .setAlpha(isPortalEdge ? 0.55 : 0.75)
+            .setDepth(0.5);
+          this.corridorTileSprites.push(tile);
+        }
+      }
     }
   }
 
