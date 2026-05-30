@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { Minimap } from '@/ui/components/Minimap';
-import { usePreferencesStore } from '@/store/preferencesStore';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 
 const dungeonMap: DungeonMap = {
@@ -56,20 +55,12 @@ const dungeonMap: DungeonMap = {
   },
 };
 
-describe('Minimap graphics mode', () => {
+describe('Minimap rendering', () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  it('draws rooms as ellipses in mind-map mode', () => {
-    usePreferencesStore.setState({ graphicsMode: 'mindmap' });
-    const { container } = render(<Minimap dungeonMap={dungeonMap} focusedRoomId={null} />);
-    expect(container.querySelectorAll('ellipse').length).toBeGreaterThan(0);
-    expect(container.querySelectorAll('rect').length).toBe(0);
-  });
-
-  it('draws rooms as rectangular chambers in RPG mode', () => {
-    usePreferencesStore.setState({ graphicsMode: 'rpg' });
+  it('draws rooms as rectangular chambers', () => {
     const { container } = render(<Minimap dungeonMap={dungeonMap} focusedRoomId={null} />);
     expect(container.querySelectorAll('rect').length).toBeGreaterThan(0);
     expect(container.querySelectorAll('ellipse').length).toBe(0);

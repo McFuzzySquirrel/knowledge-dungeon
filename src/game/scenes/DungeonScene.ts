@@ -16,7 +16,6 @@ import {
   resolveFloorBiome,
   type FloorBiomeId,
 } from '@/game/systems/proceduralTextures';
-import type { GraphicsMode } from '@/store/preferencesStore';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
 
 export interface DungeonSceneEvents {
@@ -120,7 +119,6 @@ export class DungeonScene extends Phaser.Scene {
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
   private playerClass: PlayerClassId | null = null;
-  private graphicsMode: GraphicsMode = 'rpg';
   private artifactIcons = new Map<string, Phaser.GameObjects.Container>();
   private artifactRoomIds = new Set<string>();
   private collectedArtifactRoomIds = new Set<string>();
@@ -161,13 +159,11 @@ export class DungeonScene extends Phaser.Scene {
     dungeonMap: DungeonMap;
     callbacks: DungeonSceneEvents;
     playerClass?: PlayerClassId | null;
-    graphicsMode?: GraphicsMode;
     initialFloor?: FloorVisibilityInput;
   }): void {
     this.dungeonMap = data.dungeonMap;
     this.callbacks = data.callbacks;
     this.playerClass = data.playerClass ?? null;
-    this.graphicsMode = data.graphicsMode ?? 'rpg';
     if (data.initialFloor) {
       this.applyFloorVisibility(data.initialFloor);
     }
@@ -219,7 +215,7 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.dungeonMap) return;
     const map = this.dungeonMap;
 
-    this.cameras.main.setBackgroundColor(this.graphicsMode === 'rpg' ? 0x1a120a : 0x10131a);
+    this.cameras.main.setBackgroundColor(0x1a120a);
 
     // Ensure the walkability mask is built even when no floor visibility has
     // been applied (eg. single-floor dungeons that never call setFloorVisibility).
@@ -770,15 +766,11 @@ export class DungeonScene extends Phaser.Scene {
     );
   }
 
-  /**
-   * Render an RPG-mode tiled floor inside each visible room. Mindmap mode
-   * intentionally leaves rooms as flat shapes so the floor tile texture
-   * doesn't compete with the abstract node look.
-   */
+  /** Render tiled floor textures inside each visible room. */
   private renderFloorTiles(): void {
     for (const tile of this.floorTileSprites) tile.destroy();
     this.floorTileSprites = [];
-    if (!this.dungeonMap || this.graphicsMode !== 'rpg') return;
+    if (!this.dungeonMap) return;
     const biome = resolveFloorBiome(this.floorSeed, this.floorBiomeOverride ?? undefined);
     const textureKey = ensureBiomeFloorTexture(this, biome);
     const map = this.dungeonMap;
@@ -808,13 +800,12 @@ export class DungeonScene extends Phaser.Scene {
   /**
    * Sprinkle 0–3 decor icons (bookshelf / brazier / scroll pile) into each
    * visible room. Placement is deterministic per (floorId, roomId) so the
-   * layout is stable across redraws. RPG-mode only — mindmap mode would
-   * look noisy with object sprites layered onto its abstract nodes.
+   * layout is stable across redraws.
    */
   private refreshDecor(): void {
     for (const icon of this.decorIcons) icon.destroy();
     this.decorIcons = [];
-    if (!this.dungeonMap || this.graphicsMode !== 'rpg') return;
+    if (!this.dungeonMap) return;
     const map = this.dungeonMap;
     for (const room of map.rooms) {
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
@@ -857,7 +848,6 @@ export class DungeonScene extends Phaser.Scene {
     // game objects when the floor is switched.
     for (const label of this.roomLabels.values()) label.destroy();
     this.roomLabels.clear();
-    const isRpg = this.graphicsMode === 'rpg';
     // Index doors per room so the wall stroke can skip the door tiles.
     const doorsByRoom = new Map<string, DungeonDoor[]>();
     for (const door of map.doors) {
@@ -875,40 +865,27 @@ export class DungeonScene extends Phaser.Scene {
       const isPortalDown = this.portalDownRoomIds.has(room.roomId);
       const isPortal = isPortalUp || isPortalDown;
 
-      if (isRpg) {
-        // Stone-floor chamber with a thick mortared wall border.
-        const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x4a3520 : 0x2a1f12;
-        g.fillStyle(fill, 1);
-        g.fillRect(x, y, w, h);
-        // Inner floor tile band to suggest a tiled chamber.
-        g.fillStyle(isPortal ? 0x2a3a5c : 0x3b2a18, 0.65);
-        g.fillRect(x + 4, y + 4, w - 8, h - 8);
-        this.drawRoomWallsWithDoors(
-          g,
-          room,
-          doorsByRoom.get(room.roomId) ?? [],
-          map.tileSize,
-          isPortal ? 0x7fb2ff : statusColor(room.status),
-        );
-      } else {
-        // Mind-map flavour: flat node, rounded by an outlined ellipse on top
-        // of a soft-fill rectangle so room collision still maps to the grid.
-        const fill = isPortal ? 0x2a3a5c : room.isRoot ? 0x223259 : 0x1a2032;
-        g.fillStyle(fill, 1);
-        g.fillRect(x, y, w, h);
-        g.lineStyle(2, isPortal ? 0x7fb2ff : statusColor(room.status), 1);
-        // Phaser's `strokeEllipse(cx, cy, width, height)` takes the FULL
-        // ellipse dimensions (not radii), so passing `w` and `h` here makes
-        // the ellipse exactly fill the room's grid footprint.
-        g.strokeEllipse(x + w / 2, y + h / 2, w, h);
-      }
+      // Stone-floor chamber with a thick mortared wall border.
+      const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x4a3520 : 0x2a1f12;
+      g.fillStyle(fill, 1);
+      g.fillRect(x, y, w, h);
+      // Inner floor tile band to suggest a tiled chamber.
+      g.fillStyle(isPortal ? 0x2a3a5c : 0x3b2a18, 0.65);
+      g.fillRect(x + 4, y + 4, w - 8, h - 8);
+      this.drawRoomWallsWithDoors(
+        g,
+        room,
+        doorsByRoom.get(room.roomId) ?? [],
+        map.tileSize,
+        isPortal ? 0x7fb2ff : statusColor(room.status),
+      );
 
       const labelPrefix = isPortalUp ? '↑ ' : isPortalDown ? '↓ ' : '';
       const label = this.add
         .text(x + w / 2, y + h - 12, `${labelPrefix}${room.topic}`, {
           fontFamily: 'Inter, system-ui, sans-serif',
           fontSize: '12px',
-          color: isPortal ? '#cfe1ff' : isRpg ? '#f4e4c2' : '#f5f7ff',
+          color: isPortal ? '#cfe1ff' : '#f4e4c2',
           align: 'center',
           wordWrap: { width: w - 8 },
         })
@@ -1015,15 +992,12 @@ export class DungeonScene extends Phaser.Scene {
     this.corridorTileSprites = [];
     for (const door of this.doorSprites) door.destroy();
     this.doorSprites = [];
-    const isRpg = this.graphicsMode === 'rpg';
-    const baseColor = isRpg ? 0x6b4a24 : 0x3b455e;
+    const baseColor = 0x6b4a24;
     const portalColor = 0x7fb2ff;
-    const corridorTextureKey = isRpg
-      ? ensureBiomeFloorTexture(
-          this,
-          resolveFloorBiome(this.floorSeed, this.floorBiomeOverride ?? undefined),
-        )
-      : null;
+    const corridorTextureKey = ensureBiomeFloorTexture(
+      this,
+      resolveFloorBiome(this.floorSeed, this.floorBiomeOverride ?? undefined),
+    );
     const canTilePath = !!corridorTextureKey;
     const canDrawDoor = this.textures.exists(DOOR_TEXTURE_KEY);
     const tileSize = map.tileSize;
@@ -1042,11 +1016,10 @@ export class DungeonScene extends Phaser.Scene {
         this.portalDownRoomIds.has(corridor.fromRoomId) ||
         this.portalDownRoomIds.has(corridor.toRoomId);
       const strokeColor = isPortalEdge ? portalColor : baseColor;
-      g.lineStyle(isRpg ? 5 : 4, strokeColor, 1);
+      g.lineStyle(5, strokeColor, 1);
 
-      // Stroke each axis-aligned segment so the corridor reads even when
-      // tile sprites haven't loaded (and in mind-map mode where we skip
-      // tile sprites entirely).
+      // Stroke each axis-aligned segment so the corridor still reads when
+      // tile sprites have not loaded yet.
       for (const seg of corridor.segments) {
         const ax = (seg.x1 + 0.5) * tileSize;
         const ay = (seg.y1 + 0.5) * tileSize;

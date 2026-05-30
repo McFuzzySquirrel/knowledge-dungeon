@@ -34,7 +34,7 @@ gets the maximum amount of screen space:
 
 - **Top HUD (floating):** subject, room count, XP/rank, active phase, plus
   **Map**, **Teleport**, **Home**, and **Help** buttons. `Map` opens the full
-  mindmap view, `Teleport` opens a floor/room jump flow with a cooldown,
+  topic-graph view, `Teleport` opens a floor/room jump flow with a cooldown,
   `Home` returns to subject selection, `?` opens the help overlay.
 - **Center gameplay canvas:** Phaser dungeon movement and interactions. The
   camera automatically zooms **in** when the player is standing inside a
@@ -82,12 +82,14 @@ on screen.
 
 ## 4) Full map view
 
-![Full pannable / zoomable mindmap with per-floor filter](./assets/ui/full-map-view.png)
+![Full pannable / zoomable topic graph with per-floor filter](./assets/ui/full-map-view.png)
 
 Opened from the HUD `Map` button or by pressing <kbd>M</kbd>. The full map
-view renders the dungeon mindmap with **drag-to-pan** and
-**scroll-to-zoom**, plus `+` / `−` / `Reset` controls. It's intended for
-inspecting the broader topic graph without leaving the dungeon. Rooms
+view renders the dungeon topic graph with **drag-to-pan** and
+**scroll-to-zoom**, plus `+` / `−` / `Reset` controls. You can also drag
+individual room nodes to reposition the layout while keeping each
+connection anchored to the moved node. It's intended for inspecting the
+broader topic graph without leaving the dungeon. Rooms
 directly connected to your currently focused room (and the edges to them)
 are tinted in the accent color so children/related topics stand out.
 
@@ -99,7 +101,7 @@ navigate back up the hierarchy. Turn the toggle off to inspect the whole
 graph at once.
 
 In Creator phase, switch from **Navigate** to **Graph edit** mode to
-rename, add, delete, or reparent topics directly from the mindmap so the
+rename, add, delete, or reparent topics directly from the map so the
 graph stays the source of truth and the dungeon layout remains a
 generated view over it.
 
@@ -131,7 +133,7 @@ The root topic cannot be deleted; the panel replaces the button with a
 short explanatory note in that case.
 
 The **Full Map** overlay now also includes a lightweight **Graph edit** mode
-for these same authoring actions so the mindmap stays the source of truth and
+for these same authoring actions so the graph stays the source of truth and
 the dungeon layout remains a generated view over that graph (see
 [§4](#4-full-map-view)).
 
@@ -144,36 +146,11 @@ The help dialog is opened from the `?` button (or keyboard `?`) and summarizes:
 - Movement and interaction controls.
 - What changes in each phase (Create, Scribe, Review).
 - How encounters and review passes work.
-- The <kbd>M</kbd> shortcut for the full mindmap view.
-
-It also hosts the **Graphics style** toggle (see
-[§7a Graphics style toggle](#7a-graphics-style-toggle)) so players can
-switch the dungeon look without leaving a session.
+- The <kbd>M</kbd> shortcut for the full map view.
 
 It is meant to be a quick in-context rules reference while playing.
 
-### 7a) Graphics style toggle
-
-A persistent **Mind map / RPG** segmented control is available from both
-the Welcome screen (top-right header) and the Help overlay. It switches
-the visual treatment of the dungeon, the full map, and the minimap:
-
-- **Mind map** — graph-style nodes (ellipses) connected by thin edges; the
-  HUD/panels use the default cool palette.
-- **RPG** — rectangular dungeon chambers connected by thick passageways
-  decorated with stone pathway tiles, with a parchment-toned HUD/panel
-  skin. In RPG mode the in-game scene also paints a tiled floor texture
-  per floor (cycling between the bundled tilesets — Ancient Library, Lost
-  Archive, Deep Dungeon, Garden Ruins, Iron Forge, Utility Vault, Wind
-  Temple, Neon Circuit City — so each floor reads as a distinct location)
-  and sprinkles decor (bookshelves, braziers, scroll piles)
-  deterministically into each room.
-
-Saved subjects are untouched — only the renderer changes. New users
-default to RPG; existing installs are preserved on the mind-map look they
-already know until they opt in.
-
-### 7b) In-game floor isolation and stairs portals
+### 7a) In-game floor isolation and stairs portals
 
 The in-game dungeon scene now mirrors the **Full Map**'s per-floor view:
 only rooms on the player's current floor are rendered, and the minimap

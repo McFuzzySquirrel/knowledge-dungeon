@@ -1,30 +1,19 @@
 /**
- * Preferences store — durable, user-facing display settings that survive
- * across sessions.
+ * Preferences store — currently this is intentionally RPG-only.
  *
- * Today this only carries `graphicsMode`, which selects between the original
- * mind-map look (`mindmap`) and the richer RPG dungeon style (`rpg`). The
- * value is persisted to `localStorage` so the choice is remembered across
- * page reloads in both the web and Electron builds.
- *
- * Default policy:
- *  - Fresh users (no persisted preferences) get `rpg` — the more inviting
- *    first impression.
- *  - Pre-existing installs that already have subject data but no stored
- *    preference are nudged back to `mindmap` so the UI does not visually
- *    re-skin out from under them on upgrade.
+ * We keep the `graphicsMode` field persisted in localStorage so existing
+ * preference payloads remain compatible and future visual options can be
+ * reintroduced without another storage shape change.
  */
 import { create } from 'zustand';
-import { STORAGE_KEYS } from '@/services/persistence/subjectPersistence';
 
-export type GraphicsMode = 'mindmap' | 'rpg';
+export type GraphicsMode = 'rpg';
 
 interface PersistedPreferences {
   graphicsMode?: GraphicsMode;
 }
 
-const PREFERENCES_STORAGE_KEY = `${STORAGE_KEYS.session}:preferences`;
-const LEGACY_SUBJECT_INDEX_KEY = STORAGE_KEYS.subjectIndex;
+const PREFERENCES_STORAGE_KEY = 'knowledge-dungeon:session:preferences';
 
 function hasWindow(): boolean {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -53,26 +42,9 @@ function writePersisted(prefs: PersistedPreferences): void {
   }
 }
 
-function detectExistingUser(): boolean {
-  if (!hasWindow()) return false;
-  try {
-    const subjectsRaw = window.localStorage.getItem(LEGACY_SUBJECT_INDEX_KEY);
-    if (!subjectsRaw) return false;
-    const ids = JSON.parse(subjectsRaw) as unknown;
-    return Array.isArray(ids) && ids.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 function resolveInitialGraphicsMode(): GraphicsMode {
   const persisted = readPersisted();
-  if (persisted?.graphicsMode === 'mindmap' || persisted?.graphicsMode === 'rpg') {
-    return persisted.graphicsMode;
-  }
-  // No persisted preference: keep existing users on the mind-map look they
-  // already know, and onboard new users into the RPG style.
-  return detectExistingUser() ? 'mindmap' : 'rpg';
+  return persisted?.graphicsMode === 'rpg' ? 'rpg' : 'rpg';
 }
 
 export interface PreferencesState {

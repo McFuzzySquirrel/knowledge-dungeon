@@ -4,7 +4,6 @@ import { computeFloorVisibility, deriveGraphHierarchy } from '@/core/graph';
 import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
-import { usePreferencesStore } from '@/store/preferencesStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene } from '@/game/scenes/DungeonScene';
@@ -43,7 +42,6 @@ export function GameScreen(): JSX.Element {
   const inventory = useProgressionStore((s) => s.inventory);
   const badges = useProgressionStore((s) => s.badges);
   const collectedNotes = useProgressionStore((s) => s.collectedNotes);
-  const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -102,7 +100,6 @@ export function GameScreen(): JSX.Element {
       parent: containerRef.current,
       dungeonMap,
       playerClass: selectedClass,
-      graphicsMode,
       initialFloor: initialFloor
         ? {
             floorId: initialFloor.floorId,
@@ -189,7 +186,7 @@ export function GameScreen(): JSX.Element {
     // phase reads happen at interact-time via the closure update below, and
     // floor changes are pushed via `scene.setFloorVisibility` to avoid
     // tearing down the Phaser game on every transition.
-  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId, graphicsMode]);
+  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;

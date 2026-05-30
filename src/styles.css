@@ -977,81 +977,8 @@ button.danger:hover {
 }
 
 /* ------------------------------------------------------------------
- * Graphics-mode toggle widget.
- * Used in the WelcomeScreen header and inside the Help overlay.
- * ------------------------------------------------------------------ */
-
-.graphics-mode-toggle {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.graphics-mode-toggle--compact {
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-}
-
-.graphics-mode-toggle__label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.graphics-mode-toggle [role='radiogroup'] {
-  display: inline-flex;
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.graphics-mode-toggle__option {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-.graphics-mode-toggle__option:hover {
-  background: rgba(242, 200, 121, 0.08);
-  color: var(--text-primary);
-}
-
-.graphics-mode-toggle__option--selected,
-.graphics-mode-toggle__option[aria-checked='true'] {
-  background: var(--accent);
-  color: #1a120a;
-}
-
-.welcome-graphics-mode {
-  margin-left: auto;
-}
-
-.help-overlay__settings {
-  margin: 16px 0 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.help-overlay__settings-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ------------------------------------------------------------------
- * RPG skin overrides — applied when the user opts into the dungeon
- * style. Everything is gated by `[data-graphics='rpg']` on <html> so
- * the default mind-map look is untouched for users who don't opt in.
+ * RPG skin overrides. We keep these gated by `[data-graphics='rpg']`
+ * on <html> to preserve flexibility for future themes.
  * ------------------------------------------------------------------ */
 
 :root[data-graphics='rpg'] {

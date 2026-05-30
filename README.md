@@ -42,7 +42,9 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
 - the full **Map** overlay (<kbd>M</kbd>) defaults to a per-floor view that
   greys out unrelated floors and renders the parent entry room as a dashed
   blue portal — toggle **Show current floor only** off to see the whole
-  mindmap at once
+  topic graph at once
+- in the full map, drag empty space to pan and drag any room node to
+  reposition it while its connections remain attached
 - encounter notes accept lightweight Markdown (links, bold, italic, code,
   bullets) with a live Edit/Preview toggle
 - during the **Archaeologist** phase, every room that has produced an
@@ -50,10 +52,6 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
   cleared topics are easy to revisit
 - diary entries for collected notes are clickable and open the full
   artifact note, so review runs can use the journal as a recall index
-- the **Graphics style** toggle (Welcome screen header and Help overlay)
-  switches between the mind-map view and an RPG dungeon view at any
-  time — the dungeon, full map, and minimap all re-skin together while
-  saved subjects stay untouched
 
 ## Tech stack
 

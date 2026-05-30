@@ -1,5 +1,4 @@
 import type { JSX } from 'react';
-import { GraphicsModeToggle } from '@/ui/components/GraphicsModeToggle';
 
 interface HelpOverlayProps {
   onClose: () => void;
@@ -33,20 +32,13 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
           </li>
           <li>
             Press <kbd>?</kbd> to toggle this help overlay, or <kbd>M</kbd> to open the
-            full mindmap view.
+            full map view.
           </li>
           <li>
             Teleport from the HUD to jump to a chosen floor and room, then wait two minutes
             before using the spell again.
           </li>
         </ul>
-        <div className="help-overlay__settings">
-          <GraphicsModeToggle label="Graphics style" />
-          <p className="help-overlay__settings-hint">
-            Choose between the mind-map graph view and the RPG dungeon view. You can switch
-            at any time — your saved subjects are unchanged.
-          </p>
-        </div>
         <button type="button" onClick={onClose}>
           Close
         </button>
