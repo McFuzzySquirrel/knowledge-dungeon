@@ -92,16 +92,15 @@ Once the skill generates the subject folder:
 
 ### Web Version
 1. Open Knowledge Dungeon (web)
-2. Click **"Create Subject"** → **"Import Subject"**
-3. Drag-and-drop the generated `maps/{project-name}-mindmap/` folder
-4. Click **"Load Subject"** to explore
+2. Open or create the target subject from the Welcome screen
+3. Import/copy the generated `maps/{project-name}-mindmap/` data into your local subject storage
+4. Click **"Refresh subjects"** (if needed), then load the subject to explore
 
 ### Desktop Version (Electron)
 1. Open Knowledge Dungeon (app)
-2. Go to **Admin** (bottom right)
-3. Click **"Import Subject"**
-4. Select the generated `maps/{project-name}-mindmap/` folder
-5. Click **"Load"** to explore
+2. Use the Welcome screen to **Refresh subjects** and load existing subjects by name
+3. Use **Admin** tools to open/export local subject folders when moving data between machines
+4. If you copied a generated subject folder into local storage, refresh and load it from the list
 
 ## Then Explore
 
@@ -130,9 +129,9 @@ Copilot:
 
 📖 Next steps:
    1. Open Knowledge Dungeon
-   2. Click "Import Subject"
-   3. Select: maps/my-project-mindmap/
-   4. Explore!
+    2. Copy/import the generated folder into local subject storage
+    3. Click "Refresh subjects" and load the subject by name
+    4. Explore!
 ```
 
 ## Customization
