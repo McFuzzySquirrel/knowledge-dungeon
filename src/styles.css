@@ -203,6 +203,163 @@ textarea {
 .hud-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.hud-icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, rgba(242, 200, 121, 0.12) 0%, rgba(242, 200, 121, 0.04) 100%);
+  border: 1px solid rgba(242, 200, 121, 0.45);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.hud-icon-button:hover {
+  border-color: var(--accent);
+  background: rgba(242, 200, 121, 0.18);
+}
+
+.hud-icon-glyph {
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.3));
+}
+
+.hud-icon-count {
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 1ch;
+  text-align: right;
+}
+
+.inventory-badges-modal {
+  width: min(680px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.inventory-badges-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inventory-badges-tabs {
+  display: inline-flex;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.inventory-badges-tabs button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+}
+
+.inventory-badges-tabs button[aria-selected='true'] {
+  background: var(--accent);
+  color: #1a120a;
+}
+
+.inventory-badges-rank {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: auto;
+  text-align: right;
+}
+
+.inventory-badges-rank strong {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.ib-icon {
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.inventory-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.inventory-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.inventory-card-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.inventory-card-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.inventory-card-rarity {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.inventory-card-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.badge-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.badge-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.badge-icon {
+  font-size: 18px;
+}
+
+.badge-label {
+  font-weight: 600;
 }
 
 .game-canvas {
