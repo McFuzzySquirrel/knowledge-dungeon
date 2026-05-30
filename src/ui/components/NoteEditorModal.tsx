@@ -123,7 +123,7 @@ export function NoteEditorModal(): JSX.Element | null {
         close();
         return;
       }
-      pushToast('error', 'Notes still need required sections/quality checks before submission.');
+      pushToast('info', 'Draft saved. Add required sections/quality checks to submit.');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to submit note.';
       pushToast('error', message);
