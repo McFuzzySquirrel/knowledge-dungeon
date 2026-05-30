@@ -5,7 +5,11 @@
  * encounter, and emits visited-room / interact events via Phaser's emitter.
  */
 import Phaser from 'phaser';
-import type { DungeonMap, DungeonRoom } from '@/game/systems/dungeonTypes';
+import type {
+  DungeonDoor,
+  DungeonMap,
+  DungeonRoom,
+} from '@/game/systems/dungeonTypes';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
 import type { GraphicsMode } from '@/store/preferencesStore';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
@@ -58,6 +62,8 @@ const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
 const NPC_GUIDE_SPRITE = `${BASE}assets/sprites/npc-scribe.svg`;
 const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
 const PATHWAY_STRAIGHT_SPRITE = `${BASE}assets/sprites/pathways/straight.svg`;
+const PATHWAY_CORNER_SPRITE = `${BASE}assets/sprites/pathways/corner.svg`;
+const DOOR_SPRITE = `${BASE}assets/sprites/objects/door.svg`;
 const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
 const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
 const DECOR_SPRITES = {
@@ -114,6 +120,8 @@ const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
 const NPC_GUIDE_TEXTURE_KEY = 'kd-npc-guide';
 const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
 const PATHWAY_STRAIGHT_TEXTURE_KEY = 'kd-pathway-straight';
+const PATHWAY_CORNER_TEXTURE_KEY = 'kd-pathway-corner';
+const DOOR_TEXTURE_KEY = 'kd-door';
 const STAIRS_UP_TEXTURE_KEY = 'kd-stairs-up';
 const STAIRS_DOWN_TEXTURE_KEY = 'kd-stairs-down';
 const PLAYER_SPRITE_SIZE = 32;
@@ -122,8 +130,12 @@ const NPC_GUIDE_SPRITE_SIZE = 28;
 const ARTIFACT_LOOT_SPRITE_SIZE = 26;
 const PORTAL_SPRITE_SIZE = 28;
 const PATHWAY_TILE_SIZE = 32;
+const DOOR_SPRITE_SIZE = 22;
 // Square collider, tighter than the rendered sprite so movement feels right.
 const PLAYER_COLLIDER_SIZE = 16;
+// Inset (in pixels) used when sampling the player's collider against the
+// walkability grid — keeps the player from snagging on tile seams.
+const PLAYER_WALK_INSET = 1;
 
 export class DungeonScene extends Phaser.Scene {
   private dungeonMap: DungeonMap | null = null;
@@ -152,6 +164,18 @@ export class DungeonScene extends Phaser.Scene {
   private portalHintText: Phaser.GameObjects.Text | null = null;
   private floorTileSprites: Phaser.GameObjects.TileSprite[] = [];
   private corridorTileSprites: Phaser.GameObjects.TileSprite[] = [];
+  private corridorCornerSprites: Phaser.GameObjects.Image[] = [];
+  private doorSprites: Phaser.GameObjects.Image[] = [];
+  /**
+   * Walkability mask for the currently-visible floor. Players can only move
+   * onto tiles where this is 1; everything else is treated as a solid wall.
+   * Rebuilt whenever floor visibility changes.
+   */
+  private activeWalkable: Uint8Array | null = null;
+  private activeWalkableWidth = 0;
+  private activeWalkableHeight = 0;
+  private activeWalkableOffsetX = 0;
+  private activeWalkableOffsetY = 0;
   private decorIcons: Phaser.GameObjects.Image[] = [];
   private guideNpc: Phaser.GameObjects.Image | null = null;
   private guideBubble: Phaser.GameObjects.Container | null = null;
@@ -202,6 +226,14 @@ export class DungeonScene extends Phaser.Scene {
       width: PATHWAY_TILE_SIZE,
       height: PATHWAY_TILE_SIZE,
     });
+    this.load.svg(PATHWAY_CORNER_TEXTURE_KEY, PATHWAY_CORNER_SPRITE, {
+      width: PATHWAY_TILE_SIZE,
+      height: PATHWAY_TILE_SIZE,
+    });
+    this.load.svg(DOOR_TEXTURE_KEY, DOOR_SPRITE, {
+      width: DOOR_SPRITE_SIZE,
+      height: DOOR_SPRITE_SIZE,
+    });
     this.load.svg(ARTIFACT_LOOT_TEXTURE_KEY, ARTIFACT_LOOT_SPRITE, {
       width: ARTIFACT_LOOT_SPRITE_SIZE,
       height: ARTIFACT_LOOT_SPRITE_SIZE,
@@ -233,6 +265,12 @@ export class DungeonScene extends Phaser.Scene {
     const map = this.dungeonMap;
 
     this.cameras.main.setBackgroundColor(this.graphicsMode === 'rpg' ? 0x1a120a : 0x10131a);
+
+    // Ensure the walkability mask is built even when no floor visibility has
+    // been applied (eg. single-floor dungeons that never call setFloorVisibility).
+    if (!this.activeWalkable) {
+      this.rebuildActiveWalkable();
+    }
 
     this.corridorGraphics = this.add.graphics();
     this.roomGraphics = this.add.graphics();
@@ -350,10 +388,24 @@ export class DungeonScene extends Phaser.Scene {
       vy = (vy / length) * PLAYER_SPEED;
     }
 
-    this.playerBody.setVelocity(vx, vy);
-    void dt;
-
+    // Custom movement: instead of letting arcade physics integrate velocity
+    // freely, we sample the walkability grid per-axis so the player slides
+    // along walls and can never leave rooms / corridors. The body is kept in
+    // sync so portal/teleport collision queries continue to work.
+    this.playerBody.setVelocity(0, 0);
     const player = this.player;
+    if (player) {
+      const stepX = vx * dt;
+      const stepY = vy * dt;
+      if (stepX !== 0 && this.canPlayerOccupy(player.x + stepX, player.y)) {
+        player.x += stepX;
+      }
+      if (stepY !== 0 && this.canPlayerOccupy(player.x, player.y + stepY)) {
+        player.y += stepY;
+      }
+      this.playerBody.reset(player.x, player.y);
+    }
+
     if (!player) return;
     const room = this.findRoomAtWorld(player.x, player.y, map);
     if (room && room.roomId !== this.currentRoomId) {
@@ -650,6 +702,91 @@ export class DungeonScene extends Phaser.Scene {
     this.portalUpRoomId = input.portalUpRoomId;
     this.portalDownRoomIds = new Set(input.portalDownRoomIds);
     this.floorSeed = hashString(input.floorId);
+    this.rebuildActiveWalkable();
+  }
+
+  /**
+   * Build a walkability mask restricted to the rooms (and corridors between
+   * them) on the currently-visible floor. The renderer uses {@link DungeonMap}'s
+   * static walkable grid for shape; this method just masks out tiles that
+   * belong to a hidden floor so the player can never walk between floors.
+   */
+  private rebuildActiveWalkable(): void {
+    if (!this.dungeonMap) {
+      this.activeWalkable = null;
+      return;
+    }
+    const map = this.dungeonMap;
+    const visible = this.visibleRoomIds;
+    const w = map.walkable.width;
+    const h = map.walkable.height;
+    const data = new Uint8Array(w * h);
+    const mark = (tx: number, ty: number): void => {
+      const gx = tx - map.walkable.offsetX;
+      const gy = ty - map.walkable.offsetY;
+      if (gx < 0 || gy < 0 || gx >= w || gy >= h) return;
+      data[gy * w + gx] = 1;
+    };
+    for (const room of map.rooms) {
+      if (visible && !visible.has(room.roomId)) continue;
+      for (let dy = 0; dy < room.height; dy += 1) {
+        for (let dx = 0; dx < room.width; dx += 1) {
+          mark(room.gridX + dx, room.gridY + dy);
+        }
+      }
+    }
+    for (const corridor of map.corridors) {
+      if (
+        visible &&
+        (!visible.has(corridor.fromRoomId) || !visible.has(corridor.toRoomId))
+      ) {
+        continue;
+      }
+      mark(corridor.fromDoor.x, corridor.fromDoor.y);
+      mark(corridor.toDoor.x, corridor.toDoor.y);
+      for (const tile of corridor.pathTiles) {
+        mark(tile.x, tile.y);
+      }
+    }
+    this.activeWalkable = data;
+    this.activeWalkableWidth = w;
+    this.activeWalkableHeight = h;
+    this.activeWalkableOffsetX = map.walkable.offsetX;
+    this.activeWalkableOffsetY = map.walkable.offsetY;
+  }
+
+  /** True iff the world-space point lies on a walkable tile of the active floor. */
+  private isWalkableAt(worldX: number, worldY: number): boolean {
+    if (!this.dungeonMap || !this.activeWalkable) return true;
+    const tileSize = this.dungeonMap.tileSize;
+    const tx = Math.floor(worldX / tileSize);
+    const ty = Math.floor(worldY / tileSize);
+    const gx = tx - this.activeWalkableOffsetX;
+    const gy = ty - this.activeWalkableOffsetY;
+    if (
+      gx < 0 ||
+      gy < 0 ||
+      gx >= this.activeWalkableWidth ||
+      gy >= this.activeWalkableHeight
+    ) {
+      return false;
+    }
+    return this.activeWalkable[gy * this.activeWalkableWidth + gx] === 1;
+  }
+
+  /**
+   * Check whether a player-sized collider centred at (cx, cy) overlaps only
+   * walkable tiles. We sample four inset corners of the collider so the test
+   * matches what a player would intuitively expect (no edge-snagging).
+   */
+  private canPlayerOccupy(cx: number, cy: number): boolean {
+    const half = PLAYER_COLLIDER_SIZE / 2 - PLAYER_WALK_INSET;
+    return (
+      this.isWalkableAt(cx - half, cy - half) &&
+      this.isWalkableAt(cx + half, cy - half) &&
+      this.isWalkableAt(cx - half, cy + half) &&
+      this.isWalkableAt(cx + half, cy + half)
+    );
   }
 
   /**
@@ -743,6 +880,13 @@ export class DungeonScene extends Phaser.Scene {
     for (const label of this.roomLabels.values()) label.destroy();
     this.roomLabels.clear();
     const isRpg = this.graphicsMode === 'rpg';
+    // Index doors per room so the wall stroke can skip the door tiles.
+    const doorsByRoom = new Map<string, DungeonDoor[]>();
+    for (const door of map.doors) {
+      const list = doorsByRoom.get(door.roomId);
+      if (list) list.push(door);
+      else doorsByRoom.set(door.roomId, [door]);
+    }
     for (const room of map.rooms) {
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
       const x = room.gridX * map.tileSize;
@@ -761,8 +905,13 @@ export class DungeonScene extends Phaser.Scene {
         // Inner floor tile band to suggest a tiled chamber.
         g.fillStyle(isPortal ? 0x2a3a5c : 0x3b2a18, 0.65);
         g.fillRect(x + 4, y + 4, w - 8, h - 8);
-        g.lineStyle(3, isPortal ? 0x7fb2ff : statusColor(room.status), 1);
-        g.strokeRect(x, y, w, h);
+        this.drawRoomWallsWithDoors(
+          g,
+          room,
+          doorsByRoom.get(room.roomId) ?? [],
+          map.tileSize,
+          isPortal ? 0x7fb2ff : statusColor(room.status),
+        );
       } else {
         // Mind-map flavour: flat node, rounded by an outlined ellipse on top
         // of a soft-fill rectangle so room collision still maps to the grid.
@@ -791,6 +940,93 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Stroke a room's wall border one edge at a time, leaving a 1-tile gap
+   * everywhere a door punches through. Without the gap the door sprite would
+   * sit on top of an unbroken wall line and look wrong.
+   */
+  private drawRoomWallsWithDoors(
+    g: Phaser.GameObjects.Graphics,
+    room: DungeonRoom,
+    doors: readonly DungeonDoor[],
+    tileSize: number,
+    color: number,
+  ): void {
+    g.lineStyle(3, color, 1);
+    const left = room.gridX * tileSize;
+    const top = room.gridY * tileSize;
+    const right = (room.gridX + room.width) * tileSize;
+    const bottom = (room.gridY + room.height) * tileSize;
+    const doorsBySide: Record<DungeonDoor['side'], DungeonDoor[]> = {
+      N: [],
+      S: [],
+      W: [],
+      E: [],
+    };
+    for (const door of doors) doorsBySide[door.side].push(door);
+
+    // Horizontal walls (N at top, S at bottom): split into segments around
+    // door tile columns.
+    const drawHorizontal = (y: number, side: DungeonDoor['side']): void => {
+      const gaps = doorsBySide[side]
+        .map((d) => d.x - room.gridX)
+        .sort((a, b) => a - b);
+      let startCol = 0;
+      for (const gap of gaps) {
+        if (gap > startCol) {
+          g.strokeLineShape(
+            new Phaser.Geom.Line(
+              left + startCol * tileSize,
+              y,
+              left + gap * tileSize,
+              y,
+            ),
+          );
+        }
+        startCol = gap + 1;
+      }
+      if (startCol < room.width) {
+        g.strokeLineShape(
+          new Phaser.Geom.Line(
+            left + startCol * tileSize,
+            y,
+            right,
+            y,
+          ),
+        );
+      }
+    };
+    const drawVertical = (x: number, side: DungeonDoor['side']): void => {
+      const gaps = doorsBySide[side]
+        .map((d) => d.y - room.gridY)
+        .sort((a, b) => a - b);
+      let startRow = 0;
+      for (const gap of gaps) {
+        if (gap > startRow) {
+          g.strokeLineShape(
+            new Phaser.Geom.Line(
+              x,
+              top + startRow * tileSize,
+              x,
+              top + gap * tileSize,
+            ),
+          );
+        }
+        startRow = gap + 1;
+      }
+      if (startRow < room.height) {
+        g.strokeLineShape(
+          new Phaser.Geom.Line(x, top + startRow * tileSize, x, bottom),
+        );
+      }
+    };
+
+    drawHorizontal(top, 'N');
+    drawHorizontal(bottom, 'S');
+    drawVertical(left, 'W');
+    drawVertical(right, 'E');
+  }
+
   private drawCorridors(map: DungeonMap): void {
     if (!this.corridorGraphics) return;
     const g = this.corridorGraphics;
@@ -799,13 +1035,20 @@ export class DungeonScene extends Phaser.Scene {
     // teleport, etc.) so we don't leak game objects.
     for (const tile of this.corridorTileSprites) tile.destroy();
     this.corridorTileSprites = [];
+    for (const corner of this.corridorCornerSprites) corner.destroy();
+    this.corridorCornerSprites = [];
+    for (const door of this.doorSprites) door.destroy();
+    this.doorSprites = [];
     const isRpg = this.graphicsMode === 'rpg';
     const baseColor = isRpg ? 0x6b4a24 : 0x3b455e;
     const portalColor = 0x7fb2ff;
     const canTilePath =
       isRpg && this.textures.exists(PATHWAY_STRAIGHT_TEXTURE_KEY);
+    const canTileCorner =
+      isRpg && this.textures.exists(PATHWAY_CORNER_TEXTURE_KEY);
+    const canDrawDoor = this.textures.exists(DOOR_TEXTURE_KEY);
+    const tileSize = map.tileSize;
 
-    const roomById = new Map(map.rooms.map((room) => [room.roomId, room] as const));
     for (const corridor of map.corridors) {
       if (
         this.visibleRoomIds &&
@@ -814,40 +1057,90 @@ export class DungeonScene extends Phaser.Scene {
       ) {
         continue;
       }
-      const from = roomById.get(corridor.fromRoomId);
-      const to = roomById.get(corridor.toRoomId);
-      if (!from || !to) continue;
       const isPortalEdge =
         corridor.fromRoomId === this.portalUpRoomId ||
         corridor.toRoomId === this.portalUpRoomId ||
         this.portalDownRoomIds.has(corridor.fromRoomId) ||
         this.portalDownRoomIds.has(corridor.toRoomId);
-      g.lineStyle(isRpg ? 5 : 4, isPortalEdge ? portalColor : baseColor, 1);
-      const a = this.roomCenter(from, map.tileSize);
-      const b = this.roomCenter(to, map.tileSize);
-      g.strokeLineShape(new Phaser.Geom.Line(a.x, a.y, b.x, b.y));
+      const strokeColor = isPortalEdge ? portalColor : baseColor;
+      g.lineStyle(isRpg ? 5 : 4, strokeColor, 1);
+
+      // Stroke each axis-aligned segment so the corridor reads even when
+      // tile sprites haven't loaded (and in mind-map mode where we skip
+      // tile sprites entirely).
+      for (const seg of corridor.segments) {
+        const ax = (seg.x1 + 0.5) * tileSize;
+        const ay = (seg.y1 + 0.5) * tileSize;
+        const bx = (seg.x2 + 0.5) * tileSize;
+        const by = (seg.y2 + 0.5) * tileSize;
+        g.strokeLineShape(new Phaser.Geom.Line(ax, ay, bx, by));
+      }
 
       if (canTilePath) {
-        // In RPG mode, lay a stone-tile pathway texture along the corridor
-        // between rooms. We orient a single tileSprite to the corridor's
-        // angle and use its full length as the sprite width so the texture
-        // tiles seamlessly along the path.
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const length = Math.hypot(dx, dy);
-        if (length > 0) {
-          const cx = (a.x + b.x) / 2;
-          const cy = (a.y + b.y) / 2;
-          const angle = Math.atan2(dy, dx);
+        for (const seg of corridor.segments) {
+          const lenTiles = Math.max(
+            1,
+            seg.orientation === 'h'
+              ? seg.x2 - seg.x1 + 1
+              : seg.y2 - seg.y1 + 1,
+          );
+          const cxTile = (seg.x1 + seg.x2 + 1) / 2;
+          const cyTile = (seg.y1 + seg.y2 + 1) / 2;
+          const cx = cxTile * tileSize;
+          const cy = cyTile * tileSize;
+          const length = lenTiles * tileSize;
           const tile = this.add
-            .tileSprite(cx, cy, length, PATHWAY_TILE_SIZE, PATHWAY_STRAIGHT_TEXTURE_KEY)
-            .setRotation(angle)
+            .tileSprite(
+              cx,
+              cy,
+              length,
+              PATHWAY_TILE_SIZE,
+              PATHWAY_STRAIGHT_TEXTURE_KEY,
+            )
+            .setRotation(seg.orientation === 'h' ? 0 : Math.PI / 2)
             .setAlpha(isPortalEdge ? 0.55 : 0.75)
             .setDepth(0.5);
           this.corridorTileSprites.push(tile);
         }
+        if (canTileCorner && corridor.elbow) {
+          const cx = (corridor.elbow.x + 0.5) * tileSize;
+          const cy = (corridor.elbow.y + 0.5) * tileSize;
+          const cornerImg = this.add
+            .image(cx, cy, PATHWAY_CORNER_TEXTURE_KEY)
+            .setAlpha(isPortalEdge ? 0.55 : 0.78)
+            .setDepth(0.6);
+          this.corridorCornerSprites.push(cornerImg);
+        }
+      }
+
+      // Draw doors at both endpoints. Doors live on the room's perimeter, so
+      // they sit visually right where the corridor meets the wall.
+      if (canDrawDoor) {
+        for (const door of [corridor.fromDoor, corridor.toDoor] as const) {
+          const sprite = this.drawDoor(door, tileSize, isPortalEdge);
+          if (sprite) this.doorSprites.push(sprite);
+        }
       }
     }
+  }
+
+  private drawDoor(
+    door: DungeonDoor,
+    tileSize: number,
+    isPortalEdge: boolean,
+  ): Phaser.GameObjects.Image | null {
+    const cx = (door.x + 0.5) * tileSize;
+    const cy = (door.y + 0.5) * tileSize;
+    const img = this.add
+      .image(cx, cy, DOOR_TEXTURE_KEY)
+      .setDepth(2.5)
+      .setAlpha(isPortalEdge ? 0.85 : 1);
+    // Rotate so the door's hinge axis aligns with the wall it sits on.
+    // North/south doors keep the upright pose; east/west doors are rotated 90°.
+    if (door.side === 'E' || door.side === 'W') {
+      img.setRotation(Math.PI / 2);
+    }
+    return img;
   }
 
   private roomCenter(room: DungeonRoom, tileSize: number): { x: number; y: number } {
