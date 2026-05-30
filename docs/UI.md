@@ -8,7 +8,7 @@ This document captures key UI surfaces in Knowledge Dungeon and explains what ea
 
 Use this screen to:
 
-- Choose the current phase (Create, Scribe, Review), which controls the active gameplay loop.
+- Choose the current phase (Create, Scribe, Review/Archaeologist), which controls the active gameplay loop.
 - Pick a study archetype (Scholar, Cartographer, Archivist), which applies your class/perk identity.
 - Create a new subject from a root topic.
 - Browse previously created subjects by **subject name** instead of raw id, with room counts visible from home.
@@ -59,7 +59,8 @@ gets the maximum amount of screen space:
   (a `← Back to <parent>` shortcut plus jumps to topics that live on other
   floors). The panel also exposes portal shortcuts into deeper floors,
   child-room creation, reparenting, topic deletion (Creator phase), and
-  encounter access.
+  encounter access. A tab-row **Expand / Collapse** control widens the panel
+  for note and image-heavy study sessions.
 - **Touch controls (bottom-right, floating):** mobile-friendly directional
   / interact buttons.
 
@@ -171,6 +172,11 @@ the in-game floor in sync automatically.
 This modal appears when opening a room encounter. It provides:
 
 - A structured notes input area with an **Edit / Preview** toggle.
+- A **Save draft** path when notes are not yet at final pass quality, so
+  partial progress is preserved while learners iterate.
+- In Scribe phase, image cards in the Notes tab include an **Insert in note**
+  action so learners can place images without manually writing token syntax;
+  Archaeologist mode remains view-only for images.
 - Lightweight Markdown support — `**bold**`, `*italic*`, `` `code` ``,
   `-` bullet lists, and `[label](https://example.com)` links — rendered
   live in the Preview tab and persisted on submit.
@@ -180,8 +186,9 @@ This modal appears when opening a room encounter. It provides:
 
 This is the core learning loop UI where players convert study notes into
 room completion progress. Saved notes are re-rendered as rich text in the
-room panel's Notes tab so links and formatting stay live after the
-encounter is defeated.
+room panel's Notes tab so links, images, and formatting stay live after the
+encounter is defeated. Image add/remove/edit controls are restricted to the
+Scribe phase so Archaeologist mode stays review-focused.
 
 ## 9) Archaeologist phase loot icons
 

@@ -1,13 +1,22 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
 
 if (process.platform === 'linux' && isDev) {
   // Local dev environments often cannot set root ownership/mode on chrome-sandbox.
@@ -33,6 +42,173 @@ function sanitizeSubjectId(id: string): string {
     throw new Error('Invalid subject id');
   }
   return id;
+}
+
+function sanitizeRoomId(id: string): string {
+  if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
+    throw new Error('Invalid room id');
+  }
+  return id;
+}
+
+function sanitizeAttachmentId(id: string): string {
+  if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
+    throw new Error('Invalid attachment id');
+  }
+  return id;
+}
+
+function makeAttachmentId(): string {
+  const random = Math.random().toString(36).slice(2, 10);
+  const time = Date.now().toString(36);
+  return `att-${time}-${random}`;
+}
+
+function isSafeExternalImageUrl(candidate: string): boolean {
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+async function addRoomLocalAttachment(subjectId: string, roomId: string): Promise<unknown> {
+  const result = await dialog.showOpenDialog({
+    title: 'Attach image to room',
+    filters: [
+      {
+        name: 'Images',
+        extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
+      },
+    ],
+    properties: ['openFile'],
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const sourcePath = result.filePaths[0];
+  const extension = path.extname(sourcePath).toLowerCase();
+  const mimeType = IMAGE_MIME_BY_EXT[extension];
+  if (!mimeType) {
+    throw new Error('Unsupported image format');
+  }
+
+  const sourceStat = await fs.stat(sourcePath);
+  if (!sourceStat.isFile()) {
+    throw new Error('Attachment source is not a file');
+  }
+  if (sourceStat.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error('Image too large (max 10MB)');
+  }
+
+  const safeRoomId = sanitizeRoomId(roomId);
+  const subjectRoot = await ensureSubjectRoot(subjectId);
+  const attachmentsDir = path.join(subjectRoot, 'rooms', safeRoomId, 'attachments');
+  await fs.mkdir(attachmentsDir, { recursive: true });
+
+  const attachmentId = makeAttachmentId();
+  const outputFileName = `${attachmentId}${extension}`;
+  const outputPath = path.join(attachmentsDir, outputFileName);
+  await fs.copyFile(sourcePath, outputPath);
+
+  const originalName = path.basename(sourcePath);
+  const altText = path.basename(originalName, extension).replace(/[_-]+/g, ' ').trim();
+
+  return {
+    attachmentId,
+    sourceType: 'local',
+    fileName: originalName,
+    mimeType,
+    relativePath: `rooms/${safeRoomId}/attachments/${outputFileName}`,
+    ...(altText.length > 0 ? { altText } : {}),
+    addedAt: new Date().toISOString(),
+  };
+}
+
+async function resolveExternalImageMimeType(url: string): Promise<string> {
+  async function requestContentType(method: 'HEAD' | 'GET'): Promise<string | null> {
+    const response = await fetch(url, {
+      method,
+      redirect: 'follow',
+      ...(method === 'GET' ? { headers: { Range: 'bytes=0-0' } } : {}),
+    });
+    if (!response.ok) return null;
+    return response.headers.get('content-type')?.toLowerCase() ?? null;
+  }
+
+  try {
+    let contentType = await requestContentType('HEAD');
+    if (!contentType) {
+      contentType = await requestContentType('GET');
+    }
+    if (contentType && contentType.startsWith('image/')) {
+      return contentType;
+    }
+    throw new Error('URL must point directly to an image resource.');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to validate image URL.';
+    throw new Error(message);
+  }
+}
+
+async function buildExternalAttachment(url: string): Promise<unknown> {
+  const normalized = url.trim();
+  if (!isSafeExternalImageUrl(normalized)) {
+    throw new Error('Only https image URLs are allowed');
+  }
+
+  const mimeType = await resolveExternalImageMimeType(normalized);
+
+  const parsed = new URL(normalized);
+  const pathBase = path.basename(parsed.pathname);
+  const fileName = pathBase.length > 0 ? pathBase : parsed.hostname;
+  const altText = fileName.replace(/[_-]+/g, ' ').replace(/\.[a-z0-9]+$/i, '').trim();
+
+  return {
+    attachmentId: makeAttachmentId(),
+    sourceType: 'external',
+    fileName,
+    mimeType,
+    externalUrl: normalized,
+    ...(altText.length > 0 ? { altText } : {}),
+    addedAt: new Date().toISOString(),
+  };
+}
+
+async function deleteRoomAttachment(
+  subjectId: string,
+  roomId: string,
+  attachmentId: string,
+): Promise<boolean> {
+  const safeRoomId = sanitizeRoomId(roomId);
+  const safeAttachmentId = sanitizeAttachmentId(attachmentId);
+  const subjectRoot = await ensureSubjectRoot(subjectId);
+  const attachmentsDir = path.join(subjectRoot, 'rooms', safeRoomId, 'attachments');
+
+  const entries = await fs.readdir(attachmentsDir).catch(() => [] as string[]);
+  const match = entries.find((entry) => entry.startsWith(safeAttachmentId));
+  if (!match) return false;
+
+  await fs.rm(path.join(attachmentsDir, match), { force: true });
+  return true;
+}
+
+async function resolveRoomAttachmentUrl(
+  subjectId: string,
+  roomId: string,
+  attachmentId: string,
+): Promise<string | null> {
+  const safeRoomId = sanitizeRoomId(roomId);
+  const safeAttachmentId = sanitizeAttachmentId(attachmentId);
+  const subjectRoot = await ensureSubjectRoot(subjectId);
+  const attachmentsDir = path.join(subjectRoot, 'rooms', safeRoomId, 'attachments');
+
+  const entries = await fs.readdir(attachmentsDir).catch(() => [] as string[]);
+  const match = entries.find((entry) => entry.startsWith(safeAttachmentId));
+  if (!match) return null;
+
+  return pathToFileURL(path.join(attachmentsDir, match)).toString();
 }
 
 async function ensureSubjectRoot(subjectId: string): Promise<string> {
@@ -262,6 +438,31 @@ function registerKnowledgeBridgeHandlers(): void {
     await fs.cp(source, destination, { recursive: true, force: true });
     return destination;
   });
+
+  ipcMain.handle('knowledge:add-room-local-attachment', async (_event, subjectId: string, roomId: string) => {
+    return addRoomLocalAttachment(subjectId, roomId);
+  });
+
+  ipcMain.handle(
+    'knowledge:add-room-external-attachment',
+    async (_event, _subjectId: string, _roomId: string, url: string) => {
+      return buildExternalAttachment(url);
+    },
+  );
+
+  ipcMain.handle(
+    'knowledge:delete-room-attachment',
+    async (_event, subjectId: string, roomId: string, attachmentId: string) => {
+      return deleteRoomAttachment(subjectId, roomId, attachmentId);
+    },
+  );
+
+  ipcMain.handle(
+    'knowledge:resolve-room-attachment-url',
+    async (_event, subjectId: string, roomId: string, attachmentId: string) => {
+      return resolveRoomAttachmentUrl(subjectId, roomId, attachmentId);
+    },
+  );
 }
 
 async function createMainWindow(): Promise<void> {

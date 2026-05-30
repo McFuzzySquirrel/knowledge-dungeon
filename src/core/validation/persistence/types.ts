@@ -55,9 +55,12 @@ export type CriterionScores = Record<QualityScoreKey, number>;
 
 export interface RoomAttachment {
   attachmentId: string;
+  sourceType: 'local' | 'external';
   fileName: string;
   mimeType: string;
-  relativePath: string;
+  relativePath?: string;
+  externalUrl?: string;
+  altText?: string;
   addedAt: string;
 }
 

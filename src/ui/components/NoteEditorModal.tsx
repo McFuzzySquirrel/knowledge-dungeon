@@ -8,7 +8,9 @@ import {
   REQUIRED_NOTE_SECTIONS,
 } from '@/core/validation/notes';
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
+import { ToastStack } from '@/ui/components/ToastStack';
 import { Markdown } from '@/ui/utils/markdown';
+import { useToasts } from '@/ui/utils/useToasts';
 
 const TEMPLATE = `Summary
 (Write at least one paragraph summarising the topic in your own words.)
@@ -25,9 +27,12 @@ Why does this matter? See also [related topic](#).
 export function NoteEditorModal(): JSX.Element | null {
   const isOpen = useSessionStore((s) => s.isNoteEditorOpen);
   const roomId = useSessionStore((s) => s.noteEditorRoomId);
+  const pendingInsert = useSessionStore((s) => s.noteEditorPendingInsert);
+  const clearPendingInsert = useSessionStore((s) => s.clearNoteEditorPendingInsert);
   const close = useSessionStore((s) => s.closeNoteEditor);
   const snapshot = useSubjectStore((s) => s.snapshot);
   const submitNote = useSubjectStore((s) => s.submitNote);
+  const resolveAttachmentUrl = useSubjectStore((s) => s.resolveAttachmentUrl);
   const awardRoomClear = useProgressionStore((s) => s.awardRoomClear);
   const awardBadge = useProgressionStore((s) => s.awardBadge);
 
@@ -36,13 +41,21 @@ export function NoteEditorModal(): JSX.Element | null {
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
+  const { toasts, pushToast } = useToasts();
 
   useEffect(() => {
     if (!isOpen || !room) return;
     setNoteText(room.noteText || TEMPLATE);
-    setConfirm(false);
+    setConfirm(room.validationState.manualConfirmed);
     setShowPreview(false);
   }, [isOpen, room]);
+
+  useEffect(() => {
+    if (!isOpen || !room || !pendingInsert) return;
+    setNoteText((current) => `${current.trimEnd()}\n\n${pendingInsert}\n`);
+    clearPendingInsert();
+  }, [clearPendingInsert, isOpen, pendingInsert, room]);
 
   const preview = useMemo(() => {
     if (!room) return null;
@@ -52,6 +65,38 @@ export function NoteEditorModal(): JSX.Element | null {
       roomTopic: room.topic,
     });
   }, [noteText, confirm, room]);
+
+  useEffect(() => {
+    if (!isOpen || !room) {
+      setAttachmentUrls({});
+      return;
+    }
+
+    let cancelled = false;
+    const localAttachments = room.attachments.filter((attachment) => attachment.sourceType === 'local');
+    if (localAttachments.length === 0) {
+      setAttachmentUrls({});
+      return;
+    }
+
+    void Promise.all(
+      localAttachments.map(async (attachment) => {
+        const resolved = await resolveAttachmentUrl(room.roomId, attachment.attachmentId);
+        return [attachment.attachmentId, resolved] as const;
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setAttachmentUrls(
+        Object.fromEntries(
+          results.filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
+        ),
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, resolveAttachmentUrl, room]);
 
   if (!isOpen || !room || !snapshot) return null;
 
@@ -76,7 +121,12 @@ export function NoteEditorModal(): JSX.Element | null {
           awardBadge(SCRIBE_CENTURY_120_BADGE_ID);
         }
         close();
+        return;
       }
+      pushToast('info', 'Draft saved. Add required sections/quality checks to submit.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to submit note.';
+      pushToast('error', message);
     } finally {
       setSubmitting(false);
     }
@@ -96,6 +146,10 @@ export function NoteEditorModal(): JSX.Element | null {
           <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, and{' '}
           <code>-</code> for bullets.
         </p>
+        <p className="room-help-text">
+          In Scribe phase, use the room Images section and tap <code>Insert in note</code>
+          to place images in your notes.
+        </p>
         <div className="note-editor-toolbar">
           <button
             type="button"
@@ -112,12 +166,16 @@ export function NoteEditorModal(): JSX.Element | null {
             Preview
           </button>
         </div>
+        <ToastStack toasts={toasts} className="toast-stack--inline" />
         {showPreview ? (
           <div
             className="markdown-body note-body note-preview"
             aria-label="Notes preview"
           >
-            <Markdown source={noteText} />
+            <Markdown
+              source={noteText}
+              resolveLocalImage={(attachmentId) => attachmentUrls[attachmentId] ?? null}
+            />
           </div>
         ) : (
           <textarea
@@ -171,12 +229,12 @@ export function NoteEditorModal(): JSX.Element | null {
           <button type="button" onClick={close}>
             Cancel
           </button>
-          <button
-            type="button"
-            disabled={submitting || !preview?.finalPass}
-            onClick={() => void handleSubmit()}
-          >
-            {submitting ? 'Submitting…' : 'Defeat encounter'}
+          <button type="button" disabled={submitting} onClick={() => void handleSubmit()}>
+            {submitting
+              ? 'Submitting…'
+              : preview?.finalPass
+                ? 'Defeat encounter'
+                : 'Save draft'}
           </button>
         </div>
       </div>

@@ -75,4 +75,32 @@ describe('RoomPanel', () => {
     expect(screen.getByText('Imported note content')).toBeInTheDocument();
     expect(screen.queryByText(/No notes drafted yet/i)).toBeNull();
   });
+
+  it('shows local-image fallback text when attachment token cannot be resolved', () => {
+    const snapshot = createSnapshot();
+    snapshot.rooms['room-1'] = {
+      ...snapshot.rooms['room-1'],
+      noteText: '![Missing artifact](local:att-missing)',
+    };
+
+    render(
+      <RoomPanel
+        snapshot={snapshot}
+        focusedRoom={snapshot.rooms['room-1']}
+        onInteract={() => undefined}
+        onTravelToRoom={() => undefined}
+        inventoryCount={0}
+        badgeCount={0}
+        journalCount={0}
+        onOpenInventory={() => undefined}
+        onOpenBadges={() => undefined}
+        onOpenJournal={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Notes' }));
+    expect(
+      screen.getByText(/Missing image \(att-missing\)\. Reattach it or remove this token\./i),
+    ).toBeInTheDocument();
+  });
 });

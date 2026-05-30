@@ -22,7 +22,7 @@ Generate a complete Knowledge Dungeon subject from a repository so users can exp
 - `--depth` (default `balanced`): `light`, `balanced`, `deep`.
 - `--name` (optional): display name for subject.
 - `--output` (default `maps/{project-name}-mindmap`): destination folder.
-- `--entry-phase` (default `scribe`): `creator`, `scribe`, `archaeologist`.
+- `--entry-phase` (default `scribe`): `creator`, `scribe`, `archaeologist` (`review` should be treated as alias for `archaeologist`).
 - `--review-ready` (flag): alias for `--entry-phase archaeologist`.
 
 ## Required Output Structure
@@ -220,3 +220,6 @@ Next steps:
 - Prefer deterministic, analysis-driven room naming and grouping.
 - If repository is very large, focus on highest-signal modules first.
 - If requested scope is a monorepo subproject, honor `--repo-path` exactly.
+- Generated repo mindmaps are image-ready: after loading a subject in Knowledge Dungeon,
+  users can add room images during Scribe phase and then export the subject folder
+  from desktop mode for sharing.

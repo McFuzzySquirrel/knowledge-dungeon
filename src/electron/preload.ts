@@ -14,6 +14,24 @@ const electronKnowledgeBridge = {
     ipcRenderer.invoke('knowledge:export-subject-folder', subjectId) as Promise<string | null>,
   importSubjectFolder: () =>
     ipcRenderer.invoke('knowledge:import-subject-folder') as Promise<unknown>,
+  addRoomLocalAttachment: (subjectId: string, roomId: string) =>
+    ipcRenderer.invoke('knowledge:add-room-local-attachment', subjectId, roomId) as Promise<unknown>,
+  addRoomExternalAttachment: (subjectId: string, roomId: string, url: string) =>
+    ipcRenderer.invoke('knowledge:add-room-external-attachment', subjectId, roomId, url) as Promise<unknown>,
+  deleteRoomAttachment: (subjectId: string, roomId: string, attachmentId: string) =>
+    ipcRenderer.invoke(
+      'knowledge:delete-room-attachment',
+      subjectId,
+      roomId,
+      attachmentId,
+    ) as Promise<boolean>,
+  resolveRoomAttachmentUrl: (subjectId: string, roomId: string, attachmentId: string) =>
+    ipcRenderer.invoke(
+      'knowledge:resolve-room-attachment-url',
+      subjectId,
+      roomId,
+      attachmentId,
+    ) as Promise<string | null>,
 };
 
 contextBridge.exposeInMainWorld('electronKnowledgeBridge', electronKnowledgeBridge);

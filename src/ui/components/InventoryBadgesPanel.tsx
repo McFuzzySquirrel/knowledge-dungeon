@@ -32,6 +32,9 @@ const BADGE_DESCRIPTIONS: Record<string, string> = {
   CreatorPhaseComplete: 'Mapped 90%+ of rooms in the creator phase.',
   ScribePhaseComplete: 'Cleared every room by completing scribe encounters.',
   ArchaeologistPhaseComplete: 'Completed at least two full archaeology review passes.',
+  ArchaeologistReviewPass3: 'Completed at least 3 full archaeology review passes.',
+  ArchaeologistReviewPass7: 'Completed at least 7 full archaeology review passes.',
+  ArchaeologistReviewPass15: 'Completed at least 15 full archaeology review passes.',
   [SCRIBE_CENTURY_120_BADGE_ID]:
     'Awarded for writing a note with at least 120 words in a valid encounter.',
 };

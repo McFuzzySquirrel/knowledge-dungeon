@@ -27,13 +27,39 @@ describe('progressionEngine', () => {
         totalRooms: 4,
         creatorMappedRooms: 4,
         scribeClearedRooms: 4,
-        archaeologistFullReviewPasses: 2,
+        archaeologistFullReviewPasses: 3,
       },
       [],
     );
     expect(unlocked).toContain('CreatorPhaseComplete');
     expect(unlocked).toContain('ScribePhaseComplete');
     expect(unlocked).toContain('ArchaeologistPhaseComplete');
+    expect(unlocked).toContain('ArchaeologistReviewPass3');
+  });
+
+  it('unlocks archaeologist milestone badges at 7 and 15 full passes', () => {
+    const seven = evaluatePhaseBadgeUnlocks(
+      {
+        totalRooms: 10,
+        creatorMappedRooms: 10,
+        scribeClearedRooms: 10,
+        archaeologistFullReviewPasses: 7,
+      },
+      [],
+    );
+    expect(seven).toContain('ArchaeologistReviewPass7');
+    expect(seven).not.toContain('ArchaeologistReviewPass15');
+
+    const fifteen = evaluatePhaseBadgeUnlocks(
+      {
+        totalRooms: 10,
+        creatorMappedRooms: 10,
+        scribeClearedRooms: 10,
+        archaeologistFullReviewPasses: 15,
+      },
+      [],
+    );
+    expect(fifteen).toContain('ArchaeologistReviewPass15');
   });
 
   it('returns a progression snapshot from awardRoomClearProgression', () => {

@@ -34,6 +34,12 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             <strong>Archaeologist</strong> phase turns room interactions into review passes.
           </li>
           <li>
+            Room images are managed in the <strong>Notes</strong> tab during the
+            <strong>Scribe</strong> phase only. Use <strong>Insert in note</strong> from an image card
+            to place an image in your note, and use <strong>Expand</strong> on the room panel when you
+            want a larger writing/media workspace.
+          </li>
+          <li>
             Press <kbd>?</kbd> to toggle this help overlay.
           </li>
         </ul>

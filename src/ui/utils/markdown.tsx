@@ -18,7 +18,9 @@
 import type { JSX, ReactNode } from 'react';
 
 const SAFE_PROTOCOL = /^(https?:|mailto:)/i;
+const SAFE_IMAGE_PROTOCOL = /^https:/i;
 const BARE_URL = /\bhttps?:\/\/[^\s<>()\][]+/g;
+const MD_IMAGE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
 // `[label](href)` — non-greedy label, href stops at whitespace or `)`.
 const MD_LINK = /\[([^\]]+)\]\(([^)\s]+)\)/g;
 const BOLD = /\*\*([^*]+)\*\*/g;
@@ -26,7 +28,7 @@ const ITALIC = /(^|[^*])\*([^*]+)\*/g;
 const CODE = /`([^`]+)`/g;
 
 interface Token {
-  type: 'text' | 'link' | 'bold' | 'italic' | 'code';
+  type: 'text' | 'link' | 'bold' | 'italic' | 'code' | 'image' | 'missing-image';
   text: string;
   href?: string;
 }
@@ -35,6 +37,19 @@ function escapeHref(href: string): string | null {
   const trimmed = href.trim();
   if (!SAFE_PROTOCOL.test(trimmed)) return null;
   return trimmed;
+}
+
+function escapeImageHref(href: string): string | null {
+  const trimmed = href.trim();
+  if (!SAFE_IMAGE_PROTOCOL.test(trimmed)) return null;
+  return trimmed;
+}
+
+function parseLocalAttachmentId(href: string): string | null {
+  if (!href.startsWith('local:')) return null;
+  const attachmentId = href.slice('local:'.length).trim();
+  if (!/^[a-zA-Z0-9._-]+$/.test(attachmentId)) return null;
+  return attachmentId;
 }
 
 /**
@@ -48,6 +63,24 @@ function tokenizeInline(line: string): Token[] {
   const PH = (i: number) => `\u0000${i}\u0000`;
 
   let working = line;
+
+  // Markdown images first to avoid getting tokenized as links.
+  working = working.replace(MD_IMAGE, (_match, altText: string, href: string) => {
+    const safe = escapeImageHref(href);
+    if (safe) {
+      placeholders.push({ type: 'image', text: altText || 'Image', href: safe });
+      return PH(placeholders.length - 1);
+    }
+
+    const localId = parseLocalAttachmentId(href);
+    if (localId) {
+      placeholders.push({ type: 'image', text: altText || 'Image', href: `local:${localId}` });
+      return PH(placeholders.length - 1);
+    }
+
+    placeholders.push({ type: 'missing-image', text: altText || 'Image', href });
+    return PH(placeholders.length - 1);
+  });
 
   // Explicit markdown links first so bare-URL pass doesn't double-link them.
   working = working.replace(MD_LINK, (_match, label: string, href: string) => {
@@ -96,10 +129,40 @@ function tokenizeInline(line: string): Token[] {
   return tokens;
 }
 
-function renderInline(line: string, keyBase: string): ReactNode[] {
+interface RenderInlineOptions {
+  resolveLocalImage?: (attachmentId: string) => string | null;
+}
+
+function renderInline(line: string, keyBase: string, options?: RenderInlineOptions): ReactNode[] {
   return tokenizeInline(line).map((token, idx) => {
     const key = `${keyBase}-${idx}`;
     switch (token.type) {
+      case 'image': {
+        if (!token.href) {
+          return (
+            <span key={key} className="markdown-image-missing">
+              Missing image reference.
+            </span>
+          );
+        }
+
+        const localId = parseLocalAttachmentId(token.href);
+        const resolved = localId ? options?.resolveLocalImage?.(localId) ?? null : token.href;
+        if (!resolved) {
+          return (
+            <span key={key} className="markdown-image-missing" role="note">
+              Missing image ({localId ?? token.href}). Reattach it or remove this token.
+            </span>
+          );
+        }
+        return <img key={key} src={resolved} alt={token.text || 'Image'} className="markdown-image" />;
+      }
+      case 'missing-image':
+        return (
+          <span key={key} className="markdown-image-missing" role="note">
+            Unsupported image source ({token.href ?? 'unknown'}).
+          </span>
+        );
       case 'link':
         return (
           <a
@@ -178,9 +241,10 @@ function parseBlocks(source: string): Block[] {
 interface MarkdownProps {
   source: string;
   className?: string;
+  resolveLocalImage?: (attachmentId: string) => string | null;
 }
 
-export function Markdown({ source, className }: MarkdownProps): JSX.Element {
+export function Markdown({ source, className, resolveLocalImage }: MarkdownProps): JSX.Element {
   const blocks = parseBlocks(source);
   return (
     <div className={className ?? 'markdown-body'}>
@@ -188,7 +252,7 @@ export function Markdown({ source, className }: MarkdownProps): JSX.Element {
         const key = `b-${idx}`;
         if (block.type === 'heading') {
           const text = block.lines[0] ?? '';
-          const children = renderInline(text, key);
+          const children = renderInline(text, key, { resolveLocalImage });
           if (block.level === 1) return <h3 key={key}>{children}</h3>;
           if (block.level === 2) return <h4 key={key}>{children}</h4>;
           return <h5 key={key}>{children}</h5>;
@@ -197,7 +261,7 @@ export function Markdown({ source, className }: MarkdownProps): JSX.Element {
           return (
             <ul key={key}>
               {block.lines.map((line, li) => (
-                <li key={`${key}-${li}`}>{renderInline(line, `${key}-${li}`)}</li>
+                <li key={`${key}-${li}`}>{renderInline(line, `${key}-${li}`, { resolveLocalImage })}</li>
               ))}
             </ul>
           );
@@ -207,7 +271,7 @@ export function Markdown({ source, className }: MarkdownProps): JSX.Element {
           <p key={key}>
             {block.lines.map((line, li) => (
               <span key={`${key}-${li}`}>
-                {renderInline(line, `${key}-${li}`)}
+                {renderInline(line, `${key}-${li}`, { resolveLocalImage })}
                 {li < block.lines.length - 1 ? <br /> : null}
               </span>
             ))}

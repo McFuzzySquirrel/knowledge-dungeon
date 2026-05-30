@@ -9,6 +9,8 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
 import { Markdown } from '@/ui/utils/markdown';
+import { ToastStack } from '@/ui/components/ToastStack';
+import { useToasts } from '@/ui/utils/useToasts';
 import {
   evaluateReviewUnlock,
   extractMarkdownHeadings,
@@ -44,11 +46,16 @@ export function RoomPanel({
 }: RoomPanelProps): JSX.Element {
   const [tab, setTab] = useState<RoomTab>('topic');
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
+  const addLocalAttachment = useSubjectStore((s) => s.addLocalAttachment);
+  const addExternalAttachment = useSubjectStore((s) => s.addExternalAttachment);
+  const removeAttachment = useSubjectStore((s) => s.removeAttachment);
+  const resolveAttachmentUrl = useSubjectStore((s) => s.resolveAttachmentUrl);
   const reparentRoom = useSubjectStore((s) => s.reparentRoom);
   const removeRoom = useSubjectStore((s) => s.removeRoom);
   const lastError = useSubjectStore((s) => s.lastError);
   const phase = useSessionStore((s) => s.phase);
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
+  const openNoteEditorWithInsert = useSessionStore((s) => s.openNoteEditorWithInsert);
   const [draftTopics, setDraftTopics] = useState('');
   const [reparentTargetId, setReparentTargetId] = useState('');
   const [sameFloorFilter, setSameFloorFilter] = useState('');
@@ -57,6 +64,11 @@ export function RoomPanel({
   const [selectedTravelRoomId, setSelectedTravelRoomId] = useState<string | null>(null);
   const [portalFilter, setPortalFilter] = useState('');
   const [selectedPortalRoomId, setSelectedPortalRoomId] = useState<string | null>(null);
+  const [externalImageUrl, setExternalImageUrl] = useState('');
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
+  const [isSavingAttachment, setIsSavingAttachment] = useState(false);
+  const [panelExpanded, setPanelExpanded] = useState(false);
+  const { toasts, pushToast } = useToasts();
 
   const hierarchy = useMemo(() => deriveGraphHierarchy(snapshot.dungeon), [snapshot.dungeon]);
 
@@ -69,6 +81,41 @@ export function RoomPanel({
     [snapshot],
   );
   const focusedRoomId = focusedRoom?.roomId ?? null;
+
+  useEffect(() => {
+    if (!focusedRoom) {
+      setAttachmentUrls({});
+      return;
+    }
+
+    let cancelled = false;
+    const localAttachments = focusedRoom.attachments.filter((attachment) => attachment.sourceType === 'local');
+    if (localAttachments.length === 0) {
+      setAttachmentUrls({});
+      return;
+    }
+
+    void Promise.all(
+      localAttachments.map(async (attachment) => {
+        const resolved = await resolveAttachmentUrl(focusedRoom.roomId, attachment.attachmentId);
+        return [attachment.attachmentId, resolved] as const;
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      const next = Object.fromEntries(
+        results.filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
+      );
+      setAttachmentUrls(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusedRoom, resolveAttachmentUrl]);
+
+  const resolveLocalImage = (attachmentId: string): string | null => {
+    return attachmentUrls[attachmentId] ?? null;
+  };
 
   const artifactMarkdown = focusedRoom?.validationState.finalPass
     ? focusedRoom.artifactMarkdown
@@ -298,7 +345,7 @@ export function RoomPanel({
   }
 
   return (
-    <aside className="room-panel" aria-label="Room information">
+    <aside className={`room-panel${panelExpanded ? ' room-panel--expanded' : ''}`} aria-label="Room information">
       <div className="room-tabs" role="tablist">
         <button
           type="button"
@@ -333,6 +380,15 @@ export function RoomPanel({
           disabled={!focusedRoom.validationState.finalPass}
         >
           Self-check
+        </button>
+        <button
+          type="button"
+          className="room-panel-toggle"
+          aria-pressed={panelExpanded}
+          aria-label={panelExpanded ? 'Collapse room panel' : 'Expand room panel'}
+          onClick={() => setPanelExpanded((value) => !value)}
+        >
+          {panelExpanded ? 'Collapse' : 'Expand'}
         </button>
       </div>
 
@@ -589,8 +645,153 @@ export function RoomPanel({
                 </p>
                 <p>Quality bonus: {focusedRoom.validationState.qualityBonus}/10</p>
                 {focusedRoom.noteText ? (
-                  <Markdown source={focusedRoom.noteText} className="markdown-body note-body" />
+                  <Markdown
+                    source={focusedRoom.noteText}
+                    className="markdown-body note-body"
+                    resolveLocalImage={resolveLocalImage}
+                  />
                 ) : null}
+                <div className="room-section" style={{ marginTop: 16 }}>
+                  <h3>Images</h3>
+                  {phase === 'scribe' ? (
+                    <div className="attachment-actions">
+                      <button
+                        type="button"
+                        disabled={isSavingAttachment}
+                        onClick={() => {
+                          setIsSavingAttachment(true);
+                          void addLocalAttachment(focusedRoom.roomId)
+                            .then((created) => {
+                              if (!created) {
+                                pushToast('info', 'No image selected.');
+                                return;
+                              }
+                              pushToast('info', 'Image attached to room.');
+                            })
+                            .catch((error: unknown) => {
+                              const message =
+                                error instanceof Error ? error.message : 'Failed to attach local image.';
+                              pushToast('error', message);
+                            })
+                            .finally(() => {
+                              setIsSavingAttachment(false);
+                            });
+                        }}
+                      >
+                        Add local image
+                      </button>
+                      <input
+                        type="url"
+                        value={externalImageUrl}
+                        onChange={(event) => setExternalImageUrl(event.target.value)}
+                        placeholder="https://example.com/image.png"
+                        aria-label="External image URL"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
+                        onClick={() => {
+                          const nextUrl = externalImageUrl.trim();
+                          if (nextUrl.length === 0) return;
+                          setIsSavingAttachment(true);
+                          void addExternalAttachment(focusedRoom.roomId, nextUrl)
+                            .then((created) => {
+                              if (!created) {
+                                pushToast('info', 'No external image was added.');
+                                return;
+                              }
+                              setExternalImageUrl('');
+                              pushToast('info', 'External image attached to room.');
+                            })
+                            .catch((error: unknown) => {
+                              const message =
+                                error instanceof Error ? error.message : 'Failed to attach external image URL.';
+                              pushToast('error', message);
+                            })
+                            .finally(() => {
+                              setIsSavingAttachment(false);
+                            });
+                        }}
+                      >
+                        Add URL image
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="room-help-text">
+                      Image editing is available only during the Scribe phase.
+                    </p>
+                  )}
+                  <ToastStack toasts={toasts} className="toast-stack--inline" />
+                  {focusedRoom.attachments.length === 0 ? (
+                    <p className="room-help-text">No room images yet.</p>
+                  ) : (
+                    <ul className="attachment-grid">
+                      {focusedRoom.attachments.map((attachment) => {
+                        const previewUrl =
+                          attachment.sourceType === 'external'
+                            ? attachment.externalUrl ?? null
+                            : resolveLocalImage(attachment.attachmentId);
+                        const markdownToken =
+                          attachment.sourceType === 'local'
+                            ? `![${attachment.altText ?? attachment.fileName}](local:${attachment.attachmentId})`
+                            : `![${attachment.altText ?? attachment.fileName}](${attachment.externalUrl ?? ''})`;
+                        return (
+                          <li key={attachment.attachmentId} className="attachment-card">
+                            {previewUrl ? (
+                              <img
+                                src={previewUrl}
+                                alt={attachment.altText ?? attachment.fileName}
+                                className="attachment-image"
+                              />
+                            ) : (
+                              <div className="attachment-image attachment-image--missing">
+                                Missing image source
+                              </div>
+                            )}
+                            <div className="attachment-meta">
+                              <strong>{attachment.fileName}</strong>
+                              <p className="room-help-text">{attachment.sourceType}</p>
+                            </div>
+                            <div className="attachment-card-actions">
+                              {phase === 'scribe' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    onClick={() => {
+                                      openNoteEditorWithInsert(focusedRoom.roomId, markdownToken);
+                                    }}
+                                  >
+                                    Insert in note
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="danger"
+                                    onClick={() => {
+                                      void removeAttachment(focusedRoom.roomId, attachment.attachmentId)
+                                        .then(() => {
+                                          pushToast('info', 'Attachment removed from room.');
+                                        })
+                                        .catch((error: unknown) => {
+                                          const message =
+                                            error instanceof Error
+                                              ? error.message
+                                              : 'Failed to remove attachment.';
+                                          pushToast('error', message);
+                                        });
+                                    }}
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               </>
             )}
           </>
@@ -600,7 +801,11 @@ export function RoomPanel({
           <>
             <h2>Artifact</h2>
             {artifactMarkdown ? (
-              <Markdown source={artifactMarkdown} className="markdown-body artifact-body" />
+              <Markdown
+                source={artifactMarkdown}
+                className="markdown-body artifact-body"
+                resolveLocalImage={resolveLocalImage}
+              />
             ) : (
               <p>Defeat this encounter to generate an artifact.</p>
             )}

@@ -8,10 +8,16 @@ export const PHASE_BADGE_IDS = [
   'CreatorPhaseComplete',
   'ScribePhaseComplete',
   'ArchaeologistPhaseComplete',
+  'ArchaeologistReviewPass3',
+  'ArchaeologistReviewPass7',
+  'ArchaeologistReviewPass15',
 ] as const;
 
 export const SCRIBE_CENTURY_120_BADGE_ID = 'ScribeCentury120';
 export const SCRIBE_CENTURY_120_BADGE_LABEL = 'Scribe Century (120+ Words)';
+export const ARCHAEOLOGIST_REVIEW_PASS_3_BADGE_ID = 'ArchaeologistReviewPass3';
+export const ARCHAEOLOGIST_REVIEW_PASS_7_BADGE_ID = 'ArchaeologistReviewPass7';
+export const ARCHAEOLOGIST_REVIEW_PASS_15_BADGE_ID = 'ArchaeologistReviewPass15';
 
 export const RANK_TIERS = [
   { rank: 'Novice', minXp: 0, maxXp: 299 },
