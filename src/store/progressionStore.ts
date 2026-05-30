@@ -25,6 +25,7 @@ export interface CollectedNoteEntry {
   topic: string;
   floorLabel: string;
   artifactPreview: string;
+  noteMarkdown: string;
   artifactMarkdown: string;
   collectedAt: string;
 }
@@ -67,6 +68,10 @@ function loadPersisted(): PersistedProgression {
             topic: typeof entry.topic === 'string' ? entry.topic : 'Collected note',
             floorLabel: typeof entry.floorLabel === 'string' ? entry.floorLabel : 'Unknown floor',
             artifactPreview: typeof entry.artifactPreview === 'string' ? entry.artifactPreview : '',
+            noteMarkdown:
+              typeof entry.noteMarkdown === 'string'
+                ? entry.noteMarkdown
+                : '',
             artifactMarkdown:
               typeof entry.artifactMarkdown === 'string'
                 ? entry.artifactMarkdown

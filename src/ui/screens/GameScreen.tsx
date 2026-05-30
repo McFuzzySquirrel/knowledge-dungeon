@@ -130,7 +130,8 @@ export function GameScreen(): JSX.Element {
           const liveHierarchy = deriveGraphHierarchy(liveSnapshot.dungeon);
           const floorId = liveHierarchy.floorIdByRoomId[roomId] ?? liveSnapshot.dungeon.rootRoomId;
           const floorLabel = liveHierarchy.floorLabelByFloorId[floorId] ?? liveSnapshot.dungeon.subjectName;
-          const preview = room.artifactMarkdown
+          const previewSource = room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown;
+          const preview = previewSource
             .replace(/^#\s+.*$/gm, '')
             .replace(/\s+/g, ' ')
             .trim()
@@ -142,6 +143,7 @@ export function GameScreen(): JSX.Element {
             topic: room.topic,
             floorLabel,
             artifactPreview: preview,
+            noteMarkdown: room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown,
             artifactMarkdown: room.artifactMarkdown,
           });
         },
@@ -238,6 +240,11 @@ export function GameScreen(): JSX.Element {
   }
 
   const focusedRoom = focusedRoomId ? snapshot.rooms[focusedRoomId] ?? null : null;
+  const noteMarkdownByRoomId = useMemo(() => {
+    return Object.fromEntries(
+      Object.values(snapshot.rooms).map((room) => [room.roomId, room.noteText] as const),
+    );
+  }, [snapshot.rooms]);
   const currentFloorLabel =
     focusedRoom && hierarchy
       ? hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[focusedRoom.roomId]]
@@ -352,6 +359,7 @@ export function GameScreen(): JSX.Element {
           inventory={inventory}
           badges={badges}
           collectedNotes={collectedNotes}
+          noteMarkdownByRoomId={noteMarkdownByRoomId}
           xpTotal={xpTotal}
           rank={rank}
           onSwitchView={(v) => setInventoryView(v)}

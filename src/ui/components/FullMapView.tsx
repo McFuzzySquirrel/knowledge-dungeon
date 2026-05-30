@@ -38,6 +38,38 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.0015;
 
+function splitTopicLabel(topic: string, maxCharsPerLine: number, maxLines: number): string[] {
+  const words = topic.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [''];
+
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const candidate = current.length === 0 ? word : `${current} ${word}`;
+    if (candidate.length <= maxCharsPerLine || current.length === 0) {
+      current = candidate;
+      continue;
+    }
+    lines.push(current);
+    current = word;
+    if (lines.length === maxLines - 1) break;
+  }
+
+  if (lines.length < maxLines && current.length > 0) {
+    lines.push(current);
+  }
+
+  const consumedWords = lines.join(' ').trim().split(/\s+/).filter(Boolean).length;
+  if (consumedWords < words.length && lines.length > 0) {
+    const lastIndex = lines.length - 1;
+    const last = lines[lastIndex] ?? '';
+    lines[lastIndex] = last.length >= maxCharsPerLine ? `${last.slice(0, maxCharsPerLine - 1)}…` : `${last}…`;
+  }
+
+  return lines.slice(0, maxLines);
+}
+
 export function FullMapView({
   snapshot,
   dungeonMap,
@@ -55,8 +87,16 @@ export function FullMapView({
   const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
   const isRpg = graphicsMode === 'rpg';
   const { bounds, rooms, corridors } = dungeonMap;
-  const innerWidth = (bounds.maxX - bounds.minX) * SCALE;
-  const innerHeight = (bounds.maxY - bounds.minY) * SCALE;
+  const maxTopicLength = useMemo(
+    () => rooms.reduce((max, room) => Math.max(max, room.topic.length), 0),
+    [rooms],
+  );
+  const layoutSpread = useMemo(
+    () => Math.min(2, 1 + Math.max(0, maxTopicLength - 18) / 42),
+    [maxTopicLength],
+  );
+  const innerWidth = (bounds.maxX - bounds.minX) * SCALE * layoutSpread;
+  const innerHeight = (bounds.maxY - bounds.minY) * SCALE * layoutSpread;
   const hierarchy = useMemo(() => deriveGraphHierarchy(snapshot.dungeon), [snapshot.dungeon]);
   const [mode, setMode] = useState<'navigate' | 'edit'>('navigate');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(focusedRoomId);
@@ -322,10 +362,10 @@ export function FullMapView({
                   const from = rooms.find((r) => r.roomId === c.fromRoomId);
                   const to = rooms.find((r) => r.roomId === c.toRoomId);
                   if (!from || !to) return null;
-                  const x1 = (from.gridX - bounds.minX + from.width / 2) * SCALE;
-                  const y1 = (from.gridY - bounds.minY + from.height / 2) * SCALE;
-                  const x2 = (to.gridX - bounds.minX + to.width / 2) * SCALE;
-                  const y2 = (to.gridY - bounds.minY + to.height / 2) * SCALE;
+                  const x1 = (from.gridX - bounds.minX + from.width / 2) * SCALE * layoutSpread;
+                  const y1 = (from.gridY - bounds.minY + from.height / 2) * SCALE * layoutSpread;
+                  const x2 = (to.gridX - bounds.minX + to.width / 2) * SCALE * layoutSpread;
+                  const y2 = (to.gridY - bounds.minY + to.height / 2) * SCALE * layoutSpread;
                   const isConnected =
                     focusedRoomId !== null &&
                     (c.fromRoomId === focusedRoomId || c.toRoomId === focusedRoomId);
@@ -355,12 +395,13 @@ export function FullMapView({
                   );
                 })}
                 {visibleRooms.map((room) => {
-                  const x = (room.gridX - bounds.minX) * SCALE;
-                  const y = (room.gridY - bounds.minY) * SCALE;
+                  const x = (room.gridX - bounds.minX) * SCALE * layoutSpread;
+                  const y = (room.gridY - bounds.minY) * SCALE * layoutSpread;
                   const w = room.width * SCALE;
                   const h = room.height * SCALE;
                   const cx = x + w / 2;
                   const cy = y + h / 2;
+                  const topicLines = splitTopicLabel(room.topic, 22, 3);
                   const isFocused = room.roomId === focusedRoomId;
                   const isNeighbor = neighborIds.has(room.roomId);
                   const isSelected = room.roomId === selectedRoomId;
@@ -449,11 +490,19 @@ export function FullMapView({
                         y={cy}
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        fontSize={10}
+                        fontSize={9}
                         fill={textFill}
                       >
-                        {isPortal ? '↑ ' : ''}
-                        {room.topic.length > 18 ? `${room.topic.slice(0, 17)}…` : room.topic}
+                        {isPortal ? <tspan x={cx} dy={-10}>↑</tspan> : null}
+                        {topicLines.map((line, index) => {
+                          const lineOffset = (index - (topicLines.length - 1) / 2) * 10;
+                          const dy = isPortal && index === 0 ? lineOffset + 10 : lineOffset;
+                          return (
+                            <tspan key={`${room.roomId}-${index}`} x={cx} dy={index === 0 ? dy : 10}>
+                              {line}
+                            </tspan>
+                          );
+                        })}
                       </text>
                     </g>
                   );

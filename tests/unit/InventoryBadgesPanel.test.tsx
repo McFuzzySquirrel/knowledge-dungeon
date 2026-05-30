@@ -67,6 +67,7 @@ describe('InventoryBadgesPanel', () => {
             topic: 'Vector Spaces',
             floorLabel: 'Linear Algebra',
             artifactPreview: 'A concise artifact summary.',
+            noteMarkdown: '## Key ideas\nA full encounter note.',
             artifactMarkdown: '## Key ideas\nA full artifact note.',
             collectedAt: '2026-01-01T00:00:00.000Z',
           },
@@ -95,6 +96,7 @@ describe('InventoryBadgesPanel', () => {
             topic: 'Vector Spaces',
             floorLabel: 'Linear Algebra',
             artifactPreview: 'A concise artifact summary.',
+            noteMarkdown: '## Key ideas\nA full encounter note for recall.',
             artifactMarkdown: '## Key ideas\nA full artifact note for recall.',
             collectedAt: '2026-01-01T00:00:00.000Z',
           },
@@ -107,7 +109,7 @@ describe('InventoryBadgesPanel', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Vector Spaces' }));
-    expect(screen.getByText('A full artifact note for recall.')).toBeInTheDocument();
+    expect(screen.getByText('A full encounter note for recall.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back to journal' })).toBeInTheDocument();
   });
 });

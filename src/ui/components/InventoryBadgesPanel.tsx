@@ -11,6 +11,7 @@ interface InventoryBadgesPanelProps {
   inventory: readonly LootItem[];
   badges: readonly string[];
   collectedNotes: readonly CollectedNoteEntry[];
+  noteMarkdownByRoomId?: Readonly<Record<string, string>>;
   xpTotal: number;
   rank: string;
   onSwitchView: (view: 'inventory' | 'badges' | 'journal') => void;
@@ -65,6 +66,7 @@ export function InventoryBadgesPanel({
   inventory,
   badges,
   collectedNotes,
+  noteMarkdownByRoomId,
   xpTotal,
   rank,
   onSwitchView,
@@ -84,6 +86,16 @@ export function InventoryBadgesPanel({
         : view === 'badges'
           ? 'Badges'
           : 'Collected notes';
+
+  const selectedNoteMarkdown = useMemo(() => {
+    if (!selectedNote) return '';
+    const liveNote = noteMarkdownByRoomId?.[selectedNote.roomId]?.trim() ?? '';
+    const persisted = selectedNote.noteMarkdown?.trim() ?? '';
+    const looksLikeLegacyArtifact = /artifact id:/i.test(persisted);
+    if (liveNote.length > 0) return liveNote;
+    if (persisted.length > 0 && !looksLikeLegacyArtifact) return persisted;
+    return selectedNote.artifactMarkdown;
+  }, [selectedNote, noteMarkdownByRoomId]);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -161,7 +173,7 @@ export function InventoryBadgesPanel({
               </button>
             </div>
             <div className="journal-note-markdown">
-              <Markdown source={selectedNote.artifactMarkdown} />
+              <Markdown source={selectedNoteMarkdown} />
             </div>
           </section>
         ) : view === 'inventory' ? (
