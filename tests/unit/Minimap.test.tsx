@@ -31,7 +31,29 @@ const dungeonMap: DungeonMap = {
       status: 'Visited',
     },
   ],
-  corridors: [{ fromRoomId: 'root', toRoomId: 'child', relationType: 'subtopic' }],
+  corridors: [
+    {
+      fromRoomId: 'root',
+      toRoomId: 'child',
+      relationType: 'subtopic',
+      fromDoor: { roomId: 'root', side: 'E', x: 3, y: 2 },
+      toDoor: { roomId: 'child', side: 'W', x: 6, y: 7 },
+      pathTiles: [],
+      segments: [],
+      elbow: null,
+    },
+  ],
+  doors: [
+    { roomId: 'root', side: 'E', x: 3, y: 2 },
+    { roomId: 'child', side: 'W', x: 6, y: 7 },
+  ],
+  walkable: {
+    width: 11,
+    height: 11,
+    offsetX: 0,
+    offsetY: 0,
+    data: new Uint8Array(11 * 11).fill(1),
+  },
 };
 
 describe('Minimap graphics mode', () => {
