@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
   type JSX,
   type PointerEvent,
   type WheelEvent,
@@ -63,6 +64,7 @@ export function FullMapView({
     focusedRoomId ? hierarchy.floorIdByRoomId[focusedRoomId] : hierarchy.floorIds[0] ?? '',
   );
   const [teleportRoomId, setTeleportRoomId] = useState(focusedRoomId ?? '');
+  const [teleportFilter, setTeleportFilter] = useState('');
   const [draftTopics, setDraftTopics] = useState('');
   const [reparentTargetId, setReparentTargetId] = useState('');
 
@@ -81,6 +83,46 @@ export function FullMapView({
       setTeleportRoomId(roomIds[0] ?? '');
     }
   }, [floorId, hierarchy.roomIdsByFloorId, teleportRoomId]);
+
+  const floorTeleportRoomIds = hierarchy.roomIdsByFloorId[floorId] ?? [];
+  const filteredTeleportRoomIds = useMemo(() => {
+    const query = teleportFilter.trim().toLocaleLowerCase();
+    if (query.length === 0) return floorTeleportRoomIds;
+    return floorTeleportRoomIds.filter((roomId) =>
+      (snapshot.rooms[roomId]?.topic ?? roomId).toLocaleLowerCase().includes(query),
+    );
+  }, [floorTeleportRoomIds, snapshot.rooms, teleportFilter]);
+
+  useEffect(() => {
+    if (filteredTeleportRoomIds.length === 0) return;
+    if (!filteredTeleportRoomIds.includes(teleportRoomId)) {
+      setTeleportRoomId(filteredTeleportRoomIds[0] ?? '');
+    }
+  }, [filteredTeleportRoomIds, teleportRoomId]);
+
+  function cycleTeleportSelection(step: number): void {
+    if (filteredTeleportRoomIds.length === 0) return;
+    const currentIndex = Math.max(0, filteredTeleportRoomIds.indexOf(teleportRoomId));
+    const nextIndex = (currentIndex + step + filteredTeleportRoomIds.length) % filteredTeleportRoomIds.length;
+    setTeleportRoomId(filteredTeleportRoomIds[nextIndex] ?? filteredTeleportRoomIds[0] ?? '');
+  }
+
+  function onTeleportFilterKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      cycleTeleportSelection(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      cycleTeleportSelection(-1);
+      return;
+    }
+    if (event.key === 'Enter' && teleportRoomId && teleportRemainingMs <= 0) {
+      event.preventDefault();
+      onTeleportToRoom(teleportRoomId);
+    }
+  }
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: -innerWidth / 2, y: -innerHeight / 2 });
@@ -421,7 +463,7 @@ export function FullMapView({
           </div>
 
           <aside className="full-map-sidebar">
-            <div className="room-section">
+            <div className="room-section room-section--scrollable">
               <h3>Teleport</h3>
               <select value={floorId} onChange={(e) => setFloorId(e.target.value)}>
                 {hierarchy.floorIds.map((entryFloorId) => (
@@ -430,13 +472,43 @@ export function FullMapView({
                   </option>
                 ))}
               </select>
-              <select value={teleportRoomId} onChange={(e) => setTeleportRoomId(e.target.value)}>
-                {(hierarchy.roomIdsByFloorId[floorId] ?? []).map((roomId) => (
-                  <option key={roomId} value={roomId}>
-                    {snapshot.rooms[roomId]?.topic ?? roomId}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="text"
+                value={teleportFilter}
+                onChange={(e) => setTeleportFilter(e.target.value)}
+                onKeyDown={onTeleportFilterKeyDown}
+                placeholder="Filter rooms on this floor"
+                aria-label="Filter teleport rooms"
+              />
+              <div className="teleport-room-list" role="listbox" aria-label="Teleport room list">
+                {filteredTeleportRoomIds.length === 0 ? (
+                  <p className="room-help-text">No rooms match this filter.</p>
+                ) : (
+                  filteredTeleportRoomIds.map((roomId) => {
+                    const isSelected = roomId === teleportRoomId;
+                    return (
+                      <button
+                        key={roomId}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        className={`teleport-room-item${isSelected ? ' teleport-room-item--selected' : ''}`}
+                        onClick={() => setTeleportRoomId(roomId)}
+                        onDoubleClick={() => {
+                          if (teleportRemainingMs <= 0) {
+                            onTeleportToRoom(roomId);
+                          }
+                        }}
+                      >
+                        {snapshot.rooms[roomId]?.topic ?? roomId}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              <p className="room-help-text">
+                Tip: Arrow up/down to change selection, Enter to teleport, or double-click a room.
+              </p>
               <button
                 type="button"
                 disabled={!teleportRoomId || teleportRemainingMs > 0}
@@ -451,7 +523,7 @@ export function FullMapView({
               </button>
             </div>
 
-            <div className="room-section">
+            <div className="room-section room-section--scrollable">
               <h3>Selected topic</h3>
               {selectedRoom ? (
                 <>

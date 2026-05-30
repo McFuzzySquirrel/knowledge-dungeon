@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'react';
 import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistence';
 import {
   deriveGraphHierarchy,
@@ -39,6 +39,12 @@ export function RoomPanel({
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
   const [draftTopics, setDraftTopics] = useState('');
   const [reparentTargetId, setReparentTargetId] = useState('');
+  const [sameFloorFilter, setSameFloorFilter] = useState('');
+  const [selectedSameFloorRoomId, setSelectedSameFloorRoomId] = useState<string | null>(null);
+  const [travelFilter, setTravelFilter] = useState('');
+  const [selectedTravelRoomId, setSelectedTravelRoomId] = useState<string | null>(null);
+  const [portalFilter, setPortalFilter] = useState('');
+  const [selectedPortalRoomId, setSelectedPortalRoomId] = useState<string | null>(null);
 
   const hierarchy = useMemo(() => deriveGraphHierarchy(snapshot.dungeon), [snapshot.dungeon]);
 
@@ -50,6 +56,217 @@ export function RoomPanel({
       }),
     [snapshot],
   );
+  const focusedRoomId = focusedRoom?.roomId ?? null;
+
+  const artifactMarkdown = focusedRoom?.validationState.finalPass
+    ? focusedRoom.artifactMarkdown
+    : null;
+
+  const connectedRoomIds = focusedRoomId
+    ? getConnectedRoomIds(snapshot.dungeon, focusedRoomId)
+    : [];
+  const connectedRooms = connectedRoomIds
+    .map((roomId) => snapshot.rooms[roomId])
+    .filter((room): room is RoomMetadata => Boolean(room));
+  const relatedTopics = connectedRooms.map((room) => room.topic);
+  const focusedFloorId = focusedRoomId
+    ? hierarchy.floorIdByRoomId[focusedRoomId]
+    : snapshot.dungeon.rootRoomId;
+  const sameFloorConnections = connectedRooms.filter(
+    (room) => hierarchy.floorIdByRoomId[room.roomId] === focusedFloorId,
+  );
+  const otherFloorConnections = connectedRooms.filter(
+    (room) => hierarchy.floorIdByRoomId[room.roomId] !== focusedFloorId,
+  );
+  const parentRoomId = focusedRoomId ? hierarchy.parentByRoomId[focusedRoomId] : null;
+  const parentRoom = parentRoomId ? snapshot.rooms[parentRoomId] ?? null : null;
+  const parentFloorId = parentRoom ? hierarchy.floorIdByRoomId[parentRoom.roomId] : null;
+  const parentFloorRoom =
+    parentFloorId && parentFloorId !== focusedFloorId
+      ? snapshot.rooms[parentFloorId] ?? null
+      : null;
+
+  const filteredSameFloorRooms = useMemo(() => {
+    const query = sameFloorFilter.trim().toLocaleLowerCase();
+    if (query.length === 0) return sameFloorConnections;
+    return sameFloorConnections.filter((room) => room.topic.toLocaleLowerCase().includes(query));
+  }, [sameFloorConnections, sameFloorFilter]);
+
+  useEffect(() => {
+    if (filteredSameFloorRooms.length === 0) {
+      setSelectedSameFloorRoomId(null);
+      return;
+    }
+    if (
+      !selectedSameFloorRoomId ||
+      !filteredSameFloorRooms.some((room) => room.roomId === selectedSameFloorRoomId)
+    ) {
+      setSelectedSameFloorRoomId(filteredSameFloorRooms[0]?.roomId ?? null);
+    }
+  }, [filteredSameFloorRooms, selectedSameFloorRoomId]);
+
+  function cycleSameFloorSelection(step: number): void {
+    if (filteredSameFloorRooms.length === 0) return;
+    const ids = filteredSameFloorRooms.map((room) => room.roomId);
+    const currentIndex = Math.max(0, ids.indexOf(selectedSameFloorRoomId ?? ids[0] ?? ''));
+    const nextIndex = (currentIndex + step + ids.length) % ids.length;
+    setSelectedSameFloorRoomId(ids[nextIndex] ?? ids[0] ?? null);
+  }
+
+  function onSameFloorFilterKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      cycleSameFloorSelection(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      cycleSameFloorSelection(-1);
+      return;
+    }
+    if (event.key === 'Enter' && selectedSameFloorRoomId) {
+      event.preventDefault();
+      onTravelToRoom(selectedSameFloorRoomId);
+    }
+  }
+
+  const travelRoomCandidates = useMemo(() => {
+    const list: RoomMetadata[] = [];
+    if (parentFloorRoom) {
+      list.push(parentFloorRoom);
+    }
+    for (const room of otherFloorConnections) {
+      if (room.roomId === parentFloorRoom?.roomId) continue;
+      list.push(room);
+    }
+    return list;
+  }, [otherFloorConnections, parentFloorRoom]);
+
+  const filteredTravelRooms = useMemo(() => {
+    const query = travelFilter.trim().toLocaleLowerCase();
+    if (query.length === 0) return travelRoomCandidates;
+    return travelRoomCandidates.filter((room) => {
+      const floorLabel = hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[room.roomId]];
+      return `${room.topic} ${floorLabel}`.toLocaleLowerCase().includes(query);
+    });
+  }, [travelFilter, travelRoomCandidates, hierarchy.floorIdByRoomId, hierarchy.floorLabelByFloorId]);
+
+  useEffect(() => {
+    if (filteredTravelRooms.length === 0) {
+      setSelectedTravelRoomId(null);
+      return;
+    }
+    if (!selectedTravelRoomId || !filteredTravelRooms.some((room) => room.roomId === selectedTravelRoomId)) {
+      setSelectedTravelRoomId(filteredTravelRooms[0]?.roomId ?? null);
+    }
+  }, [filteredTravelRooms, selectedTravelRoomId]);
+
+  function cycleTravelSelection(step: number): void {
+    if (filteredTravelRooms.length === 0) return;
+    const ids = filteredTravelRooms.map((room) => room.roomId);
+    const currentIndex = Math.max(0, ids.indexOf(selectedTravelRoomId ?? ids[0] ?? ''));
+    const nextIndex = (currentIndex + step + ids.length) % ids.length;
+    setSelectedTravelRoomId(ids[nextIndex] ?? ids[0] ?? null);
+  }
+
+  function onTravelFilterKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      cycleTravelSelection(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      cycleTravelSelection(-1);
+      return;
+    }
+    if (event.key === 'Enter' && selectedTravelRoomId) {
+      event.preventDefault();
+      onTravelToRoom(selectedTravelRoomId);
+    }
+  }
+
+  const selfCheckPrompts = focusedRoom?.validationState.finalPass
+    ? generateSelfCheckPrompts({
+        roomId: focusedRoom.roomId,
+        subjectName: snapshot.dungeon.subjectName,
+        roomTopic: focusedRoom.topic,
+        noteHeadings: artifactMarkdown ? extractMarkdownHeadings(artifactMarkdown) : [],
+        relatedTopics,
+      })
+    : [];
+
+  const breadcrumbRooms = focusedRoomId
+    ? hierarchy.breadcrumbRoomIdsByRoomId[focusedRoomId]
+        .map((roomId) => snapshot.rooms[roomId])
+        .filter((room): room is RoomMetadata => Boolean(room))
+    : [];
+  const currentFloorLabel =
+    focusedRoomId
+      ? hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[focusedRoomId]]
+      : snapshot.dungeon.subjectName;
+  const directChildRoomIds = focusedRoomId
+    ? hierarchy.childRoomIdsByParentId[focusedRoomId] ?? []
+    : [];
+  const portalRooms = directChildRoomIds
+    .filter((roomId) => (hierarchy.childRoomIdsByParentId[roomId] ?? []).length > 0)
+    .map((roomId) => snapshot.rooms[roomId])
+    .filter((room): room is RoomMetadata => Boolean(room));
+
+  const filteredPortalRooms = useMemo(() => {
+    const query = portalFilter.trim().toLocaleLowerCase();
+    if (query.length === 0) return portalRooms;
+    return portalRooms.filter((room) => room.topic.toLocaleLowerCase().includes(query));
+  }, [portalFilter, portalRooms]);
+
+  useEffect(() => {
+    if (filteredPortalRooms.length === 0) {
+      setSelectedPortalRoomId(null);
+      return;
+    }
+    if (
+      !selectedPortalRoomId ||
+      !filteredPortalRooms.some((room) => room.roomId === selectedPortalRoomId)
+    ) {
+      setSelectedPortalRoomId(filteredPortalRooms[0]?.roomId ?? null);
+    }
+  }, [filteredPortalRooms, selectedPortalRoomId]);
+
+  function cyclePortalSelection(step: number): void {
+    if (filteredPortalRooms.length === 0) return;
+    const ids = filteredPortalRooms.map((room) => room.roomId);
+    const currentIndex = Math.max(0, ids.indexOf(selectedPortalRoomId ?? ids[0] ?? ''));
+    const nextIndex = (currentIndex + step + ids.length) % ids.length;
+    setSelectedPortalRoomId(ids[nextIndex] ?? ids[0] ?? null);
+  }
+
+  function onPortalFilterKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      cyclePortalSelection(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      cyclePortalSelection(-1);
+      return;
+    }
+    if (event.key === 'Enter' && selectedPortalRoomId) {
+      event.preventDefault();
+      onTravelToRoom(selectedPortalRoomId);
+    }
+  }
+  const currentParentId = focusedRoomId ? hierarchy.parentByRoomId[focusedRoomId] : null;
+  const reparentCandidates = focusedRoomId
+    ? snapshot.dungeon.rooms
+        .filter(
+          (room) =>
+            room.roomId !== focusedRoomId &&
+            room.roomId !== currentParentId &&
+            !isReachableViaSubtopics(snapshot.dungeon, focusedRoomId, room.roomId),
+        )
+        .sort((left, right) => left.topic.localeCompare(right.topic))
+    : [];
 
   if (!focusedRoom) {
     return (
@@ -65,60 +282,6 @@ export function RoomPanel({
       </aside>
     );
   }
-
-  const artifactMarkdown = focusedRoom.validationState.finalPass
-    ? focusedRoom.artifactMarkdown
-    : null;
-
-  const connectedRoomIds = getConnectedRoomIds(snapshot.dungeon, focusedRoom.roomId);
-  const connectedRooms = connectedRoomIds
-    .map((roomId) => snapshot.rooms[roomId])
-    .filter((room): room is RoomMetadata => Boolean(room));
-  const relatedTopics = connectedRooms.map((room) => room.topic);
-  const focusedFloorId = hierarchy.floorIdByRoomId[focusedRoom.roomId];
-  const sameFloorConnections = connectedRooms.filter(
-    (room) => hierarchy.floorIdByRoomId[room.roomId] === focusedFloorId,
-  );
-  const otherFloorConnections = connectedRooms.filter(
-    (room) => hierarchy.floorIdByRoomId[room.roomId] !== focusedFloorId,
-  );
-  const parentRoomId = hierarchy.parentByRoomId[focusedRoom.roomId];
-  const parentRoom = parentRoomId ? snapshot.rooms[parentRoomId] ?? null : null;
-  const parentFloorId = parentRoom ? hierarchy.floorIdByRoomId[parentRoom.roomId] : null;
-  const parentFloorRoom =
-    parentFloorId && parentFloorId !== focusedFloorId
-      ? snapshot.rooms[parentFloorId] ?? null
-      : null;
-
-  const selfCheckPrompts = focusedRoom.validationState.finalPass
-    ? generateSelfCheckPrompts({
-        roomId: focusedRoom.roomId,
-        subjectName: snapshot.dungeon.subjectName,
-        roomTopic: focusedRoom.topic,
-        noteHeadings: artifactMarkdown ? extractMarkdownHeadings(artifactMarkdown) : [],
-        relatedTopics,
-      })
-    : [];
-
-  const breadcrumbRooms = hierarchy.breadcrumbRoomIdsByRoomId[focusedRoom.roomId]
-    .map((roomId) => snapshot.rooms[roomId])
-    .filter((room): room is RoomMetadata => Boolean(room));
-  const currentFloorLabel =
-    hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[focusedRoom.roomId]];
-  const directChildRoomIds = hierarchy.childRoomIdsByParentId[focusedRoom.roomId] ?? [];
-  const portalRooms = directChildRoomIds
-    .filter((roomId) => (hierarchy.childRoomIdsByParentId[roomId] ?? []).length > 0)
-    .map((roomId) => snapshot.rooms[roomId])
-    .filter((room): room is RoomMetadata => Boolean(room));
-  const currentParentId = hierarchy.parentByRoomId[focusedRoom.roomId];
-  const reparentCandidates = snapshot.dungeon.rooms
-    .filter(
-      (room) =>
-        room.roomId !== focusedRoom.roomId &&
-        room.roomId !== currentParentId &&
-        !isReachableViaSubtopics(snapshot.dungeon, focusedRoom.roomId, room.roomId),
-    )
-    .sort((left, right) => left.topic.localeCompare(right.topic));
 
   return (
     <aside className="room-panel" aria-label="Room information">
@@ -175,76 +338,122 @@ export function RoomPanel({
             {sameFloorConnections.length > 0 ? (
               <div className="room-section">
                 <h3>Connected topics on this floor</h3>
-                <div className="linked-topic-list">
-                  {sameFloorConnections.map((room) => (
-                    <button
-                      key={room.roomId}
-                      type="button"
-                      className="ghost"
-                      onClick={() => onTravelToRoom(room.roomId)}
-                    >
-                      Travel to {room.topic}
-                    </button>
-                  ))}
+                <input
+                  type="text"
+                  value={sameFloorFilter}
+                  onChange={(e) => setSameFloorFilter(e.target.value)}
+                  onKeyDown={onSameFloorFilterKeyDown}
+                  placeholder="Filter connected topics"
+                  aria-label="Filter connected topics on this floor"
+                />
+                <div className="room-travel-list" role="listbox" aria-label="Connected topics list">
+                  {filteredSameFloorRooms.length === 0 ? (
+                    <p className="room-help-text">No connected topics match this filter.</p>
+                  ) : (
+                    filteredSameFloorRooms.map((room) => {
+                      const isSelected = room.roomId === selectedSameFloorRoomId;
+                      return (
+                        <button
+                          key={room.roomId}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          className={`ghost room-travel-item${isSelected ? ' room-travel-item--selected' : ''}`}
+                          onClick={() => {
+                            setSelectedSameFloorRoomId(room.roomId);
+                            onTravelToRoom(room.roomId);
+                          }}
+                        >
+                          Travel to {room.topic}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
+                <p className="room-help-text">Tip: Arrow up/down to select, Enter to travel.</p>
               </div>
             ) : null}
 
             {parentFloorRoom || otherFloorConnections.length > 0 ? (
               <div className="room-section">
                 <h3>Travel to related floors</h3>
-                <div className="linked-topic-list">
-                  {parentFloorRoom ? (
-                    <button
-                      type="button"
-                      className="ghost"
-                      onClick={() => onTravelToRoom(parentFloorRoom.roomId)}
-                      title={`Back to ${hierarchy.floorLabelByFloorId[parentFloorRoom.roomId]}`}
-                    >
-                      ← Back to {parentFloorRoom.topic}
-                    </button>
-                  ) : null}
-                  {otherFloorConnections
-                    .filter((room) => room.roomId !== parentFloorRoom?.roomId)
-                    .map((room) => (
-                      <button
-                        key={room.roomId}
-                        type="button"
-                        className="ghost"
-                        onClick={() => onTravelToRoom(room.roomId)}
-                        title={`On ${hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[room.roomId]]}`}
-                      >
-                        Travel to {room.topic}{' '}
-                        <small>
-                          (
-                          {
-                            hierarchy.floorLabelByFloorId[
-                              hierarchy.floorIdByRoomId[room.roomId]
-                            ]
-                          }
-                          )
-                        </small>
-                      </button>
-                    ))}
+                <input
+                  type="text"
+                  value={travelFilter}
+                  onChange={(e) => setTravelFilter(e.target.value)}
+                  onKeyDown={onTravelFilterKeyDown}
+                  placeholder="Filter related floors"
+                  aria-label="Filter related floor travel"
+                />
+                <div className="room-travel-list" role="listbox" aria-label="Related floor travel list">
+                  {filteredTravelRooms.length === 0 ? (
+                    <p className="room-help-text">No related floors match this filter.</p>
+                  ) : (
+                    filteredTravelRooms.map((room) => {
+                      const isParent = room.roomId === parentFloorRoom?.roomId;
+                      const isSelected = room.roomId === selectedTravelRoomId;
+                      const floorLabel =
+                        hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[room.roomId]];
+                      return (
+                        <button
+                          key={room.roomId}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          className={`ghost room-travel-item${isSelected ? ' room-travel-item--selected' : ''}`}
+                          onClick={() => {
+                            setSelectedTravelRoomId(room.roomId);
+                            onTravelToRoom(room.roomId);
+                          }}
+                          title={`On ${floorLabel}`}
+                        >
+                          {isParent ? '← Back to ' : 'Travel to '}
+                          {room.topic} <small>({floorLabel})</small>
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
+                <p className="room-help-text">Tip: Arrow up/down to select, Enter to travel.</p>
               </div>
             ) : null}
 
             {portalRooms.length > 0 ? (
               <div className="room-section">
                 <h3>Portals to deeper floors</h3>
-                <div className="linked-topic-list">
-                  {portalRooms.map((room) => (
-                    <button
-                      key={room.roomId}
-                      type="button"
-                      className="ghost"
-                      onClick={() => onTravelToRoom(room.roomId)}
-                    >
-                      Enter {room.topic}
-                    </button>
-                  ))}
+                <input
+                  type="text"
+                  value={portalFilter}
+                  onChange={(e) => setPortalFilter(e.target.value)}
+                  onKeyDown={onPortalFilterKeyDown}
+                  placeholder="Filter portal rooms"
+                  aria-label="Filter portal rooms"
+                />
+                <div className="room-travel-list" role="listbox" aria-label="Portal rooms list">
+                  {filteredPortalRooms.length === 0 ? (
+                    <p className="room-help-text">No portal rooms match this filter.</p>
+                  ) : (
+                    filteredPortalRooms.map((room) => {
+                      const isSelected = room.roomId === selectedPortalRoomId;
+                      return (
+                        <button
+                          key={room.roomId}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          className={`ghost room-travel-item${isSelected ? ' room-travel-item--selected' : ''}`}
+                          onClick={() => {
+                            setSelectedPortalRoomId(room.roomId);
+                            onTravelToRoom(room.roomId);
+                          }}
+                        >
+                          Enter {room.topic}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
+                <p className="room-help-text">Tip: Arrow up/down to select, Enter to travel.</p>
               </div>
             ) : null}
 

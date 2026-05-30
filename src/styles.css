@@ -443,6 +443,13 @@ textarea {
   gap: 8px;
 }
 
+.room-section--scrollable {
+  max-height: 34vh;
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 2px;
+}
+
 .room-help-text {
   margin: 0;
   color: var(--text-muted);
@@ -458,6 +465,28 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.room-travel-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
+  padding: 8px;
+}
+
+.room-travel-item {
+  width: 100%;
+  text-align: left;
+}
+
+.room-travel-item--selected,
+.room-travel-item[aria-selected='true'] {
+  border-color: var(--accent);
+  background: rgba(127, 178, 255, 0.18);
 }
 
 button.ghost {
@@ -697,6 +726,30 @@ button.danger:hover {
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.teleport-room-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
+  padding: 6px;
+}
+
+.teleport-room-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.teleport-room-item--selected,
+.teleport-room-item[aria-selected='true'] {
+  border-color: var(--accent);
+  background: rgba(127, 178, 255, 0.18);
+  color: var(--text-primary);
 }
 
 .full-map-hint {
