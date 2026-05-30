@@ -9,6 +9,12 @@ const __dirname = path.dirname(__filename);
 const isDev = !app.isPackaged;
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
+if (process.platform === 'linux' && isDev) {
+  // Local dev environments often cannot set root ownership/mode on chrome-sandbox.
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
+
 function isSafeExternalUrl(candidate: string): boolean {
   try {
     const parsed = new URL(candidate);
