@@ -11,32 +11,30 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
         <h2>How to play</h2>
         <ul>
           <li>
-            Move with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrow keys.
+            Move with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrow keys, and
+            press <kbd>E</kbd> or tap <kbd>Interact</kbd> to open the room you&rsquo;re standing in.
           </li>
           <li>
-            Press <kbd>E</kbd> (or tap <kbd>Interact</kbd>) to open the encounter for the room
-            you&rsquo;re standing in.
+            Use the HUD <kbd>Map</kbd> button or <kbd>M</kbd> to open the full map. From there you
+            can drag the canvas, zoom, and drag individual room nodes to reshape the layout.
           </li>
           <li>
-            In the <strong>Creator</strong> phase, use the Topic tab or Full Map graph-edit mode
-            to bulk-add child topics and safely change a topic&rsquo;s parent.
+            The room panel&rsquo;s <strong>Inventory</strong>, <strong>Badges</strong>, and
+            <strong>Diary</strong> buttons open your collected loot, milestone badges, and saved
+            notes.
           </li>
           <li>
-            In the <strong>Scribe</strong> phase, include Summary, Key Points, and Recall
-            Question sections to defeat an encounter and earn XP, loot, and an artifact. Notes
-            with 120+ words earn the <strong>Scribe Century</strong> badge.
+            Use <kbd>Teleport</kbd> to jump to a room from the map. After teleporting, wait for the
+            cooldown before using it again.
           </li>
           <li>
-            Once every room is cleared, the <strong>Archaeologist</strong> phase unlocks and the
-            interact button records a review pass on the room.
+            In the <strong>Creator</strong> phase, use the Topic tab or the map edit tools to add,
+            reparent, or delete topics. In the <strong>Scribe</strong> phase, defeat encounters by
+            writing the required notes. Once the dungeon is cleared, the
+            <strong>Archaeologist</strong> phase turns room interactions into review passes.
           </li>
           <li>
-            Press <kbd>?</kbd> to toggle this help overlay, or <kbd>M</kbd> to open the
-            full map view.
-          </li>
-          <li>
-            Teleport from the HUD to jump to a chosen floor and room, then wait two minutes
-            before using the spell again.
+            Press <kbd>?</kbd> to toggle this help overlay.
           </li>
         </ul>
         <button type="button" onClick={onClose}>

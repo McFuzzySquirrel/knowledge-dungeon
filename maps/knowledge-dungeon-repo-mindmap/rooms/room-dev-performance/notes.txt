@@ -1,0 +1,132 @@
+# Performance & Bundle Size
+
+## Bundle Size Goals
+
+Knowledge Dungeon targets **minimal bundles** for fast load times:
+
+- **Core bundle**: <500KB gzipped (without assets)
+- **Total with assets**: <1MB gzipped
+- **Vite magic**: Code splitting, lazy loading, tree-shaking
+
+## Size Check Command
+
+```bash
+npm run check:bundle-size
+```
+
+This runs `vite-plugin-compression` and verifies:
+- `dist/assets/index-*.js` < 250KB gzipped
+- `dist/assets/index-*.css` < 50KB gzipped
+- Fails CI if exceeded (prevents bloat)
+
+## What Takes Space?
+
+| Library | Size (gzipped) |
+| --- | --- |
+| React 19 | ~45KB |
+| Phaser 3 | ~90KB |
+| Zustand | ~2KB |
+| TypeScript (runtime) | ~0KB (compiled away) |
+| Vitest (dev only) | ~0KB (not in bundle) |
+| ESLint (dev only) | ~0KB (not in bundle) |
+
+**Total**: ~140KB, leaving 110KB for app code + assets.
+
+## Optimization Strategies
+
+### 1. Code Splitting
+
+Vite automatically splits code by route:
+
+```typescript
+// Lazy load heavy components
+const CreatorScene = lazy(() => import('./scenes/Creator'));
+const ScribeScene = lazy(() => import('./scenes/Scribe'));
+```
+
+Initial load only includes the home screen. Scene code is loaded on demand.
+
+### 2. Tree-Shaking
+
+Unused code is removed at build time:
+
+```typescript
+// Only "used" functions are bundled
+import { validateNote } from '@/core/validation'; // ✓ used
+import { unusedFunction } from '@/utils';         // ✗ removed
+```
+
+Always import from barrel exports (`index.ts`) for best tree-shaking.
+
+### 3. Dependency Choices
+
+We prefer **small libraries**:
+
+- **Zustand** (~2KB) over Redux (~40KB)
+- **Date-fns** (~5KB) over Moment.js (~70KB)
+- **Phaser** (~90KB) — no good alternative for 2D games
+
+### 4. Asset Optimization
+
+Images and sounds are:
+- Compressed with WebP format (~50% smaller)
+- Lazy-loaded only when needed
+- Cached by browser
+
+## Development vs. Production
+
+### Development Build
+```bash
+npm run build:web
+```
+
+- Preserves sourcemaps for debugging
+- Doesn't minify JavaScript
+- Full TypeScript error checking
+- ~2–3MB on disk (not deployed)
+
+### Production Build
+```bash
+npm run build:web -- --mode production
+```
+
+- Minified and gzipped
+- Sourcemaps excluded (or external)
+- Tree-shaken
+- ~200–300KB on disk
+
+## Monitoring Performance
+
+### Build Time
+```bash
+npm run build:web -- --stats  # Detailed build metrics
+```
+
+Target: <30 seconds from clean.
+
+### Runtime Performance
+In-game profiler (optional):
+- Phaser FPS counter
+- React DevTools Profiler
+- Chrome DevTools Performance tab
+
+Target: 60 FPS on desktop, 30+ FPS on mobile.
+
+## Future Optimizations
+
+Potential improvements:
+
+1. **Service Worker** — Cache assets for offline-first
+2. **Wasm** — Rewrite validation/progression in Rust (if validation becomes CPU-bound)
+3. **Worker threads** — Offload validation to background thread
+4. **HTTP/2 push** — Server-side optimization if we add cloud
+
+## Design Insight
+
+Bundle size is **always minimized**. Small bundles mean:
+- Faster downloads
+- Faster startup
+- Faster browser parsing and execution
+- Better battery life on mobile
+
+The check:bundle-size script enforces this—no sneaky bloat can slip in. Performance isn't an afterthought; it's a constraint that guides architecture decisions.

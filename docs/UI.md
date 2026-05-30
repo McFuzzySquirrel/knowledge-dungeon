@@ -144,9 +144,10 @@ the dungeon layout remains a generated view over that graph (see
 The help dialog is opened from the `?` button (or keyboard `?`) and summarizes:
 
 - Movement and interaction controls.
-- What changes in each phase (Create, Scribe, Review).
-- How encounters and review passes work.
-- The <kbd>M</kbd> shortcut for the full map view.
+- The full map controls, including drag-to-pan, zoom, and moving room nodes.
+- The room panel collections shortcuts for Inventory, Badges, and Diary.
+- Teleport usage and its cooldown.
+- What changes in each phase: Creator, Scribe, and Archaeologist.
 
 It is meant to be a quick in-context rules reference while playing.
 

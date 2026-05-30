@@ -5,6 +5,7 @@ import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses
 import {
   exportSubjectFolder,
   exportSubjectsRoot,
+  importSubjectFolder,
   listSubjectIds,
   loadSubjectSnapshot,
   openSubjectsFolder,
@@ -30,6 +31,7 @@ const PHASES: { id: GamePhase; title: string; description: string }[] = [
 ];
 
 const BASE = import.meta.env.BASE_URL;
+const WELCOME_ICON = `${BASE}assets/welcome-icon.png`;
 const CLASS_SPRITES: Record<PlayerClassId, string> = {
   scholar: `${BASE}assets/sprites/player-hero.svg`,
   cartographer: `${BASE}assets/sprites/player-explorer.svg`,
@@ -155,15 +157,40 @@ export function WelcomeScreen(): JSX.Element {
     }
   }
 
+  async function handleImportSubjectFolder() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const imported = await importSubjectFolder();
+      if (!imported) {
+        setAdminMessage('Import cancelled.');
+        return;
+      }
+      await refreshExistingSubjects();
+      await loadSubject(imported.dungeon.dungeonId);
+      setActiveSubjectId(imported.dungeon.dungeonId);
+      setAdminMessage(`Imported ${imported.dungeon.subjectName}.`);
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
   return (
     <div className="welcome-screen">
       <header style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
         <img
-          src={`${import.meta.env.BASE_URL}assets/sprites/objects/readme-scroll.svg`}
-          alt=""
-          width={72}
-          height={72}
-          style={{ flex: '0 0 auto' }}
+          src={WELCOME_ICON}
+          alt="Knowledge Dungeon crystal icon"
+          width={88}
+          height={88}
+          style={{
+            flex: '0 0 auto',
+            borderRadius: 18,
+            padding: 6,
+            background: 'linear-gradient(180deg, rgba(242, 200, 121, 0.14), rgba(15, 11, 6, 0.28))',
+            border: '1px solid rgba(242, 200, 121, 0.28)',
+            boxShadow: '0 10px 24px rgba(0, 0, 0, 0.35)',
+          }}
         />
         <div>
           <h1>Knowledge Dungeon</h1>
@@ -324,6 +351,14 @@ export function WelcomeScreen(): JSX.Element {
                 aria-disabled={adminBusy}
               >
                 Export subjects root
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleImportSubjectFolder()}
+                disabled={adminBusy}
+                aria-disabled={adminBusy}
+              >
+                Import subject folder
               </button>
               {existingSubjects.map((subject) => (
                 <button

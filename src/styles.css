@@ -984,19 +984,19 @@ button.danger:hover {
 :root[data-graphics='rpg'] {
   --bg-deep: #15100a;
   --bg-panel: #211810;
-  --bg-panel-soft: #2c2014;
-  --border-soft: #4a3520;
+  --bg-panel-soft: #2a241f;
+  --border-soft: #6a5b48;
   --text-primary: #f4e4c2;
-  --text-secondary: #d6b884;
-  --text-muted: #a08a64;
+  --text-secondary: #e6d1ab;
+  --text-muted: #e1d4bf;
   --accent: #f2c879;
   --accent-soft: #f7d99c;
   --accent-cool: #d6883a;
 }
 
 :root[data-graphics='rpg'] button {
-  background: linear-gradient(180deg, #3b2a18 0%, #2a1f12 100%);
-  border-color: #6b4a24;
+  background: linear-gradient(180deg, #463729 0%, #32261c 100%);
+  border-color: #77614b;
   color: var(--text-primary);
   box-shadow: inset 0 1px 0 rgba(255, 217, 153, 0.08);
 }

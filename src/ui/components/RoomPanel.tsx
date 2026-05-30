@@ -73,6 +73,8 @@ export function RoomPanel({
   const artifactMarkdown = focusedRoom?.validationState.finalPass
     ? focusedRoom.artifactMarkdown
     : null;
+  const hasNoteText = Boolean(focusedRoom?.noteText.trim().length);
+  const noteWordCount = focusedRoom?.validationState.wordCount ?? 0;
 
   const connectedRoomIds = focusedRoomId
     ? getConnectedRoomIds(snapshot.dungeon, focusedRoomId)
@@ -576,11 +578,11 @@ export function RoomPanel({
         {tab === 'notes' ? (
           <>
             <h2>Notes</h2>
-            {focusedRoom.validationState.wordCount === 0 ? (
+            {!hasNoteText && noteWordCount === 0 ? (
               <p>No notes drafted yet. Press <kbd>E</kbd> in the dungeon to open the editor.</p>
             ) : (
               <>
-                <p>Words: {focusedRoom.validationState.wordCount}</p>
+                <p>Words: {noteWordCount > 0 ? noteWordCount : focusedRoom.noteText.trim().split(/\s+/).filter(Boolean).length}</p>
                 <p>
                   Required sections present:{' '}
                   {focusedRoom.validationState.requiredSectionsPresent ? 'yes' : 'no'}

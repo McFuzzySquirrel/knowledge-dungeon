@@ -1,0 +1,43 @@
+# Core Graph Module
+
+## What It Does
+
+The graph module manages the **dungeon structure**—rooms, topics, and the edges (relationships) between them. It's the "map" of the entire knowledge base.
+
+## Key Concepts
+
+### Rooms
+- Represent a single topic (e.g., "Authentication")
+- Have a unique ID and name
+- Track state: Uncreated, Created, Visited, NotesDrafted, EncounterDefeated, ArtifactCollected, NeedsRevalidation
+- Store validation results and metadata
+
+### Edges
+- Connect two rooms with a relationship type
+- Types: `subtopic`, `prerequisite`, `analogy`, `depends_on`, `related`
+- Created by which phase: Creator (topology), Scribe (optional), Archaeologist (optional)
+- Allow topic discovery and intelligent prerequisite checking
+
+### DungeonMetadata
+- Root room ID
+- All rooms and edges
+- Subject name and ID
+- Schema version
+- Phase state tracking
+
+## Key Operations
+
+### During Creator Phase
+- `addLinkedRooms()` — Create new rooms with edges to an existing room
+- `addCrossLink()` — Connect existing rooms
+- `removeRoom()` — Delete a room and all its edges
+- `validateGraph()` — Ensure no broken references
+
+### Consistency & Revalidation
+- When a room is modified, connected rooms may need revalidation (e.g., prerequisites)
+- `propagateRevalidation()` — Mark affected rooms as NeedsRevalidation
+- Prevents invalid room states
+
+## Design Insight
+
+The graph is **immutable**—operations return a new copy. This makes state management predictable and enables undo/redo if needed.

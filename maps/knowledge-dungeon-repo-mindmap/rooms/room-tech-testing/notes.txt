@@ -1,0 +1,64 @@
+# Testing: Vitest & Testing Library
+
+## Vitest: The Test Runner
+
+Vitest is a Jest-compatible test runner built on Vite:
+
+### Why Vitest?
+- **Fast** — Uses Vite's fast transpilation, runs tests in parallel
+- **Compatible** — Drop-in Jest replacement, same syntax
+- **Great DX** — Watch mode with smart re-runs
+- **Works with TypeScript** — No extra config needed
+
+### Running Tests
+```bash
+npm run test              # Run all tests once
+npm run test -- --watch  # Watch mode (re-run on file changes)
+npm run test -- --ui     # Open UI dashboard
+```
+
+## Testing Library: Writing Good Tests
+
+Testing Library is a philosophy: **Test behavior, not implementation**.
+
+Good test: "When I click the 'Create Room' button, a new room appears in the list."
+
+Bad test: "When I click element with ID #btn-create, the component's `roomCount` state increases."
+
+### Key Utilities
+
+- `render()` — Mount a React component in a test
+- `screen.getByRole()` — Find elements by accessibility role
+- `userEvent.click()` — Simulate user interactions
+- `waitFor()` — Wait for async state updates
+
+## Test Organization
+
+Tests live in `/tests/unit/`:
+
+```
+tests/unit/
+  core/               # Domain logic tests
+    graph/
+    validation/
+  game/               # Game system tests
+  store/              # Zustand store tests
+```
+
+## Example: Testing a Validation
+
+```typescript
+import { validateNote } from '@/core/validation/notes/noteValidation';
+
+describe('Note Validation', () => {
+  it('passes a well-formed note', () => {
+    const note = `# Overview\n...content...\n# Key Concepts\n...`;
+    const result = validateNote({ roomTopic: 'React', noteText: note });
+    expect(result.finalPass).toBe(true);
+  });
+});
+```
+
+## Design Insight
+
+Tests are **executable specifications**. A passing test suite is proof that the app works as designed. For Knowledge Dungeon, this is critical—if validation breaks, learning breaks.

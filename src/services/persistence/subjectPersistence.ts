@@ -32,6 +32,7 @@ declare global {
       openSubjectsFolder?: () => Promise<boolean>;
       exportSubjectsRoot?: () => Promise<string | null>;
       exportSubjectFolder?: (subjectId: string) => Promise<string | null>;
+      importSubjectFolder?: () => Promise<SubjectSnapshot | null>;
     };
   }
 }
@@ -191,6 +192,15 @@ export async function exportSubjectFolder(subjectId: string): Promise<string | n
   const exportSubjectFolderBridge = bridge?.exportSubjectFolder;
   if (exportSubjectFolderBridge) {
     return invokeBridge(() => exportSubjectFolderBridge(subjectId), null);
+  }
+  return null;
+}
+
+export async function importSubjectFolder(): Promise<SubjectSnapshot | null> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const importSubjectFolderBridge = bridge?.importSubjectFolder;
+  if (importSubjectFolderBridge) {
+    return invokeBridge(() => importSubjectFolderBridge(), null);
   }
   return null;
 }

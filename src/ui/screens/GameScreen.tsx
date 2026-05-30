@@ -192,13 +192,11 @@ export function GameScreen(): JSX.Element {
     if (!sceneReady || !snapshot) return;
     const scene = sceneRef.current;
     if (!scene) return;
-    const collectedRoomIds = new Set(collectedNotes.map((entry) => entry.roomId));
     const artifactRoomIds = Object.values(snapshot.rooms)
       .filter((room) => room.validationState.finalPass)
-      .filter((room) => !collectedRoomIds.has(room.roomId))
       .map((room) => room.roomId);
     scene.setArtifactRooms(artifactRoomIds, phase === 'archaeologist');
-  }, [sceneReady, snapshot, phase, collectedNotes]);
+  }, [sceneReady, snapshot, phase]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
