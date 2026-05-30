@@ -142,7 +142,7 @@ async function resolveExternalImageMimeType(url: string): Promise<string> {
     if (!contentType) {
       contentType = await requestContentType('GET');
     }
-    if (contentType.startsWith('image/')) {
+    if (contentType && contentType.startsWith('image/')) {
       return contentType;
     }
     throw new Error('URL must point directly to an image resource.');
