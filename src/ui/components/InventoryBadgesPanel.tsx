@@ -1,13 +1,18 @@
 import type { JSX } from 'react';
-import type { LootItem } from '@/store/progressionStore';
+import {
+  SCRIBE_CENTURY_120_BADGE_ID,
+  SCRIBE_CENTURY_120_BADGE_LABEL,
+} from '@/core/progression';
+import type { CollectedNoteEntry, LootItem } from '@/store/progressionStore';
 
 interface InventoryBadgesPanelProps {
-  view: 'inventory' | 'badges';
+  view: 'inventory' | 'badges' | 'journal';
   inventory: readonly LootItem[];
   badges: readonly string[];
+  collectedNotes: readonly CollectedNoteEntry[];
   xpTotal: number;
   rank: string;
-  onSwitchView: (view: 'inventory' | 'badges') => void;
+  onSwitchView: (view: 'inventory' | 'badges' | 'journal') => void;
   onClose: () => void;
 }
 
@@ -16,6 +21,38 @@ const RARITY_COLOR: Record<LootItem['rarity'], string> = {
   rare: 'var(--accent-cool)',
   epic: 'var(--accent)',
 };
+
+const BADGE_LABELS: Record<string, string> = {
+  [SCRIBE_CENTURY_120_BADGE_ID]: SCRIBE_CENTURY_120_BADGE_LABEL,
+};
+
+const BADGE_DESCRIPTIONS: Record<string, string> = {
+  CreatorPhaseComplete: 'Mapped 90%+ of rooms in the creator phase.',
+  ScribePhaseComplete: 'Cleared every room by completing scribe encounters.',
+  ArchaeologistPhaseComplete: 'Completed at least two full archaeology review passes.',
+  [SCRIBE_CENTURY_120_BADGE_ID]:
+    'Awarded for writing a note with at least 120 words in a valid encounter.',
+};
+
+const RARITY_HINT: Record<LootItem['rarity'], string> = {
+  common: 'Utility: baseline study support item.',
+  rare: 'Utility: stronger navigation or recall support.',
+  epic: 'Utility: highest-tier synthesis support item.',
+};
+
+function badgeLabel(badgeId: string): string {
+  return BADGE_LABELS[badgeId] ?? badgeId;
+}
+
+function badgeDescription(badgeId: string): string {
+  return BADGE_DESCRIPTIONS[badgeId] ?? 'Milestone badge earned during your dungeon journey.';
+}
+
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString();
+}
 
 /**
  * Modal that surfaces collected loot and earned milestone badges. Mirrors
@@ -26,6 +63,7 @@ export function InventoryBadgesPanel({
   view,
   inventory,
   badges,
+  collectedNotes,
   xpTotal,
   rank,
   onSwitchView,
@@ -37,7 +75,7 @@ export function InventoryBadgesPanel({
         className="modal inventory-badges-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label={view === 'inventory' ? 'Inventory' : 'Badges'}
+        aria-label={view === 'inventory' ? 'Inventory' : view === 'badges' ? 'Badges' : 'Collected notes'}
       >
         <div className="inventory-badges-header">
           <div className="inventory-badges-tabs" role="tablist">
@@ -62,6 +100,17 @@ export function InventoryBadgesPanel({
                 🏅
               </span>{' '}
               Badges ({badges.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'journal'}
+              onClick={() => onSwitchView('journal')}
+            >
+              <span className="ib-icon" aria-hidden="true">
+                📚
+              </span>{' '}
+              Collected Notes ({collectedNotes.length})
             </button>
           </div>
           <div className="inventory-badges-rank">
@@ -95,12 +144,15 @@ export function InventoryBadgesPanel({
                       {item.rarity}
                     </div>
                     <p className="inventory-card-desc">{item.description}</p>
+                    <p className="inventory-card-desc">{RARITY_HINT[item.rarity]}</p>
+                    <p className="room-help-text">Acquired: {formatTimestamp(item.acquiredAt)}</p>
                   </div>
                 </li>
               ))}
             </ul>
           )
-        ) : badges.length === 0 ? (
+        ) : view === 'badges' ? (
+          badges.length === 0 ? (
           <p className="room-help-text">
             No badges yet. Reach milestones (rooms cleared, ranks gained) to earn badges.
           </p>
@@ -111,7 +163,31 @@ export function InventoryBadgesPanel({
                 <span className="badge-icon" aria-hidden="true">
                   🏅
                 </span>
-                <span className="badge-label">{badge}</span>
+                <div>
+                  <div className="badge-label">{badgeLabel(badge)}</div>
+                  <p className="room-help-text">{badgeDescription(badge)}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )
+        ) : collectedNotes.length === 0 ? (
+          <p className="room-help-text">
+            No collected notes yet. In archaeologist phase, walk over artifact loot to add entries.
+          </p>
+        ) : (
+          <ul className="inventory-grid">
+            {collectedNotes.map((entry) => (
+              <li key={entry.noteId} className="inventory-card">
+                <div className="inventory-card-icon" aria-hidden="true">
+                  📓
+                </div>
+                <div>
+                  <div className="inventory-card-title">{entry.topic}</div>
+                  <div className="inventory-card-rarity">{entry.floorLabel}</div>
+                  <p className="inventory-card-desc">{entry.artifactPreview || 'Artifact note collected.'}</p>
+                  <p className="room-help-text">Collected: {formatTimestamp(entry.collectedAt)}</p>
+                </div>
               </li>
             ))}
           </ul>

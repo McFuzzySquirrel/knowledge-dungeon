@@ -1,5 +1,5 @@
 import {
-  NOTE_MINIMUM_WORD_COUNT,
+  NOTE_BADGE_WORD_COUNT,
   REQUIRED_NOTE_SECTIONS,
   type NoteValidationInput,
   type NoteValidationOutput,
@@ -290,11 +290,11 @@ export function evaluateNoteValidation(input: NoteValidationInput): NoteValidati
 
   const criteria: NoteValidationOutput['criteria'] = [
     {
-      code: 'VAL_WORD_COUNT_TOO_LOW',
-      passed: wordCount >= NOTE_MINIMUM_WORD_COUNT,
-      required: NOTE_MINIMUM_WORD_COUNT,
+      code: 'VAL_WORD_COUNT_BONUS_TARGET',
+      passed: wordCount >= NOTE_BADGE_WORD_COUNT,
+      required: NOTE_BADGE_WORD_COUNT,
       actual: wordCount,
-      message: `Note must contain at least ${NOTE_MINIMUM_WORD_COUNT} words.`,
+      message: `Bonus badge target: ${NOTE_BADGE_WORD_COUNT}+ words.`,
     },
     {
       code: 'VAL_REQUIRED_SECTION_MISSING',
@@ -312,8 +312,13 @@ export function evaluateNoteValidation(input: NoteValidationInput): NoteValidati
     },
   ];
 
+  const blockingCriteriaCodes = new Set<NoteValidationOutput['criteria'][number]['code']>([
+    'VAL_REQUIRED_SECTION_MISSING',
+    'VAL_MANUAL_CONFIRM_REQUIRED',
+  ]);
+
   const failedChecks = criteria
-    .filter((criterion) => !criterion.passed)
+    .filter((criterion) => blockingCriteriaCodes.has(criterion.code) && !criterion.passed)
     .map((criterion) => criterion.code);
   const finalPass = failedChecks.length === 0;
 

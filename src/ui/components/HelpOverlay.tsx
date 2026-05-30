@@ -23,9 +23,9 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             to bulk-add child topics and safely change a topic&rsquo;s parent.
           </li>
           <li>
-            In the <strong>Scribe</strong> phase, write at least 120 words with Summary, Key
-            Points, and Recall Question sections to defeat an encounter and earn XP, loot, and
-            an artifact.
+            In the <strong>Scribe</strong> phase, include Summary, Key Points, and Recall
+            Question sections to defeat an encounter and earn XP, loot, and an artifact. Notes
+            with 120+ words earn the <strong>Scribe Century</strong> badge.
           </li>
           <li>
             Once every room is cleared, the <strong>Archaeologist</strong> phase unlocks and the

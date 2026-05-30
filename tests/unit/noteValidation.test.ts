@@ -29,14 +29,16 @@ describe('evaluateNoteValidation', () => {
     expect(result.failedChecks).toHaveLength(0);
   });
 
-  it('fails when word count is below the minimum', () => {
+  it('does not fail when word count is below the bonus target', () => {
     const result = evaluateNoteValidation({
       noteText: 'Summary\nKey Points\nRecall Question\n?',
       manualConfirmed: true,
       roomTopic: 'Vector Spaces',
     });
-    expect(result.finalPass).toBe(false);
-    expect(result.failedChecks).toContain('VAL_WORD_COUNT_TOO_LOW');
+    expect(result.finalPass).toBe(true);
+    expect(result.failedChecks).not.toContain('VAL_WORD_COUNT_BONUS_TARGET');
+    const wordBonus = result.criteria.find((c) => c.code === 'VAL_WORD_COUNT_BONUS_TARGET');
+    expect(wordBonus?.passed).toBe(false);
   });
 
   it('fails when manual confirmation is missing', () => {

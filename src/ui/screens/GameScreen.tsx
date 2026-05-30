@@ -42,13 +42,16 @@ export function GameScreen(): JSX.Element {
   const rank = useProgressionStore((s) => s.rank);
   const inventory = useProgressionStore((s) => s.inventory);
   const badges = useProgressionStore((s) => s.badges);
+  const collectedNotes = useProgressionStore((s) => s.collectedNotes);
   const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<DungeonScene | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges'>(null);
+  const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges' | 'journal'>(
+    null,
+  );
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [sceneReady, setSceneReady] = useState(false);
 
@@ -118,6 +121,29 @@ export function GameScreen(): JSX.Element {
             openNoteEditor(roomId);
           }
         },
+        onArtifactCollected: (roomId) => {
+          const liveSnapshot = useSubjectStore.getState().snapshot;
+          if (!liveSnapshot) return;
+          const room = liveSnapshot.rooms[roomId];
+          if (!room?.artifactMarkdown) return;
+
+          const liveHierarchy = deriveGraphHierarchy(liveSnapshot.dungeon);
+          const floorId = liveHierarchy.floorIdByRoomId[roomId] ?? liveSnapshot.dungeon.rootRoomId;
+          const floorLabel = liveHierarchy.floorLabelByFloorId[floorId] ?? liveSnapshot.dungeon.subjectName;
+          const preview = room.artifactMarkdown
+            .replace(/^#\s+.*$/gm, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 180);
+
+          useProgressionStore.getState().collectArtifactNote({
+            dungeonId: liveSnapshot.dungeon.dungeonId,
+            roomId,
+            topic: room.topic,
+            floorLabel,
+            artifactPreview: preview,
+          });
+        },
         onFloorTransition: ({ fromRoomId, direction }) => {
           const liveSnapshot = useSubjectStore.getState().snapshot;
           if (!liveSnapshot) return;
@@ -166,11 +192,13 @@ export function GameScreen(): JSX.Element {
     if (!sceneReady || !snapshot) return;
     const scene = sceneRef.current;
     if (!scene) return;
+    const collectedRoomIds = new Set(collectedNotes.map((entry) => entry.roomId));
     const artifactRoomIds = Object.values(snapshot.rooms)
       .filter((room) => room.validationState.finalPass)
+      .filter((room) => !collectedRoomIds.has(room.roomId))
       .map((room) => room.roomId);
     scene.setArtifactRooms(artifactRoomIds, phase === 'archaeologist');
-  }, [sceneReady, snapshot, phase]);
+  }, [sceneReady, snapshot, phase, collectedNotes]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -320,6 +348,7 @@ export function GameScreen(): JSX.Element {
           view={inventoryView}
           inventory={inventory}
           badges={badges}
+          collectedNotes={collectedNotes}
           xpTotal={xpTotal}
           rank={rank}
           onSwitchView={(v) => setInventoryView(v)}

@@ -10,6 +10,9 @@ export const PHASE_BADGE_IDS = [
   'ArchaeologistPhaseComplete',
 ] as const;
 
+export const SCRIBE_CENTURY_120_BADGE_ID = 'ScribeCentury120';
+export const SCRIBE_CENTURY_120_BADGE_LABEL = 'Scribe Century (120+ Words)';
+
 export const RANK_TIERS = [
   { rank: 'Novice', minXp: 0, maxXp: 299 },
   { rank: 'Scholar', minXp: 300, maxXp: 799 },
