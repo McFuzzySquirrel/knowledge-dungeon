@@ -86,7 +86,7 @@ async function buildSubjectSnapshotFromFolder(folderPath: string): Promise<unkno
     throw new Error('Invalid subject folder format');
   }
 
-  const dungeon = parsed.dungeon as Record<string, unknown>;
+  const dungeon = parsed.dungeon;
   const rooms = dungeon.rooms as Array<Record<string, unknown>>;
   const importedRooms: Record<string, unknown> = {};
 
