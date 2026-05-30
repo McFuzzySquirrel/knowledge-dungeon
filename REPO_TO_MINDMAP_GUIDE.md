@@ -71,6 +71,7 @@ npm run interactive
 - **Customizable Topics**: Define what matters for your repo
 - **Edge Types**: Subtopic, prerequisite, depends_on, related, analogy
 - **Validation-Ready**: Generated notes pass Knowledge Dungeon rubric
+- **Phase-ready profiles**: Generate Creator, Scribe, or Archaeologist entry-ready subjects
 
 ### Easy Customization
 - Simple YAML/JSON config format
@@ -125,7 +126,8 @@ For each room:
 ├── README.md
 └── rooms/
     └── room-{id}/
-        └── notes.txt
+  ├── notes.txt
+  └── artifact.md   # present for archaeologist-ready output
 ```
 
 ## Installation
@@ -159,6 +161,8 @@ Options:
   --repo, -r <path>        Repository path or GitHub URL (required)
   --output, -o <path>      Output directory (default: ./{repo-name}-mindmap)
   --depth <level>          Content depth: light, balanced, deep (default: balanced)
+  --entry-phase <phase>    Start profile: creator, scribe, archaeologist (default: scribe)
+  --review-ready           Shortcut for --entry-phase archaeologist
   --lang <language>        Repository language: js, python, go, rust, java (auto-detect)
   --config <file>          Custom config file (YAML/JSON)
   --skip-analysis          Skip auto-analysis, use manual config only
@@ -175,12 +179,29 @@ mindmap generate --repo https://github.com/facebook/react
 # Generate for local repo with deep analysis
 mindmap generate --repo ./my-project --depth deep --output ~/knowledge-dungeons/my-project
 
+# Generate review-ready output so users can jump directly into Archaeologist
+mindmap generate --repo ./my-project --entry-phase archaeologist
+
 # Use custom config
 mindmap generate --repo ./codebase --config my-topics.yaml
 
 # Generate and show what would be created
 mindmap generate --repo ./project --dry-run --verbose
 ```
+
+### Phase-ready output modes
+
+- `creator`: room statuses stay `Created` for map-authoring workflows.
+- `scribe`: default study flow with encounter-ready notes.
+- `archaeologist`: review-ready output with collected artifacts so users can start in Archaeologist immediately.
+
+For archaeologist-ready output, generate with:
+
+- `dungeon.phaseState`: `ArchaeologistUnlocked` or `ArchaeologistActive`
+- room summary statuses: `ArtifactCollected`
+- room metadata with `validationState.finalPass: true`
+- populated `artifactMarkdown` and matching `rooms/{room-id}/artifact.md`
+- `reviewPassCount` initialized (typically `0`)
 
 ### Configuration
 

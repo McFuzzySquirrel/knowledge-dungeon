@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 
@@ -67,6 +67,7 @@ describe('InventoryBadgesPanel', () => {
             topic: 'Vector Spaces',
             floorLabel: 'Linear Algebra',
             artifactPreview: 'A concise artifact summary.',
+            artifactMarkdown: '## Key ideas\nA full artifact note.',
             collectedAt: '2026-01-01T00:00:00.000Z',
           },
         ]}
@@ -78,5 +79,35 @@ describe('InventoryBadgesPanel', () => {
     );
     expect(screen.getByText('Vector Spaces')).toBeInTheDocument();
     expect(screen.getByText('Linear Algebra')).toBeInTheDocument();
+  });
+
+  it('opens full collected note content from the diary list', () => {
+    render(
+      <InventoryBadgesPanel
+        view="journal"
+        inventory={[]}
+        badges={[]}
+        collectedNotes={[
+          {
+            noteId: 'dungeon:room-1',
+            dungeonId: 'dungeon',
+            roomId: 'room-1',
+            topic: 'Vector Spaces',
+            floorLabel: 'Linear Algebra',
+            artifactPreview: 'A concise artifact summary.',
+            artifactMarkdown: '## Key ideas\nA full artifact note for recall.',
+            collectedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ]}
+        xpTotal={50}
+        rank="Apprentice"
+        onSwitchView={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Vector Spaces' }));
+    expect(screen.getByText('A full artifact note for recall.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to journal' })).toBeInTheDocument();
   });
 });

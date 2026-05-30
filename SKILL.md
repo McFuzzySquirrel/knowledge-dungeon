@@ -9,8 +9,9 @@ Invoke this skill in your Copilot session and it will:
 1. **Analyze your repository** — Explore the codebase structure, identify core modules, technologies, and patterns
 2. **Generate a mindmap structure** — Create 30-40 interconnected rooms organized by topic
 3. **Write comprehensive notes** — Author detailed, validation-ready notes for each topic
-4. **Create the subject folder** — Output a complete Knowledge Dungeon subject ready to import
-5. **Provide import instructions** — Show you exactly how to load it into Knowledge Dungeon
+4. **Apply a phase-ready profile** — Generate content for Creator, Scribe, or Archaeologist entry
+5. **Create the subject folder** — Output a complete Knowledge Dungeon subject ready to import
+6. **Provide import instructions** — Show you exactly how to load it into Knowledge Dungeon
 
 ## How to Use
 
@@ -34,6 +35,8 @@ Or provide context about what you want:
 - `--depth` (optional) — Content depth: `light`, `balanced`, or `deep` (default: `balanced`)
 - `--name` (optional) — Project name for the mindmap (auto-detected from repo if not provided)
 - `--output` (optional) — Where to write the subject folder (default: `maps/{project-name}-mindmap`)
+- `--entry-phase` (optional) — Generated start profile: `creator`, `scribe`, `archaeologist` (default: `scribe`)
+- `--review-ready` (optional) — Shortcut for `--entry-phase archaeologist`
 
 ## What You Get
 
@@ -45,11 +48,32 @@ maps/{project-name}-mindmap/
 ├── README.md             # Import instructions
 └── rooms/
     ├── room-architecture-1/
-    │   └── notes.txt
+    │   ├── notes.txt
+    │   └── artifact.md   # present for archaeologist-ready output
     ├── room-tech-stack-1/
-    │   └── notes.txt
+    │   ├── notes.txt
+    │   └── artifact.md   # present for archaeologist-ready output
     └── ... (30-40 rooms total)
 ```
+
+## Phase-Ready Generation
+
+Use `--entry-phase` to control how playable the generated subject is on first load.
+
+- `creator` — Structure-focused seed for map editing. Rooms are `Created` and ready for authoring.
+- `scribe` — Default. Rooms include complete notes that are ready to study and validate in encounters.
+- `archaeologist` — Review-ready seed. Rooms include finalized artifacts and progression metadata so users can jump straight into Archaeologist mode.
+
+For archaeologist-ready output, generation should set all of the following:
+
+- `dungeon.phaseState` to `ArchaeologistUnlocked` or `ArchaeologistActive`
+- each room summary status to `ArtifactCollected`
+- each room metadata to include:
+    - `validationState.finalPass: true`
+    - a non-empty `artifactMarkdown` (and mirrored `rooms/{room-id}/artifact.md`)
+    - `reviewPassCount` initialized (usually `0`)
+
+This keeps generated subjects aligned with current Knowledge Dungeon behavior while enabling immediate review runs.
 
 ## Topics Covered
 
@@ -85,6 +109,8 @@ Once the skill generates the subject folder:
 - **Scribe Phase** — Walk through each topic, refine the notes, defeat rooms
 - **Archaeologist Phase** — Review your learning and build retention
 
+If generated with `--entry-phase archaeologist` (or `--review-ready`), you can immediately choose **Archaeologist** from the phase picker and start reviewing artifacts.
+
 ## Example Session
 
 ```
@@ -98,6 +124,7 @@ Copilot:
 ✓ Generating 36 rooms across 6 topic areas...
 ✓ Writing 36 detailed notes...
 ✓ Creating edges and relationships (48 total)...
+✓ Applying phase profile: archaeologist-ready
 
 ✅ Subject created: maps/my-project-mindmap/
 
@@ -115,6 +142,12 @@ Copilot:
 - **`--depth light`** — Overview-level notes, fewer details, faster generation
 - **`--depth balanced`** — Mix of overview and detail (recommended)
 - **`--depth deep`** — Detailed technical notes with code examples
+
+### Choosing a Start Profile
+
+- **`--entry-phase creator`** — Best for teams who want to author/refine the map structure first
+- **`--entry-phase scribe`** — Best for normal study progression from encounters to review
+- **`--entry-phase archaeologist`** — Best for instant recall/review sessions after generation
 
 ### Using Your Own Repository
 
@@ -145,6 +178,9 @@ The skill generates notes that:
 
 ### Can I regenerate if I want different depth?
 Yes! Just run the skill again with `--depth deep` or `--depth light` and it will overwrite.
+
+### Can I start directly in Archaeologist after generation?
+Yes. Generate with `--entry-phase archaeologist` (or `--review-ready`) and then select Archaeologist in the welcome phase picker.
 
 ### Can I use this on any language?
 Yes! The skill auto-detects and adapts to JavaScript, Python, Go, Rust, Java, C#, and more.

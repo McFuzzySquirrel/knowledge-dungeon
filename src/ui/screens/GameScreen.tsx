@@ -142,6 +142,7 @@ export function GameScreen(): JSX.Element {
             topic: room.topic,
             floorLabel,
             artifactPreview: preview,
+            artifactMarkdown: room.artifactMarkdown,
           });
         },
         onFloorTransition: ({ fromRoomId, direction }) => {
@@ -293,8 +294,6 @@ export function GameScreen(): JSX.Element {
         roomCount={snapshot.dungeon.rooms.length}
         xpTotal={xpTotal}
         rank={rank}
-        inventoryCount={inventory.length}
-        badgeCount={badges.length}
         phase={phase}
         currentFloorLabel={currentFloorLabel}
         teleportRemainingMs={teleportRemainingMs}
@@ -304,8 +303,6 @@ export function GameScreen(): JSX.Element {
         onOpenMap={openMapView}
         onTeleport={handleTeleport}
         onHome={handleHome}
-        onOpenInventory={() => setInventoryView('inventory')}
-        onOpenBadges={() => setInventoryView('badges')}
       />
 
       <div className="game-canvas">
@@ -324,6 +321,12 @@ export function GameScreen(): JSX.Element {
         focusedRoom={focusedRoom}
         onInteract={() => focusedRoom && openNoteEditor(focusedRoom.roomId)}
         onTravelToRoom={handleTravelToRoom}
+        inventoryCount={inventory.length}
+        badgeCount={badges.length}
+        journalCount={collectedNotes.length}
+        onOpenInventory={() => setInventoryView('inventory')}
+        onOpenBadges={() => setInventoryView('badges')}
+        onOpenJournal={() => setInventoryView('journal')}
       />
 
       <TouchControls onInteract={() => sceneRef.current?.triggerInteract()} />

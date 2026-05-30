@@ -32,6 +32,7 @@ The home screen is where you:
 Once a subject is loaded, the in-dungeon view keeps the study loop visible in one place:
 
 - HUD for phase, progression, current floor, map, home, and help
+- room-panel **Collections** shortcuts for inventory, badges, and diary
 - HUD teleport spell for floor/room jumps with cooldown tracking
 - Phaser dungeon canvas for movement and room navigation
 - minimap and room panel for topic context, breadcrumbs, portals, and creator edits
@@ -47,6 +48,8 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
 - during the **Archaeologist** phase, every room that has produced an
   artifact is marked with a loot-chest icon on the dungeon canvas so
   cleared topics are easy to revisit
+- diary entries for collected notes are clickable and open the full
+  artifact note, so review runs can use the journal as a recall index
 - the **Graphics style** toggle (Welcome screen header and Help overlay)
   switches between the mind-map view and an RPG dungeon view at any
   time — the dungeon, full map, and minimap all re-skin together while

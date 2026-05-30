@@ -106,6 +106,58 @@ textarea {
   gap: 12px;
 }
 
+.welcome-selection-summary {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(127, 178, 255, 0.1), rgba(242, 200, 121, 0.08));
+}
+
+.welcome-selection-summary h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.welcome-ready-indicator {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.welcome-ready-indicator--ready {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.welcome-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.welcome-selection-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.55);
+}
+
+.welcome-selection-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.welcome-selection-card strong {
+  color: var(--accent);
+}
+
 .phase-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -333,6 +385,48 @@ textarea {
   line-height: 1.4;
 }
 
+.journal-note-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-cool);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.journal-note-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.journal-note-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 260px;
+}
+
+.journal-note-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.journal-note-view-header h3 {
+  margin: 0;
+}
+
+.journal-note-markdown {
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.6);
+  padding: 12px;
+  max-height: 48vh;
+}
+
 .badge-grid {
   list-style: none;
   margin: 0;
@@ -435,6 +529,20 @@ textarea {
 
 .room-meta-line {
   margin: 8px 0 0;
+}
+
+.room-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.room-quick-action {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: rgba(127, 178, 255, 0.08);
+  border-color: rgba(127, 178, 255, 0.35);
 }
 
 .room-section {

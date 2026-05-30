@@ -22,6 +22,12 @@ interface RoomPanelProps {
   focusedRoom: RoomMetadata | null;
   onInteract: () => void;
   onTravelToRoom: (roomId: string) => void;
+  inventoryCount: number;
+  badgeCount: number;
+  journalCount: number;
+  onOpenInventory: () => void;
+  onOpenBadges: () => void;
+  onOpenJournal: () => void;
 }
 
 export function RoomPanel({
@@ -29,6 +35,12 @@ export function RoomPanel({
   focusedRoom,
   onInteract,
   onTravelToRoom,
+  inventoryCount,
+  badgeCount,
+  journalCount,
+  onOpenInventory,
+  onOpenBadges,
+  onOpenJournal,
 }: RoomPanelProps): JSX.Element {
   const [tab, setTab] = useState<RoomTab>('topic');
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
@@ -325,6 +337,17 @@ export function RoomPanel({
       <div className="room-tab-body">
         {tab === 'topic' ? (
           <>
+            <div className="room-quick-actions" aria-label="Collections">
+              <button type="button" className="room-quick-action" onClick={onOpenInventory}>
+                🎒 Inventory ({inventoryCount})
+              </button>
+              <button type="button" className="room-quick-action" onClick={onOpenBadges}>
+                🏅 Badges ({badgeCount})
+              </button>
+              <button type="button" className="room-quick-action" onClick={onOpenJournal}>
+                📚 Diary ({journalCount})
+              </button>
+            </div>
             <h2>{focusedRoom.topic}</h2>
             <span className="room-status-chip">{focusedRoom.state}</span>
             <p className="room-meta-line">Room id: {focusedRoom.roomId}</p>

@@ -1,9 +1,10 @@
-import type { JSX } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import {
   SCRIBE_CENTURY_120_BADGE_ID,
   SCRIBE_CENTURY_120_BADGE_LABEL,
 } from '@/core/progression';
 import type { CollectedNoteEntry, LootItem } from '@/store/progressionStore';
+import { Markdown } from '@/ui/utils/markdown';
 
 interface InventoryBadgesPanelProps {
   view: 'inventory' | 'badges' | 'journal';
@@ -69,13 +70,28 @@ export function InventoryBadgesPanel({
   onSwitchView,
   onClose,
 }: InventoryBadgesPanelProps): JSX.Element {
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const selectedNote = useMemo(
+    () => collectedNotes.find((entry) => entry.noteId === selectedNoteId) ?? null,
+    [collectedNotes, selectedNoteId],
+  );
+
+  const dialogLabel =
+    selectedNote !== null
+      ? `Collected note: ${selectedNote.topic}`
+      : view === 'inventory'
+        ? 'Inventory'
+        : view === 'badges'
+          ? 'Badges'
+          : 'Collected notes';
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal inventory-badges-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label={view === 'inventory' ? 'Inventory' : view === 'badges' ? 'Badges' : 'Collected notes'}
+        aria-label={dialogLabel}
       >
         <div className="inventory-badges-header">
           <div className="inventory-badges-tabs" role="tablist">
@@ -83,7 +99,10 @@ export function InventoryBadgesPanel({
               type="button"
               role="tab"
               aria-selected={view === 'inventory'}
-              onClick={() => onSwitchView('inventory')}
+              onClick={() => {
+                setSelectedNoteId(null);
+                onSwitchView('inventory');
+              }}
             >
               <span className="ib-icon" aria-hidden="true">
                 🎒
@@ -94,7 +113,10 @@ export function InventoryBadgesPanel({
               type="button"
               role="tab"
               aria-selected={view === 'badges'}
-              onClick={() => onSwitchView('badges')}
+              onClick={() => {
+                setSelectedNoteId(null);
+                onSwitchView('badges');
+              }}
             >
               <span className="ib-icon" aria-hidden="true">
                 🏅
@@ -105,7 +127,10 @@ export function InventoryBadgesPanel({
               type="button"
               role="tab"
               aria-selected={view === 'journal'}
-              onClick={() => onSwitchView('journal')}
+              onClick={() => {
+                setSelectedNoteId(null);
+                onSwitchView('journal');
+              }}
             >
               <span className="ib-icon" aria-hidden="true">
                 📚
@@ -122,7 +147,24 @@ export function InventoryBadgesPanel({
           </button>
         </div>
 
-        {view === 'inventory' ? (
+        {selectedNote ? (
+          <section className="journal-note-view" aria-label="Collected note details">
+            <div className="journal-note-view-header">
+              <div>
+                <h3>{selectedNote.topic}</h3>
+                <p className="room-help-text">
+                  {selectedNote.floorLabel} · Collected {formatTimestamp(selectedNote.collectedAt)}
+                </p>
+              </div>
+              <button type="button" className="ghost" onClick={() => setSelectedNoteId(null)}>
+                Back to journal
+              </button>
+            </div>
+            <div className="journal-note-markdown">
+              <Markdown source={selectedNote.artifactMarkdown} />
+            </div>
+          </section>
+        ) : view === 'inventory' ? (
           inventory.length === 0 ? (
             <p className="room-help-text">
               No loot yet. Defeat encounters during the Scribe phase to earn artifacts.
@@ -183,7 +225,13 @@ export function InventoryBadgesPanel({
                   📓
                 </div>
                 <div>
-                  <div className="inventory-card-title">{entry.topic}</div>
+                  <button
+                    type="button"
+                    className="journal-note-link"
+                    onClick={() => setSelectedNoteId(entry.noteId)}
+                  >
+                    {entry.topic}
+                  </button>
                   <div className="inventory-card-rarity">{entry.floorLabel}</div>
                   <p className="inventory-card-desc">{entry.artifactPreview || 'Artifact note collected.'}</p>
                   <p className="room-help-text">Collected: {formatTimestamp(entry.collectedAt)}</p>

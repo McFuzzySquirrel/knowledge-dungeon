@@ -25,6 +25,7 @@ export interface CollectedNoteEntry {
   topic: string;
   floorLabel: string;
   artifactPreview: string;
+  artifactMarkdown: string;
   collectedAt: string;
 }
 
@@ -52,12 +53,33 @@ function loadPersisted(): PersistedProgression {
     const raw = localStorage.getItem(STORAGE_KEYS.progression);
     if (!raw) return DEFAULT_PROGRESSION;
     const parsed = JSON.parse(raw) as PersistedProgression;
+    const collectedNotes = Array.isArray(parsed.collectedNotes)
+      ? parsed.collectedNotes
+          .filter((entry): entry is Partial<CollectedNoteEntry> => Boolean(entry))
+          .map((entry) => ({
+            noteId: typeof entry.noteId === 'string' ? entry.noteId : '',
+            dungeonId: typeof entry.dungeonId === 'string' ? entry.dungeonId : '',
+            roomId: typeof entry.roomId === 'string' ? entry.roomId : '',
+            topic: typeof entry.topic === 'string' ? entry.topic : 'Collected note',
+            floorLabel: typeof entry.floorLabel === 'string' ? entry.floorLabel : 'Unknown floor',
+            artifactPreview: typeof entry.artifactPreview === 'string' ? entry.artifactPreview : '',
+            artifactMarkdown:
+              typeof entry.artifactMarkdown === 'string'
+                ? entry.artifactMarkdown
+                : typeof entry.artifactPreview === 'string'
+                  ? entry.artifactPreview
+                  : 'Artifact note collected.',
+            collectedAt: typeof entry.collectedAt === 'string' ? entry.collectedAt : new Date(0).toISOString(),
+          }))
+          .filter((entry) => entry.noteId.length > 0)
+      : [];
+
     return {
       xpTotal: typeof parsed.xpTotal === 'number' ? parsed.xpTotal : 0,
       rank: assignRankTier(parsed.xpTotal ?? 0),
       badges: Array.isArray(parsed.badges) ? parsed.badges : [],
       inventory: Array.isArray(parsed.inventory) ? parsed.inventory : [],
-      collectedNotes: Array.isArray(parsed.collectedNotes) ? parsed.collectedNotes : [],
+      collectedNotes,
       streakCount: typeof parsed.streakCount === 'number' ? parsed.streakCount : 0,
     };
   } catch {

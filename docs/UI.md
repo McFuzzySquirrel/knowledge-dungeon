@@ -26,10 +26,7 @@ The game shell combines several persistent UI regions, all rendered as
 gets the maximum amount of screen space:
 
 - **Top HUD (floating):** subject, room count, XP/rank, active phase, plus
-  **Inventory** (🎒), **Badges** (🏅), **Map**, **Teleport**, **Home**, and
-  **Help** buttons. Inventory and Badges open a tabbed modal that lists
-  collected loot and earned milestone badges (mirroring the icon-driven
-  rail used by the Repo Dungeon HUD). `Map` opens the full
+  **Map**, **Teleport**, **Home**, and **Help** buttons. `Map` opens the full
   mindmap view, `Teleport` opens a floor/room jump flow with a cooldown,
   `Home` returns to subject selection, `?` opens the help overlay.
 - **Center gameplay canvas:** Phaser dungeon movement and interactions. The
@@ -47,6 +44,9 @@ gets the maximum amount of screen space:
   current room and any rooms **directly connected** to it are highlighted
   in the accent color (see [§5 Minimap child highlighting](#5-minimap-child-highlighting)).
 - **Right room panel (floating):** topic metadata, breadcrumbs, and travel
+  plus a quick-access **Collections** row for **Inventory**, **Badges**, and
+  **Diary** so progression actions stay reachable without crowding the HUD.
+  The room panel also includes topic metadata, breadcrumbs, and travel
   shortcuts split into two sections — **Connected topics on this floor**
   (siblings/neighbors on the same floor) and **Travel to related floors**
   (a `← Back to <parent>` shortcut plus jumps to topics that live on other
@@ -207,16 +207,19 @@ artifacts and self-check prompts are ready to revisit; they disappear
 automatically when you switch back to the Create or Scribe phase so they
 don't clutter authoring/exploration.
 
-## 10) Inventory & Badges panel
+## 10) Inventory, badges, and diary panel
 
-![Inventory and badges modal opened from the HUD](./assets/ui/inventory-badges.png)
+![Inventory, badges, and diary modal opened from the room panel](./assets/ui/inventory-badges.png)
 
-The **🎒 Inventory** and **🏅 Badges** HUD buttons open a tabbed modal
+The room panel **Collections** buttons (**🎒 Inventory**, **🏅 Badges**,
+**📚 Diary**) open a shared tabbed modal
 that surfaces the player's progression rewards:
 
 - **Inventory** lists collected loot artifacts, each rendered as a card
   showing its name, rarity (common/rare/epic, color-coded), and flavour
   description.
 - **Badges** lists earned milestone badges as compact pill chips.
+- **Diary / Collected Notes** lists archaeologist pickups and lets you click
+  an entry to open its full collected note for recall.
 - The header also shows the player's current XP total and rank tier so
   progression context is always one click away.

@@ -59,6 +59,10 @@ export function WelcomeScreen(): JSX.Element {
   const [adminBusy, setAdminBusy] = useState(false);
   const env = getElectronEnvironmentLabel();
   const electronAvailable = isElectronAvailable();
+  const selectedPhaseLabel = PHASES.find((phaseDef) => phaseDef.id === phase)?.title ?? phase;
+  const selectedClassLabel =
+    PLAYER_CLASSES.find((playerClass) => playerClass.id === selectedClass)?.name ?? 'Not selected yet';
+  const isReadyToEnter = Boolean(selectedClass);
 
   async function fetchExistingSubjects() {
     try {
@@ -174,6 +178,27 @@ export function WelcomeScreen(): JSX.Element {
           <GraphicsModeToggle label="Graphics" compact />
         </div>
       </header>
+
+      <section className="welcome-selection-summary" aria-label="Current selections">
+        <h2>Current selections</h2>
+        <p
+          className={isReadyToEnter ? 'welcome-ready-indicator welcome-ready-indicator--ready' : 'welcome-ready-indicator'}
+          role="status"
+          aria-live="polite"
+        >
+          {isReadyToEnter ? 'Ready to enter dungeon' : 'Select an archetype to enter dungeon'}
+        </p>
+        <div className="welcome-selection-grid">
+          <div className="welcome-selection-card">
+            <span className="welcome-selection-label">Phase</span>
+            <strong>{selectedPhaseLabel}</strong>
+          </div>
+          <div className="welcome-selection-card">
+            <span className="welcome-selection-label">Archetype</span>
+            <strong>{selectedClassLabel}</strong>
+          </div>
+        </div>
+      </section>
 
       <section>
         <h2>1. Choose a phase</h2>
