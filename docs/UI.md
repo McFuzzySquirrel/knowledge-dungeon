@@ -8,7 +8,7 @@ This document captures key UI surfaces in Knowledge Dungeon and explains what ea
 
 Use this screen to:
 
-- Choose the current phase (Create, Scribe, Review), which controls the active gameplay loop.
+- Choose the current phase (Create, Scribe, Review/Archaeologist), which controls the active gameplay loop.
 - Pick a study archetype (Scholar, Cartographer, Archivist), which applies your class/perk identity.
 - Create a new subject from a root topic.
 - Browse previously created subjects by **subject name** instead of raw id, with room counts visible from home.
@@ -172,8 +172,11 @@ the in-game floor in sync automatically.
 This modal appears when opening a room encounter. It provides:
 
 - A structured notes input area with an **Edit / Preview** toggle.
+- A **Save draft** path when notes are not yet at final pass quality, so
+  partial progress is preserved while learners iterate.
 - In Scribe phase, image cards in the Notes tab include an **Insert in note**
-  action so learners can place images without manually writing token syntax.
+  action so learners can place images without manually writing token syntax;
+  Archaeologist mode remains view-only for images.
 - Lightweight Markdown support — `**bold**`, `*italic*`, `` `code` ``,
   `-` bullet lists, and `[label](https://example.com)` links — rendered
   live in the Preview tab and persisted on submit.

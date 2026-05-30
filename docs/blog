@@ -1,0 +1,113 @@
+---
+layout: post
+title: "Knowledge Dungeon: Turning Study Notes into an Explorable World"
+date:   2026-05-30 18:30:00 +0200
+categories: [personal, project]
+tags: [knowledge dungeon, educational gaming, procedural generation, knowledge mapping, repo-dungeon]
+---
+
+> *What if notes were not pages to read, but a world to explore?*
+
+I have been building a project called **Knowledge Dungeon**, and it has evolved far beyond a simple study tool.
+
+It started with a question: what if your notes, study material, and knowledge base could become a game world instead of a collection of documents?
+
+The result is a procedurally generated 2D dungeon crawler where the dungeon itself is built from learning content. Notes become explorable areas, concepts become locations, and studying becomes exploration instead of passive reading.
+
+<!--more-->
+
+## From Repo-Dungeon Idea to Playable Learning World
+
+<figure>
+	<img src="assets/blog/story-01-landing.png" alt="Knowledge Dungeon landing screen showing phase and archetype selection" width="720" />
+	<figcaption>Storyboard 1: Starting at the command center, choosing phase, archetype, and subject.</figcaption>
+</figure>
+
+The earliest concept was "repo-dungeon": turning structured information into navigable space. At first, this was mostly an experiment in representation. Could content relationships become map topology? Could navigation through a world stand in for navigation through ideas?
+
+As the prototype evolved, it became a playable system with game loops, progression patterns, and interaction mechanics that made learning feel active.
+
+<figure>
+	<img src="assets/blog/story-02-phase-selected.png" alt="Transition into the dungeon after selecting Scribe and Scholar" width="720" />
+	<figcaption>Storyboard 2: Entering the generated dungeon with a selected playstyle.</figcaption>
+</figure>
+
+<figure>
+	<img src="assets/blog/story-03-dungeon-overview.png" alt="In-dungeon overview with minimap and room information panel" width="720" />
+	<figcaption>Storyboard 3: The explorable world view, minimap, and room topology in action.</figcaption>
+</figure>
+
+## Built on the Repo-Dungeon Foundation
+
+Knowledge Dungeon did not start from zero. It was built on top of my earlier experiment, [repo-dungeon](https://github.com/McFuzzySquirrel/repo-dungeon), where I explored how structured information could be transformed into explorable spatial layouts.
+
+That experiment provided the foundation for several core ideas that now power this project:
+
+- Information first, visuals second: generation starts from relationships in the source material, then maps those relationships into navigable world structures.
+- Exploration as comprehension: movement and discovery are treated as part of understanding, not just presentation.
+- Spatialized knowledge: related concepts are placed in ways that help reveal clusters, boundaries, and paths through a topic.
+- Reusable generation pipeline: parsing, relationship modeling, and layout logic from the original experiment were adapted and extended for educational content.
+
+In short, repo-dungeon was the proof of concept. Knowledge Dungeon is the expanded version where the same principle is applied to learning experiences, gameplay systems, and deeper content interaction.
+
+## What Is Built So Far
+
+Here are some of the core features currently in place:
+
+- Procedurally generated dungeon layouts driven by knowledge content.
+- A playable RPG-style exploration experience built with web technologies and packaged for desktop.
+- Draggable and interactive minimap systems for navigating generated worlds.
+- Biomes and themed areas representing different domains of knowledge.
+- Artifact, scroll, signpost, and discovery mechanics that turn information into game objects.
+- Conversational interaction patterns that let players engage with content in a more natural way.
+- Support for transforming static study notes into an experience closer to an adventure game.
+- An architecture designed to eventually run on low-cost hardware for education-focused use cases.
+
+## Areas This Brings Together
+
+What makes Knowledge Dungeon exciting for me is how many long-running interests converge in one project:
+
+- Conversational learning.
+- Knowledge graphs and content relationships.
+- Procedural generation.
+- Local and affordable computing.
+- Educational gaming.
+- Open-source experimentation.
+
+Instead of asking learners to adapt to traditional study workflows, the goal is to adapt learning to something naturally engaging: exploration, discovery, progression, and curiosity.
+
+## A Practical Spinout: Repo Mapping for Developers
+
+One of the most useful outcomes was not part of the game itself.
+
+While building Knowledge Dungeon, I created reusable repo-dungeon tooling that can analyze a software repository and generate a navigable mind map of its structure, relationships, and architecture. Instead of reading hundreds of files line by line to understand an unfamiliar codebase, developers can quickly visualize how parts connect.
+
+This became a practical second application of the same core idea:
+
+- Helping developers understand their own repositories.
+- Accelerating onboarding into existing projects.
+- Exploring unfamiliar open-source repositories.
+- Discovering architectural patterns and dependencies.
+- Creating visual maps of complex codebases.
+
+The underlying principle is the same in both contexts: transform information into something that can be explored instead of simply consumed.
+
+<figure>
+	<img src="assets/blog/story-04-notes-images.png" alt="Notes panel with writing feedback and image controls" width="720" />
+	<figcaption>Storyboard 4: Structured note capture, validation cues, and room image support.</figcaption>
+</figure>
+
+<figure>
+	<img src="assets/blog/story-05-full-map.png" alt="Full map modal showing connected concept rooms" width="720" />
+	<figcaption>Storyboard 5: A full-map view of connected concepts, using the repo-mindmap-style layout.</figcaption>
+</figure>
+
+## Why This Matters
+
+Whether the source material is study notes, a textbook, or a software repository, the objective is consistent: make understanding feel like exploration and discovery.
+
+Knowledge Dungeon is still evolving, but it already demonstrates a practical intersection of game development, knowledge mapping, and education. More importantly, it shows that study material can become a world you walk through, not just a document you read.
+
+---
+
+**Project:** [Knowledge Dungeon on GitHub](https://github.com/McFuzzySquirrel/knowledge-dungeon)
