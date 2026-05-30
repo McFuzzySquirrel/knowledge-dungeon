@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type Phaser from 'phaser';
 import { computeFloorVisibility, deriveGraphHierarchy } from '@/core/graph';
+import { evaluatePhaseBadgeUnlocks } from '@/core/progression';
+import { isReviewableRoom, summarizeReviewAnalytics } from '@/core/review';
 import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -112,7 +114,50 @@ export function GameScreen(): JSX.Element {
         onRoomEntered: (roomId) => setFocusedRoomId(roomId),
         onInteract: (roomId) => {
           if (phase === 'archaeologist') {
+            const liveSnapshot = useSubjectStore.getState().snapshot;
             void recordReviewPass(roomId);
+
+            if (liveSnapshot) {
+              const room = liveSnapshot.rooms[roomId];
+              if (room && room.validationState.finalPass) {
+                const roomsWithIncrement = {
+                  ...liveSnapshot.rooms,
+                  [roomId]: {
+                    ...room,
+                    reviewPassCount: room.reviewPassCount + 1,
+                  },
+                };
+                const reviewableRoomIds = liveSnapshot.dungeon.rooms
+                  .map((summary) => summary.roomId)
+                  .filter((candidateRoomId) => {
+                    const candidate = roomsWithIncrement[candidateRoomId];
+                    return candidate ? isReviewableRoom(candidate) : false;
+                  });
+                const analytics = summarizeReviewAnalytics({
+                  rooms: roomsWithIncrement,
+                  reviewableRoomIds,
+                  currentReviewStreak: 0,
+                  longestReviewStreak: 0,
+                });
+
+                const unlockedBadges = evaluatePhaseBadgeUnlocks(
+                  {
+                    totalRooms: liveSnapshot.dungeon.rooms.length,
+                    creatorMappedRooms: liveSnapshot.dungeon.rooms.length,
+                    scribeClearedRooms: reviewableRoomIds.length,
+                    archaeologistFullReviewPasses: analytics.fullReviewPasses,
+                  },
+                  useProgressionStore.getState().badges,
+                );
+                if (unlockedBadges.length > 0) {
+                  const progression = useProgressionStore.getState();
+                  unlockedBadges.forEach((badgeId) => {
+                    progression.awardBadge(badgeId);
+                  });
+                }
+              }
+            }
+
             setFocusedRoomId(roomId);
           } else {
             openNoteEditor(roomId);
@@ -230,16 +275,18 @@ export function GameScreen(): JSX.Element {
       setSnapshot(null);
   }
 
+  const noteMarkdownByRoomId = useMemo(() => {
+    if (!snapshot) return {};
+    return Object.fromEntries(
+      Object.values(snapshot.rooms).map((room) => [room.roomId, room.noteText] as const),
+    );
+  }, [snapshot]);
+
   if (!snapshot || !dungeonMap) {
     return <div>Loading dungeon…</div>;
   }
 
   const focusedRoom = focusedRoomId ? snapshot.rooms[focusedRoomId] ?? null : null;
-  const noteMarkdownByRoomId = useMemo(() => {
-    return Object.fromEntries(
-      Object.values(snapshot.rooms).map((room) => [room.roomId, room.noteText] as const),
-    );
-  }, [snapshot.rooms]);
   const currentFloorLabel =
     focusedRoom && hierarchy
       ? hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[focusedRoom.roomId]]

@@ -53,6 +53,25 @@ describe('InventoryBadgesPanel', () => {
     expect(screen.getByText('Scribe Century (120+ Words)')).toBeInTheDocument();
   });
 
+  it('renders description for archaeologist milestone badges', () => {
+    render(
+      <InventoryBadgesPanel
+        view="badges"
+        inventory={[]}
+        badges={['ArchaeologistReviewPass7']}
+        collectedNotes={[]}
+        xpTotal={50}
+        rank="Apprentice"
+        onSwitchView={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+    expect(screen.getByText('ArchaeologistReviewPass7')).toBeInTheDocument();
+    expect(
+      screen.getByText('Completed at least 7 full archaeology review passes.'),
+    ).toBeInTheDocument();
+  });
+
   it('renders collected notes journal entries', () => {
     render(
       <InventoryBadgesPanel

@@ -16,6 +16,7 @@ export interface SessionState {
   focusedRoomId: string | null;
   isNoteEditorOpen: boolean;
   noteEditorRoomId: string | null;
+  noteEditorPendingInsert: string | null;
   isMapViewOpen: boolean;
   teleportModeArmed: boolean;
   lastTeleportAt: number | null;
@@ -24,7 +25,9 @@ export interface SessionState {
   setSelectedClass: (id: PlayerClassId | null) => void;
   setFocusedRoomId: (id: string | null) => void;
   openNoteEditor: (roomId: string) => void;
+  openNoteEditorWithInsert: (roomId: string, insertText: string) => void;
   closeNoteEditor: () => void;
+  clearNoteEditorPendingInsert: () => void;
   openMapView: () => void;
   closeMapView: () => void;
   armTeleportMode: () => void;
@@ -39,6 +42,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   focusedRoomId: null,
   isNoteEditorOpen: false,
   noteEditorRoomId: null,
+  noteEditorPendingInsert: null,
   isMapViewOpen: false,
   teleportModeArmed: false,
   lastTeleportAt: null,
@@ -47,8 +51,12 @@ export const useSessionStore = create<SessionState>((set) => ({
   setSelectedClass: (selectedClass) => set({ selectedClass }),
   setFocusedRoomId: (focusedRoomId) => set({ focusedRoomId }),
   openNoteEditor: (noteEditorRoomId) =>
-    set({ noteEditorRoomId, isNoteEditorOpen: true }),
-  closeNoteEditor: () => set({ isNoteEditorOpen: false, noteEditorRoomId: null }),
+    set({ noteEditorRoomId, isNoteEditorOpen: true, noteEditorPendingInsert: null }),
+  openNoteEditorWithInsert: (noteEditorRoomId, insertText) =>
+    set({ noteEditorRoomId, isNoteEditorOpen: true, noteEditorPendingInsert: insertText }),
+  closeNoteEditor: () =>
+    set({ isNoteEditorOpen: false, noteEditorRoomId: null, noteEditorPendingInsert: null }),
+  clearNoteEditorPendingInsert: () => set({ noteEditorPendingInsert: null }),
   openMapView: () => set({ isMapViewOpen: true }),
   closeMapView: () => set({ isMapViewOpen: false, teleportModeArmed: false }),
   armTeleportMode: () => set({ teleportModeArmed: true, isMapViewOpen: true }),

@@ -27,6 +27,32 @@ describe('Markdown', () => {
     expect(screen.getByText(/bad/)).toBeInTheDocument();
   });
 
+  it('renders https markdown images', () => {
+    render(<Markdown source="![Diagram](https://example.com/diagram.png)" />);
+    const image = screen.getByRole('img', { name: 'Diagram' });
+    expect(image).toHaveAttribute('src', 'https://example.com/diagram.png');
+  });
+
+  it('resolves local image tokens through resolver', () => {
+    render(
+      <Markdown
+        source="![Dungeon artifact](local:att-123)"
+        resolveLocalImage={(attachmentId) =>
+          attachmentId === 'att-123' ? 'file:///tmp/artifact.png' : null
+        }
+      />,
+    );
+    const image = screen.getByRole('img', { name: 'Dungeon artifact' });
+    expect(image).toHaveAttribute('src', 'file:///tmp/artifact.png');
+  });
+
+  it('shows missing-image placeholder for unresolved local image tokens', () => {
+    render(<Markdown source="![Dungeon artifact](local:att-missing)" />);
+    expect(
+      screen.getByText(/Missing image \(att-missing\)\. Reattach it or remove this token\./i),
+    ).toBeInTheDocument();
+  });
+
   it('renders headings, bold, italic, code, and bullet lists', () => {
     render(
       <Markdown

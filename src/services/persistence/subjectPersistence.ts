@@ -9,6 +9,7 @@
  */
 
 import type { SubjectSnapshot } from '@/core/validation/persistence';
+import type { RoomAttachment } from '@/core/validation/persistence';
 
 const STORAGE_PREFIX = 'knowledge-dungeon:v1';
 
@@ -33,6 +34,25 @@ declare global {
       exportSubjectsRoot?: () => Promise<string | null>;
       exportSubjectFolder?: (subjectId: string) => Promise<string | null>;
       importSubjectFolder?: () => Promise<SubjectSnapshot | null>;
+      addRoomLocalAttachment?: (
+        subjectId: string,
+        roomId: string,
+      ) => Promise<RoomAttachment | null>;
+      addRoomExternalAttachment?: (
+        subjectId: string,
+        roomId: string,
+        url: string,
+      ) => Promise<RoomAttachment | null>;
+      deleteRoomAttachment?: (
+        subjectId: string,
+        roomId: string,
+        attachmentId: string,
+      ) => Promise<boolean>;
+      resolveRoomAttachmentUrl?: (
+        subjectId: string,
+        roomId: string,
+        attachmentId: string,
+      ) => Promise<string | null>;
     };
   }
 }
@@ -203,6 +223,49 @@ export async function importSubjectFolder(): Promise<SubjectSnapshot | null> {
     return invokeBridge(() => importSubjectFolderBridge(), null);
   }
   return null;
+}
+
+export async function addRoomLocalAttachment(
+  subjectId: string,
+  roomId: string,
+): Promise<RoomAttachment | null> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const handler = bridge?.addRoomLocalAttachment;
+  if (!handler) return null;
+  return invokeBridge(() => handler(subjectId, roomId), null);
+}
+
+export async function addRoomExternalAttachment(
+  subjectId: string,
+  roomId: string,
+  url: string,
+): Promise<RoomAttachment | null> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const handler = bridge?.addRoomExternalAttachment;
+  if (!handler) return null;
+  return invokeBridge(() => handler(subjectId, roomId, url), null);
+}
+
+export async function deleteRoomAttachment(
+  subjectId: string,
+  roomId: string,
+  attachmentId: string,
+): Promise<boolean> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const handler = bridge?.deleteRoomAttachment;
+  if (!handler) return false;
+  return invokeBridge(() => handler(subjectId, roomId, attachmentId), false);
+}
+
+export async function resolveRoomAttachmentUrl(
+  subjectId: string,
+  roomId: string,
+  attachmentId: string,
+): Promise<string | null> {
+  const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
+  const handler = bridge?.resolveRoomAttachmentUrl;
+  if (!handler) return null;
+  return invokeBridge(() => handler(subjectId, roomId, attachmentId), null);
 }
 
 export function exportSubjectToJson(snapshot: SubjectSnapshot): string {

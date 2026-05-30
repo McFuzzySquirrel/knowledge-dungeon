@@ -70,6 +70,11 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
   reposition it while its connections remain attached
 - encounter notes accept lightweight Markdown (links, bold, italic, code,
   bullets) with a live Edit/Preview toggle
+- in the Scribe phase, the Notes tab can attach local/URL images per room;
+  each image card includes an **Insert in note** action so learners can place
+  visuals without typing markdown tokens manually
+- room panel includes an **Expand/Collapse** toggle for a larger note + image
+  workspace during media-heavy study sessions
 - during the **Archaeologist** phase, every room that has produced an
   artifact is marked with a loot-chest icon on the dungeon canvas so
   cleared topics are easy to revisit

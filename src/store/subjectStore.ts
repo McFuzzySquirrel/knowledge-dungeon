@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import type {
   DungeonMetadata,
+  RoomAttachment,
   RoomMetadata,
   SubjectSnapshot,
 } from '@/core/validation/persistence';
@@ -23,7 +24,11 @@ import {
 import { generateRoomArtifact } from '@/core/artifacts';
 import { evaluateNoteValidation, type NoteValidationOutput } from '@/core/validation/notes';
 import {
+  addRoomExternalAttachment,
+  addRoomLocalAttachment,
+  deleteRoomAttachment,
   loadSubjectSnapshot,
+  resolveRoomAttachmentUrl,
   saveSubjectSnapshot,
   setActiveSubjectId,
 } from '@/services/persistence/subjectPersistence';
@@ -45,6 +50,10 @@ export interface SubjectState {
     manualConfirmed: boolean,
   ) => Promise<NoteValidationOutput & { artifactMarkdown: string | null }>;
   recordReviewPass: (roomId: string) => Promise<void>;
+  addLocalAttachment: (roomId: string) => Promise<RoomAttachment | null>;
+  addExternalAttachment: (roomId: string, url: string) => Promise<RoomAttachment | null>;
+  removeAttachment: (roomId: string, attachmentId: string) => Promise<void>;
+  resolveAttachmentUrl: (roomId: string, attachmentId: string) => Promise<string | null>;
   exportSnapshot: () => SubjectSnapshot | null;
   importSnapshot: (snapshot: SubjectSnapshot) => Promise<void>;
 }
@@ -83,10 +92,30 @@ function withRooms(
 }
 
 function normalizeRoomMetadata(room: RoomMetadata): RoomMetadata {
+  const attachments = Array.isArray(room.attachments)
+    ? room.attachments
+        .filter((attachment): attachment is RoomAttachment => Boolean(attachment))
+        .map((attachment) => {
+          const sourceType = attachment.sourceType ?? 'local';
+          const normalized: RoomAttachment = {
+            attachmentId: attachment.attachmentId,
+            sourceType,
+            fileName: attachment.fileName,
+            mimeType: attachment.mimeType,
+            ...(attachment.relativePath ? { relativePath: attachment.relativePath } : {}),
+            ...(attachment.externalUrl ? { externalUrl: attachment.externalUrl } : {}),
+            ...(attachment.altText ? { altText: attachment.altText } : {}),
+            addedAt: attachment.addedAt,
+          };
+          return normalized;
+        })
+    : [];
+
   return {
     ...room,
     noteText: room.noteText ?? '',
     artifactMarkdown: room.artifactMarkdown ?? null,
+    attachments,
   };
 }
 
@@ -350,6 +379,83 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     const next = withRooms(current, current.dungeon, [updatedRoom]);
     set({ snapshot: next });
     await persist(next);
+  },
+
+  async addLocalAttachment(roomId) {
+    const current = get().snapshot;
+    if (!current) return null;
+    const room = current.rooms[roomId];
+    if (!room) return null;
+
+    const attachment = await addRoomLocalAttachment(current.dungeon.dungeonId, roomId);
+    if (!attachment) return null;
+
+    const updatedRoom: RoomMetadata = {
+      ...room,
+      updatedAt: nowIso(),
+      attachments: [...room.attachments, attachment],
+    };
+    const next = withRooms(current, current.dungeon, [updatedRoom]);
+    set({ snapshot: next, lastError: null });
+    await persist(next);
+    return attachment;
+  },
+
+  async addExternalAttachment(roomId, url) {
+    const current = get().snapshot;
+    if (!current) return null;
+    const room = current.rooms[roomId];
+    if (!room) return null;
+
+    const attachment = await addRoomExternalAttachment(current.dungeon.dungeonId, roomId, url);
+    if (!attachment) return null;
+
+    const updatedRoom: RoomMetadata = {
+      ...room,
+      updatedAt: nowIso(),
+      attachments: [...room.attachments, attachment],
+    };
+    const next = withRooms(current, current.dungeon, [updatedRoom]);
+    set({ snapshot: next, lastError: null });
+    await persist(next);
+    return attachment;
+  },
+
+  async removeAttachment(roomId, attachmentId) {
+    const current = get().snapshot;
+    if (!current) return;
+    const room = current.rooms[roomId];
+    if (!room) return;
+
+    const target = room.attachments.find((attachment) => attachment.attachmentId === attachmentId);
+    if (!target) return;
+
+    if (target.sourceType === 'local') {
+      await deleteRoomAttachment(current.dungeon.dungeonId, roomId, attachmentId);
+    }
+
+    const updatedRoom: RoomMetadata = {
+      ...room,
+      updatedAt: nowIso(),
+      attachments: room.attachments.filter((attachment) => attachment.attachmentId !== attachmentId),
+    };
+    const next = withRooms(current, current.dungeon, [updatedRoom]);
+    set({ snapshot: next, lastError: null });
+    await persist(next);
+  },
+
+  async resolveAttachmentUrl(roomId, attachmentId) {
+    const current = get().snapshot;
+    if (!current) return null;
+    const room = current.rooms[roomId];
+    if (!room) return null;
+
+    const attachment = room.attachments.find((item) => item.attachmentId === attachmentId);
+    if (!attachment) return null;
+    if (attachment.sourceType === 'external') {
+      return attachment.externalUrl ?? null;
+    }
+    return resolveRoomAttachmentUrl(current.dungeon.dungeonId, roomId, attachmentId);
   },
 
   exportSnapshot() {

@@ -497,6 +497,10 @@ textarea {
   overflow: hidden;
 }
 
+.room-panel--expanded {
+  width: min(680px, 72vw);
+}
+
 .room-tabs {
   display: flex;
   border-bottom: 1px solid var(--border-soft);
@@ -510,6 +514,12 @@ textarea {
   border-bottom: 2px solid transparent;
   padding: 10px;
   color: var(--text-secondary);
+}
+
+.room-tabs .room-panel-toggle {
+  flex: 0 0 auto;
+  min-width: 86px;
+  border-left: 1px solid var(--border-soft);
 }
 
 .room-tabs button[aria-selected='true'] {
@@ -710,6 +720,12 @@ button.ghost {
   z-index: 30;
 }
 
+.toast-stack--inline {
+  position: static;
+  margin-top: 8px;
+  z-index: auto;
+}
+
 .toast {
   background: var(--bg-panel);
   border: 1px solid var(--accent);
@@ -723,6 +739,16 @@ button.ghost {
   font-weight: 600;
   color: var(--accent);
   margin-bottom: 2px;
+}
+
+.toast--info {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-soft));
+}
+
+.toast--error {
+  border-color: #c35a5a;
+  background: color-mix(in srgb, #3a2020 55%, var(--bg-panel-soft));
+  color: #ffd5d5;
 }
 
 .help-overlay {
@@ -965,6 +991,77 @@ button.danger:hover {
 
 .note-preview {
   min-height: 220px;
+}
+
+.markdown-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  margin: 8px 0;
+}
+
+.markdown-image-missing {
+  display: block;
+  border: 1px dashed var(--accent);
+  background: var(--bg-panel-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+.attachment-actions {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.attachment-grid {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.attachment-card {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel-soft);
+  border-radius: 8px;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.attachment-image {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.attachment-image--missing {
+  display: grid;
+  place-items: center;
+  min-height: 92px;
+  color: var(--text-secondary);
+  border: 1px dashed var(--border-soft);
+  background: var(--bg-panel);
+}
+
+.attachment-meta {
+  display: grid;
+  gap: 2px;
+}
+
+.attachment-card-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .full-map-toggle {

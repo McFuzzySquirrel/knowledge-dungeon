@@ -42,6 +42,18 @@ function isArchaeologistBadgeUnlocked(progress: PhaseBadgeProgressInput): boolea
   return progress.archaeologistFullReviewPasses >= 2;
 }
 
+function isArchaeologistReviewPass3Unlocked(progress: PhaseBadgeProgressInput): boolean {
+  return progress.archaeologistFullReviewPasses >= 3;
+}
+
+function isArchaeologistReviewPass7Unlocked(progress: PhaseBadgeProgressInput): boolean {
+  return progress.archaeologistFullReviewPasses >= 7;
+}
+
+function isArchaeologistReviewPass15Unlocked(progress: PhaseBadgeProgressInput): boolean {
+  return progress.archaeologistFullReviewPasses >= 15;
+}
+
 export function assignRankTier(cumulativeXp: number): RankTier {
   const safeXp = Math.max(0, Math.trunc(cumulativeXp));
 
@@ -89,6 +101,24 @@ export function evaluatePhaseBadgeUnlocks(
     isArchaeologistBadgeUnlocked(progress)
   ) {
     unlocked.push('ArchaeologistPhaseComplete');
+  }
+  if (
+    !hasBadge(existingBadges, 'ArchaeologistReviewPass3') &&
+    isArchaeologistReviewPass3Unlocked(progress)
+  ) {
+    unlocked.push('ArchaeologistReviewPass3');
+  }
+  if (
+    !hasBadge(existingBadges, 'ArchaeologistReviewPass7') &&
+    isArchaeologistReviewPass7Unlocked(progress)
+  ) {
+    unlocked.push('ArchaeologistReviewPass7');
+  }
+  if (
+    !hasBadge(existingBadges, 'ArchaeologistReviewPass15') &&
+    isArchaeologistReviewPass15Unlocked(progress)
+  ) {
+    unlocked.push('ArchaeologistReviewPass15');
   }
 
   return unlocked;
