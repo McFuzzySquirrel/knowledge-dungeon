@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
   type JSX,
   type PointerEvent,
   type WheelEvent,
@@ -16,7 +17,6 @@ import {
 import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistence';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 import type { GamePhase } from '@/store/sessionStore';
-import { usePreferencesStore } from '@/store/preferencesStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
 
@@ -37,6 +37,62 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.0015;
 
+interface RoomOffset {
+  x: number;
+  y: number;
+}
+
+type DragState =
+  | {
+      kind: 'pan';
+      pointerId: number;
+      startX: number;
+      startY: number;
+      panX: number;
+      panY: number;
+    }
+  | {
+      kind: 'room';
+      pointerId: number;
+      roomId: string;
+      startX: number;
+      startY: number;
+      offsetX: number;
+      offsetY: number;
+    };
+
+function splitTopicLabel(topic: string, maxCharsPerLine: number, maxLines: number): string[] {
+  const words = topic.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [''];
+
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const candidate = current.length === 0 ? word : `${current} ${word}`;
+    if (candidate.length <= maxCharsPerLine || current.length === 0) {
+      current = candidate;
+      continue;
+    }
+    lines.push(current);
+    current = word;
+    if (lines.length === maxLines - 1) break;
+  }
+
+  if (lines.length < maxLines && current.length > 0) {
+    lines.push(current);
+  }
+
+  const consumedWords = lines.join(' ').trim().split(/\s+/).filter(Boolean).length;
+  if (consumedWords < words.length && lines.length > 0) {
+    const lastIndex = lines.length - 1;
+    const last = lines[lastIndex] ?? '';
+    lines[lastIndex] = last.length >= maxCharsPerLine ? `${last.slice(0, maxCharsPerLine - 1)}…` : `${last}…`;
+  }
+
+  return lines.slice(0, maxLines);
+}
+
 export function FullMapView({
   snapshot,
   dungeonMap,
@@ -51,11 +107,17 @@ export function FullMapView({
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
   const reparentRoom = useSubjectStore((s) => s.reparentRoom);
   const lastError = useSubjectStore((s) => s.lastError);
-  const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
-  const isRpg = graphicsMode === 'rpg';
   const { bounds, rooms, corridors } = dungeonMap;
-  const innerWidth = (bounds.maxX - bounds.minX) * SCALE;
-  const innerHeight = (bounds.maxY - bounds.minY) * SCALE;
+  const maxTopicLength = useMemo(
+    () => rooms.reduce((max, room) => Math.max(max, room.topic.length), 0),
+    [rooms],
+  );
+  const layoutSpread = useMemo(
+    () => Math.min(2, 1 + Math.max(0, maxTopicLength - 18) / 42),
+    [maxTopicLength],
+  );
+  const innerWidth = (bounds.maxX - bounds.minX) * SCALE * layoutSpread;
+  const innerHeight = (bounds.maxY - bounds.minY) * SCALE * layoutSpread;
   const hierarchy = useMemo(() => deriveGraphHierarchy(snapshot.dungeon), [snapshot.dungeon]);
   const [mode, setMode] = useState<'navigate' | 'edit'>('navigate');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(focusedRoomId);
@@ -63,6 +125,7 @@ export function FullMapView({
     focusedRoomId ? hierarchy.floorIdByRoomId[focusedRoomId] : hierarchy.floorIds[0] ?? '',
   );
   const [teleportRoomId, setTeleportRoomId] = useState(focusedRoomId ?? '');
+  const [teleportFilter, setTeleportFilter] = useState('');
   const [draftTopics, setDraftTopics] = useState('');
   const [reparentTargetId, setReparentTargetId] = useState('');
 
@@ -82,16 +145,52 @@ export function FullMapView({
     }
   }, [floorId, hierarchy.roomIdsByFloorId, teleportRoomId]);
 
+  const floorTeleportRoomIds = hierarchy.roomIdsByFloorId[floorId] ?? [];
+  const filteredTeleportRoomIds = useMemo(() => {
+    const query = teleportFilter.trim().toLocaleLowerCase();
+    if (query.length === 0) return floorTeleportRoomIds;
+    return floorTeleportRoomIds.filter((roomId) =>
+      (snapshot.rooms[roomId]?.topic ?? roomId).toLocaleLowerCase().includes(query),
+    );
+  }, [floorTeleportRoomIds, snapshot.rooms, teleportFilter]);
+
+  useEffect(() => {
+    if (filteredTeleportRoomIds.length === 0) return;
+    if (!filteredTeleportRoomIds.includes(teleportRoomId)) {
+      setTeleportRoomId(filteredTeleportRoomIds[0] ?? '');
+    }
+  }, [filteredTeleportRoomIds, teleportRoomId]);
+
+  function cycleTeleportSelection(step: number): void {
+    if (filteredTeleportRoomIds.length === 0) return;
+    const currentIndex = Math.max(0, filteredTeleportRoomIds.indexOf(teleportRoomId));
+    const nextIndex = (currentIndex + step + filteredTeleportRoomIds.length) % filteredTeleportRoomIds.length;
+    setTeleportRoomId(filteredTeleportRoomIds[nextIndex] ?? filteredTeleportRoomIds[0] ?? '');
+  }
+
+  function onTeleportFilterKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      cycleTeleportSelection(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      cycleTeleportSelection(-1);
+      return;
+    }
+    if (event.key === 'Enter' && teleportRoomId && teleportRemainingMs <= 0) {
+      event.preventDefault();
+      onTeleportToRoom(teleportRoomId);
+    }
+  }
+
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: -innerWidth / 2, y: -innerHeight / 2 });
   const [floorFilterOn, setFloorFilterOn] = useState(true);
-  const dragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    panX: number;
-    panY: number;
-  } | null>(null);
+  const [roomOffsets, setRoomOffsets] = useState<Record<string, RoomOffset>>({});
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<DragState | null>(null);
 
   const neighborIds = new Set<string>();
   if (focusedRoomId) {
@@ -126,6 +225,30 @@ export function FullMapView({
         (c) => visibleRoomIdSet.has(c.fromRoomId) && visibleRoomIdSet.has(c.toRoomId),
       )
     : corridors;
+  const roomById = useMemo(() => {
+    const map = new Map<string, DungeonMap['rooms'][number]>();
+    for (const room of rooms) map.set(room.roomId, room);
+    return map;
+  }, [rooms]);
+
+  const getRoomLayout = useCallback(
+    (room: DungeonMap['rooms'][number]) => {
+      const offset = roomOffsets[room.roomId] ?? { x: 0, y: 0 };
+      const x = (room.gridX - bounds.minX) * SCALE * layoutSpread + offset.x;
+      const y = (room.gridY - bounds.minY) * SCALE * layoutSpread + offset.y;
+      const w = room.width * SCALE;
+      const h = room.height * SCALE;
+      return {
+        x,
+        y,
+        w,
+        h,
+        cx: x + w / 2,
+        cy: y + h / 2,
+      };
+    },
+    [bounds.minX, bounds.minY, layoutSpread, roomOffsets],
+  );
 
   const selectedRoom = selectedRoomId ? snapshot.rooms[selectedRoomId] ?? null : null;
   const selectedBreadcrumbs = selectedRoom
@@ -165,8 +288,10 @@ export function FullMapView({
 
   const onPointerDown = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
-      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      if ((e.target as Element).closest('[data-room-id]')) return;
+      viewportRef.current?.setPointerCapture?.(e.pointerId);
       dragRef.current = {
+        kind: 'pan',
         pointerId: e.pointerId,
         startX: e.clientX,
         startY: e.clientY,
@@ -180,18 +305,50 @@ export function FullMapView({
   const onPointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
-    setPan({
-      x: drag.panX + (e.clientX - drag.startX),
-      y: drag.panY + (e.clientY - drag.startY),
-    });
-  }, []);
+    if (drag.kind === 'pan') {
+      setPan({
+        x: drag.panX + (e.clientX - drag.startX),
+        y: drag.panY + (e.clientY - drag.startY),
+      });
+      return;
+    }
+    const deltaX = (e.clientX - drag.startX) / zoom;
+    const deltaY = (e.clientY - drag.startY) / zoom;
+    setRoomOffsets((current) => ({
+      ...current,
+      [drag.roomId]: {
+        x: drag.offsetX + deltaX,
+        y: drag.offsetY + deltaY,
+      },
+    }));
+  }, [zoom]);
 
   const onPointerUp = useCallback((e: PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId === e.pointerId) {
-      (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+    if (dragRef.current && dragRef.current.pointerId === e.pointerId) {
+      viewportRef.current?.releasePointerCapture?.(e.pointerId);
       dragRef.current = null;
     }
   }, []);
+
+  const onRoomPointerDown = useCallback(
+    (roomId: string, e: PointerEvent<SVGGElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSelectedRoomId(roomId);
+      const offset = roomOffsets[roomId] ?? { x: 0, y: 0 };
+      viewportRef.current?.setPointerCapture?.(e.pointerId);
+      dragRef.current = {
+        kind: 'room',
+        pointerId: e.pointerId,
+        roomId,
+        startX: e.clientX,
+        startY: e.clientY,
+        offsetX: offset.x,
+        offsetY: offset.y,
+      };
+    },
+    [roomOffsets],
+  );
 
   const resetView = useCallback(() => {
     setZoom(1);
@@ -207,8 +364,8 @@ export function FullMapView({
           <div>
             <h2>Full Map</h2>
             <p className="full-map-subtitle">
-              Mindmap-first editing drives the dungeon layout. Use this view to inspect, edit, and
-              teleport between floors.
+              Explore and edit your dungeon graph, then teleport between floors.
+              Use drag-to-pan, scroll-to-zoom, and drag nodes to refine layout.
             </p>
           </div>
           <div className="full-map-actions">
@@ -255,6 +412,7 @@ export function FullMapView({
 
         <div className="full-map-layout">
           <div
+            ref={viewportRef}
             className="full-map-viewport"
             onWheel={onWheel}
             onPointerDown={onPointerDown}
@@ -274,16 +432,14 @@ export function FullMapView({
                 width={innerWidth}
                 height={innerHeight}
                 viewBox={`0 0 ${innerWidth} ${innerHeight}`}
-                data-graphics={graphicsMode}
+                data-graphics="rpg"
               >
                 {visibleCorridors.map((c, i) => {
-                  const from = rooms.find((r) => r.roomId === c.fromRoomId);
-                  const to = rooms.find((r) => r.roomId === c.toRoomId);
+                  const from = roomById.get(c.fromRoomId);
+                  const to = roomById.get(c.toRoomId);
                   if (!from || !to) return null;
-                  const x1 = (from.gridX - bounds.minX + from.width / 2) * SCALE;
-                  const y1 = (from.gridY - bounds.minY + from.height / 2) * SCALE;
-                  const x2 = (to.gridX - bounds.minX + to.width / 2) * SCALE;
-                  const y2 = (to.gridY - bounds.minY + to.height / 2) * SCALE;
+                  const fromLayout = getRoomLayout(from);
+                  const toLayout = getRoomLayout(to);
                   const isConnected =
                     focusedRoomId !== null &&
                     (c.fromRoomId === focusedRoomId || c.toRoomId === focusedRoomId);
@@ -295,30 +451,24 @@ export function FullMapView({
                     ? '#f2c879'
                     : isPortalEdge
                       ? '#7fb2ff'
-                      : isRpg
-                        ? '#7a5a32'
-                        : '#3b455e';
+                      : '#7a5a32';
                   return (
                     <line
                       key={i}
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
+                      x1={fromLayout.cx}
+                      y1={fromLayout.cy}
+                      x2={toLayout.cx}
+                      y2={toLayout.cy}
                       stroke={corridorStroke}
-                      strokeWidth={isConnected ? 3 : isPortalEdge ? 2.5 : isRpg ? 3 : 2}
-                      strokeLinecap={isRpg ? 'round' : undefined}
+                      strokeWidth={isConnected ? 3 : isPortalEdge ? 2.5 : 3}
+                      strokeLinecap="round"
                       strokeDasharray={isPortalEdge ? '6 4' : undefined}
                     />
                   );
                 })}
                 {visibleRooms.map((room) => {
-                  const x = (room.gridX - bounds.minX) * SCALE;
-                  const y = (room.gridY - bounds.minY) * SCALE;
-                  const w = room.width * SCALE;
-                  const h = room.height * SCALE;
-                  const cx = x + w / 2;
-                  const cy = y + h / 2;
+                  const { x, y, w, h, cx, cy } = getRoomLayout(room);
+                  const topicLines = splitTopicLabel(room.topic, 22, 3);
                   const isFocused = room.roomId === focusedRoomId;
                   const isNeighbor = neighborIds.has(room.roomId);
                   const isSelected = room.roomId === selectedRoomId;
@@ -333,25 +483,14 @@ export function FullMapView({
                         : room.isRoot
                           ? '#b88a4a'
                           : '#3d2b1a';
-                  const mindmapFill = isPortal
-                    ? '#2a3a5c'
-                    : isFocused
-                      ? '#f2c879'
-                      : isNeighbor
-                        ? '#f7d99c'
-                        : room.isRoot
-                          ? '#7fb2ff'
-                          : '#1f2433';
-                  const fill = isRpg ? rpgFill : mindmapFill;
+                  const fill = rpgFill;
                   const stroke = isSelected
                     ? '#8b5cf6'
                     : isPortal
                       ? '#7fb2ff'
                       : isFocused || isNeighbor
                         ? '#f2c879'
-                        : isRpg
-                          ? '#6b4a24'
-                          : '#a8b0c8';
+                        : '#6b4a24';
                   const strokeWidth = isSelected
                     ? 3
                     : isPortal
@@ -360,58 +499,51 @@ export function FullMapView({
                         ? 2
                         : isNeighbor
                           ? 1.5
-                          : isRpg
-                            ? 1.5
-                            : 1;
-                  const textFill = isRpg
-                    ? isFocused || isNeighbor
-                      ? '#3a2a14'
-                      : '#f4e4c2'
-                    : isFocused || isNeighbor
-                      ? '#14171e'
-                      : '#f5f7ff';
+                          : 1.5;
+                  const textFill = isFocused || isNeighbor ? '#2d1f11' : '#f9eed9';
+                  const textStroke = isFocused || isNeighbor ? '#f9eed9' : '#2d1f11';
                   return (
                     <g
                       key={room.roomId}
                       onClick={() => setSelectedRoomId(room.roomId)}
+                      onPointerDown={(e) => onRoomPointerDown(room.roomId, e)}
                       role="button"
                       tabIndex={0}
                       data-room-id={room.roomId}
+                      style={{ cursor: 'grab' }}
                     >
-                      {isRpg ? (
-                        <rect
-                          x={x}
-                          y={y}
-                          width={w}
-                          height={h}
-                          fill={fill}
-                          stroke={stroke}
-                          strokeWidth={strokeWidth}
-                          strokeDasharray={isPortal ? '4 3' : undefined}
-                          rx={1}
-                        />
-                      ) : (
-                        <ellipse
-                          cx={cx}
-                          cy={cy}
-                          rx={w / 2}
-                          ry={h / 2}
-                          fill={fill}
-                          stroke={stroke}
-                          strokeWidth={strokeWidth}
-                          strokeDasharray={isPortal ? '4 3' : undefined}
-                        />
-                      )}
+                      <rect
+                        x={x}
+                        y={y}
+                        width={w}
+                        height={h}
+                        fill={fill}
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={isPortal ? '4 3' : undefined}
+                        rx={1}
+                      />
                       <text
                         x={cx}
                         y={cy}
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        fontSize={10}
+                        fontSize={9}
                         fill={textFill}
+                        stroke={textStroke}
+                        strokeWidth={2.2}
+                        paintOrder="stroke"
                       >
-                        {isPortal ? '↑ ' : ''}
-                        {room.topic.length > 18 ? `${room.topic.slice(0, 17)}…` : room.topic}
+                        {isPortal ? <tspan x={cx} dy={-10}>↑</tspan> : null}
+                        {topicLines.map((line, index) => {
+                          const lineOffset = (index - (topicLines.length - 1) / 2) * 10;
+                          const dy = isPortal && index === 0 ? lineOffset + 10 : lineOffset;
+                          return (
+                            <tspan key={`${room.roomId}-${index}`} x={cx} dy={index === 0 ? dy : 10}>
+                              {line}
+                            </tspan>
+                          );
+                        })}
                       </text>
                     </g>
                   );
@@ -421,7 +553,7 @@ export function FullMapView({
           </div>
 
           <aside className="full-map-sidebar">
-            <div className="room-section">
+            <div className="room-section room-section--scrollable">
               <h3>Teleport</h3>
               <select value={floorId} onChange={(e) => setFloorId(e.target.value)}>
                 {hierarchy.floorIds.map((entryFloorId) => (
@@ -430,13 +562,43 @@ export function FullMapView({
                   </option>
                 ))}
               </select>
-              <select value={teleportRoomId} onChange={(e) => setTeleportRoomId(e.target.value)}>
-                {(hierarchy.roomIdsByFloorId[floorId] ?? []).map((roomId) => (
-                  <option key={roomId} value={roomId}>
-                    {snapshot.rooms[roomId]?.topic ?? roomId}
-                  </option>
-                ))}
-              </select>
+              <input
+                type="text"
+                value={teleportFilter}
+                onChange={(e) => setTeleportFilter(e.target.value)}
+                onKeyDown={onTeleportFilterKeyDown}
+                placeholder="Filter rooms on this floor"
+                aria-label="Filter teleport rooms"
+              />
+              <div className="teleport-room-list" role="listbox" aria-label="Teleport room list">
+                {filteredTeleportRoomIds.length === 0 ? (
+                  <p className="room-help-text">No rooms match this filter.</p>
+                ) : (
+                  filteredTeleportRoomIds.map((roomId) => {
+                    const isSelected = roomId === teleportRoomId;
+                    return (
+                      <button
+                        key={roomId}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        className={`teleport-room-item${isSelected ? ' teleport-room-item--selected' : ''}`}
+                        onClick={() => setTeleportRoomId(roomId)}
+                        onDoubleClick={() => {
+                          if (teleportRemainingMs <= 0) {
+                            onTeleportToRoom(roomId);
+                          }
+                        }}
+                      >
+                        {snapshot.rooms[roomId]?.topic ?? roomId}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              <p className="room-help-text">
+                Tip: Arrow up/down to change selection, Enter to teleport, or double-click a room.
+              </p>
               <button
                 type="button"
                 disabled={!teleportRoomId || teleportRemainingMs > 0}
@@ -451,7 +613,7 @@ export function FullMapView({
               </button>
             </div>
 
-            <div className="room-section">
+            <div className="room-section room-section--scrollable">
               <h3>Selected topic</h3>
               {selectedRoom ? (
                 <>
@@ -539,8 +701,8 @@ export function FullMapView({
         </div>
 
         <p className="full-map-hint">
-          Drag to pan · scroll to zoom · highlighted rooms are directly connected to the current
-          room · purple border marks the selected room
+          Drag empty space to pan · drag a room to reposition it · scroll to zoom · highlighted
+          rooms are directly connected to the current room · purple border marks the selected room
           {floorFilterOn ? ' · dashed blue room is the portal back to the parent floor' : ''}.
         </p>
       </div>

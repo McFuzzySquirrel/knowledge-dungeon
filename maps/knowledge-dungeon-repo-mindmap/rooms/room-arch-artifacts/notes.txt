@@ -1,0 +1,58 @@
+# Artifacts & Review System
+
+## What Are Artifacts?
+
+An **artifact** is a markdown file generated after you defeat a room. It documents:
+
+- What you learned (your submitted notes)
+- How well you learned it (quality scores)
+- When you learned it (timestamp)
+- Your progress at that moment (XP awarded)
+
+Artifacts serve two purposes:
+
+1. **Documentation** — Proof that you cleared the room
+2. **Review Material** — Revisitable during the Archaeologist phase
+
+## Artifact Structure
+
+Each artifact is a markdown file containing:
+
+```
+# Scribe Artifact
+
+- Artifact ID: artifact-{roomId}
+- Subject: {subject name}
+- Topic: {topic name}
+- Generated At: {timestamp}
+- Quality Bonus: {0-10}
+
+## Rubric Breakdown
+- sectionCompleteness: {0/2}
+- conceptTermCoverage: {0/2}
+- linkReferences: {0/2}
+- recallQuestionQuality: {0/2}
+- clarityReadability: {0/2}
+
+## Submitted Notes
+{your notes here}
+```
+
+## The Review Phase
+
+In the Archaeologist phase, you:
+
+1. **Revisit artifacts** one by one
+2. **Answer self-check prompts** about each topic
+3. **Track review streaks** — consecutive rooms reviewed correctly
+4. **Unlock final mastery** when all rooms are reviewed
+
+### Review Mechanics
+- Each artifact can be reviewed multiple times
+- Review pass count is tracked in room metadata
+- Streak bonus applied after 3+ consecutive passes
+- Revalidation can be triggered if you're unsure
+
+## Design Insight
+
+Artifacts are **immutable records** of learning. They're not deleted or modified, so you can track your thinking over time. The review system turns scattered learning into coherent long-term retention.

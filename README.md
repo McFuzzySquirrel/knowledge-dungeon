@@ -11,6 +11,29 @@ quality gates. Defeated rooms drop loot, XP, and a generated artifact. When
 every room is cleared, the **Archaeologist** phase unlocks self-check prompts
 and review-streak tracking.
 
+Built with a simple goal: make learning feel fun again by turning note-taking,
+revision, and concept mapping into an interactive adventure instead of a static checklist.
+
+## Why Use This
+
+Knowledge Dungeon is useful anywhere mindmaps and notes intersect with real learning.
+
+- **Students**: turn class topics into rooms, write concise study notes, and use Recall Questions for active memory practice.
+- **Developers**: map your codebase architecture into connected topics, then explore system boundaries, dependencies, and workflows as a playable graph.
+- **Researchers / knowledge workers**: break complex subjects into linked rooms and keep concept notes connected instead of isolated.
+- **Teams**: create shared onboarding dungeons so newcomers can learn architecture, conventions, and workflows in a structured path.
+- **Anyone who uses mindmaps + notes**: keep the visual map and written understanding synchronized, with a loop that encourages review rather than passive storage.
+
+### Explore Your Repository As A Mindmap
+
+You can generate a Knowledge Dungeon subject directly from a repository and explore it like an interactive architecture map:
+
+1. Generate a repo subject with the portable Copilot skill (see link below).
+2. Load/refresh it in Knowledge Dungeon.
+3. Traverse rooms to understand modules, runtime flow, data boundaries, and tooling relationships.
+
+This works especially well for onboarding, architecture reviews, and "what does this codebase actually do?" sessions.
+
 ## Screenshots
 
 ### Home / subject management
@@ -32,6 +55,7 @@ The home screen is where you:
 Once a subject is loaded, the in-dungeon view keeps the study loop visible in one place:
 
 - HUD for phase, progression, current floor, map, home, and help
+- room-panel **Collections** shortcuts for inventory, badges, and diary
 - HUD teleport spell for floor/room jumps with cooldown tracking
 - Phaser dungeon canvas for movement and room navigation
 - minimap and room panel for topic context, breadcrumbs, portals, and creator edits
@@ -41,16 +65,26 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
 - the full **Map** overlay (<kbd>M</kbd>) defaults to a per-floor view that
   greys out unrelated floors and renders the parent entry room as a dashed
   blue portal — toggle **Show current floor only** off to see the whole
-  mindmap at once
+  topic graph at once
+- in the full map, drag empty space to pan and drag any room node to
+  reposition it while its connections remain attached
 - encounter notes accept lightweight Markdown (links, bold, italic, code,
   bullets) with a live Edit/Preview toggle
 - during the **Archaeologist** phase, every room that has produced an
   artifact is marked with a loot-chest icon on the dungeon canvas so
   cleared topics are easy to revisit
-- the **Graphics style** toggle (Welcome screen header and Help overlay)
-  switches between the mind-map view and an RPG dungeon view at any
-  time — the dungeon, full map, and minimap all re-skin together while
-  saved subjects stay untouched
+- diary entries for collected notes are clickable and open the full
+  artifact note, so review runs can use the journal as a recall index
+
+### Inventory, Badges, And Diary
+
+Knowledge Dungeon includes a small progression loop that rewards study quality and keeps review material easy to find.
+
+- **Inventory (🎒)**: when you defeat encounters, generated artifacts are collected as loot entries. This gives each cleared topic a tangible output you can revisit.
+- **Badges (🏅)**: milestone achievements are awarded for learning behaviors (for example, writing more complete notes). Badges make progress visible beyond raw XP.
+- **Diary (📚)**: collected note entries are stored in a browsable journal; selecting an entry opens the full note so you can quickly review what you previously wrote.
+
+These three views are available from the room-panel **Collections** shortcuts and are designed to support both motivation (rewarding progress) and retention (fast recall).
 
 ## Tech stack
 
@@ -144,6 +178,7 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 
 - [UI walkthrough with screenshots](./docs/UI.md)
 - [Customization: adding images, where subjects are saved, and desktop export helpers](./docs/CUSTOMIZATION.md)
+- [Portable Copilot skill (copy/paste template)](./docs/COPILOT_SKILL_CREATE_REPO_MINDMAP.md)
 
 ## Project structure
 

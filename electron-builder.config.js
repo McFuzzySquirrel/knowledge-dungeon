@@ -12,6 +12,7 @@ const config = {
   appId: 'com.knowledgedungeon.app',
   productName: 'Knowledge Dungeon',
   artifactName: '${productName}-${version}-${os}-${arch}.${ext}',
+  icon: 'build/icon',
   directories: {
     output: 'release',
     buildResources: 'build',

@@ -17,6 +17,13 @@ Use this screen to:
 
 This is the entry point for every session and determines how the rest of the UI behaves.
 
+### 1a) Selection readiness state
+
+![Welcome screen with readiness summary](./assets/ui/welcome-selections-ready.png)
+
+The **Current selections** card echoes the active phase and archetype, and
+shows a readiness line that turns green once an archetype is selected.
+
 ## 2) Main game shell (HUD + minimap + room panel)
 
 ![Main game shell](./assets/ui/game-screen.png)
@@ -26,11 +33,8 @@ The game shell combines several persistent UI regions, all rendered as
 gets the maximum amount of screen space:
 
 - **Top HUD (floating):** subject, room count, XP/rank, active phase, plus
-  **Inventory** (🎒), **Badges** (🏅), **Map**, **Teleport**, **Home**, and
-  **Help** buttons. Inventory and Badges open a tabbed modal that lists
-  collected loot and earned milestone badges (mirroring the icon-driven
-  rail used by the Repo Dungeon HUD). `Map` opens the full
-  mindmap view, `Teleport` opens a floor/room jump flow with a cooldown,
+  **Map**, **Teleport**, **Home**, and **Help** buttons. `Map` opens the full
+  topic-graph view, `Teleport` opens a floor/room jump flow with a cooldown,
   `Home` returns to subject selection, `?` opens the help overlay.
 - **Center gameplay canvas:** Phaser dungeon movement and interactions. The
   camera automatically zooms **in** when the player is standing inside a
@@ -46,7 +50,10 @@ gets the maximum amount of screen space:
 - **Minimap (bottom-left, floating):** quick room-location awareness. The
   current room and any rooms **directly connected** to it are highlighted
   in the accent color (see [§5 Minimap child highlighting](#5-minimap-child-highlighting)).
-- **Right room panel (floating):** topic metadata, breadcrumbs, and travel
+- **Right room panel (floating):** a quick-access **Collections** row for
+  **Inventory**, **Badges**, and **Diary** keeps progression actions visible
+  without crowding the HUD. The panel also includes topic metadata,
+  breadcrumbs, and travel
   shortcuts split into two sections — **Connected topics on this floor**
   (siblings/neighbors on the same floor) and **Travel to related floors**
   (a `← Back to <parent>` shortcut plus jumps to topics that live on other
@@ -58,6 +65,8 @@ gets the maximum amount of screen space:
 
 See [`CUSTOMIZATION.md`](./CUSTOMIZATION.md) for how to swap in your own
 sprites and tilesets, and for where desktop subject exports are written from.
+
+![Room panel collections shortcuts](./assets/ui/room-panel-collections.png)
 
 ## 3) Auto-zoom (room ↔ corridor)
 
@@ -73,12 +82,14 @@ on screen.
 
 ## 4) Full map view
 
-![Full pannable / zoomable mindmap with per-floor filter](./assets/ui/full-map-view.png)
+![Full pannable / zoomable topic graph with per-floor filter](./assets/ui/full-map-view.png)
 
 Opened from the HUD `Map` button or by pressing <kbd>M</kbd>. The full map
-view renders the dungeon mindmap with **drag-to-pan** and
-**scroll-to-zoom**, plus `+` / `−` / `Reset` controls. It's intended for
-inspecting the broader topic graph without leaving the dungeon. Rooms
+view renders the dungeon topic graph with **drag-to-pan** and
+**scroll-to-zoom**, plus `+` / `−` / `Reset` controls. You can also drag
+individual room nodes to reposition the layout while keeping each
+connection anchored to the moved node. It's intended for inspecting the
+broader topic graph without leaving the dungeon. Rooms
 directly connected to your currently focused room (and the edges to them)
 are tinted in the accent color so children/related topics stand out.
 
@@ -90,7 +101,7 @@ navigate back up the hierarchy. Turn the toggle off to inspect the whole
 graph at once.
 
 In Creator phase, switch from **Navigate** to **Graph edit** mode to
-rename, add, delete, or reparent topics directly from the mindmap so the
+rename, add, delete, or reparent topics directly from the map so the
 graph stays the source of truth and the dungeon layout remains a
 generated view over it.
 
@@ -122,7 +133,7 @@ The root topic cannot be deleted; the panel replaces the button with a
 short explanatory note in that case.
 
 The **Full Map** overlay now also includes a lightweight **Graph edit** mode
-for these same authoring actions so the mindmap stays the source of truth and
+for these same authoring actions so the graph stays the source of truth and
 the dungeon layout remains a generated view over that graph (see
 [§4](#4-full-map-view)).
 
@@ -133,38 +144,14 @@ the dungeon layout remains a generated view over that graph (see
 The help dialog is opened from the `?` button (or keyboard `?`) and summarizes:
 
 - Movement and interaction controls.
-- What changes in each phase (Create, Scribe, Review).
-- How encounters and review passes work.
-- The <kbd>M</kbd> shortcut for the full mindmap view.
-
-It also hosts the **Graphics style** toggle (see
-[§7a Graphics style toggle](#7a-graphics-style-toggle)) so players can
-switch the dungeon look without leaving a session.
+- The full map controls, including drag-to-pan, zoom, and moving room nodes.
+- The room panel collections shortcuts for Inventory, Badges, and Diary.
+- Teleport usage and its cooldown.
+- What changes in each phase: Creator, Scribe, and Archaeologist.
 
 It is meant to be a quick in-context rules reference while playing.
 
-### 7a) Graphics style toggle
-
-A persistent **Mind map / RPG** segmented control is available from both
-the Welcome screen (top-right header) and the Help overlay. It switches
-the visual treatment of the dungeon, the full map, and the minimap:
-
-- **Mind map** — graph-style nodes (ellipses) connected by thin edges; the
-  HUD/panels use the default cool palette.
-- **RPG** — rectangular dungeon chambers connected by thick passageways
-  decorated with stone pathway tiles, with a parchment-toned HUD/panel
-  skin. In RPG mode the in-game scene also paints a tiled floor texture
-  per floor (cycling between the bundled tilesets — Ancient Library, Lost
-  Archive, Deep Dungeon, Garden Ruins, Iron Forge, Utility Vault, Wind
-  Temple, Neon Circuit City — so each floor reads as a distinct location)
-  and sprinkles decor (bookshelves, braziers, scroll piles)
-  deterministically into each room.
-
-Saved subjects are untouched — only the renderer changes. New users
-default to RPG; existing installs are preserved on the mind-map look they
-already know until they opt in.
-
-### 7b) In-game floor isolation and stairs portals
+### 7a) In-game floor isolation and stairs portals
 
 The in-game dungeon scene now mirrors the **Full Map**'s per-floor view:
 only rooms on the player's current floor are rendered, and the minimap
@@ -207,16 +194,19 @@ artifacts and self-check prompts are ready to revisit; they disappear
 automatically when you switch back to the Create or Scribe phase so they
 don't clutter authoring/exploration.
 
-## 10) Inventory & Badges panel
+## 10) Inventory, badges, and diary panel
 
-![Inventory and badges modal opened from the HUD](./assets/ui/inventory-badges.png)
+![Inventory, badges, and diary modal opened from the room panel](./assets/ui/inventory-badges.png)
 
-The **🎒 Inventory** and **🏅 Badges** HUD buttons open a tabbed modal
+The room panel **Collections** buttons (**🎒 Inventory**, **🏅 Badges**,
+**📚 Diary**) open a shared tabbed modal
 that surfaces the player's progression rewards:
 
 - **Inventory** lists collected loot artifacts, each rendered as a card
   showing its name, rarity (common/rare/epic, color-coded), and flavour
   description.
 - **Badges** lists earned milestone badges as compact pill chips.
+- **Diary / Collected Notes** lists archaeologist pickups and lets you click
+  an entry to open its full collected note for recall.
 - The header also shows the player's current XP total and rank tier so
   progression context is always one click away.

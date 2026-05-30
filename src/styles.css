@@ -106,6 +106,58 @@ textarea {
   gap: 12px;
 }
 
+.welcome-selection-summary {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(127, 178, 255, 0.1), rgba(242, 200, 121, 0.08));
+}
+
+.welcome-selection-summary h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.welcome-ready-indicator {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.welcome-ready-indicator--ready {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.welcome-selection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.welcome-selection-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.55);
+}
+
+.welcome-selection-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.welcome-selection-card strong {
+  color: var(--accent);
+}
+
 .phase-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -333,6 +385,48 @@ textarea {
   line-height: 1.4;
 }
 
+.journal-note-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-cool);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.journal-note-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.journal-note-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 260px;
+}
+
+.journal-note-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.journal-note-view-header h3 {
+  margin: 0;
+}
+
+.journal-note-markdown {
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.6);
+  padding: 12px;
+  max-height: 48vh;
+}
+
 .badge-grid {
   list-style: none;
   margin: 0;
@@ -437,10 +531,31 @@ textarea {
   margin: 8px 0 0;
 }
 
+.room-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.room-quick-action {
+  padding: 6px 10px;
+  font-size: 12px;
+  background: rgba(127, 178, 255, 0.08);
+  border-color: rgba(127, 178, 255, 0.35);
+}
+
 .room-section {
   margin-top: 16px;
   display: grid;
   gap: 8px;
+}
+
+.room-section--scrollable {
+  max-height: 34vh;
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 2px;
 }
 
 .room-help-text {
@@ -458,6 +573,28 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.room-travel-list {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
+  padding: 8px;
+}
+
+.room-travel-item {
+  width: 100%;
+  text-align: left;
+}
+
+.room-travel-item--selected,
+.room-travel-item[aria-selected='true'] {
+  border-color: var(--accent);
+  background: rgba(127, 178, 255, 0.18);
 }
 
 button.ghost {
@@ -699,6 +836,30 @@ button.danger:hover {
   padding-right: 4px;
 }
 
+.teleport-room-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
+  padding: 6px;
+}
+
+.teleport-room-item {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.teleport-room-item--selected,
+.teleport-room-item[aria-selected='true'] {
+  border-color: var(--accent);
+  background: rgba(127, 178, 255, 0.18);
+  color: var(--text-primary);
+}
+
 .full-map-hint {
   margin: 0;
   color: var(--text-muted);
@@ -816,99 +977,26 @@ button.danger:hover {
 }
 
 /* ------------------------------------------------------------------
- * Graphics-mode toggle widget.
- * Used in the WelcomeScreen header and inside the Help overlay.
- * ------------------------------------------------------------------ */
-
-.graphics-mode-toggle {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.graphics-mode-toggle--compact {
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-}
-
-.graphics-mode-toggle__label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.graphics-mode-toggle [role='radiogroup'] {
-  display: inline-flex;
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.graphics-mode-toggle__option {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-.graphics-mode-toggle__option:hover {
-  background: rgba(242, 200, 121, 0.08);
-  color: var(--text-primary);
-}
-
-.graphics-mode-toggle__option--selected,
-.graphics-mode-toggle__option[aria-checked='true'] {
-  background: var(--accent);
-  color: #1a120a;
-}
-
-.welcome-graphics-mode {
-  margin-left: auto;
-}
-
-.help-overlay__settings {
-  margin: 16px 0 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.help-overlay__settings-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ------------------------------------------------------------------
- * RPG skin overrides — applied when the user opts into the dungeon
- * style. Everything is gated by `[data-graphics='rpg']` on <html> so
- * the default mind-map look is untouched for users who don't opt in.
+ * RPG skin overrides. We keep these gated by `[data-graphics='rpg']`
+ * on <html> to preserve flexibility for future themes.
  * ------------------------------------------------------------------ */
 
 :root[data-graphics='rpg'] {
   --bg-deep: #15100a;
   --bg-panel: #211810;
-  --bg-panel-soft: #2c2014;
-  --border-soft: #4a3520;
+  --bg-panel-soft: #2a241f;
+  --border-soft: #6a5b48;
   --text-primary: #f4e4c2;
-  --text-secondary: #d6b884;
-  --text-muted: #a08a64;
+  --text-secondary: #e6d1ab;
+  --text-muted: #e1d4bf;
   --accent: #f2c879;
   --accent-soft: #f7d99c;
   --accent-cool: #d6883a;
 }
 
 :root[data-graphics='rpg'] button {
-  background: linear-gradient(180deg, #3b2a18 0%, #2a1f12 100%);
-  border-color: #6b4a24;
+  background: linear-gradient(180deg, #463729 0%, #32261c 100%);
+  border-color: #77614b;
   color: var(--text-primary);
   box-shadow: inset 0 1px 0 rgba(255, 217, 153, 0.08);
 }

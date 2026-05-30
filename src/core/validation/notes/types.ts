@@ -1,6 +1,7 @@
 import type { CriterionScores, QualityScoreKey } from '@/core/validation/persistence';
 
 export const NOTE_MINIMUM_WORD_COUNT = 120;
+export const NOTE_BADGE_WORD_COUNT = NOTE_MINIMUM_WORD_COUNT;
 
 export const REQUIRED_NOTE_SECTIONS = ['Summary', 'Key Points', 'Recall Question'] as const;
 
@@ -14,7 +15,7 @@ export interface NoteValidationInput {
 }
 
 export type NoteValidationFailureCode =
-  | 'VAL_WORD_COUNT_TOO_LOW'
+  | 'VAL_WORD_COUNT_BONUS_TARGET'
   | 'VAL_REQUIRED_SECTION_MISSING'
   | 'VAL_MANUAL_CONFIRM_REQUIRED';
 

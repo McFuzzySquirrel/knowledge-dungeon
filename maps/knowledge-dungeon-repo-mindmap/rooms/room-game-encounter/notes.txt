@@ -1,0 +1,55 @@
+# Encounter System
+
+## What Happens When You Enter a Room
+
+1. **Collision detection** — Player sprite overlaps with room hitbox
+2. **Phaser emits event** — `roomEncountered` event fires
+3. **React receives event** — SessionStore updates `currentEncounter`
+4. **Modal opens** — Encounter dialog displays the room topic and encounter form
+
+## The Encounter Modal
+
+Shows:
+
+- **Room topic** — The name of what you're learning
+- **Encounter description** — Context (e.g., "Write notes explaining this concept")
+- **Note input form** — Text area for submitting notes
+- **Submit button** — Triggers validation
+
+## Validation on Submit
+
+When you click Submit:
+
+1. **Local validation** — Check if the text is not empty
+2. **Domain validation** — Call `validateNote()` from core
+3. **Get results** — Detailed breakdown (sections, scores, pass/fail)
+4. **Show feedback** — Modal updates to show results
+5. **On pass** — `generateArtifact()` is called, artifact is saved
+6. **Update state** — Room marked as `ArtifactCollected`, XP awarded
+
+## Retry Logic
+
+If notes fail:
+
+- You see **what failed** (missing sections, low scores, etc.)
+- You can **revise immediately** without closing the modal
+- Resubmit as many times as needed (no penalty)
+- On pass, the encounter is defeated
+
+## State Management
+
+The encounter state lives in **SessionStore**:
+
+```typescript
+currentEncounter: {
+  roomId: string;
+  topic: string;
+  phase: 'Creator' | 'Scribe' | 'Archaeologist';
+}
+```
+
+When you close the encounter or move to another room, it's cleared.
+
+## Design Insight
+
+The encounter system keeps you **in the game world** while you work. You don't jump to a form on a separate page; you open a modal in the dungeon. This maintains immersion and makes learning feel like adventure, not administration.

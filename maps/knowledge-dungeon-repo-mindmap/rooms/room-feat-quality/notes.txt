@@ -1,0 +1,62 @@
+# Quality Scoring
+
+## What Is Quality Scoring?
+
+Quality scoring is the **numerical feedback** from validation that tells you how well you've explained a topic. It's the bridge between "did your note pass?" and "how good was it?".
+
+## The Quality Bonus
+
+After validation passes, a quality bonus (0–10) is calculated:
+
+```
+qualityBonus = (sum of all criterion scores) / 5 * 10
+```
+
+Example:
+- All criteria score 2: bonus = 10/5 * 10 = 20 (capped at 10)
+- Mixed scores (2+1+2+1+2): bonus = 8/5 * 10 = 16 (capped at 10)
+- Minimal scores (1+0+1+0+1): bonus = 3/5 * 10 = 6
+
+This bonus is **visible in the artifact** and feeds into **XP calculation** during progression.
+
+## Why Quality Matters
+
+The app assumes:
+
+> **Better explanations = Better learning**
+
+A student who writes clear, well-structured, interconnected notes is learning more deeply than one who submits barely-passing notes. The quality bonus incentivizes this.
+
+### Progression Feedback Loop
+
+```
+High-quality notes → High quality bonus
+                  → More XP awarded
+                  → Rank up faster
+                  → Badges/achievements
+                  → Motivation to maintain quality
+```
+
+This is **virtuous cycle**: quality → progress → motivation → more quality.
+
+## Preventing Inflation
+
+Quality scoring is:
+
+- **Deterministic** — Same note always gets the same score
+- **Transparent** — You see exact scores for each criterion
+- **Not gamifiable** — Can't artificially inflate by gaming the system
+- **Aligned with learning** — Criteria reflect good study habits
+
+## Displaying Quality
+
+Quality is shown in several places:
+
+1. **Encounter feedback** — After you submit
+2. **Artifact document** — "Quality Bonus: 8/10"
+3. **HUD** — Historical quality over time (optional)
+4. **Progress review** — "Your average quality: 7.2/10"
+
+## Design Insight
+
+Quality scoring removes **arbitrary pass/fail** in favor of **continuous feedback**. You always know how well you did, not just "pass" or "fail". This motivates improvement and makes learning feel achievable and measurable.

@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState, type JSX } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
-import { evaluateNoteValidation, REQUIRED_NOTE_SECTIONS } from '@/core/validation/notes';
+import {
+  NOTE_BADGE_WORD_COUNT,
+  evaluateNoteValidation,
+  REQUIRED_NOTE_SECTIONS,
+} from '@/core/validation/notes';
+import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
 import { Markdown } from '@/ui/utils/markdown';
 
 const TEMPLATE = `Summary
@@ -24,6 +29,7 @@ export function NoteEditorModal(): JSX.Element | null {
   const snapshot = useSubjectStore((s) => s.snapshot);
   const submitNote = useSubjectStore((s) => s.submitNote);
   const awardRoomClear = useProgressionStore((s) => s.awardRoomClear);
+  const awardBadge = useProgressionStore((s) => s.awardBadge);
 
   const room = roomId ? snapshot?.rooms[roomId] : null;
   const [noteText, setNoteText] = useState(TEMPLATE);
@@ -66,6 +72,9 @@ export function NoteEditorModal(): JSX.Element | null {
           scribeClearedRooms: cleared + 1,
           archaeologistFullReviewPasses: 0,
         });
+        if (result.wordCount >= NOTE_BADGE_WORD_COUNT) {
+          awardBadge(SCRIBE_CENTURY_120_BADGE_ID);
+        }
         close();
       }
     } finally {
@@ -78,8 +87,9 @@ export function NoteEditorModal(): JSX.Element | null {
       <div className="modal">
         <h2>Encounter: {room.topic}</h2>
         <p>
-          Write at least 120 words including {REQUIRED_NOTE_SECTIONS.join(', ')} sections to
-          defeat this encounter and generate its artifact.
+          Write as much or as little as needed. Include {REQUIRED_NOTE_SECTIONS.join(', ')}{' '}
+          sections to defeat this encounter and generate its artifact. Reach{' '}
+          {NOTE_BADGE_WORD_COUNT}+ words to earn a special badge.
         </p>
         <p className="room-help-text">
           Rich text: use <code>[label](https://example.com)</code> for clickable links,
@@ -131,8 +141,18 @@ export function NoteEditorModal(): JSX.Element | null {
             {preview.criteria.map((c) => (
               <li key={c.code}>
                 <span>{c.message}</span>
-                <span className={c.passed ? 'pass' : 'fail'}>
-                  {c.passed ? '✓' : '✗'}
+                <span
+                  className={
+                    c.code === 'VAL_WORD_COUNT_BONUS_TARGET'
+                      ? c.passed
+                        ? 'pass'
+                        : ''
+                      : c.passed
+                        ? 'pass'
+                        : 'fail'
+                  }
+                >
+                  {c.code === 'VAL_WORD_COUNT_BONUS_TARGET' ? (c.passed ? '★' : '○') : c.passed ? '✓' : '✗'}
                 </span>
               </li>
             ))}

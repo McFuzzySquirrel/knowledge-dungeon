@@ -4,7 +4,6 @@ import { computeFloorVisibility, deriveGraphHierarchy } from '@/core/graph';
 import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
-import { usePreferencesStore } from '@/store/preferencesStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene } from '@/game/scenes/DungeonScene';
@@ -42,13 +41,15 @@ export function GameScreen(): JSX.Element {
   const rank = useProgressionStore((s) => s.rank);
   const inventory = useProgressionStore((s) => s.inventory);
   const badges = useProgressionStore((s) => s.badges);
-  const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
+  const collectedNotes = useProgressionStore((s) => s.collectedNotes);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<DungeonScene | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges'>(null);
+  const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges' | 'journal'>(
+    null,
+  );
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [sceneReady, setSceneReady] = useState(false);
 
@@ -99,7 +100,6 @@ export function GameScreen(): JSX.Element {
       parent: containerRef.current,
       dungeonMap,
       playerClass: selectedClass,
-      graphicsMode,
       initialFloor: initialFloor
         ? {
             floorId: initialFloor.floorId,
@@ -117,6 +117,32 @@ export function GameScreen(): JSX.Element {
           } else {
             openNoteEditor(roomId);
           }
+        },
+        onArtifactCollected: (roomId) => {
+          const liveSnapshot = useSubjectStore.getState().snapshot;
+          if (!liveSnapshot) return;
+          const room = liveSnapshot.rooms[roomId];
+          if (!room?.artifactMarkdown) return;
+
+          const liveHierarchy = deriveGraphHierarchy(liveSnapshot.dungeon);
+          const floorId = liveHierarchy.floorIdByRoomId[roomId] ?? liveSnapshot.dungeon.rootRoomId;
+          const floorLabel = liveHierarchy.floorLabelByFloorId[floorId] ?? liveSnapshot.dungeon.subjectName;
+          const previewSource = room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown;
+          const preview = previewSource
+            .replace(/^#\s+.*$/gm, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 180);
+
+          useProgressionStore.getState().collectArtifactNote({
+            dungeonId: liveSnapshot.dungeon.dungeonId,
+            roomId,
+            topic: room.topic,
+            floorLabel,
+            artifactPreview: preview,
+            noteMarkdown: room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown,
+            artifactMarkdown: room.artifactMarkdown,
+          });
         },
         onFloorTransition: ({ fromRoomId, direction }) => {
           const liveSnapshot = useSubjectStore.getState().snapshot;
@@ -160,7 +186,7 @@ export function GameScreen(): JSX.Element {
     // phase reads happen at interact-time via the closure update below, and
     // floor changes are pushed via `scene.setFloorVisibility` to avoid
     // tearing down the Phaser game on every transition.
-  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId, graphicsMode]);
+  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
@@ -209,6 +235,11 @@ export function GameScreen(): JSX.Element {
   }
 
   const focusedRoom = focusedRoomId ? snapshot.rooms[focusedRoomId] ?? null : null;
+  const noteMarkdownByRoomId = useMemo(() => {
+    return Object.fromEntries(
+      Object.values(snapshot.rooms).map((room) => [room.roomId, room.noteText] as const),
+    );
+  }, [snapshot.rooms]);
   const currentFloorLabel =
     focusedRoom && hierarchy
       ? hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[focusedRoom.roomId]]
@@ -265,8 +296,6 @@ export function GameScreen(): JSX.Element {
         roomCount={snapshot.dungeon.rooms.length}
         xpTotal={xpTotal}
         rank={rank}
-        inventoryCount={inventory.length}
-        badgeCount={badges.length}
         phase={phase}
         currentFloorLabel={currentFloorLabel}
         teleportRemainingMs={teleportRemainingMs}
@@ -276,8 +305,6 @@ export function GameScreen(): JSX.Element {
         onOpenMap={openMapView}
         onTeleport={handleTeleport}
         onHome={handleHome}
-        onOpenInventory={() => setInventoryView('inventory')}
-        onOpenBadges={() => setInventoryView('badges')}
       />
 
       <div className="game-canvas">
@@ -296,6 +323,12 @@ export function GameScreen(): JSX.Element {
         focusedRoom={focusedRoom}
         onInteract={() => focusedRoom && openNoteEditor(focusedRoom.roomId)}
         onTravelToRoom={handleTravelToRoom}
+        inventoryCount={inventory.length}
+        badgeCount={badges.length}
+        journalCount={collectedNotes.length}
+        onOpenInventory={() => setInventoryView('inventory')}
+        onOpenBadges={() => setInventoryView('badges')}
+        onOpenJournal={() => setInventoryView('journal')}
       />
 
       <TouchControls onInteract={() => sceneRef.current?.triggerInteract()} />
@@ -320,6 +353,8 @@ export function GameScreen(): JSX.Element {
           view={inventoryView}
           inventory={inventory}
           badges={badges}
+          collectedNotes={collectedNotes}
+          noteMarkdownByRoomId={noteMarkdownByRoomId}
           xpTotal={xpTotal}
           rank={rank}
           onSwitchView={(v) => setInventoryView(v)}

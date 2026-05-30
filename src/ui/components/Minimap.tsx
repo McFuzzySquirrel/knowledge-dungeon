@@ -1,6 +1,5 @@
 import type { JSX } from 'react';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
-import { usePreferencesStore } from '@/store/preferencesStore';
 
 interface MinimapProps {
   dungeonMap: DungeonMap;
@@ -27,8 +26,6 @@ export function Minimap({
   portalDownRoomIds,
 }: MinimapProps): JSX.Element {
   const { bounds, rooms } = dungeonMap;
-  const graphicsMode = usePreferencesStore((s) => s.graphicsMode);
-  const isRpg = graphicsMode === 'rpg';
   const width = (bounds.maxX - bounds.minX) * SCALE;
   const height = (bounds.maxY - bounds.minY) * SCALE;
 
@@ -47,7 +44,7 @@ export function Minimap({
     !visibleRoomIds || visibleRoomIds.has(roomId);
 
   return (
-    <div className="minimap" aria-label="Minimap" data-graphics={graphicsMode}>
+    <div className="minimap" aria-label="Minimap" data-graphics="rpg">
       <svg width={Math.min(180, width)} height={Math.min(180, height)} viewBox={`0 0 ${width} ${height}`}>
         {dungeonMap.corridors.map((c, i) => {
           if (!isRoomVisible(c.fromRoomId) || !isRoomVisible(c.toRoomId)) return null;
@@ -78,12 +75,10 @@ export function Minimap({
                   ? '#f2c879'
                   : isPortalEdge
                     ? '#7fb2ff'
-                    : isRpg
-                      ? '#6b4a24'
-                      : '#3b455e'
+                    : '#6b4a24'
               }
               strokeWidth={isConnected ? 1.5 : 1}
-              strokeLinecap={isRpg ? 'round' : undefined}
+              strokeLinecap="round"
               strokeDasharray={isPortalEdge ? '3 2' : undefined}
             />
           );
@@ -108,45 +103,20 @@ export function Minimap({
                 : room.isRoot
                   ? '#b88a4a'
                   : '#3d2b1a';
-          const mindmapFill = isPortal
-            ? '#2a3a5c'
-            : isFocused
-              ? '#f2c879'
-              : isNeighbor
-                ? '#f7d99c'
-                : room.isRoot
-                  ? '#7fb2ff'
-                  : '#1f2433';
-          const fill = isRpg ? rpgFill : mindmapFill;
+          const fill = rpgFill;
           const stroke = isPortal
             ? '#7fb2ff'
             : isNeighbor && !isFocused
               ? '#f2c879'
-              : isRpg
-                ? '#6b4a24'
-                : '#a8b0c8';
+              : '#6b4a24';
           const strokeWidth = isPortal || (isNeighbor && !isFocused) ? 1 : 0.5;
-          if (isRpg) {
-            return (
-              <rect
-                key={room.roomId}
-                x={x}
-                y={y}
-                width={w}
-                height={h}
-                fill={fill}
-                stroke={stroke}
-                strokeWidth={strokeWidth}
-              />
-            );
-          }
           return (
-            <ellipse
+            <rect
               key={room.roomId}
-              cx={x + w / 2}
-              cy={y + h / 2}
-              rx={w / 2}
-              ry={h / 2}
+              x={x}
+              y={y}
+              width={w}
+              height={h}
               fill={fill}
               stroke={stroke}
               strokeWidth={strokeWidth}

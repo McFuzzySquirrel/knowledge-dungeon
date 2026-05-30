@@ -11,12 +11,17 @@ import type {
   DungeonRoom,
 } from '@/game/systems/dungeonTypes';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
-import type { GraphicsMode } from '@/store/preferencesStore';
+import {
+  ensureBiomeFloorTexture,
+  resolveFloorBiome,
+  type FloorBiomeId,
+} from '@/game/systems/proceduralTextures';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
 
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
   onInteract: (roomId: string) => void;
+  onArtifactCollected?: (roomId: string) => void;
   /**
    * Fired when the player presses E inside a portal room (up or down).
    * The React layer is responsible for choosing the destination floor,
@@ -34,6 +39,7 @@ export interface FloorVisibilityInput {
   visibleRoomIds: ReadonlySet<string> | readonly string[];
   portalUpRoomId: string | null;
   portalDownRoomIds: ReadonlySet<string> | readonly string[];
+  biomeId?: FloorBiomeId;
 }
 
 const PLAYER_SPEED = 160;
@@ -61,8 +67,6 @@ const PLAYER_SPRITE_FALLBACK = `${BASE}assets/sprites/player.svg`;
 const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
 const NPC_GUIDE_SPRITE = `${BASE}assets/sprites/npc-scribe.svg`;
 const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
-const PATHWAY_STRAIGHT_SPRITE = `${BASE}assets/sprites/pathways/straight.svg`;
-const PATHWAY_CORNER_SPRITE = `${BASE}assets/sprites/pathways/corner.svg`;
 const DOOR_SPRITE = `${BASE}assets/sprites/objects/door.svg`;
 const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
 const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
@@ -80,47 +84,10 @@ const DECOR_TEXTURE_KEYS: Record<DecorKey, string> = {
 const DECOR_KEYS: readonly DecorKey[] = ['bookshelf', 'brazier', 'scrollPile'];
 const DECOR_SPRITE_SIZE = 24;
 
-// Tileset textures used as RPG-mode floor backgrounds. Cycled deterministically
-// per floor so each floor has its own visual identity.
-const TILESET_SPRITES = {
-  ancientLibrary: `${BASE}assets/tilesets/ancient-library.svg`,
-  lostArchive: `${BASE}assets/tilesets/lost-archive.svg`,
-  deepDungeon: `${BASE}assets/tilesets/deep-dungeon.svg`,
-  gardenRuins: `${BASE}assets/tilesets/garden-ruins.svg`,
-  ironForge: `${BASE}assets/tilesets/iron-forge.svg`,
-  utilityVault: `${BASE}assets/tilesets/utility-vault.svg`,
-  windTemple: `${BASE}assets/tilesets/wind-temple.svg`,
-  neonCircuitCity: `${BASE}assets/tilesets/neon-circuit-city.svg`,
-} as const;
-type TilesetKey = keyof typeof TILESET_SPRITES;
-const TILESET_TEXTURE_KEYS: Record<TilesetKey, string> = {
-  ancientLibrary: 'kd-tileset-ancient-library',
-  lostArchive: 'kd-tileset-lost-archive',
-  deepDungeon: 'kd-tileset-deep-dungeon',
-  gardenRuins: 'kd-tileset-garden-ruins',
-  ironForge: 'kd-tileset-iron-forge',
-  utilityVault: 'kd-tileset-utility-vault',
-  windTemple: 'kd-tileset-wind-temple',
-  neonCircuitCity: 'kd-tileset-neon-circuit-city',
-};
-const TILESET_KEYS: readonly TilesetKey[] = [
-  'ancientLibrary',
-  'lostArchive',
-  'deepDungeon',
-  'gardenRuins',
-  'ironForge',
-  'utilityVault',
-  'windTemple',
-  'neonCircuitCity',
-];
-const TILESET_TILE_SIZE = 32;
-
 const PLAYER_TEXTURE_KEY = 'kd-player';
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
 const NPC_GUIDE_TEXTURE_KEY = 'kd-npc-guide';
 const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
-const PATHWAY_STRAIGHT_TEXTURE_KEY = 'kd-pathway-straight';
-const PATHWAY_CORNER_TEXTURE_KEY = 'kd-pathway-corner';
 const DOOR_TEXTURE_KEY = 'kd-door';
 const STAIRS_UP_TEXTURE_KEY = 'kd-stairs-up';
 const STAIRS_DOWN_TEXTURE_KEY = 'kd-stairs-down';
@@ -152,9 +119,9 @@ export class DungeonScene extends Phaser.Scene {
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
   private playerClass: PlayerClassId | null = null;
-  private graphicsMode: GraphicsMode = 'rpg';
   private artifactIcons = new Map<string, Phaser.GameObjects.Container>();
   private artifactRoomIds = new Set<string>();
+  private collectedArtifactRoomIds = new Set<string>();
   private showArtifactIcons = false;
   private currentFloorId: string | null = null;
   private visibleRoomIds: Set<string> | null = null;
@@ -164,7 +131,6 @@ export class DungeonScene extends Phaser.Scene {
   private portalHintText: Phaser.GameObjects.Text | null = null;
   private floorTileSprites: Phaser.GameObjects.TileSprite[] = [];
   private corridorTileSprites: Phaser.GameObjects.TileSprite[] = [];
-  private corridorCornerSprites: Phaser.GameObjects.Image[] = [];
   private doorSprites: Phaser.GameObjects.Image[] = [];
   /**
    * Walkability mask for the currently-visible floor. Players can only move
@@ -183,6 +149,7 @@ export class DungeonScene extends Phaser.Scene {
    * decor placement and tileset selection so the layout is stable across
    * redraws on the same floor. */
   private floorSeed = 0;
+  private floorBiomeOverride: FloorBiomeId | null = null;
 
   constructor() {
     super({ key: 'DungeonScene' });
@@ -192,13 +159,11 @@ export class DungeonScene extends Phaser.Scene {
     dungeonMap: DungeonMap;
     callbacks: DungeonSceneEvents;
     playerClass?: PlayerClassId | null;
-    graphicsMode?: GraphicsMode;
     initialFloor?: FloorVisibilityInput;
   }): void {
     this.dungeonMap = data.dungeonMap;
     this.callbacks = data.callbacks;
     this.playerClass = data.playerClass ?? null;
-    this.graphicsMode = data.graphicsMode ?? 'rpg';
     if (data.initialFloor) {
       this.applyFloorVisibility(data.initialFloor);
     }
@@ -222,14 +187,6 @@ export class DungeonScene extends Phaser.Scene {
       width: NPC_GUIDE_SPRITE_SIZE,
       height: NPC_GUIDE_SPRITE_SIZE,
     });
-    this.load.svg(PATHWAY_STRAIGHT_TEXTURE_KEY, PATHWAY_STRAIGHT_SPRITE, {
-      width: PATHWAY_TILE_SIZE,
-      height: PATHWAY_TILE_SIZE,
-    });
-    this.load.svg(PATHWAY_CORNER_TEXTURE_KEY, PATHWAY_CORNER_SPRITE, {
-      width: PATHWAY_TILE_SIZE,
-      height: PATHWAY_TILE_SIZE,
-    });
     this.load.svg(DOOR_TEXTURE_KEY, DOOR_SPRITE, {
       width: DOOR_SPRITE_SIZE,
       height: DOOR_SPRITE_SIZE,
@@ -252,19 +209,13 @@ export class DungeonScene extends Phaser.Scene {
         height: DECOR_SPRITE_SIZE,
       });
     }
-    for (const key of TILESET_KEYS) {
-      this.load.svg(TILESET_TEXTURE_KEYS[key], TILESET_SPRITES[key], {
-        width: TILESET_TILE_SIZE,
-        height: TILESET_TILE_SIZE,
-      });
-    }
   }
 
   create(): void {
     if (!this.dungeonMap) return;
     const map = this.dungeonMap;
 
-    this.cameras.main.setBackgroundColor(this.graphicsMode === 'rpg' ? 0x1a120a : 0x10131a);
+    this.cameras.main.setBackgroundColor(0x1a120a);
 
     // Ensure the walkability mask is built even when no floor visibility has
     // been applied (eg. single-floor dungeons that never call setFloorVisibility).
@@ -418,6 +369,8 @@ export class DungeonScene extends Phaser.Scene {
       this.setZoomTarget(shouldBeInsideRoom ? ZOOM_INSIDE_ROOM : ZOOM_ON_PATH);
     }
 
+    this.checkArtifactCollection();
+
     if (
       !typingInTextField &&
       this.interactKey &&
@@ -478,8 +431,31 @@ export class DungeonScene extends Phaser.Scene {
    */
   setArtifactRooms(roomIds: readonly string[], visible: boolean): void {
     this.artifactRoomIds = new Set(roomIds);
+    for (const roomId of [...this.collectedArtifactRoomIds]) {
+      if (!this.artifactRoomIds.has(roomId)) {
+        this.collectedArtifactRoomIds.delete(roomId);
+      }
+    }
     this.showArtifactIcons = visible;
     this.refreshArtifactIcons();
+  }
+
+  private checkArtifactCollection(): void {
+    if (!this.showArtifactIcons || !this.player || !this.currentRoomId) return;
+    if (!this.artifactRoomIds.has(this.currentRoomId)) return;
+    if (this.collectedArtifactRoomIds.has(this.currentRoomId)) return;
+    const icon = this.artifactIcons.get(this.currentRoomId);
+    if (!icon) return;
+
+    const dx = this.player.x - icon.x;
+    const dy = this.player.y - icon.y;
+    const pickupRadius = 22;
+    if (dx * dx + dy * dy > pickupRadius * pickupRadius) return;
+
+    this.collectedArtifactRoomIds.add(this.currentRoomId);
+    icon.destroy();
+    this.artifactIcons.delete(this.currentRoomId);
+    this.callbacks?.onArtifactCollected?.(this.currentRoomId);
   }
 
   private refreshArtifactIcons(): void {
@@ -701,6 +677,7 @@ export class DungeonScene extends Phaser.Scene {
     this.visibleRoomIds = new Set(input.visibleRoomIds);
     this.portalUpRoomId = input.portalUpRoomId;
     this.portalDownRoomIds = new Set(input.portalDownRoomIds);
+    this.floorBiomeOverride = input.biomeId ?? null;
     this.floorSeed = hashString(input.floorId);
     this.rebuildActiveWalkable();
   }
@@ -789,20 +766,13 @@ export class DungeonScene extends Phaser.Scene {
     );
   }
 
-  /**
-   * Render an RPG-mode tiled floor inside each visible room. Mindmap mode
-   * intentionally leaves rooms as flat shapes so the floor tile texture
-   * doesn't compete with the abstract node look.
-   */
+  /** Render tiled floor textures inside each visible room. */
   private renderFloorTiles(): void {
     for (const tile of this.floorTileSprites) tile.destroy();
     this.floorTileSprites = [];
-    if (!this.dungeonMap || this.graphicsMode !== 'rpg') return;
-    // Pick a single tileset per floor so each floor reads as a distinct
-    // location (Ancient Library vs Lost Archive vs Deep Dungeon).
-    const tilesetKey = TILESET_KEYS[this.floorSeed % TILESET_KEYS.length];
-    const textureKey = TILESET_TEXTURE_KEYS[tilesetKey];
-    if (!this.textures.exists(textureKey)) return;
+    if (!this.dungeonMap) return;
+    const biome = resolveFloorBiome(this.floorSeed, this.floorBiomeOverride ?? undefined);
+    const textureKey = ensureBiomeFloorTexture(this, biome);
     const map = this.dungeonMap;
     for (const room of map.rooms) {
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
@@ -830,13 +800,12 @@ export class DungeonScene extends Phaser.Scene {
   /**
    * Sprinkle 0–3 decor icons (bookshelf / brazier / scroll pile) into each
    * visible room. Placement is deterministic per (floorId, roomId) so the
-   * layout is stable across redraws. RPG-mode only — mindmap mode would
-   * look noisy with object sprites layered onto its abstract nodes.
+   * layout is stable across redraws.
    */
   private refreshDecor(): void {
     for (const icon of this.decorIcons) icon.destroy();
     this.decorIcons = [];
-    if (!this.dungeonMap || this.graphicsMode !== 'rpg') return;
+    if (!this.dungeonMap) return;
     const map = this.dungeonMap;
     for (const room of map.rooms) {
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
@@ -879,7 +848,6 @@ export class DungeonScene extends Phaser.Scene {
     // game objects when the floor is switched.
     for (const label of this.roomLabels.values()) label.destroy();
     this.roomLabels.clear();
-    const isRpg = this.graphicsMode === 'rpg';
     // Index doors per room so the wall stroke can skip the door tiles.
     const doorsByRoom = new Map<string, DungeonDoor[]>();
     for (const door of map.doors) {
@@ -897,40 +865,27 @@ export class DungeonScene extends Phaser.Scene {
       const isPortalDown = this.portalDownRoomIds.has(room.roomId);
       const isPortal = isPortalUp || isPortalDown;
 
-      if (isRpg) {
-        // Stone-floor chamber with a thick mortared wall border.
-        const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x4a3520 : 0x2a1f12;
-        g.fillStyle(fill, 1);
-        g.fillRect(x, y, w, h);
-        // Inner floor tile band to suggest a tiled chamber.
-        g.fillStyle(isPortal ? 0x2a3a5c : 0x3b2a18, 0.65);
-        g.fillRect(x + 4, y + 4, w - 8, h - 8);
-        this.drawRoomWallsWithDoors(
-          g,
-          room,
-          doorsByRoom.get(room.roomId) ?? [],
-          map.tileSize,
-          isPortal ? 0x7fb2ff : statusColor(room.status),
-        );
-      } else {
-        // Mind-map flavour: flat node, rounded by an outlined ellipse on top
-        // of a soft-fill rectangle so room collision still maps to the grid.
-        const fill = isPortal ? 0x2a3a5c : room.isRoot ? 0x223259 : 0x1a2032;
-        g.fillStyle(fill, 1);
-        g.fillRect(x, y, w, h);
-        g.lineStyle(2, isPortal ? 0x7fb2ff : statusColor(room.status), 1);
-        // Phaser's `strokeEllipse(cx, cy, width, height)` takes the FULL
-        // ellipse dimensions (not radii), so passing `w` and `h` here makes
-        // the ellipse exactly fill the room's grid footprint.
-        g.strokeEllipse(x + w / 2, y + h / 2, w, h);
-      }
+      // Stone-floor chamber with a thick mortared wall border.
+      const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x4a3520 : 0x2a1f12;
+      g.fillStyle(fill, 1);
+      g.fillRect(x, y, w, h);
+      // Inner floor tile band to suggest a tiled chamber.
+      g.fillStyle(isPortal ? 0x2a3a5c : 0x3b2a18, 0.65);
+      g.fillRect(x + 4, y + 4, w - 8, h - 8);
+      this.drawRoomWallsWithDoors(
+        g,
+        room,
+        doorsByRoom.get(room.roomId) ?? [],
+        map.tileSize,
+        isPortal ? 0x7fb2ff : statusColor(room.status),
+      );
 
       const labelPrefix = isPortalUp ? '↑ ' : isPortalDown ? '↓ ' : '';
       const label = this.add
         .text(x + w / 2, y + h - 12, `${labelPrefix}${room.topic}`, {
           fontFamily: 'Inter, system-ui, sans-serif',
           fontSize: '12px',
-          color: isPortal ? '#cfe1ff' : isRpg ? '#f4e4c2' : '#f5f7ff',
+          color: isPortal ? '#cfe1ff' : '#f4e4c2',
           align: 'center',
           wordWrap: { width: w - 8 },
         })
@@ -1035,17 +990,15 @@ export class DungeonScene extends Phaser.Scene {
     // teleport, etc.) so we don't leak game objects.
     for (const tile of this.corridorTileSprites) tile.destroy();
     this.corridorTileSprites = [];
-    for (const corner of this.corridorCornerSprites) corner.destroy();
-    this.corridorCornerSprites = [];
     for (const door of this.doorSprites) door.destroy();
     this.doorSprites = [];
-    const isRpg = this.graphicsMode === 'rpg';
-    const baseColor = isRpg ? 0x6b4a24 : 0x3b455e;
+    const baseColor = 0x6b4a24;
     const portalColor = 0x7fb2ff;
-    const canTilePath =
-      isRpg && this.textures.exists(PATHWAY_STRAIGHT_TEXTURE_KEY);
-    const canTileCorner =
-      isRpg && this.textures.exists(PATHWAY_CORNER_TEXTURE_KEY);
+    const corridorTextureKey = ensureBiomeFloorTexture(
+      this,
+      resolveFloorBiome(this.floorSeed, this.floorBiomeOverride ?? undefined),
+    );
+    const canTilePath = !!corridorTextureKey;
     const canDrawDoor = this.textures.exists(DOOR_TEXTURE_KEY);
     const tileSize = map.tileSize;
 
@@ -1063,11 +1016,10 @@ export class DungeonScene extends Phaser.Scene {
         this.portalDownRoomIds.has(corridor.fromRoomId) ||
         this.portalDownRoomIds.has(corridor.toRoomId);
       const strokeColor = isPortalEdge ? portalColor : baseColor;
-      g.lineStyle(isRpg ? 5 : 4, strokeColor, 1);
+      g.lineStyle(5, strokeColor, 1);
 
-      // Stroke each axis-aligned segment so the corridor reads even when
-      // tile sprites haven't loaded (and in mind-map mode where we skip
-      // tile sprites entirely).
+      // Stroke each axis-aligned segment so the corridor still reads when
+      // tile sprites have not loaded yet.
       for (const seg of corridor.segments) {
         const ax = (seg.x1 + 0.5) * tileSize;
         const ay = (seg.y1 + 0.5) * tileSize;
@@ -1095,21 +1047,21 @@ export class DungeonScene extends Phaser.Scene {
               cy,
               length,
               PATHWAY_TILE_SIZE,
-              PATHWAY_STRAIGHT_TEXTURE_KEY,
+              corridorTextureKey,
             )
             .setRotation(seg.orientation === 'h' ? 0 : Math.PI / 2)
             .setAlpha(isPortalEdge ? 0.55 : 0.75)
             .setDepth(0.5);
           this.corridorTileSprites.push(tile);
         }
-        if (canTileCorner && corridor.elbow) {
+        if (corridor.elbow) {
           const cx = (corridor.elbow.x + 0.5) * tileSize;
           const cy = (corridor.elbow.y + 0.5) * tileSize;
-          const cornerImg = this.add
-            .image(cx, cy, PATHWAY_CORNER_TEXTURE_KEY)
+          const cornerTile = this.add
+            .tileSprite(cx, cy, PATHWAY_TILE_SIZE, PATHWAY_TILE_SIZE, corridorTextureKey)
             .setAlpha(isPortalEdge ? 0.55 : 0.78)
             .setDepth(0.6);
-          this.corridorCornerSprites.push(cornerImg);
+          this.corridorTileSprites.push(cornerTile);
         }
       }
 

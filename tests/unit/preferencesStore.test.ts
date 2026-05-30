@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STORAGE_KEYS } from '@/services/persistence/subjectPersistence';
 
 const STORE_PATH = '@/store/preferencesStore';
 
@@ -26,14 +25,13 @@ describe('preferencesStore', () => {
     expect(usePreferencesStore.getState().graphicsMode).toBe('rpg');
   });
 
-  it('keeps existing users on the mind-map look when no preference is stored', async () => {
-    window.localStorage.setItem(STORAGE_KEYS.subjectIndex, JSON.stringify(['legacy-subject']));
+  it('keeps RPG mode for existing users when no preference is stored', async () => {
+    window.localStorage.setItem('knowledge-dungeon:subjects:index', JSON.stringify(['legacy-subject']));
     const { usePreferencesStore } = await loadStore();
-    expect(usePreferencesStore.getState().graphicsMode).toBe('mindmap');
+    expect(usePreferencesStore.getState().graphicsMode).toBe('rpg');
   });
 
   it('honours a previously persisted graphics-mode preference', async () => {
-    window.localStorage.setItem(STORAGE_KEYS.subjectIndex, JSON.stringify(['legacy-subject']));
     const { __testing } = await loadStore();
     window.localStorage.setItem(
       __testing.PREFERENCES_STORAGE_KEY,
@@ -45,10 +43,10 @@ describe('preferencesStore', () => {
 
   it('persists changes via setGraphicsMode', async () => {
     const { usePreferencesStore, __testing } = await loadStore();
-    usePreferencesStore.getState().setGraphicsMode('mindmap');
-    expect(usePreferencesStore.getState().graphicsMode).toBe('mindmap');
+    usePreferencesStore.getState().setGraphicsMode('rpg');
+    expect(usePreferencesStore.getState().graphicsMode).toBe('rpg');
     const raw = window.localStorage.getItem(__testing.PREFERENCES_STORAGE_KEY);
     expect(raw).not.toBeNull();
-    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'mindmap' });
+    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg' });
   });
 });

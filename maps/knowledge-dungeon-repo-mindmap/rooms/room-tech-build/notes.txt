@@ -1,0 +1,60 @@
+# Build Tools: Vite & TypeScript
+
+## Vite: The Build Engine
+
+Vite (French for "fast") is a next-generation bundler:
+
+### Development Mode
+- **No bundling** — Serves modules as-is over HTTP
+- **Hot reload** — Change a file, see it live in <1 second
+- **Error overlays** — Syntax errors show in browser, not console
+- **Fast startup** — Dev server ready in milliseconds
+
+### Production Mode
+- **Tree-shaking** — Removes unused code automatically
+- **Code splitting** — Lazy-loads route chunks
+- **CSS minification** — Optimized stylesheets
+- **Asset hashing** — Long-term caching support
+
+## TypeScript: The Type System
+
+We use TypeScript 5 with **strict mode enabled**:
+
+```
+"strict": true,
+"noImplicitAny": true,
+"strictNullChecks": true,
+```
+
+This means:
+- Every function must declare parameter types
+- `null` and `undefined` are treated as distinct types
+- No implicit `any` types
+- Catches bugs at compile time, not runtime
+
+### Benefits
+- **Self-documenting code** — Types serve as inline documentation
+- **IDE support** — Autocomplete and refactoring work perfectly
+- **Safety** — Impossible to pass wrong types without error
+- **Confidence** — Type checker finds 30–40% of bugs before testing
+
+## The Pipeline
+
+```
+src/ (TypeScript)
+  ↓ [tsc & Vite transpile]
+dist/ (JavaScript + CSS + assets)
+  ↓ [Electron bundler]
+release/ (native app for macOS/Windows/Linux)
+```
+
+## Configuration
+
+- `vite.config.ts` — Build settings, plugins, aliases
+- `tsconfig.json` — TypeScript compilation settings
+- `tsconfig.app.json` — App-specific overrides
+- `tsconfig.node.json` — Node script overrides
+
+## Design Insight
+
+Vite + TypeScript is the sweet spot: **near-instant feedback during development** combined with **type safety**. This is why the workflow feels snappy when adding features.

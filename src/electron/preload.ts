@@ -12,6 +12,8 @@ const electronKnowledgeBridge = {
   exportSubjectsRoot: () => ipcRenderer.invoke('knowledge:export-subjects-root') as Promise<string | null>,
   exportSubjectFolder: (subjectId: string) =>
     ipcRenderer.invoke('knowledge:export-subject-folder', subjectId) as Promise<string | null>,
+  importSubjectFolder: () =>
+    ipcRenderer.invoke('knowledge:import-subject-folder') as Promise<unknown>,
 };
 
 contextBridge.exposeInMainWorld('electronKnowledgeBridge', electronKnowledgeBridge);

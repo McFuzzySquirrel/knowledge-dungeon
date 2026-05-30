@@ -18,11 +18,24 @@ export interface LootItem {
   acquiredAt: string;
 }
 
+export interface CollectedNoteEntry {
+  noteId: string;
+  dungeonId: string;
+  roomId: string;
+  topic: string;
+  floorLabel: string;
+  artifactPreview: string;
+  noteMarkdown: string;
+  artifactMarkdown: string;
+  collectedAt: string;
+}
+
 interface PersistedProgression {
   xpTotal: number;
   rank: RankTier;
   badges: string[];
   inventory: LootItem[];
+  collectedNotes: CollectedNoteEntry[];
   streakCount: number;
 }
 
@@ -31,6 +44,7 @@ const DEFAULT_PROGRESSION: PersistedProgression = {
   rank: 'Novice',
   badges: [],
   inventory: [],
+  collectedNotes: [],
   streakCount: 0,
 };
 
@@ -39,13 +53,47 @@ function loadPersisted(): PersistedProgression {
     if (typeof localStorage === 'undefined') return DEFAULT_PROGRESSION;
     const raw = localStorage.getItem(STORAGE_KEYS.progression);
     if (!raw) return DEFAULT_PROGRESSION;
-    const parsed = JSON.parse(raw) as PersistedProgression;
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) {
+      return DEFAULT_PROGRESSION;
+    }
+    const parsedRecord = parsed as Record<string, unknown>;
+    const collectedNotes = Array.isArray(parsedRecord.collectedNotes)
+      ? parsedRecord.collectedNotes
+          .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+          .map((entry) => ({
+            noteId: typeof entry.noteId === 'string' ? entry.noteId : '',
+            dungeonId: typeof entry.dungeonId === 'string' ? entry.dungeonId : '',
+            roomId: typeof entry.roomId === 'string' ? entry.roomId : '',
+            topic: typeof entry.topic === 'string' ? entry.topic : 'Collected note',
+            floorLabel: typeof entry.floorLabel === 'string' ? entry.floorLabel : 'Unknown floor',
+            artifactPreview: typeof entry.artifactPreview === 'string' ? entry.artifactPreview : '',
+            noteMarkdown:
+              typeof entry.noteMarkdown === 'string'
+                ? entry.noteMarkdown
+                : '',
+            artifactMarkdown:
+              typeof entry.artifactMarkdown === 'string'
+                ? entry.artifactMarkdown
+                : typeof entry.artifactPreview === 'string'
+                  ? entry.artifactPreview
+                  : 'Artifact note collected.',
+            collectedAt: typeof entry.collectedAt === 'string' ? entry.collectedAt : new Date(0).toISOString(),
+          }))
+          .filter((entry) => entry.noteId.length > 0)
+      : [];
+
+    const xpTotal = typeof parsedRecord.xpTotal === 'number' ? parsedRecord.xpTotal : 0;
+
     return {
-      xpTotal: typeof parsed.xpTotal === 'number' ? parsed.xpTotal : 0,
-      rank: assignRankTier(parsed.xpTotal ?? 0),
-      badges: Array.isArray(parsed.badges) ? parsed.badges : [],
-      inventory: Array.isArray(parsed.inventory) ? parsed.inventory : [],
-      streakCount: typeof parsed.streakCount === 'number' ? parsed.streakCount : 0,
+      xpTotal,
+      rank: assignRankTier(xpTotal),
+      badges: Array.isArray(parsedRecord.badges)
+        ? parsedRecord.badges.filter((badge): badge is string => typeof badge === 'string')
+        : [],
+      inventory: Array.isArray(parsedRecord.inventory) ? (parsedRecord.inventory as LootItem[]) : [],
+      collectedNotes,
+      streakCount: typeof parsedRecord.streakCount === 'number' ? parsedRecord.streakCount : 0,
     };
   } catch {
     return DEFAULT_PROGRESSION;
@@ -85,7 +133,10 @@ export interface ProgressionStoreState {
   rank: RankTier;
   badges: string[];
   inventory: LootItem[];
+  collectedNotes: CollectedNoteEntry[];
   streakCount: number;
+  awardBadge: (badgeId: string) => boolean;
+  collectArtifactNote: (entry: Omit<CollectedNoteEntry, 'noteId' | 'collectedAt'>) => boolean;
   awardRoomClear: (input: {
     qualityBonus: number;
     totalRooms: number;
@@ -105,6 +156,54 @@ export interface ProgressionStoreState {
 
 export const useProgressionStore = create<ProgressionStoreState>((set, get) => ({
   ...loadPersisted(),
+
+  awardBadge(badgeId) {
+    const normalized = badgeId.trim();
+    if (normalized.length === 0) return false;
+    const state = get();
+    if (state.badges.includes(normalized)) return false;
+
+    const next: PersistedProgression = {
+      xpTotal: state.xpTotal,
+      rank: state.rank,
+      badges: [...state.badges, normalized],
+      inventory: state.inventory,
+      collectedNotes: state.collectedNotes,
+      streakCount: state.streakCount,
+    };
+    set(next);
+    savePersisted(next);
+    return true;
+  },
+
+  collectArtifactNote(entry) {
+    const state = get();
+    const normalizedRoom = entry.roomId.trim();
+    const normalizedDungeon = entry.dungeonId.trim();
+    if (normalizedRoom.length === 0 || normalizedDungeon.length === 0) return false;
+
+    const noteId = `${normalizedDungeon}:${normalizedRoom}`;
+    if (state.collectedNotes.some((note) => note.noteId === noteId)) return false;
+
+    const collectedAt = new Date().toISOString();
+    const nextEntry: CollectedNoteEntry = {
+      ...entry,
+      noteId,
+      collectedAt,
+    };
+
+    const next: PersistedProgression = {
+      xpTotal: state.xpTotal,
+      rank: state.rank,
+      badges: state.badges,
+      inventory: state.inventory,
+      collectedNotes: [nextEntry, ...state.collectedNotes],
+      streakCount: state.streakCount,
+    };
+    set(next);
+    savePersisted(next);
+    return true;
+  },
 
   awardRoomClear({
     qualityBonus,
@@ -141,6 +240,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       rank: value.rankAfter,
       badges: value.progressionSnapshot.badges,
       inventory,
+      collectedNotes: get().collectedNotes,
       streakCount: nextStreak,
     };
     set(next);

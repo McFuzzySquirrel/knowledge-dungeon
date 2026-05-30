@@ -26,6 +26,7 @@
    - Welcome → pick **Creator**, pick a class, type a subject name + root topic
    - Walk into the root room with `WASD`, press `E` → encounter modal opens
    - Add a child topic from the Topic tab; minimap shows the new room
-   - Submit notes that hit ≥120 words with all three sections → XP/loot fires
+  - Submit notes with required sections/manual confirmation → XP/loot fires
+  - Optional: submit a 120+ word note and verify the bonus badge is awarded
    - Once every room is cleared, switch to **Archaeologist** and confirm
      self-check prompts render
