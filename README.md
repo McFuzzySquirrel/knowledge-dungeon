@@ -185,6 +185,7 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 
 - [UI walkthrough with screenshots](./docs/UI.md)
 - [Customization: adding images, where subjects are saved, and desktop export helpers](./docs/CUSTOMIZATION.md)
+- [Create-repo-mindmap skill usage](./SKILL.md)
 - [Portable Copilot skill (copy/paste template)](./docs/COPILOT_SKILL_CREATE_REPO_MINDMAP.md)
 
 ## Project structure

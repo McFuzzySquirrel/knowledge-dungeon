@@ -1,5 +1,9 @@
 # Repo-to-Mindmap Dungeon Generator
 
+> This guide documents an aspirational CLI experience.
+> The currently supported interface in this repository is the Copilot skill:
+> `/skill create-repo-mindmap` with arguments documented in `SKILL.md`.
+
 A reusable tool to automatically generate Knowledge Dungeon mindmaps documenting any software repository's architecture, design, and implementation.
 
 ## Overview

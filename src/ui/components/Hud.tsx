@@ -6,6 +6,10 @@ interface HudProps {
   roomCount: number;
   xpTotal: number;
   rank: string;
+  reviewPassesCompleted: number;
+  reviewRoomsTowardNextPass: number;
+  reviewNextPassTarget: number;
+  reviewTotalRooms: number;
   phase: GamePhase;
   currentFloorLabel: string;
   teleportRemainingMs: number;
@@ -14,6 +18,7 @@ interface HudProps {
   showScribeNudge: boolean;
   onPhaseChange: (phase: GamePhase) => void;
   onHelp: () => void;
+  onOpenSettings: () => void;
   onOpenMap: () => void;
   onTeleport: () => void;
   onHome: () => void;
@@ -30,6 +35,10 @@ export function Hud({
   roomCount,
   xpTotal,
   rank,
+  reviewPassesCompleted,
+  reviewRoomsTowardNextPass,
+  reviewNextPassTarget,
+  reviewTotalRooms,
   phase,
   currentFloorLabel,
   teleportRemainingMs,
@@ -37,12 +46,17 @@ export function Hud({
   phaseChangeNeedsConfirmation,
   onPhaseChange,
   onHelp,
+  onOpenSettings,
   onOpenMap,
   onTeleport,
   onHome,
   showScribeNudge,
 }: HudProps): JSX.Element {
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
+  const reviewProgressPercent =
+    reviewTotalRooms > 0
+      ? Math.min(100, Math.round((reviewRoomsTowardNextPass / reviewTotalRooms) * 100))
+      : 0;
   const teleportLabel =
     teleportRemainingMs > 0
       ? `Teleport ${Math.floor(teleportSeconds / 60)}:${String(teleportSeconds % 60).padStart(2, '0')}`
@@ -77,6 +91,26 @@ export function Hud({
           <strong>
             {xpTotal} · {rank}
           </strong>
+        </div>
+        <div className="hud-stat">
+          <span>Review Passes</span>
+          <strong>{reviewPassesCompleted}</strong>
+          <span className="hud-stat-subtle">
+            {reviewRoomsTowardNextPass}/{reviewTotalRooms} toward pass {reviewNextPassTarget}
+          </span>
+          <div
+            className="review-progress-bar"
+            role="progressbar"
+            aria-label="Review progress toward next pass"
+            aria-valuemin={0}
+            aria-valuemax={reviewTotalRooms}
+            aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}
+          >
+            <span
+              className="review-progress-bar-fill"
+              style={{ width: `${reviewProgressPercent}%` }}
+            />
+          </div>
         </div>
         <div className="hud-stat">
           <span>Phase</span>
@@ -114,6 +148,9 @@ export function Hud({
         </button>
         <button type="button" onClick={onHome} aria-label="Return to subject selection">
           Home
+        </button>
+        <button type="button" onClick={onOpenSettings} aria-label="Open settings">
+          Settings
         </button>
         {showScribeNudge ? (
           <div className="hud-scribe-nudge" role="status" aria-live="polite">

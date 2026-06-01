@@ -1,9 +1,11 @@
 import type { JSX } from 'react';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
+import type { ColorTheme } from '@/store/preferencesStore';
 
 interface MinimapProps {
   dungeonMap: DungeonMap;
   focusedRoomId: string | null;
+  colorTheme?: ColorTheme;
   /**
    * Optional set of room IDs the player can currently see. When provided the
    * minimap only renders rooms / corridors inside this set, keeping the
@@ -18,13 +20,72 @@ interface MinimapProps {
 
 const SCALE = 4;
 
+const MINIMAP_PALETTE: Record<
+  ColorTheme,
+  {
+    corridorConnected: string;
+    corridorPortal: string;
+    corridorDefault: string;
+    roomPortalFill: string;
+    roomFocusedFill: string;
+    roomNeighborFill: string;
+    roomRootFill: string;
+    roomDefaultFill: string;
+    roomPortalStroke: string;
+    roomNeighborStroke: string;
+    roomDefaultStroke: string;
+  }
+> = {
+  dark: {
+    corridorConnected: '#7be3ff',
+    corridorPortal: '#b48cff',
+    corridorDefault: '#4f679f',
+    roomPortalFill: '#263c68',
+    roomFocusedFill: '#7be3ff',
+    roomNeighborFill: '#c7b2ff',
+    roomRootFill: '#8fc1ff',
+    roomDefaultFill: '#22345d',
+    roomPortalStroke: '#b48cff',
+    roomNeighborStroke: '#7be3ff',
+    roomDefaultStroke: '#4f679f',
+  },
+  colorful: {
+    corridorConnected: '#ffcf5f',
+    corridorPortal: '#7be3ff',
+    corridorDefault: '#5f79c9',
+    roomPortalFill: '#213865',
+    roomFocusedFill: '#ffcf5f',
+    roomNeighborFill: '#a6f0ff',
+    roomRootFill: '#8db2ff',
+    roomDefaultFill: '#1f315d',
+    roomPortalStroke: '#7be3ff',
+    roomNeighborStroke: '#ffcf5f',
+    roomDefaultStroke: '#5f79c9',
+  },
+  aurora: {
+    corridorConnected: '#9af7e5',
+    corridorPortal: '#b48cff',
+    corridorDefault: '#4f6cc7',
+    roomPortalFill: '#273463',
+    roomFocusedFill: '#9af7e5',
+    roomNeighborFill: '#c9b3ff',
+    roomRootFill: '#8fc1ff',
+    roomDefaultFill: '#1f2f58',
+    roomPortalStroke: '#b48cff',
+    roomNeighborStroke: '#9af7e5',
+    roomDefaultStroke: '#4f6cc7',
+  },
+};
+
 export function Minimap({
   dungeonMap,
   focusedRoomId,
+  colorTheme = 'dark',
   visibleRoomIds,
   portalUpRoomId,
   portalDownRoomIds,
 }: MinimapProps): JSX.Element {
+  const palette = MINIMAP_PALETTE[colorTheme];
   const { bounds, rooms } = dungeonMap;
   const width = (bounds.maxX - bounds.minX) * SCALE;
   const height = (bounds.maxY - bounds.minY) * SCALE;
@@ -72,10 +133,10 @@ export function Minimap({
               y2={y2}
               stroke={
                 isConnected
-                  ? '#f2c879'
+                  ? palette.corridorConnected
                   : isPortalEdge
-                    ? '#7fb2ff'
-                    : '#6b4a24'
+                    ? palette.corridorPortal
+                    : palette.corridorDefault
               }
               strokeWidth={isConnected ? 1.5 : 1}
               strokeLinecap="round"
@@ -95,20 +156,20 @@ export function Minimap({
             room.roomId === portalUpRoomId ||
             (portalDownRoomIds?.has(room.roomId) ?? false);
           const rpgFill = isPortal
-            ? '#2a3a5c'
+            ? palette.roomPortalFill
             : isFocused
-              ? '#f2c879'
+              ? palette.roomFocusedFill
               : isNeighbor
-                ? '#e8c98a'
+                ? palette.roomNeighborFill
                 : room.isRoot
-                  ? '#b88a4a'
-                  : '#3d2b1a';
+                  ? palette.roomRootFill
+                  : palette.roomDefaultFill;
           const fill = rpgFill;
           const stroke = isPortal
-            ? '#7fb2ff'
+            ? palette.roomPortalStroke
             : isNeighbor && !isFocused
-              ? '#f2c879'
-              : '#6b4a24';
+              ? palette.roomNeighborStroke
+              : palette.roomDefaultStroke;
           const strokeWidth = isPortal || (isNeighbor && !isFocused) ? 1 : 0.5;
           return (
             <rect

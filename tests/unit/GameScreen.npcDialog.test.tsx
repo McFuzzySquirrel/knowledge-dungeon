@@ -20,6 +20,8 @@ interface CapturedCallbacks {
 
 interface MockScene {
   setArtifactRooms: ReturnType<typeof vi.fn>;
+  setCollectedArtifactRooms: ReturnType<typeof vi.fn>;
+  setReviewedArtifactRooms: ReturnType<typeof vi.fn>;
   setFloorVisibility: ReturnType<typeof vi.fn>;
   teleportToRoom: ReturnType<typeof vi.fn>;
   triggerInteract: ReturnType<typeof vi.fn>;
@@ -90,7 +92,6 @@ vi.mock('@/ui/components/RoomPanel', () => ({
   RoomPanel: () => <div data-testid="room-panel" />,
 }));
 vi.mock('@/ui/components/NoteEditorModal', () => ({ NoteEditorModal: () => null }));
-vi.mock('@/ui/components/TouchControls', () => ({ TouchControls: () => null }));
 vi.mock('@/ui/components/Minimap', () => ({ Minimap: () => null }));
 vi.mock('@/ui/components/HelpOverlay', () => ({ HelpOverlay: () => null }));
 vi.mock('@/ui/components/FullMapView', () => ({ FullMapView: () => null }));
@@ -166,6 +167,8 @@ describe('GameScreen NPC dialog callbacks', () => {
 
     const fakeScene = {
       setArtifactRooms: vi.fn(),
+      setCollectedArtifactRooms: vi.fn(),
+      setReviewedArtifactRooms: vi.fn(),
       setFloorVisibility: vi.fn(),
       teleportToRoom: vi.fn(),
       triggerInteract: vi.fn(),
@@ -243,5 +246,35 @@ describe('GameScreen NPC dialog callbacks', () => {
 
     expect(screen.queryByText(/Room Guide/i)).toBeNull();
     expect(useSessionStore.getState().isNoteEditorOpen).toBe(true);
+  });
+
+  it('awards archaeologist XP only on first review per room per pass', async () => {
+    const snapshot = makeSnapshot();
+    snapshot.rooms['room-1'] = {
+      ...snapshot.rooms['room-1'],
+      state: 'ArtifactCollected',
+      validationState: {
+        ...snapshot.rooms['room-1'].validationState,
+        finalPass: true,
+      },
+    };
+    useSubjectStore.setState({ snapshot, lastError: null });
+    useSessionStore.setState({ phase: 'archaeologist' });
+
+    render(<GameScreen />);
+
+    await waitFor(() => {
+      expect(capturedCallbacks).not.toBeNull();
+    });
+
+    act(() => {
+      capturedCallbacks?.onInteract?.('room-1');
+    });
+    expect(useProgressionStore.getState().xpTotal).toBe(6);
+
+    act(() => {
+      capturedCallbacks?.onInteract?.('room-1');
+    });
+    expect(useProgressionStore.getState().xpTotal).toBe(6);
   });
 });

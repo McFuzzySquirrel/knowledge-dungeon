@@ -36,6 +36,7 @@ Or provide context about what you want:
 - `--name` (optional) — Project name for the mindmap (auto-detected from repo if not provided)
 - `--output` (optional) — Where to write the subject folder (default: `maps/{project-name}-mindmap`)
 - `--entry-phase` (optional) — Generated start profile: `creator`, `scribe`, `archaeologist` (default: `scribe`)
+- `--entry-phase` also accepts `review` as an alias for `archaeologist`.
 - `--review-ready` (optional) — Shortcut for `--entry-phase archaeologist`
 
 ## What You Get
@@ -63,6 +64,12 @@ Use `--entry-phase` to control how playable the generated subject is on first lo
 - `creator` — Structure-focused seed for map editing. Rooms are `Created` and ready for authoring.
 - `scribe` — Default. Rooms include complete notes that are ready to study and validate in encounters.
 - `archaeologist` — Review-ready seed. Rooms include finalized artifacts and progression metadata so users can jump straight into Archaeologist mode.
+
+Phase metadata and room status mapping:
+
+- `creator`: `dungeon.phaseState = CreatorActive`, room status `Created`
+- `scribe`: `dungeon.phaseState = ScribeActive`, room status `Created`
+- `archaeologist` (or `review`): `dungeon.phaseState = ArchaeologistUnlocked` or `ArchaeologistActive`, room status `ArtifactCollected`
 
 For archaeologist-ready output, generation should set all of the following:
 
@@ -168,7 +175,7 @@ The skill generates notes that:
 ## Tips for Best Results
 
 1. **Run in your repo root** — The skill needs access to source files to analyze
-2. **Let it analyze first** — Don't use `--skip-analysis` unless it's a known structure
+2. **Keep arguments skill-compatible** — Use `--repo-path`, `--depth`, `--name`, `--output`, and phase flags from this guide.
 3. **Review the output** — Check `README.md` in the generated folder for context
 4. **Start with balanced depth** — You can regenerate with `deep` if needed
 5. **Customize after import** — Edit notes in Knowledge Dungeon during Scribe phase

@@ -3,6 +3,7 @@ import { DungeonScene, type FloorVisibilityInput } from '@/game/scenes/DungeonSc
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 import type { DungeonSceneEvents } from '@/game/scenes/DungeonScene';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
+import type { ColorTheme } from '@/store/preferencesStore';
 
 export interface CreateGameOptions {
   parent: HTMLElement;
@@ -10,13 +11,21 @@ export interface CreateGameOptions {
   callbacks: DungeonSceneEvents;
   playerClass?: PlayerClassId | null;
   initialFloor?: FloorVisibilityInput;
+  colorTheme?: ColorTheme;
 }
 
+const GAME_BACKGROUND_BY_THEME: Record<ColorTheme, string> = {
+  dark: '#101a30',
+  colorful: '#111b33',
+  aurora: '#101a30',
+};
+
 export function createGame(options: CreateGameOptions): Phaser.Game {
+  const theme = options.colorTheme ?? 'dark';
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: options.parent,
-    backgroundColor: '#1a120a',
+    backgroundColor: GAME_BACKGROUND_BY_THEME[theme],
     scale: {
       mode: Phaser.Scale.RESIZE,
       autoCenter: Phaser.Scale.CENTER_BOTH,

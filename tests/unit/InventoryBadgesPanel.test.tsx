@@ -11,6 +11,9 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={[]}
         collectedNotes={[]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
         xpTotal={0}
         rank="Novice"
         onSwitchView={() => undefined}
@@ -27,6 +30,9 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={['First Steps']}
         collectedNotes={[]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
         xpTotal={50}
         rank="Apprentice"
         onSwitchView={() => undefined}
@@ -44,6 +50,9 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={[SCRIBE_CENTURY_120_BADGE_ID]}
         collectedNotes={[]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
         xpTotal={50}
         rank="Apprentice"
         onSwitchView={() => undefined}
@@ -60,6 +69,9 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={['ArchaeologistReviewPass7']}
         collectedNotes={[]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
         xpTotal={50}
         rank="Apprentice"
         onSwitchView={() => undefined}
@@ -91,6 +103,9 @@ describe('InventoryBadgesPanel', () => {
             collectedAt: '2026-01-01T00:00:00.000Z',
           },
         ]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
         xpTotal={50}
         rank="Apprentice"
         onSwitchView={() => undefined}
@@ -120,6 +135,9 @@ describe('InventoryBadgesPanel', () => {
             collectedAt: '2026-01-01T00:00:00.000Z',
           },
         ]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
         xpTotal={50}
         rank="Apprentice"
         onSwitchView={() => undefined}
@@ -129,6 +147,40 @@ describe('InventoryBadgesPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Vector Spaces' }));
     expect(screen.getByText('A full encounter note for recall.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to journal' })).toBeInTheDocument();
+  });
+
+  it('auto-opens a collected note when autoOpenNoteId is provided', () => {
+    render(
+      <InventoryBadgesPanel
+        view="journal"
+        inventory={[]}
+        badges={[]}
+        collectedNotes={[
+          {
+            noteId: 'dungeon:room-2',
+            dungeonId: 'dungeon',
+            roomId: 'room-2',
+            topic: 'Graph Traversal',
+            floorLabel: 'Algorithms',
+            artifactPreview: 'Traversal summary',
+            noteMarkdown: '## Summary\nDepth-first and breadth-first traversal notes.',
+            artifactMarkdown: '## Summary\nArtifact fallback text.',
+            collectedAt: '2026-01-02T00:00:00.000Z',
+          },
+        ]}
+        autoOpenNoteId="dungeon:room-2"
+        subjectName="Algorithms"
+        clearedRoomCount={0}
+        totalRoomCount={1}
+        xpTotal={10}
+        rank="Novice"
+        onSwitchView={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText('Depth-first and breadth-first traversal notes.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back to journal' })).toBeInTheDocument();
   });
 });

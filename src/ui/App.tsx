@@ -3,6 +3,7 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { WelcomeScreen } from '@/ui/screens/WelcomeScreen';
 import { GameScreen } from '@/ui/screens/GameScreen';
+import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
 import {
   getActiveSubjectId,
   listSubjectIds,
@@ -10,12 +11,10 @@ import {
 
 export function App(): JSX.Element {
   const snapshot = useSubjectStore((state) => state.snapshot);
-  const loadSubject = useSubjectStore((state) => state.loadSubject);
   const selectedClass = useSessionStore((state) => state.selectedClass);
-  const setActiveSubjectId = useSessionStore((state) => state.setActiveSubjectId);
+  const loadSubjectFlow = useLoadSubjectFlow();
   const [bootstrapped, setBootstrapped] = useState(false);
 
-  // Keep the root skin in RPG mode.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     document.documentElement.setAttribute('data-graphics', 'rpg');
@@ -29,9 +28,8 @@ export function App(): JSX.Element {
     async function hydrate() {
       const active = getActiveSubjectId();
       if (active) {
-        const loaded = await loadSubject(active);
-        if (!cancelled && loaded) {
-          setActiveSubjectId(loaded.dungeon.dungeonId);
+        if (!cancelled) {
+          await loadSubjectFlow(active);
         }
       } else {
         await listSubjectIds(); // warm cache
@@ -42,7 +40,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [loadSubject, setActiveSubjectId]);
+  }, [loadSubjectFlow]);
 
   if (!bootstrapped) {
     return (

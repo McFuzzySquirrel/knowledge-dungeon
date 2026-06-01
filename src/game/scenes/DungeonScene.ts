@@ -131,8 +131,10 @@ export class DungeonScene extends Phaser.Scene {
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
   private playerClass: PlayerClassId | null = null;
   private artifactIcons = new Map<string, Phaser.GameObjects.Container>();
+  private artifactReviewMarkers = new Map<string, Phaser.GameObjects.Text>();
   private artifactRoomIds = new Set<string>();
   private collectedArtifactRoomIds = new Set<string>();
+  private reviewedArtifactRoomIds = new Set<string>();
   private showArtifactIcons = false;
   private currentFloorId: string | null = null;
   private visibleRoomIds: Set<string> | null = null;
@@ -226,7 +228,7 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.dungeonMap) return;
     const map = this.dungeonMap;
 
-    this.cameras.main.setBackgroundColor(0x1a120a);
+    this.cameras.main.setBackgroundColor(0x0f1930);
 
     // Ensure the walkability mask is built even when no floor visibility has
     // been applied (eg. single-floor dungeons that never call setFloorVisibility).
@@ -447,13 +449,20 @@ export class DungeonScene extends Phaser.Scene {
    */
   setArtifactRooms(roomIds: readonly string[], visible: boolean): void {
     this.artifactRoomIds = new Set(roomIds);
-    for (const roomId of [...this.collectedArtifactRoomIds]) {
-      if (!this.artifactRoomIds.has(roomId)) {
-        this.collectedArtifactRoomIds.delete(roomId);
-      }
-    }
     this.showArtifactIcons = visible;
     this.refreshArtifactIcons();
+    this.refreshArtifactReviewMarkers();
+  }
+
+  setCollectedArtifactRooms(roomIds: readonly string[]): void {
+    this.collectedArtifactRoomIds = new Set(roomIds);
+    this.refreshArtifactIcons();
+    this.refreshArtifactReviewMarkers();
+  }
+
+  setReviewedArtifactRooms(roomIds: readonly string[]): void {
+    this.reviewedArtifactRoomIds = new Set(roomIds);
+    this.refreshArtifactReviewMarkers();
   }
 
   private checkArtifactCollection(): void {
@@ -496,6 +505,7 @@ export class DungeonScene extends Phaser.Scene {
     if (!this.showArtifactIcons) return;
     for (const room of map.rooms) {
       if (!this.artifactRoomIds.has(room.roomId)) continue;
+      if (this.collectedArtifactRoomIds.has(room.roomId)) continue;
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
       if (this.artifactIcons.has(room.roomId)) continue;
       const center = this.roomCenter(room, map.tileSize);
@@ -504,11 +514,11 @@ export class DungeonScene extends Phaser.Scene {
       const cx = center.x;
       const cy = center.y - room.height * map.tileSize * 0.25;
       const container = this.add.container(cx, cy).setDepth(6);
-      // Two stacked additive-blended halos give the artifact a warm,
-      // pulsing "loot" glow similar to repo-dungeon's collectibles.
-      const glowOuter = this.add.circle(0, 0, 22, 0xf2c879, 0.18);
+      // Two stacked additive-blended halos give artifact loot a readable
+      // cool glow even against dark floor textures.
+      const glowOuter = this.add.circle(0, 0, 22, 0x7be3ff, 0.2);
       glowOuter.setBlendMode(Phaser.BlendModes.ADD);
-      const glowInner = this.add.circle(0, 0, 14, 0xffe9b3, 0.32);
+      const glowInner = this.add.circle(0, 0, 14, 0xb48cff, 0.3);
       glowInner.setBlendMode(Phaser.BlendModes.ADD);
       const icon = this.add.image(0, 0, ARTIFACT_LOOT_TEXTURE_KEY);
       container.add([glowOuter, glowInner, icon]);
@@ -529,6 +539,37 @@ export class DungeonScene extends Phaser.Scene {
         ease: 'Sine.easeInOut',
       });
       this.artifactIcons.set(room.roomId, container);
+    }
+  }
+
+  private refreshArtifactReviewMarkers(): void {
+    if (!this.dungeonMap) return;
+    const map = this.dungeonMap;
+    for (const [roomId, marker] of this.artifactReviewMarkers) {
+      const stillReviewed = this.reviewedArtifactRoomIds.has(roomId);
+      const stillVisible = !this.visibleRoomIds || this.visibleRoomIds.has(roomId);
+      if (!stillReviewed || !stillVisible) {
+        marker.destroy();
+        this.artifactReviewMarkers.delete(roomId);
+      }
+    }
+    for (const room of map.rooms) {
+      if (!this.reviewedArtifactRoomIds.has(room.roomId)) continue;
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
+      if (this.artifactReviewMarkers.has(room.roomId)) continue;
+      const center = this.roomCenter(room, map.tileSize);
+      const marker = this.add
+        .text(center.x + room.width * map.tileSize * 0.31, center.y - room.height * map.tileSize * 0.34, '●', {
+          fontFamily: 'Inter, system-ui, sans-serif',
+          fontSize: '10px',
+          color: '#9af7e5',
+          backgroundColor: 'rgba(16, 23, 37, 0.45)',
+          padding: { left: 3, right: 3, top: 0, bottom: 0 },
+        })
+        .setOrigin(1, 0)
+        .setDepth(7)
+        .setAlpha(0.9);
+      this.artifactReviewMarkers.set(room.roomId, marker);
     }
   }
 
@@ -950,12 +991,12 @@ export class DungeonScene extends Phaser.Scene {
       const isPortalDown = this.portalDownRoomIds.has(room.roomId);
       const isPortal = isPortalUp || isPortalDown;
 
-      // Stone-floor chamber with a thick mortared wall border.
-      const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x4a3520 : 0x2a1f12;
+      // Room shells stay in cool slate/indigo tones to avoid warm browns.
+      const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x1c2c4f : 0x16233d;
       g.fillStyle(fill, 1);
       g.fillRect(x, y, w, h);
       // Inner floor tile band to suggest a tiled chamber.
-      g.fillStyle(isPortal ? 0x2a3a5c : 0x3b2a18, 0.65);
+      g.fillStyle(isPortal ? 0x2a3a5c : 0x22355e, 0.65);
       g.fillRect(x + 4, y + 4, w - 8, h - 8);
       this.drawRoomWallsWithDoors(
         g,
@@ -970,7 +1011,7 @@ export class DungeonScene extends Phaser.Scene {
         .text(x + w / 2, y + h - 12, `${labelPrefix}${room.topic}`, {
           fontFamily: 'Inter, system-ui, sans-serif',
           fontSize: '12px',
-          color: isPortal ? '#cfe1ff' : '#f4e4c2',
+          color: isPortal ? '#cfe1ff' : '#dbe6ff',
           align: 'center',
           wordWrap: { width: w - 8 },
         })
@@ -1077,7 +1118,7 @@ export class DungeonScene extends Phaser.Scene {
     this.corridorTileSprites = [];
     for (const door of this.doorSprites) door.destroy();
     this.doorSprites = [];
-    const baseColor = 0x6b4a24;
+    const baseColor = 0x4f679f;
     const portalColor = 0x7fb2ff;
     const corridorTextureKey = ensureBiomeFloorTexture(
       this,
@@ -1226,7 +1267,7 @@ function statusColor(status: string): number {
     case 'ArtifactCollected':
       return 0x4fd1a5;
     case 'NotesDrafted':
-      return 0xf2c879;
+      return 0x7be3ff;
     case 'NeedsRevalidation':
       return 0xff7676;
     case 'Visited':

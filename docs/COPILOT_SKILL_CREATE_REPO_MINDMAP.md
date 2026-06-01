@@ -2,6 +2,10 @@
 
 Use this page to copy the Knowledge Dungeon skill into any repository.
 
+This document reflects the Copilot skill interface (`/skill create-repo-mindmap`).
+If you also read `REPO_TO_MINDMAP_GUIDE.md`, treat that file as future CLI direction,
+not the current command surface for this repository.
+
 ## What To Copy
 
 Copy these two files into the target repository:
@@ -41,7 +45,7 @@ Generate a complete Knowledge Dungeon subject from a repository so users can exp
 - --depth (default balanced): light, balanced, deep.
 - --name (optional): display name for subject.
 - --output (default maps/{project-name}-mindmap): destination folder.
-- --entry-phase (default scribe): creator, scribe, archaeologist.
+- --entry-phase (default scribe): creator, scribe, archaeologist (review alias maps to archaeologist).
 - --review-ready (flag): alias for --entry-phase archaeologist.
 
 ## Required Output Structure
@@ -190,7 +194,9 @@ Must pass all checks:
 3. Graph has no isolated nodes and has root reachability.
 4. Room count matches requested depth/scope (target 30-40 unless explicitly reduced).
 5. Topic claims are backed by real repository evidence.
-6. README instructions match current Knowledge Dungeon load flow.
+6. README instructions match current Knowledge Dungeon load flow:
+  - web: refresh subjects, then load by subject name
+  - desktop: refresh subjects, then load from list or import folder via Admin tools
 7. Phase profile metadata is internally consistent (creator vs scribe vs archaeologist).
 
 ## Reference
