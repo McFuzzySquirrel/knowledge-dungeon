@@ -21,6 +21,8 @@ import { isEditableElementFocused } from '@/ui/utils/editableElement';
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
   onInteract: (roomId: string) => void;
+  onNpcInteract?: (roomId: string) => void;
+  onNpcOutOfRange?: (roomId: string) => void;
   onArtifactCollected?: (roomId: string) => void;
   /**
    * Fired when the player presses E inside a portal room (up or down).
@@ -94,6 +96,8 @@ const STAIRS_DOWN_TEXTURE_KEY = 'kd-stairs-down';
 const PLAYER_SPRITE_SIZE = 32;
 const SIGNPOST_SPRITE_SIZE = 28;
 const NPC_GUIDE_SPRITE_SIZE = 28;
+const NPC_INTERACT_RADIUS = 28;
+const NPC_DIALOG_CLEAR_RADIUS = 44;
 const ARTIFACT_LOOT_SPRITE_SIZE = 26;
 const PORTAL_SPRITE_SIZE = 28;
 const PATHWAY_TILE_SIZE = 32;
@@ -143,8 +147,8 @@ export class DungeonScene extends Phaser.Scene {
   private activeWalkableOffsetX = 0;
   private activeWalkableOffsetY = 0;
   private decorIcons: Phaser.GameObjects.Image[] = [];
-  private guideNpc: Phaser.GameObjects.Image | null = null;
-  private guideBubble: Phaser.GameObjects.Container | null = null;
+  private roomNpcs = new Map<string, Phaser.GameObjects.Image>();
+  private activeNpcRoomId: string | null = null;
   /** Per-room floor id, captured when visibility is applied — used to seed
    * decor placement and tileset selection so the layout is stable across
    * redraws on the same floor. */
@@ -240,9 +244,7 @@ export class DungeonScene extends Phaser.Scene {
       .image(start.x, start.y - root.height * map.tileSize * 0.3, SIGNPOST_TEXTURE_KEY)
       .setDepth(4);
 
-    // Add a guidance NPC near the signpost with a floating hint bubble so
-    // first-time players know what to do (move with WASD, press E to interact).
-    this.spawnGuideNpc(start.x, start.y, root, map);
+    this.refreshRoomNpcs();
 
     this.player = this.add.image(start.x, start.y, PLAYER_TEXTURE_KEY).setDepth(10);
     this.physics.add.existing(this.player);
@@ -370,6 +372,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     this.checkArtifactCollection();
+    this.checkNpcDialogRange();
 
     if (
       !typingInTextField &&
@@ -377,6 +380,9 @@ export class DungeonScene extends Phaser.Scene {
       Phaser.Input.Keyboard.JustDown(this.interactKey)
     ) {
       if (this.currentRoomId) {
+        if (this.tryInteractNpcInCurrentRoom()) {
+          return;
+        }
         if (this.currentRoomId === this.portalUpRoomId) {
           this.callbacks?.onFloorTransition?.({
             fromRoomId: this.currentRoomId,
@@ -397,6 +403,9 @@ export class DungeonScene extends Phaser.Scene {
   /** Programmatic interact, used by on-screen touch button. */
   triggerInteract(): void {
     if (!this.currentRoomId) return;
+    if (this.tryInteractNpcInCurrentRoom()) {
+      return;
+    }
     if (this.currentRoomId === this.portalUpRoomId) {
       this.callbacks?.onFloorTransition?.({
         fromRoomId: this.currentRoomId,
@@ -516,75 +525,118 @@ export class DungeonScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Place a friendly NPC next to the spawn signpost with a small speech
-   * bubble explaining the basic controls. The NPC is purely cosmetic — it
-   * gives newcomers a visible "what do I do?" cue.
-   */
-  private spawnGuideNpc(
-    spawnX: number,
-    spawnY: number,
-    root: DungeonRoom,
-    map: DungeonMap,
-  ): void {
-    if (this.guideNpc) {
-      this.guideNpc.destroy();
-      this.guideNpc = null;
-    }
-    if (this.guideBubble) {
-      this.guideBubble.destroy();
-      this.guideBubble = null;
-    }
-    if (!this.textures.exists(NPC_GUIDE_TEXTURE_KEY)) return;
-    const npcX = spawnX + root.width * map.tileSize * 0.18;
-    const npcY = spawnY - root.height * map.tileSize * 0.2;
-    this.guideNpc = this.add.image(npcX, npcY, NPC_GUIDE_TEXTURE_KEY).setDepth(5);
-    // Subtle bobbing tween so the NPC reads as alive.
-    this.tweens.add({
-      targets: this.guideNpc,
-      y: { from: npcY, to: npcY - 3 },
-      duration: 1400,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
+  private refreshRoomNpcs(): void {
+    if (!this.dungeonMap || !this.textures.exists(NPC_GUIDE_TEXTURE_KEY)) return;
 
-    // Build a small parchment-style speech bubble with movement / interact
-    // hints. Anchored above the NPC so it's clearly attributed to them.
-    const text = this.add
-      .text(0, 0, 'Welcome, scholar!\nWASD to move · E to interact', {
-        fontFamily: 'Inter, system-ui, sans-serif',
-        fontSize: '11px',
-        color: '#1a120a',
-        align: 'center',
-        wordWrap: { width: 160 },
-      })
-      .setOrigin(0.5, 0.5);
-    const padX = 8;
-    const padY = 6;
-    const bgWidth = text.width + padX * 2;
-    const bgHeight = text.height + padY * 2;
-    const bg = this.add.graphics();
-    bg.fillStyle(0xf4e4c2, 0.95);
-    bg.fillRoundedRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, 6);
-    bg.lineStyle(1.5, 0x6b4a24, 1);
-    bg.strokeRoundedRect(-bgWidth / 2, -bgHeight / 2, bgWidth, bgHeight, 6);
-    // Tail pointing down toward the NPC.
-    bg.fillStyle(0xf4e4c2, 0.95);
-    bg.fillTriangle(-6, bgHeight / 2 - 1, 6, bgHeight / 2 - 1, 0, bgHeight / 2 + 7);
-    bg.lineStyle(1.5, 0x6b4a24, 1);
-    bg.strokeTriangle(-6, bgHeight / 2 - 1, 6, bgHeight / 2 - 1, 0, bgHeight / 2 + 7);
+    const visibleRoomIds = new Set(
+      this.dungeonMap.rooms
+        .map((room) => room.roomId)
+        .filter((roomId) => !this.visibleRoomIds || this.visibleRoomIds.has(roomId)),
+    );
 
-    const bubbleY = npcY - NPC_GUIDE_SPRITE_SIZE / 2 - bgHeight / 2 - 10;
-    this.guideBubble = this.add.container(npcX, bubbleY, [bg, text]).setDepth(7);
-    this.tweens.add({
-      targets: this.guideBubble,
-      y: { from: bubbleY, to: bubbleY - 3 },
-      duration: 1800,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
+    for (const [roomId, npc] of this.roomNpcs) {
+      if (!visibleRoomIds.has(roomId)) {
+        npc.destroy();
+        this.roomNpcs.delete(roomId);
+      }
+    }
+
+    for (const room of this.dungeonMap.rooms) {
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
+      if (this.roomNpcs.has(room.roomId)) continue;
+      const { x: npcX, y: npcY } = this.resolveNpcPosition(room, this.dungeonMap);
+      const npc = this.add.image(npcX, npcY, NPC_GUIDE_TEXTURE_KEY).setDepth(5);
+      this.tweens.add({
+        targets: npc,
+        y: { from: npcY, to: npcY - 3 },
+        duration: 1400,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+      this.roomNpcs.set(room.roomId, npc);
+    }
+
+    if (this.activeNpcRoomId && !this.roomNpcs.has(this.activeNpcRoomId)) {
+      const activeRoomId = this.activeNpcRoomId;
+      this.activeNpcRoomId = null;
+      this.callbacks?.onNpcOutOfRange?.(activeRoomId);
+    }
+  }
+
+  private resolveNpcPosition(room: DungeonRoom, map: DungeonMap): { x: number; y: number } {
+    const roomSeed = hashString(`${this.currentFloorId ?? 'all'}::npc::${room.roomId}`);
+    const anchors: ReadonlyArray<{ ax: number; ay: number }> = [
+      { ax: 0.18, ay: 0.24 },
+      { ax: 0.82, ay: 0.24 },
+      { ax: 0.18, ay: 0.52 },
+      { ax: 0.82, ay: 0.52 },
+    ];
+    // Artifact / portal icons live around (0.5, 0.25), room labels around
+    // (0.5, 0.9). Pick the anchor that stays furthest from both.
+    const artifact = { ax: 0.5, ay: 0.25 };
+    const label = { ax: 0.5, ay: 0.9 };
+    let best = anchors[0];
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < anchors.length; i += 1) {
+      const anchor = anchors[i];
+      const dArtifact = Math.hypot(anchor.ax - artifact.ax, anchor.ay - artifact.ay);
+      const dLabel = Math.hypot(anchor.ax - label.ax, anchor.ay - label.ay);
+      const jitter = (((roomSeed >>> (i * 2)) & 0x3) / 3) * 0.01;
+      const score = Math.min(dArtifact, dLabel) + jitter;
+      if (score > bestScore) {
+        bestScore = score;
+        best = anchor;
+      }
+    }
+
+    return {
+      x: (room.gridX + room.width * best.ax) * map.tileSize,
+      y: (room.gridY + room.height * best.ay) * map.tileSize,
+    };
+  }
+
+  private tryInteractNpcInCurrentRoom(): boolean {
+    if (!this.player || !this.currentRoomId) return false;
+    const npc = this.roomNpcs.get(this.currentRoomId);
+    if (!npc) return false;
+
+    const dx = this.player.x - npc.x;
+    const dy = this.player.y - npc.y;
+    if (dx * dx + dy * dy > NPC_INTERACT_RADIUS * NPC_INTERACT_RADIUS) {
+      return false;
+    }
+
+    this.activeNpcRoomId = this.currentRoomId;
+    this.callbacks?.onNpcInteract?.(this.currentRoomId);
+    return true;
+  }
+
+  private checkNpcDialogRange(): void {
+    if (!this.player || !this.activeNpcRoomId) return;
+    if (this.currentRoomId !== this.activeNpcRoomId) {
+      const roomId = this.activeNpcRoomId;
+      this.activeNpcRoomId = null;
+      this.callbacks?.onNpcOutOfRange?.(roomId);
+      return;
+    }
+
+    const npc = this.roomNpcs.get(this.activeNpcRoomId);
+    if (!npc) {
+      const roomId = this.activeNpcRoomId;
+      this.activeNpcRoomId = null;
+      this.callbacks?.onNpcOutOfRange?.(roomId);
+      return;
+    }
+
+    const dx = this.player.x - npc.x;
+    const dy = this.player.y - npc.y;
+    if (dx * dx + dy * dy > NPC_DIALOG_CLEAR_RADIUS * NPC_DIALOG_CLEAR_RADIUS) {
+      const roomId = this.activeNpcRoomId;
+      this.activeNpcRoomId = null;
+      this.callbacks?.onNpcOutOfRange?.(roomId);
+    }
   }
 
   /**
@@ -667,6 +719,7 @@ export class DungeonScene extends Phaser.Scene {
       this.drawRooms(this.dungeonMap);
       this.refreshPortalIcons();
       this.refreshDecor();
+      this.refreshRoomNpcs();
       this.refreshArtifactIcons();
       this.refreshPortalHint();
     }

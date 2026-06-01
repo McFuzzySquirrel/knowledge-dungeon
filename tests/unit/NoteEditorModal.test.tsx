@@ -77,14 +77,37 @@ describe('NoteEditorModal', () => {
     render(<NoteEditorModal />);
 
     fireEvent.change(screen.getByRole('textbox'), {
-      target: { value: 'Summary\nA short draft only.' },
+      target: { value: 'A short draft only.' },
     });
 
     expect(
-      screen.getByText(/Add sections: Key Points, Recall Question\./i),
+      screen.getByText(/Add notes in: Key Points, Recall Question\./i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Check the confirmation box before defeating this encounter\./i),
     ).toBeInTheDocument();
+  });
+
+  it('preserves content while switching between section chips', () => {
+    render(<NoteEditorModal />);
+
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: 'Summary draft text' },
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Key Points/i }));
+    fireEvent.change(screen.getByRole('textbox'), {
+      target: { value: '- Point A' },
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Summary/i }));
+    expect(screen.getByRole('textbox')).toHaveValue('Summary draft text');
+  });
+
+  it('applies pending inserts into the active section editor', () => {
+    useSessionStore.setState({ noteEditorPendingInsert: '![diagram](local:asset-1)' });
+    render(<NoteEditorModal />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('![diagram](local:asset-1)');
   });
 });

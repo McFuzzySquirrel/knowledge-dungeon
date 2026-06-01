@@ -1198,8 +1198,78 @@ button.danger:hover {
   background: rgba(242, 200, 121, 0.15);
 }
 
+.note-section-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.note-section-chip {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel-soft);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.note-section-chip.is-active {
+  border-color: var(--accent);
+  background: rgba(242, 200, 121, 0.2);
+}
+
+.note-section-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
 .note-preview {
   min-height: 220px;
+}
+
+.npc-dialog {
+  position: fixed;
+  right: 18px;
+  bottom: 110px;
+  width: min(360px, calc(100vw - 32px));
+  z-index: 70;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(26, 18, 10, 0.94);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.npc-dialog h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.npc-dialog p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.npc-dialog p + p {
+  margin-top: 8px;
+}
+
+.npc-dialog__eyebrow {
+  color: var(--accent-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.npc-dialog__action {
+  color: var(--text-primary);
 }
 
 .markdown-image {

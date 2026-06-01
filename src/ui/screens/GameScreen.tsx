@@ -13,6 +13,7 @@ import { Hud } from '@/ui/components/Hud';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
+import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
 import { TouchControls } from '@/ui/components/TouchControls';
 import { Minimap } from '@/ui/components/Minimap';
 import { HelpOverlay } from '@/ui/components/HelpOverlay';
@@ -64,6 +65,7 @@ export function GameScreen(): JSX.Element {
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [sceneReady, setSceneReady] = useState(false);
   const [lastWelcomedSubjectId, setLastWelcomedSubjectId] = useState<string | null>(null);
+  const [npcDialogRoomId, setNpcDialogRoomId] = useState<string | null>(null);
   const { toasts, pushToast } = useToasts();
 
   const dungeonMap = useMemo(() => {
@@ -128,7 +130,15 @@ export function GameScreen(): JSX.Element {
         : undefined,
       callbacks: {
         onRoomEntered: (roomId) => setFocusedRoomId(roomId),
+        onNpcInteract: (roomId) => {
+          setNpcDialogRoomId(roomId);
+          setFocusedRoomId(roomId);
+        },
+        onNpcOutOfRange: (roomId) => {
+          setNpcDialogRoomId((current) => (current === roomId ? null : current));
+        },
         onInteract: (roomId) => {
+          setNpcDialogRoomId(null);
           if (phase === 'archaeologist') {
             const liveSnapshot = useSubjectStore.getState().snapshot;
             void recordReviewPass(roomId);
@@ -426,6 +436,15 @@ export function GameScreen(): JSX.Element {
 
       <TouchControls onInteract={() => sceneRef.current?.triggerInteract()} />
       <ToastStack toasts={toasts} />
+
+      {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
+        <RoomNpcDialog
+          topic={snapshot.rooms[npcDialogRoomId].topic}
+          phase={phase}
+          roomState={snapshot.rooms[npcDialogRoomId].state}
+          isCleared={snapshot.rooms[npcDialogRoomId].validationState.finalPass}
+        />
+      ) : null}
 
       <NoteEditorModal />
       {isMapViewOpen ? (
