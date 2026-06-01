@@ -313,7 +313,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     if (!state.activeSubjectId) {
       return {
         xpGained: 0,
-        newRank: 'Novice' as RankTier,
+        newRank: 'Novice',
         rankChanged: false,
         unlockedBadges: [],
         loot: null,
@@ -374,7 +374,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     if (!state.activeSubjectId) {
       return {
         xpGained: 0,
-        newRank: 'Novice' as RankTier,
+        newRank: 'Novice',
         rankChanged: false,
       };
     }
