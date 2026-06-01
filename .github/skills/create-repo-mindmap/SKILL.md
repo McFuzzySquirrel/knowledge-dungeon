@@ -171,7 +171,9 @@ Must pass all checks:
 3. Graph has no isolated nodes and has root reachability.
 4. Room count matches requested depth/scope (target 30-40 unless explicitly reduced).
 5. Topic claims are backed by real repository evidence.
-6. README instructions match current Knowledge Dungeon load flow.
+6. README instructions match current Knowledge Dungeon load flow:
+  - web: refresh subjects, then load by subject name
+  - desktop: refresh subjects, then load from list or import folder via Admin tools
 7. Phase profile metadata is internally consistent (`creator` vs `scribe` vs `archaeologist`).
 
 ## Reference
@@ -196,6 +198,45 @@ When `--entry-phase archaeologist` (or `--review-ready`) is requested, ensure:
   - `validationState.finalPass: true`
   - non-empty `artifactMarkdown`
   - initialized `reviewPassCount` (typically `0`)
+
+For concrete examples of archaeologist-ready room metadata and artifact structure, see:
+- [Dungeon Output Spec: Worked Example](./references/dungeon-output-spec.md#worked-example)
+
+## Phase Profile Metadata
+
+Ensure `dungeon.phaseState` and room summary status match the requested entry phase:
+
+- `creator`
+  - `dungeon.phaseState`: `CreatorActive`
+  - room summary status: `Created`
+  - `artifact.md`: not required
+- `scribe`
+  - `dungeon.phaseState`: `ScribeActive`
+  - room summary status: `Created`
+  - `artifact.md`: optional
+- `archaeologist` (or `review` alias)
+  - `dungeon.phaseState`: `ArchaeologistUnlocked` or `ArchaeologistActive`
+  - room summary status: `ArtifactCollected`
+  - `artifact.md`: required for every room
+
+If exact enum names differ in the target repository, use that repository's canonical persisted values.
+
+## Artifact Markdown Format
+
+For archaeologist-ready output, keep each room artifact structured and non-trivial:
+
+```markdown
+# <Room Topic>
+
+## Snapshot
+<1-2 sentence summary>
+
+## Why It Matters
+<2-3 sentence architectural or learning significance>
+
+## Cross-References
+- <related room/topic>
+```
 
 ## Response Template
 

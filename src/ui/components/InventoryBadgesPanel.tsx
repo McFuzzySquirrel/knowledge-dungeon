@@ -1,9 +1,13 @@
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useState, type JSX } from 'react';
 import {
   SCRIBE_CENTURY_120_BADGE_ID,
   SCRIBE_CENTURY_120_BADGE_LABEL,
 } from '@/core/progression';
 import type { CollectedNoteEntry, LootItem } from '@/store/progressionStore';
+import {
+  exportCollectionSnapshot,
+  exportSubjectSummaryCard,
+} from '@/ui/utils/progressionShareExport';
 import { Markdown } from '@/ui/utils/markdown';
 
 interface InventoryBadgesPanelProps {
@@ -11,9 +15,13 @@ interface InventoryBadgesPanelProps {
   inventory: readonly LootItem[];
   badges: readonly string[];
   collectedNotes: readonly CollectedNoteEntry[];
+  subjectName: string;
+  clearedRoomCount: number;
+  totalRoomCount: number;
   noteMarkdownByRoomId?: Readonly<Record<string, string>>;
   xpTotal: number;
   rank: string;
+  autoOpenNoteId?: string | null;
   onSwitchView: (view: 'inventory' | 'badges' | 'journal') => void;
   onClose: () => void;
 }
@@ -69,13 +77,24 @@ export function InventoryBadgesPanel({
   inventory,
   badges,
   collectedNotes,
+  subjectName,
+  clearedRoomCount,
+  totalRoomCount,
   noteMarkdownByRoomId,
   xpTotal,
   rank,
+  autoOpenNoteId,
   onSwitchView,
   onClose,
 }: InventoryBadgesPanelProps): JSX.Element {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!autoOpenNoteId) return;
+    const noteExists = collectedNotes.some((entry) => entry.noteId === autoOpenNoteId);
+    if (!noteExists) return;
+    setSelectedNoteId(autoOpenNoteId);
+  }, [autoOpenNoteId, collectedNotes]);
+
   const selectedNote = useMemo(
     () => collectedNotes.find((entry) => entry.noteId === selectedNoteId) ?? null,
     [collectedNotes, selectedNoteId],
@@ -157,6 +176,40 @@ export function InventoryBadgesPanel({
             <span>{xpTotal} XP</span>
             <strong>{rank}</strong>
           </div>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              void exportSubjectSummaryCard({
+                subjectName,
+                xpTotal,
+                rank,
+                badgeCount: badges.length,
+                inventoryCount: inventory.length,
+                collectedNoteCount: collectedNotes.length,
+                clearedRoomCount,
+                totalRoomCount,
+              });
+            }}
+          >
+            Export summary image
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => {
+              void exportCollectionSnapshot({
+                subjectName,
+                xpTotal,
+                rank,
+                badges,
+                inventory,
+                collectedNotes,
+              });
+            }}
+          >
+            Export collections image
+          </button>
           <button type="button" className="ghost" onClick={onClose} aria-label="Close panel">
             ✕
           </button>
@@ -175,7 +228,7 @@ export function InventoryBadgesPanel({
                 Back to journal
               </button>
             </div>
-            <div className="journal-note-markdown">
+            <div className="journal-note-markdown journal-note-markdown--wide">
               <Markdown source={selectedNoteMarkdown} />
             </div>
           </section>

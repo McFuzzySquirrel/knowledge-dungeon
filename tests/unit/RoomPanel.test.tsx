@@ -61,6 +61,10 @@ describe('RoomPanel', () => {
         focusedRoom={focusedRoom}
         onInteract={() => undefined}
         onTravelToRoom={() => undefined}
+        reviewPassesCompleted={0}
+        reviewRoomsTowardNextPass={0}
+        reviewNextPassTarget={1}
+        reviewTotalRooms={1}
         inventoryCount={0}
         badgeCount={0}
         journalCount={0}
@@ -89,6 +93,10 @@ describe('RoomPanel', () => {
         focusedRoom={snapshot.rooms['room-1']}
         onInteract={() => undefined}
         onTravelToRoom={() => undefined}
+        reviewPassesCompleted={0}
+        reviewRoomsTowardNextPass={0}
+        reviewNextPassTarget={1}
+        reviewTotalRooms={1}
         inventoryCount={0}
         badgeCount={0}
         journalCount={0}
@@ -113,6 +121,10 @@ describe('RoomPanel', () => {
         focusedRoom={snapshot.rooms['room-1']}
         onInteract={() => undefined}
         onTravelToRoom={() => undefined}
+        reviewPassesCompleted={0}
+        reviewRoomsTowardNextPass={0}
+        reviewNextPassTarget={1}
+        reviewTotalRooms={1}
         inventoryCount={0}
         badgeCount={0}
         journalCount={0}
@@ -139,6 +151,10 @@ describe('RoomPanel', () => {
         focusedRoom={snapshot.rooms['room-1']}
         onInteract={() => undefined}
         onTravelToRoom={() => undefined}
+        reviewPassesCompleted={0}
+        reviewRoomsTowardNextPass={0}
+        reviewNextPassTarget={1}
+        reviewTotalRooms={1}
         inventoryCount={0}
         badgeCount={0}
         journalCount={0}

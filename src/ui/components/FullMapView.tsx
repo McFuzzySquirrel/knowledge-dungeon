@@ -17,12 +17,14 @@ import {
 import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistence';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 import type { GamePhase } from '@/store/sessionStore';
+import type { ColorTheme } from '@/store/preferencesStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
 
 interface FullMapViewProps {
   snapshot: SubjectSnapshot;
   dungeonMap: DungeonMap;
+  colorTheme?: ColorTheme;
   focusedRoomId: string | null;
   phase: GamePhase;
   teleportModeArmed: boolean;
@@ -37,6 +39,75 @@ const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.0015;
 const CANVAS_PADDING = 220;
+
+const FULLMAP_PALETTE: Record<
+  ColorTheme,
+  {
+    corridorConnected: string;
+    corridorPortal: string;
+    corridorDefault: string;
+    roomPortalFill: string;
+    roomFocusedFill: string;
+    roomNeighborFill: string;
+    roomRootFill: string;
+    roomDefaultFill: string;
+    roomSelectedStroke: string;
+    roomPortalStroke: string;
+    roomHighlightStroke: string;
+    roomDefaultStroke: string;
+    textLight: string;
+    textDark: string;
+  }
+> = {
+  dark: {
+    corridorConnected: '#7be3ff',
+    corridorPortal: '#b48cff',
+    corridorDefault: '#4f679f',
+    roomPortalFill: '#273b67',
+    roomFocusedFill: '#7be3ff',
+    roomNeighborFill: '#c7b2ff',
+    roomRootFill: '#8fc1ff',
+    roomDefaultFill: '#22345d',
+    roomSelectedStroke: '#e879f9',
+    roomPortalStroke: '#b48cff',
+    roomHighlightStroke: '#7be3ff',
+    roomDefaultStroke: '#4f679f',
+    textLight: '#f3f8ff',
+    textDark: '#121b31',
+  },
+  colorful: {
+    corridorConnected: '#ffcf5f',
+    corridorPortal: '#7be3ff',
+    corridorDefault: '#6b82d4',
+    roomPortalFill: '#243a66',
+    roomFocusedFill: '#ffcf5f',
+    roomNeighborFill: '#a8f0ff',
+    roomRootFill: '#8fb6ff',
+    roomDefaultFill: '#263a6e',
+    roomSelectedStroke: '#c084fc',
+    roomPortalStroke: '#7be3ff',
+    roomHighlightStroke: '#ffcf5f',
+    roomDefaultStroke: '#6b82d4',
+    textLight: '#f6fbff',
+    textDark: '#16223a',
+  },
+  aurora: {
+    corridorConnected: '#9af7e5',
+    corridorPortal: '#b48cff',
+    corridorDefault: '#5d76cf',
+    roomPortalFill: '#26345e',
+    roomFocusedFill: '#9af7e5',
+    roomNeighborFill: '#cbb5ff',
+    roomRootFill: '#90c8ff',
+    roomDefaultFill: '#22365f',
+    roomSelectedStroke: '#e879f9',
+    roomPortalStroke: '#b48cff',
+    roomHighlightStroke: '#9af7e5',
+    roomDefaultStroke: '#5d76cf',
+    textLight: '#f7fbff',
+    textDark: '#111d36',
+  },
+};
 
 interface RoomOffset {
   x: number;
@@ -97,6 +168,7 @@ function splitTopicLabel(topic: string, maxCharsPerLine: number, maxLines: numbe
 export function FullMapView({
   snapshot,
   dungeonMap,
+  colorTheme = 'dark',
   focusedRoomId,
   phase,
   teleportModeArmed,
@@ -105,6 +177,7 @@ export function FullMapView({
   onTeleportToRoom,
   onClose,
 }: FullMapViewProps): JSX.Element {
+  const palette = FULLMAP_PALETTE[colorTheme];
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
   const reparentRoom = useSubjectStore((s) => s.reparentRoom);
   const lastError = useSubjectStore((s) => s.lastError);
@@ -534,10 +607,10 @@ export function FullMapView({
                     floorFilterOn &&
                     (c.fromRoomId === portalRoomId || c.toRoomId === portalRoomId);
                   const corridorStroke = isConnected
-                    ? '#f2c879'
+                    ? palette.corridorConnected
                     : isPortalEdge
-                      ? '#7fb2ff'
-                      : '#7a5a32';
+                      ? palette.corridorPortal
+                      : palette.corridorDefault;
                   return (
                     <line
                       key={i}
@@ -561,22 +634,22 @@ export function FullMapView({
                   const isPortal =
                     floorFilterOn && portalRoomId !== null && room.roomId === portalRoomId;
                   const rpgFill = isPortal
-                    ? '#3a2a1a'
+                    ? palette.roomPortalFill
                     : isFocused
-                      ? '#f2c879'
+                      ? palette.roomFocusedFill
                       : isNeighbor
-                        ? '#e8c98a'
+                        ? palette.roomNeighborFill
                         : room.isRoot
-                          ? '#b88a4a'
-                          : '#3d2b1a';
+                          ? palette.roomRootFill
+                          : palette.roomDefaultFill;
                   const fill = rpgFill;
                   const stroke = isSelected
-                    ? '#8b5cf6'
+                    ? palette.roomSelectedStroke
                     : isPortal
-                      ? '#7fb2ff'
+                      ? palette.roomPortalStroke
                       : isFocused || isNeighbor
-                        ? '#f2c879'
-                        : '#6b4a24';
+                        ? palette.roomHighlightStroke
+                        : palette.roomDefaultStroke;
                   const strokeWidth = isSelected
                     ? 3
                     : isPortal
@@ -586,8 +659,8 @@ export function FullMapView({
                         : isNeighbor
                           ? 1.5
                           : 1.5;
-                  const textFill = isFocused || isNeighbor ? '#2d1f11' : '#f9eed9';
-                  const textStroke = isFocused || isNeighbor ? '#f9eed9' : '#2d1f11';
+                  const textFill = isFocused || isNeighbor ? palette.textDark : palette.textLight;
+                  const textStroke = isFocused || isNeighbor ? palette.textLight : palette.textDark;
                   return (
                     <g
                       key={room.roomId}

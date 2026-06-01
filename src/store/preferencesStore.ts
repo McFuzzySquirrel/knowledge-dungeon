@@ -1,16 +1,17 @@
 /**
- * Preferences store — currently this is intentionally RPG-only.
+ * Preferences store for persistent UI preferences.
  *
- * We keep the `graphicsMode` field persisted in localStorage so existing
- * preference payloads remain compatible and future visual options can be
- * reintroduced without another storage shape change.
+ * We keep the `graphicsMode` and `colorTheme` fields in localStorage so the
+ * current UI theme selection survives reloads.
  */
 import { create } from 'zustand';
 
 export type GraphicsMode = 'rpg';
+export type ColorTheme = 'dark' | 'colorful' | 'aurora';
 
 interface PersistedPreferences {
   graphicsMode?: GraphicsMode;
+  colorTheme?: ColorTheme | 'light' | 'sepia';
 }
 
 const PREFERENCES_STORAGE_KEY = 'knowledge-dungeon:session:preferences';
@@ -47,16 +48,42 @@ function resolveInitialGraphicsMode(): GraphicsMode {
   return persisted?.graphicsMode === 'rpg' ? 'rpg' : 'rpg';
 }
 
+function resolveInitialColorTheme(): ColorTheme {
+  const persisted = readPersisted();
+  switch (persisted?.colorTheme) {
+    case 'dark':
+    case 'colorful':
+    case 'aurora':
+      return persisted.colorTheme;
+    case 'light':
+    case 'sepia':
+      return 'dark';
+    default:
+      return 'dark';
+  }
+}
+
 export interface PreferencesState {
   graphicsMode: GraphicsMode;
+  colorTheme: ColorTheme;
   setGraphicsMode: (mode: GraphicsMode) => void;
+  setColorTheme: (theme: ColorTheme) => void;
 }
 
 export const usePreferencesStore = create<PreferencesState>((set) => ({
   graphicsMode: resolveInitialGraphicsMode(),
+  colorTheme: resolveInitialColorTheme(),
   setGraphicsMode: (graphicsMode) => {
-    set({ graphicsMode });
-    writePersisted({ graphicsMode });
+    set((state) => {
+      writePersisted({ graphicsMode, colorTheme: state.colorTheme });
+      return { graphicsMode };
+    });
+  },
+  setColorTheme: (colorTheme) => {
+    set((state) => {
+      writePersisted({ graphicsMode: state.graphicsMode, colorTheme });
+      return { colorTheme };
+    });
   },
 }));
 
@@ -65,4 +92,5 @@ export const usePreferencesStore = create<PreferencesState>((set) => ({
 export const __testing = {
   PREFERENCES_STORAGE_KEY,
   resolveInitialGraphicsMode,
+  resolveInitialColorTheme,
 };

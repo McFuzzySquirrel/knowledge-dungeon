@@ -11,6 +11,10 @@ describe('Hud', () => {
         roomCount={3}
         xpTotal={120}
         rank="Novice"
+        reviewPassesCompleted={1}
+        reviewRoomsTowardNextPass={2}
+        reviewNextPassTarget={2}
+        reviewTotalRooms={3}
         phase="creator"
         currentFloorLabel="Linear Algebra"
         teleportRemainingMs={0}
@@ -19,6 +23,7 @@ describe('Hud', () => {
         showScribeNudge={false}
         onPhaseChange={() => undefined}
         onHelp={() => undefined}
+        onOpenSettings={() => undefined}
         onOpenMap={() => undefined}
         onTeleport={() => undefined}
         onHome={() => undefined}
@@ -28,6 +33,7 @@ describe('Hud', () => {
     expect(screen.getAllByText('Linear Algebra')).toHaveLength(2);
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText(/120/)).toBeInTheDocument();
+    expect(screen.getByText(/2\/3 toward pass 2/i)).toBeInTheDocument();
   });
 
   it('asks for confirmation before phase switch when flow-sensitive UI is active', async () => {
@@ -41,6 +47,10 @@ describe('Hud', () => {
         roomCount={3}
         xpTotal={120}
         rank="Novice"
+        reviewPassesCompleted={0}
+        reviewRoomsTowardNextPass={0}
+        reviewNextPassTarget={1}
+        reviewTotalRooms={3}
         phase="creator"
         currentFloorLabel="Linear Algebra"
         teleportRemainingMs={0}
@@ -49,6 +59,7 @@ describe('Hud', () => {
         showScribeNudge={true}
         onPhaseChange={onPhaseChange}
         onHelp={() => undefined}
+        onOpenSettings={() => undefined}
         onOpenMap={() => undefined}
         onTeleport={() => undefined}
         onHome={() => undefined}

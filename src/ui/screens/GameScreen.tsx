@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type Phaser from 'phaser';
 import { computeFloorVisibility, deriveGraphHierarchy } from '@/core/graph';
 import { evaluatePhaseBadgeUnlocks } from '@/core/progression';
@@ -6,6 +6,7 @@ import { isReviewableRoom, summarizeReviewAnalytics } from '@/core/review';
 import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
+import { usePreferencesStore } from '@/store/preferencesStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
@@ -14,11 +15,11 @@ import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
-import { TouchControls } from '@/ui/components/TouchControls';
 import { Minimap } from '@/ui/components/Minimap';
 import { HelpOverlay } from '@/ui/components/HelpOverlay';
 import { FullMapView } from '@/ui/components/FullMapView';
 import { GameplayOnboardingModal } from '@/ui/components/GameplayOnboardingModal';
+import { SettingsModal } from '@/ui/components/SettingsModal';
 import { ToastStack } from '@/ui/components/ToastStack';
 import { isEditableElement } from '@/ui/utils/editableElement';
 import { useToasts } from '@/ui/utils/useToasts';
@@ -53,6 +54,9 @@ export function GameScreen(): JSX.Element {
   const inventory = useProgressionStore((s) => s.inventory);
   const badges = useProgressionStore((s) => s.badges);
   const collectedNotes = useProgressionStore((s) => s.collectedNotes);
+  const setProgressionActiveSubject = useProgressionStore((s) => s.setActiveSubject);
+  const colorTheme = usePreferencesStore((s) => s.colorTheme);
+  const setColorTheme = usePreferencesStore((s) => s.setColorTheme);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -60,6 +64,7 @@ export function GameScreen(): JSX.Element {
   const npcDialogRoomIdRef = useRef<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges' | 'journal'>(
     null,
   );
@@ -68,6 +73,7 @@ export function GameScreen(): JSX.Element {
   const [lastWelcomedSubjectId, setLastWelcomedSubjectId] = useState<string | null>(null);
   const [npcDialogRoomId, setNpcDialogRoomId] = useState<string | null>(null);
   const [npcDialogAnchor, setNpcDialogAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [autoOpenCollectedNoteId, setAutoOpenCollectedNoteId] = useState<string | null>(null);
   const { toasts, pushToast } = useToasts();
 
   useEffect(() => {
@@ -77,10 +83,10 @@ export function GameScreen(): JSX.Element {
   const dungeonMap = useMemo(() => {
     if (!snapshot) return null;
     return generateDungeonMap(snapshot.dungeon);
-  }, [snapshot]);
+  }, [snapshot?.dungeon]);
   const hierarchy = useMemo(
     () => (snapshot ? deriveGraphHierarchy(snapshot.dungeon) : null),
-    [snapshot],
+    [snapshot?.dungeon],
   );
 
   // The floor the in-game scene is currently rendering. Defaults to the
@@ -106,6 +112,96 @@ export function GameScreen(): JSX.Element {
     : 0;
   const showScribeNudge = phase === 'creator' && snapshot ? snapshot.dungeon.rooms.length >= 3 : false;
 
+  const handleRoomInteract = useCallback(
+    (roomId: string) => {
+      setNpcDialogRoomId(null);
+      setNpcDialogAnchor(null);
+
+      if (phase !== 'archaeologist') {
+        openNoteEditor(roomId);
+        return;
+      }
+
+      const liveSnapshot = useSubjectStore.getState().snapshot;
+
+      if (liveSnapshot) {
+        const room = liveSnapshot.rooms[roomId];
+        if (room && room.validationState.finalPass) {
+          const reviewableRoomIds = liveSnapshot.dungeon.rooms
+            .map((summary) => summary.roomId)
+            .filter((candidateRoomId) => {
+              const candidate = liveSnapshot.rooms[candidateRoomId];
+              return candidate ? isReviewableRoom(candidate) : false;
+            });
+          const analyticsBefore = summarizeReviewAnalytics({
+            rooms: liveSnapshot.rooms,
+            reviewableRoomIds,
+            currentReviewStreak: 0,
+            longestReviewStreak: 0,
+          });
+          const nextPassTarget = analyticsBefore.fullReviewPasses + 1;
+          const shouldAwardReviewXp = room.reviewPassCount < nextPassTarget;
+
+          void recordReviewPass(roomId);
+          const reviewProgression = shouldAwardReviewXp
+            ? useProgressionStore.getState().awardReviewPass()
+            : { xpGained: 0, newRank: useProgressionStore.getState().rank, rankChanged: false };
+
+          const roomsWithIncrement = {
+            ...liveSnapshot.rooms,
+            [roomId]: {
+              ...room,
+              reviewPassCount: room.reviewPassCount + 1,
+            },
+          };
+          const analytics = summarizeReviewAnalytics({
+            rooms: roomsWithIncrement,
+            reviewableRoomIds,
+            currentReviewStreak: 0,
+            longestReviewStreak: 0,
+          });
+
+          const unlockedBadges = evaluatePhaseBadgeUnlocks(
+            {
+              totalRooms: liveSnapshot.dungeon.rooms.length,
+              creatorMappedRooms: liveSnapshot.dungeon.rooms.length,
+              scribeClearedRooms: reviewableRoomIds.length,
+              archaeologistFullReviewPasses: analytics.fullReviewPasses,
+            },
+            useProgressionStore.getState().badges,
+          );
+          if (unlockedBadges.length > 0) {
+            const progression = useProgressionStore.getState();
+            unlockedBadges.forEach((badgeId) => {
+              progression.awardBadge(badgeId);
+            });
+            pushToast(
+              'info',
+              `Archaeologist badge unlocked: ${unlockedBadges.join(', ')}`,
+            );
+          }
+
+          const nextPassProgressTarget = analytics.fullReviewPasses + 1;
+          const reviewedTowardNextPass = liveSnapshot.dungeon.rooms.filter((summary) => {
+            const count = roomsWithIncrement[summary.roomId]?.reviewPassCount ?? 0;
+            return count >= nextPassProgressTarget;
+          }).length;
+          const xpMessage =
+            reviewProgression.xpGained > 0
+              ? ` (+${reviewProgression.xpGained} XP)`
+              : ' (already counted for this pass)';
+          pushToast(
+            'info',
+            `Review recorded${xpMessage}: ${reviewedTowardNextPass}/${liveSnapshot.dungeon.rooms.length} rooms toward pass ${nextPassProgressTarget}. Completed full passes: ${analytics.fullReviewPasses}.`,
+          );
+        }
+      }
+
+      setFocusedRoomId(roomId);
+    },
+    [openNoteEditor, phase, pushToast, recordReviewPass, setFocusedRoomId],
+  );
+
   useEffect(() => {
     if (teleportRemainingMs <= 0) return;
     const interval = window.setInterval(() => setClockMs(Date.now()), 1000);
@@ -125,6 +221,7 @@ export function GameScreen(): JSX.Element {
     const game = createGame({
       parent: containerRef.current,
       dungeonMap,
+      colorTheme,
       playerClass: selectedClass,
       initialFloor: initialFloor
         ? {
@@ -158,59 +255,7 @@ export function GameScreen(): JSX.Element {
             npcDialogRoomIdRef.current === roomId ? null : current,
           );
         },
-        onInteract: (roomId) => {
-          setNpcDialogRoomId(null);
-          setNpcDialogAnchor(null);
-          if (phase === 'archaeologist') {
-            const liveSnapshot = useSubjectStore.getState().snapshot;
-            void recordReviewPass(roomId);
-
-            if (liveSnapshot) {
-              const room = liveSnapshot.rooms[roomId];
-              if (room && room.validationState.finalPass) {
-                const roomsWithIncrement = {
-                  ...liveSnapshot.rooms,
-                  [roomId]: {
-                    ...room,
-                    reviewPassCount: room.reviewPassCount + 1,
-                  },
-                };
-                const reviewableRoomIds = liveSnapshot.dungeon.rooms
-                  .map((summary) => summary.roomId)
-                  .filter((candidateRoomId) => {
-                    const candidate = roomsWithIncrement[candidateRoomId];
-                    return candidate ? isReviewableRoom(candidate) : false;
-                  });
-                const analytics = summarizeReviewAnalytics({
-                  rooms: roomsWithIncrement,
-                  reviewableRoomIds,
-                  currentReviewStreak: 0,
-                  longestReviewStreak: 0,
-                });
-
-                const unlockedBadges = evaluatePhaseBadgeUnlocks(
-                  {
-                    totalRooms: liveSnapshot.dungeon.rooms.length,
-                    creatorMappedRooms: liveSnapshot.dungeon.rooms.length,
-                    scribeClearedRooms: reviewableRoomIds.length,
-                    archaeologistFullReviewPasses: analytics.fullReviewPasses,
-                  },
-                  useProgressionStore.getState().badges,
-                );
-                if (unlockedBadges.length > 0) {
-                  const progression = useProgressionStore.getState();
-                  unlockedBadges.forEach((badgeId) => {
-                    progression.awardBadge(badgeId);
-                  });
-                }
-              }
-            }
-
-            setFocusedRoomId(roomId);
-          } else {
-            openNoteEditor(roomId);
-          }
-        },
+        onInteract: (roomId) => handleRoomInteract(roomId),
         onArtifactCollected: (roomId) => {
           const liveSnapshot = useSubjectStore.getState().snapshot;
           if (!liveSnapshot) return;
@@ -227,7 +272,7 @@ export function GameScreen(): JSX.Element {
             .trim()
             .slice(0, 180);
 
-          useProgressionStore.getState().collectArtifactNote({
+          const collected = useProgressionStore.getState().collectArtifactNote({
             dungeonId: liveSnapshot.dungeon.dungeonId,
             roomId,
             topic: room.topic,
@@ -236,6 +281,11 @@ export function GameScreen(): JSX.Element {
             noteMarkdown: room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown,
             artifactMarkdown: room.artifactMarkdown,
           });
+
+          if (collected) {
+            setInventoryView('journal');
+            setAutoOpenCollectedNoteId(`${liveSnapshot.dungeon.dungeonId}:${roomId}`);
+          }
         },
         onFloorTransition: ({ fromRoomId, direction }) => {
           const liveSnapshot = useSubjectStore.getState().snapshot;
@@ -280,10 +330,11 @@ export function GameScreen(): JSX.Element {
     // floor changes are pushed via `scene.setFloorVisibility` to avoid
     // tearing down the Phaser game on every transition.
   }, [
+    colorTheme,
     dungeonMap,
-    openNoteEditor,
-    phase,
-    recordReviewPass,
+    handleRoomInteract,
+    hierarchy,
+    currentFloorId,
     selectedClass,
     setFocusedRoomId,
   ]);
@@ -299,10 +350,34 @@ export function GameScreen(): JSX.Element {
   }, [sceneReady, snapshot, phase]);
 
   useEffect(() => {
+    if (!sceneReady || !snapshot) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const subjectCollectedArtifactRoomIds = collectedNotes
+      .filter((entry) => entry.dungeonId === snapshot.dungeon.dungeonId)
+      .map((entry) => entry.roomId);
+    scene.setCollectedArtifactRooms(subjectCollectedArtifactRoomIds);
+  }, [sceneReady, snapshot, collectedNotes]);
+
+  useEffect(() => {
+    if (!sceneReady || !snapshot) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const reviewedArtifactRoomIds = Object.values(snapshot.rooms)
+      .filter((room) => room.reviewPassCount > 0)
+      .map((room) => room.roomId);
+    scene.setReviewedArtifactRooms(reviewedArtifactRoomIds);
+  }, [sceneReady, snapshot]);
+
+  useEffect(() => {
     if (!snapshot) return;
     if (hasSeenGameplayLoopOnboarding()) return;
     setShowOnboarding(true);
   }, [snapshot]);
+
+  useEffect(() => {
+    setProgressionActiveSubject(snapshot?.dungeon.dungeonId ?? null);
+  }, [setProgressionActiveSubject, snapshot]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -350,6 +425,7 @@ export function GameScreen(): JSX.Element {
     setActiveSubjectId(null);
     persistActiveSubjectId(null);
     cancelTeleportMode();
+    setProgressionActiveSubject(null);
     setSnapshot(null);
   }
 
@@ -360,11 +436,50 @@ export function GameScreen(): JSX.Element {
     );
   }, [snapshot]);
 
+  const reviewProgress = useMemo(() => {
+    if (!snapshot) {
+      return {
+        fullReviewPasses: 0,
+        nextPassTarget: 1,
+        reviewedTowardNextPass: 0,
+        totalRooms: 0,
+      };
+    }
+
+    const reviewableRoomIds = snapshot.dungeon.rooms
+      .map((summary) => summary.roomId)
+      .filter((roomId) => {
+        const room = snapshot.rooms[roomId];
+        return room ? isReviewableRoom(room) : false;
+      });
+    const analytics = summarizeReviewAnalytics({
+      rooms: snapshot.rooms,
+      reviewableRoomIds,
+      currentReviewStreak: 0,
+      longestReviewStreak: 0,
+    });
+    const nextPassTarget = analytics.fullReviewPasses + 1;
+    const reviewedTowardNextPass = snapshot.dungeon.rooms.filter((summary) => {
+      const count = snapshot.rooms[summary.roomId]?.reviewPassCount ?? 0;
+      return count >= nextPassTarget;
+    }).length;
+
+    return {
+      fullReviewPasses: analytics.fullReviewPasses,
+      nextPassTarget,
+      reviewedTowardNextPass,
+      totalRooms: snapshot.dungeon.rooms.length,
+    };
+  }, [snapshot]);
+
   if (!snapshot || !dungeonMap) {
     return <div>Loading dungeon…</div>;
   }
 
   const focusedRoom = focusedRoomId ? snapshot.rooms[focusedRoomId] ?? null : null;
+  const subjectCollectedNotes = collectedNotes.filter(
+    (entry) => entry.dungeonId === snapshot.dungeon.dungeonId,
+  );
   const currentFloorLabel =
     focusedRoom && hierarchy
       ? hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[focusedRoom.roomId]]
@@ -421,95 +536,129 @@ export function GameScreen(): JSX.Element {
 
   return (
     <div className="game-shell">
-      <Hud
-        subjectName={snapshot.dungeon.subjectName}
-        roomCount={snapshot.dungeon.rooms.length}
-        xpTotal={xpTotal}
-        rank={rank}
-        phase={phase}
-        currentFloorLabel={currentFloorLabel}
-        teleportRemainingMs={teleportRemainingMs}
-        teleportModeArmed={teleportModeArmed}
-        phaseChangeNeedsConfirmation={phaseChangeNeedsConfirmation}
-        showScribeNudge={showScribeNudge}
-        onPhaseChange={setPhase}
-        onHelp={() => setHelpOpen(true)}
-        onOpenMap={openMapView}
-        onTeleport={handleTeleport}
-        onHome={handleHome}
-      />
-
       <div className="game-canvas">
         <div className="game-canvas-host" ref={containerRef} />
         <Minimap
           dungeonMap={dungeonMap}
+          colorTheme={colorTheme}
           focusedRoomId={focusedRoomId}
           visibleRoomIds={floorVisibility?.visibleRoomIds}
           portalUpRoomId={floorVisibility?.portalUpRoomId ?? null}
           portalDownRoomIds={floorVisibility?.portalDownRoomIds}
         />
       </div>
-
-      <RoomPanel
-        snapshot={snapshot}
-        focusedRoom={focusedRoom}
-        onInteract={() => focusedRoom && openNoteEditor(focusedRoom.roomId)}
-        onTravelToRoom={handleTravelToRoom}
-        inventoryCount={inventory.length}
-        badgeCount={badges.length}
-        journalCount={collectedNotes.length}
-        onOpenInventory={() => setInventoryView('inventory')}
-        onOpenBadges={() => setInventoryView('badges')}
-        onOpenJournal={() => setInventoryView('journal')}
-      />
-
-      <TouchControls onInteract={() => sceneRef.current?.triggerInteract()} />
-      <ToastStack toasts={toasts} />
-
-      {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
-        <RoomNpcDialog
-          topic={snapshot.rooms[npcDialogRoomId].topic}
-          phase={phase}
-          roomState={snapshot.rooms[npcDialogRoomId].state}
-          isCleared={snapshot.rooms[npcDialogRoomId].validationState.finalPass}
-          anchorPosition={npcDialogAnchor}
-        />
-      ) : null}
-
-      <NoteEditorModal />
-      {isMapViewOpen ? (
-        <FullMapView
-          snapshot={snapshot}
-          dungeonMap={dungeonMap}
-          focusedRoomId={focusedRoomId}
-          phase={phase}
-          teleportModeArmed={teleportModeArmed}
-          teleportRemainingMs={teleportRemainingMs}
-          onTravelToRoom={handleTravelToRoom}
-          onTeleportToRoom={handleTeleportToRoom}
-          onClose={closeMapView}
-        />
-      ) : null}
-      {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
-      {showOnboarding ? (
-        <GameplayOnboardingModal
+      <div className="game-ui ui-skin" data-theme={colorTheme}>
+        <Hud
           subjectName={snapshot.dungeon.subjectName}
-          onClose={handleCloseOnboarding}
-        />
-      ) : null}
-      {inventoryView ? (
-        <InventoryBadgesPanel
-          view={inventoryView}
-          inventory={inventory}
-          badges={badges}
-          collectedNotes={collectedNotes}
-          noteMarkdownByRoomId={noteMarkdownByRoomId}
+          roomCount={snapshot.dungeon.rooms.length}
           xpTotal={xpTotal}
           rank={rank}
-          onSwitchView={(v) => setInventoryView(v)}
-          onClose={() => setInventoryView(null)}
+          reviewPassesCompleted={reviewProgress.fullReviewPasses}
+          reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
+          reviewNextPassTarget={reviewProgress.nextPassTarget}
+          reviewTotalRooms={reviewProgress.totalRooms}
+          phase={phase}
+          currentFloorLabel={currentFloorLabel}
+          teleportRemainingMs={teleportRemainingMs}
+          teleportModeArmed={teleportModeArmed}
+          phaseChangeNeedsConfirmation={phaseChangeNeedsConfirmation}
+          showScribeNudge={showScribeNudge}
+          onPhaseChange={setPhase}
+          onHelp={() => setHelpOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenMap={openMapView}
+          onTeleport={handleTeleport}
+          onHome={handleHome}
         />
-      ) : null}
+
+        <RoomPanel
+          snapshot={snapshot}
+          focusedRoom={focusedRoom}
+          onInteract={() => {
+            if (!focusedRoom) return;
+            handleRoomInteract(focusedRoom.roomId);
+          }}
+          onTravelToRoom={handleTravelToRoom}
+          reviewPassesCompleted={reviewProgress.fullReviewPasses}
+          reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
+          reviewNextPassTarget={reviewProgress.nextPassTarget}
+          reviewTotalRooms={reviewProgress.totalRooms}
+          inventoryCount={inventory.length}
+          badgeCount={badges.length}
+          journalCount={subjectCollectedNotes.length}
+          onOpenInventory={() => setInventoryView('inventory')}
+          onOpenBadges={() => setInventoryView('badges')}
+          onOpenJournal={() => setInventoryView('journal')}
+        />
+
+        <ToastStack toasts={toasts} />
+
+        {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
+          <RoomNpcDialog
+            topic={snapshot.rooms[npcDialogRoomId].topic}
+            phase={phase}
+            roomState={snapshot.rooms[npcDialogRoomId].state}
+            isCleared={snapshot.rooms[npcDialogRoomId].validationState.finalPass}
+            anchorPosition={npcDialogAnchor}
+          />
+        ) : null}
+
+        <NoteEditorModal />
+        {isMapViewOpen ? (
+          <FullMapView
+            snapshot={snapshot}
+            dungeonMap={dungeonMap}
+            colorTheme={colorTheme}
+            focusedRoomId={focusedRoomId}
+            phase={phase}
+            teleportModeArmed={teleportModeArmed}
+            teleportRemainingMs={teleportRemainingMs}
+            onTravelToRoom={handleTravelToRoom}
+            onTeleportToRoom={handleTeleportToRoom}
+            onClose={closeMapView}
+          />
+        ) : null}
+        {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
+        {showOnboarding ? (
+          <GameplayOnboardingModal
+            subjectName={snapshot.dungeon.subjectName}
+            onClose={handleCloseOnboarding}
+          />
+        ) : null}
+        {inventoryView ? (
+          <InventoryBadgesPanel
+            view={inventoryView}
+            inventory={inventory}
+            badges={badges}
+            collectedNotes={subjectCollectedNotes}
+            noteMarkdownByRoomId={noteMarkdownByRoomId}
+            subjectName={snapshot.dungeon.subjectName}
+            clearedRoomCount={clearedRoomsCount}
+            totalRoomCount={snapshot.dungeon.rooms.length}
+            xpTotal={xpTotal}
+            rank={rank}
+            autoOpenNoteId={inventoryView === 'journal' ? autoOpenCollectedNoteId : null}
+            onSwitchView={(v) => {
+              setInventoryView(v);
+              if (v !== 'journal') {
+                setAutoOpenCollectedNoteId(null);
+              }
+            }}
+            onClose={() => {
+              setInventoryView(null);
+              setAutoOpenCollectedNoteId(null);
+            }}
+          />
+        ) : null}
+
+        {settingsOpen ? (
+          <SettingsModal
+            currentTheme={colorTheme}
+            onThemeChange={setColorTheme}
+            onClose={() => setSettingsOpen(false)}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

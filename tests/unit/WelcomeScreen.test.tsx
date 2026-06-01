@@ -1,32 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { WelcomeScreen } from '@/ui/screens/WelcomeScreen';
+import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 
+const mockIsElectronAvailable = vi.fn(() => false);
+const mockGetElectronEnvironmentLabel = vi.fn(() => 'web');
+
 vi.mock('@/services/electronBridge', () => ({
-  isElectronAvailable: () => false,
-  getElectronEnvironmentLabel: () => 'web',
+  isElectronAvailable: () => mockIsElectronAvailable(),
+  getElectronEnvironmentLabel: () => mockGetElectronEnvironmentLabel(),
 }));
 
 const mockListSubjectIds = vi.fn<() => Promise<string[]>>();
 const mockLoadSubjectSnapshot = vi.fn<(id: string) => Promise<SubjectSnapshot | null>>();
+const mockImportSubjectFolder = vi.fn<() => Promise<SubjectSnapshot | null>>();
 
-vi.mock('@/services/persistence/subjectPersistence', () => ({
-  listSubjectIds: () => mockListSubjectIds(),
-  loadSubjectSnapshot: (id: string) => mockLoadSubjectSnapshot(id),
-  saveSubjectSnapshot: vi.fn(() => Promise.resolve(undefined)),
-  setActiveSubjectId: vi.fn(),
-  exportSubjectFolder: vi.fn(() => Promise.resolve(null)),
-  exportSubjectsRoot: vi.fn(() => Promise.resolve(null)),
-  importSubjectFolder: vi.fn(() => Promise.resolve(null)),
-  openSubjectsFolder: vi.fn(() => Promise.resolve(false)),
-  addRoomLocalAttachment: vi.fn(() => Promise.resolve(null)),
-  addRoomExternalAttachment: vi.fn(() => Promise.resolve(null)),
-  deleteRoomAttachment: vi.fn(() => Promise.resolve(false)),
-  resolveRoomAttachmentUrl: vi.fn(() => Promise.resolve(null)),
-}));
+vi.mock('@/services/persistence/subjectPersistence', async () => {
+  const actual = await vi.importActual('@/services/persistence/subjectPersistence');
+  return {
+    ...actual,
+    listSubjectIds: () => mockListSubjectIds(),
+    loadSubjectSnapshot: (id: string) => mockLoadSubjectSnapshot(id),
+    saveSubjectSnapshot: vi.fn(() => Promise.resolve(undefined)),
+    setActiveSubjectId: vi.fn(),
+    getActiveSubjectId: vi.fn(() => null),
+    exportSubjectFolder: vi.fn(() => Promise.resolve(null)),
+    exportSubjectsRoot: vi.fn(() => Promise.resolve(null)),
+    importSubjectFolder: () => mockImportSubjectFolder(),
+    openSubjectsFolder: vi.fn(() => Promise.resolve(false)),
+    addRoomLocalAttachment: vi.fn(() => Promise.resolve(null)),
+    addRoomExternalAttachment: vi.fn(() => Promise.resolve(null)),
+    deleteRoomAttachment: vi.fn(() => Promise.resolve(false)),
+    resolveRoomAttachmentUrl: vi.fn(() => Promise.resolve(null)),
+  };
+});
 
 function makeSnapshot(subjectId: string, subjectName: string): SubjectSnapshot {
   return {
@@ -91,8 +101,21 @@ describe('WelcomeScreen', () => {
       lastTeleportAt: null,
     });
     useSubjectStore.setState({ snapshot: null, lastError: null });
+    useProgressionStore.setState({
+      activeSubjectId: null,
+      bySubject: {},
+      xpTotal: 0,
+      rank: 'Novice',
+      badges: [],
+      inventory: [],
+      collectedNotes: [],
+      streakCount: 0,
+    });
     mockListSubjectIds.mockReset();
     mockLoadSubjectSnapshot.mockReset();
+    mockImportSubjectFolder.mockReset();
+    mockIsElectronAvailable.mockReturnValue(false);
+    mockGetElectronEnvironmentLabel.mockReturnValue('web');
   });
 
   it('keeps create disabled until an archetype is selected', async () => {
@@ -140,6 +163,32 @@ describe('WelcomeScreen', () => {
 
     await waitFor(() => {
       expect(useSessionStore.getState().activeSubjectId).toBe('subject-1');
+      expect(useProgressionStore.getState().activeSubjectId).toBe('subject-1');
+    });
+  });
+
+  it('associates imported subject with progression state', async () => {
+    const snapshot = makeSnapshot('imported-1', 'Imported Subject');
+    mockIsElectronAvailable.mockReturnValue(true);
+    mockGetElectronEnvironmentLabel.mockReturnValue('desktop');
+    mockListSubjectIds.mockResolvedValue(['imported-1']);
+    mockLoadSubjectSnapshot.mockImplementation((id: string) =>
+      Promise.resolve(id === 'imported-1' ? snapshot : null),
+    );
+    mockImportSubjectFolder.mockResolvedValue(snapshot);
+    useSessionStore.setState({ selectedClass: 'scholar' });
+
+    render(<WelcomeScreen />);
+    await waitFor(() => {
+      expect(screen.queryByText(/Loading subjects/i)).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Data/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Import subject folder/i }));
+
+    await waitFor(() => {
+      expect(useSessionStore.getState().activeSubjectId).toBe('imported-1');
+      expect(useProgressionStore.getState().activeSubjectId).toBe('imported-1');
     });
   });
 });

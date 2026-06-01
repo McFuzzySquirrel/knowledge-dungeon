@@ -58,6 +58,10 @@ interface RoomPanelProps {
   focusedRoom: RoomMetadata | null;
   onInteract: () => void;
   onTravelToRoom: (roomId: string) => void;
+  reviewPassesCompleted: number;
+  reviewRoomsTowardNextPass: number;
+  reviewNextPassTarget: number;
+  reviewTotalRooms: number;
   inventoryCount: number;
   badgeCount: number;
   journalCount: number;
@@ -71,6 +75,10 @@ export function RoomPanel({
   focusedRoom,
   onInteract,
   onTravelToRoom,
+  reviewPassesCompleted,
+  reviewRoomsTowardNextPass,
+  reviewNextPassTarget,
+  reviewTotalRooms,
   inventoryCount,
   badgeCount,
   journalCount,
@@ -78,6 +86,10 @@ export function RoomPanel({
   onOpenBadges,
   onOpenJournal,
 }: RoomPanelProps): JSX.Element {
+  const reviewProgressPercent =
+    reviewTotalRooms > 0
+      ? Math.min(100, Math.round((reviewRoomsTowardNextPass / reviewTotalRooms) * 100))
+      : 0;
   const [tab, setTab] = useState<RoomTab>('topic');
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
   const addLocalAttachment = useSubjectStore((s) => s.addLocalAttachment);
@@ -547,8 +559,29 @@ export function RoomPanel({
                   : 'Clear every room encounter to unlock full review mode.'}
               </p>
             </div>
+            <div className="room-progress-card" aria-label="Archaeologist review pass progress">
+              <strong>
+                Review passes: {reviewPassesCompleted} complete
+              </strong>
+              <p className="room-help-text">
+                {reviewRoomsTowardNextPass}/{reviewTotalRooms} rooms toward pass {reviewNextPassTarget}.
+              </p>
+              <div
+                className="review-progress-bar"
+                role="progressbar"
+                aria-label="Room review progress toward next pass"
+                aria-valuemin={0}
+                aria-valuemax={reviewTotalRooms}
+                aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}
+              >
+                <span
+                  className="review-progress-bar-fill"
+                  style={{ width: `${reviewProgressPercent}%` }}
+                />
+              </div>
+            </div>
             <div className="room-section" style={{ marginBottom: 12 }}>
-              <button type="button" className="touch-rail interact" onClick={onInteract}>
+              <button type="button" className="room-primary-action" onClick={onInteract}>
                 {phase === 'archaeologist' ? 'Mark reviewed' : 'Open encounter'}
               </button>
               <p className="room-help-text">

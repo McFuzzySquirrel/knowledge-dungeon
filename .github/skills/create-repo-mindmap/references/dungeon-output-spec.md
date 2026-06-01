@@ -51,9 +51,11 @@ This is a practical mini-schema, not a strict JSON Schema file.
 
 Use one of these phase states for generated output:
 
-- Creator-ready: `CreatorActive` (or repository-equivalent creator state)
-- Scribe-ready: `ScribeActive`
-- Archaeologist-ready: `ArchaeologistUnlocked` or `ArchaeologistActive`
+- Creator-ready: `CreatorActive` with room status `Created`
+- Scribe-ready: `ScribeActive` with room status `Created`
+- Archaeologist-ready: `ArchaeologistUnlocked` or `ArchaeologistActive` with room status `ArtifactCollected`
+
+`review` should be treated as an alias for `archaeologist` when interpreting request arguments.
 
 If exact enum names vary in target repo, use the canonical names used by that repository's persisted subjects.
 

@@ -23,6 +23,7 @@ describe('preferencesStore', () => {
   it('defaults new users to the RPG graphics mode', async () => {
     const { usePreferencesStore } = await loadStore();
     expect(usePreferencesStore.getState().graphicsMode).toBe('rpg');
+    expect(usePreferencesStore.getState().colorTheme).toBe('dark');
   });
 
   it('keeps RPG mode for existing users when no preference is stored', async () => {
@@ -35,10 +36,11 @@ describe('preferencesStore', () => {
     const { __testing } = await loadStore();
     window.localStorage.setItem(
       __testing.PREFERENCES_STORAGE_KEY,
-      JSON.stringify({ graphicsMode: 'rpg' }),
+      JSON.stringify({ graphicsMode: 'rpg', colorTheme: 'colorful' }),
     );
     const { usePreferencesStore } = await loadStore();
     expect(usePreferencesStore.getState().graphicsMode).toBe('rpg');
+    expect(usePreferencesStore.getState().colorTheme).toBe('colorful');
   });
 
   it('persists changes via setGraphicsMode', async () => {
@@ -47,6 +49,15 @@ describe('preferencesStore', () => {
     expect(usePreferencesStore.getState().graphicsMode).toBe('rpg');
     const raw = window.localStorage.getItem(__testing.PREFERENCES_STORAGE_KEY);
     expect(raw).not.toBeNull();
-    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg' });
+    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg', colorTheme: 'dark' });
+  });
+
+  it('persists changes via setColorTheme', async () => {
+    const { usePreferencesStore, __testing } = await loadStore();
+    usePreferencesStore.getState().setColorTheme('aurora');
+    expect(usePreferencesStore.getState().colorTheme).toBe('aurora');
+    const raw = window.localStorage.getItem(__testing.PREFERENCES_STORAGE_KEY);
+    expect(raw).not.toBeNull();
+    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg', colorTheme: 'aurora' });
   });
 });
