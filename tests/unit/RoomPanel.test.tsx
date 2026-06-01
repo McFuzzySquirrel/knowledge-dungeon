@@ -103,4 +103,59 @@ describe('RoomPanel', () => {
       screen.getByText(/Missing image \(att-missing\)\. Reattach it or remove this token\./i),
     ).toBeInTheDocument();
   });
+
+  it('shows lock messaging and archaeologist progress card for uncleared rooms', () => {
+    const snapshot = createSnapshot();
+
+    render(
+      <RoomPanel
+        snapshot={snapshot}
+        focusedRoom={snapshot.rooms['room-1']}
+        onInteract={() => undefined}
+        onTravelToRoom={() => undefined}
+        inventoryCount={0}
+        badgeCount={0}
+        journalCount={0}
+        onOpenInventory={() => undefined}
+        onOpenBadges={() => undefined}
+        onOpenJournal={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Artifact and Self-check unlock after you defeat this room encounter\./i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Archaeologist unlock: 0\/1 rooms cleared/i),
+    ).toBeInTheDocument();
+  });
+
+  it('drags the panel when using the drag handle', () => {
+    const snapshot = createSnapshot();
+
+    render(
+      <RoomPanel
+        snapshot={snapshot}
+        focusedRoom={snapshot.rooms['room-1']}
+        onInteract={() => undefined}
+        onTravelToRoom={() => undefined}
+        inventoryCount={0}
+        badgeCount={0}
+        journalCount={0}
+        onOpenInventory={() => undefined}
+        onOpenBadges={() => undefined}
+        onOpenJournal={() => undefined}
+      />,
+    );
+
+    const panel = screen.getByLabelText('Room information');
+    const handle = screen.getByTestId('room-panel-drag-handle');
+
+    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, clientX: 220, clientY: 140 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 360, clientY: 260 });
+    fireEvent.pointerUp(window, { pointerId: 1 });
+
+    expect(panel.getAttribute('style')).toContain('left:');
+    expect(panel.getAttribute('style')).toContain('top:');
+  });
 });

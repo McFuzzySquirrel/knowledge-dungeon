@@ -8,16 +8,24 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
-import type { DungeonScene } from '@/game/scenes/DungeonScene';
+import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
 import { Hud } from '@/ui/components/Hud';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
+import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
 import { TouchControls } from '@/ui/components/TouchControls';
 import { Minimap } from '@/ui/components/Minimap';
 import { HelpOverlay } from '@/ui/components/HelpOverlay';
 import { FullMapView } from '@/ui/components/FullMapView';
+import { GameplayOnboardingModal } from '@/ui/components/GameplayOnboardingModal';
+import { ToastStack } from '@/ui/components/ToastStack';
 import { isEditableElement } from '@/ui/utils/editableElement';
+import { useToasts } from '@/ui/utils/useToasts';
+import {
+  hasSeenGameplayLoopOnboarding,
+  markGameplayLoopOnboardingSeen,
+} from '@/ui/utils/onboarding';
 import { setActiveSubjectId as persistActiveSubjectId } from '@/services/persistence/subjectPersistence';
 
 export function GameScreen(): JSX.Element {
@@ -28,6 +36,7 @@ export function GameScreen(): JSX.Element {
   const focusedRoomId = useSessionStore((s) => s.focusedRoomId);
   const phase = useSessionStore((s) => s.phase);
   const setPhase = useSessionStore((s) => s.setPhase);
+  const isNoteEditorOpen = useSessionStore((s) => s.isNoteEditorOpen);
   const selectedClass = useSessionStore((s) => s.selectedClass);
   const setActiveSubjectId = useSessionStore((s) => s.setActiveSubjectId);
   const isMapViewOpen = useSessionStore((s) => s.isMapViewOpen);
@@ -48,12 +57,22 @@ export function GameScreen(): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<DungeonScene | null>(null);
+  const npcDialogRoomIdRef = useRef<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges' | 'journal'>(
     null,
   );
   const [clockMs, setClockMs] = useState(() => Date.now());
   const [sceneReady, setSceneReady] = useState(false);
+  const [lastWelcomedSubjectId, setLastWelcomedSubjectId] = useState<string | null>(null);
+  const [npcDialogRoomId, setNpcDialogRoomId] = useState<string | null>(null);
+  const [npcDialogAnchor, setNpcDialogAnchor] = useState<{ x: number; y: number } | null>(null);
+  const { toasts, pushToast } = useToasts();
+
+  useEffect(() => {
+    npcDialogRoomIdRef.current = npcDialogRoomId;
+  }, [npcDialogRoomId]);
 
   const dungeonMap = useMemo(() => {
     if (!snapshot) return null;
@@ -81,6 +100,11 @@ export function GameScreen(): JSX.Element {
 
   const teleportRemainingMs =
     lastTeleportAt === null ? 0 : Math.max(0, TELEPORT_COOLDOWN_MS - (clockMs - lastTeleportAt));
+  const phaseChangeNeedsConfirmation = isNoteEditorOpen || isMapViewOpen || teleportModeArmed;
+  const clearedRoomsCount = snapshot
+    ? Object.values(snapshot.rooms).filter((room) => room.validationState.finalPass).length
+    : 0;
+  const showScribeNudge = phase === 'creator' && snapshot ? snapshot.dungeon.rooms.length >= 3 : false;
 
   useEffect(() => {
     if (teleportRemainingMs <= 0) return;
@@ -112,7 +136,31 @@ export function GameScreen(): JSX.Element {
         : undefined,
       callbacks: {
         onRoomEntered: (roomId) => setFocusedRoomId(roomId),
+        onNpcInteract: ({ roomId, clientX, clientY }: NpcDialogAnchor) => {
+          setNpcDialogRoomId(roomId);
+          setNpcDialogAnchor({ x: clientX, y: clientY });
+          setFocusedRoomId(roomId);
+        },
+        onNpcDialogPosition: ({ roomId, clientX, clientY }: NpcDialogAnchor) => {
+          setNpcDialogAnchor((current) => {
+            if (!current || npcDialogRoomIdRef.current !== roomId) {
+              return { x: clientX, y: clientY };
+            }
+            if (Math.abs(current.x - clientX) < 0.75 && Math.abs(current.y - clientY) < 0.75) {
+              return current;
+            }
+            return { x: clientX, y: clientY };
+          });
+        },
+        onNpcOutOfRange: (roomId) => {
+          setNpcDialogRoomId((current) => (current === roomId ? null : current));
+          setNpcDialogAnchor((current) =>
+            npcDialogRoomIdRef.current === roomId ? null : current,
+          );
+        },
         onInteract: (roomId) => {
+          setNpcDialogRoomId(null);
+          setNpcDialogAnchor(null);
           if (phase === 'archaeologist') {
             const liveSnapshot = useSubjectStore.getState().snapshot;
             void recordReviewPass(roomId);
@@ -231,7 +279,14 @@ export function GameScreen(): JSX.Element {
     // phase reads happen at interact-time via the closure update below, and
     // floor changes are pushed via `scene.setFloorVisibility` to avoid
     // tearing down the Phaser game on every transition.
-  }, [dungeonMap, openNoteEditor, phase, recordReviewPass, selectedClass, setFocusedRoomId]);
+  }, [
+    dungeonMap,
+    openNoteEditor,
+    phase,
+    recordReviewPass,
+    selectedClass,
+    setFocusedRoomId,
+  ]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
@@ -242,6 +297,29 @@ export function GameScreen(): JSX.Element {
       .map((room) => room.roomId);
     scene.setArtifactRooms(artifactRoomIds, phase === 'archaeologist');
   }, [sceneReady, snapshot, phase]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    if (hasSeenGameplayLoopOnboarding()) return;
+    setShowOnboarding(true);
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    if (lastWelcomedSubjectId === snapshot.dungeon.dungeonId) return;
+    const totalRooms = snapshot.dungeon.rooms.length;
+    const suggestedNextAction =
+      clearedRoomsCount >= totalRooms && totalRooms > 0
+        ? 'Review artifacts in Archaeologist phase.'
+        : phase === 'creator'
+          ? 'Add a few rooms, then switch to Scribe to clear encounters.'
+          : 'Open a room encounter to continue progress.';
+    pushToast(
+      'info',
+      `Welcome back: ${clearedRoomsCount}/${totalRooms} rooms cleared. Current phase: ${phase[0].toUpperCase()}${phase.slice(1)}. Suggested next: ${suggestedNextAction}`,
+    );
+    setLastWelcomedSubjectId(snapshot.dungeon.dungeonId);
+  }, [clearedRoomsCount, lastWelcomedSubjectId, phase, pushToast, snapshot]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -268,11 +346,11 @@ export function GameScreen(): JSX.Element {
     // Clear the active subject so <App> falls back to <WelcomeScreen>, where
     // the user can pick an existing subject or create a new one.
     closeMapView();
-      setFocusedRoomId(null);
-      setActiveSubjectId(null);
-      persistActiveSubjectId(null);
-      cancelTeleportMode();
-      setSnapshot(null);
+    setFocusedRoomId(null);
+    setActiveSubjectId(null);
+    persistActiveSubjectId(null);
+    cancelTeleportMode();
+    setSnapshot(null);
   }
 
   const noteMarkdownByRoomId = useMemo(() => {
@@ -336,6 +414,11 @@ export function GameScreen(): JSX.Element {
     closeMapView();
   }
 
+  function handleCloseOnboarding() {
+    markGameplayLoopOnboardingSeen();
+    setShowOnboarding(false);
+  }
+
   return (
     <div className="game-shell">
       <Hud
@@ -347,6 +430,8 @@ export function GameScreen(): JSX.Element {
         currentFloorLabel={currentFloorLabel}
         teleportRemainingMs={teleportRemainingMs}
         teleportModeArmed={teleportModeArmed}
+        phaseChangeNeedsConfirmation={phaseChangeNeedsConfirmation}
+        showScribeNudge={showScribeNudge}
         onPhaseChange={setPhase}
         onHelp={() => setHelpOpen(true)}
         onOpenMap={openMapView}
@@ -379,6 +464,17 @@ export function GameScreen(): JSX.Element {
       />
 
       <TouchControls onInteract={() => sceneRef.current?.triggerInteract()} />
+      <ToastStack toasts={toasts} />
+
+      {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
+        <RoomNpcDialog
+          topic={snapshot.rooms[npcDialogRoomId].topic}
+          phase={phase}
+          roomState={snapshot.rooms[npcDialogRoomId].state}
+          isCleared={snapshot.rooms[npcDialogRoomId].validationState.finalPass}
+          anchorPosition={npcDialogAnchor}
+        />
+      ) : null}
 
       <NoteEditorModal />
       {isMapViewOpen ? (
@@ -395,6 +491,12 @@ export function GameScreen(): JSX.Element {
         />
       ) : null}
       {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
+      {showOnboarding ? (
+        <GameplayOnboardingModal
+          subjectName={snapshot.dungeon.subjectName}
+          onClose={handleCloseOnboarding}
+        />
+      ) : null}
       {inventoryView ? (
         <InventoryBadgesPanel
           view={inventoryView}

@@ -106,6 +106,17 @@ textarea {
   gap: 12px;
 }
 
+.welcome-admin-advanced {
+  margin-top: 10px;
+}
+
+.welcome-admin-advanced summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
 .welcome-selection-summary {
   display: grid;
   gap: 10px;
@@ -165,16 +176,25 @@ textarea {
 }
 
 .phase-card {
+  position: relative;
   background: var(--bg-panel-soft);
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   padding: 14px;
   text-align: left;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 100ms ease;
 }
 
 .phase-card[aria-pressed='true'] {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(242, 200, 121, 0.2);
+  box-shadow:
+    0 0 0 3px rgba(242, 200, 121, 0.35),
+    0 0 22px rgba(242, 200, 121, 0.28),
+    0 10px 20px rgba(0, 0, 0, 0.28);
+  transform: translateY(-1px);
 }
 
 .phase-card h3 {
@@ -189,16 +209,25 @@ textarea {
 }
 
 .class-card {
+  position: relative;
   background: var(--bg-panel-soft);
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   padding: 14px;
   text-align: left;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 100ms ease;
 }
 
 .class-card[aria-pressed='true'] {
   border-color: var(--accent-cool);
-  box-shadow: 0 0 0 2px rgba(127, 178, 255, 0.2);
+  box-shadow:
+    0 0 0 3px rgba(127, 178, 255, 0.35),
+    0 0 22px rgba(127, 178, 255, 0.26),
+    0 10px 20px rgba(0, 0, 0, 0.28);
+  transform: translateY(-1px);
 }
 
 .class-card h4 {
@@ -209,6 +238,20 @@ textarea {
   margin-top: 6px;
   color: var(--accent);
   font-size: 12px;
+}
+
+.selection-chip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(242, 200, 121, 0.55);
+  background: rgba(242, 200, 121, 0.2);
+  color: var(--accent-soft);
 }
 
 .game-shell {
@@ -256,6 +299,51 @@ textarea {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.hud-inline-hint {
+  margin: 0 0 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.hud-scribe-nudge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(127, 178, 255, 0.35);
+  background: rgba(127, 178, 255, 0.12);
+  font-size: 12px;
+}
+
+.hud-help-button {
+  font-weight: 600;
+}
+
+.hud-phase-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(13, 16, 24, 0.45);
+}
+
+.hud-phase-controls button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: rgba(242, 200, 121, 0.2);
+  box-shadow: 0 0 0 2px rgba(242, 200, 121, 0.2);
+  transform: translateY(-1px);
+}
+
+.hud-phase-controls-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 .hud-icon-button {
@@ -479,12 +567,47 @@ textarea {
   z-index: 15;
 }
 
+.minimap-legend {
+  margin-top: 6px;
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.minimap-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.minimap-legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.minimap-legend-swatch--focus {
+  background: #f2c879;
+}
+
+.minimap-legend-swatch--neighbor {
+  background: #e8c98a;
+}
+
+.minimap-legend-swatch--portal {
+  background: #2a3a5c;
+  border-color: #7fb2ff;
+}
+
 .room-panel {
   position: absolute;
   top: 80px;
-  right: 12px;
-  bottom: 12px;
+  left: 12px;
   width: min(360px, 38vw);
+  max-height: calc(100vh - 92px);
   z-index: 20;
   background: rgba(22, 26, 38, 0.92);
   backdrop-filter: blur(6px);
@@ -499,6 +622,28 @@ textarea {
 
 .room-panel--expanded {
   width: min(680px, 72vw);
+}
+
+.room-panel--dragging {
+  user-select: none;
+}
+
+.room-panel-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: rgba(11, 13, 20, 0.55);
+  border-bottom: 1px solid var(--border-soft);
+  cursor: grab;
+}
+
+.room-panel-drag-handle:active {
+  cursor: grabbing;
 }
 
 .room-tabs {
@@ -533,6 +678,13 @@ textarea {
   padding: 16px;
 }
 
+.room-tab-lock-hint {
+  margin: 0;
+  padding: 8px 16px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .room-tab-body h2 {
   margin-top: 0;
 }
@@ -546,6 +698,15 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.room-progress-card {
+  border: 1px solid rgba(127, 178, 255, 0.4);
+  background: rgba(127, 178, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
 }
 
 .room-quick-action {
@@ -566,6 +727,13 @@ textarea {
   overflow-y: auto;
   align-content: start;
   padding-right: 2px;
+}
+
+.room-phase-nudge {
+  border: 1px solid rgba(127, 178, 255, 0.35);
+  border-radius: 8px;
+  background: rgba(127, 178, 255, 0.1);
+  padding: 8px;
 }
 
 .room-help-text {
@@ -605,6 +773,7 @@ textarea {
 .room-travel-item[aria-selected='true'] {
   border-color: var(--accent);
   background: rgba(127, 178, 255, 0.18);
+  transform: translateY(-1px);
 }
 
 button.ghost {
@@ -684,6 +853,23 @@ button.ghost {
   margin-top: 0;
 }
 
+.onboarding-modal {
+  width: min(640px, 100%);
+}
+
+.onboarding-steps {
+  margin: 10px 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.onboarding-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .validation-list {
   list-style: none;
   padding: 0;
@@ -708,6 +894,17 @@ button.ghost {
 
 .validation-list .fail {
   color: var(--bad);
+}
+
+.note-submit-hints {
+  margin-right: auto;
+  max-width: 320px;
+}
+
+.note-submit-hints p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .toast-stack {
@@ -789,8 +986,8 @@ button.danger:hover {
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   border-radius: 12px;
-  width: min(1100px, 96vw);
-  height: min(800px, 90vh);
+  width: min(1280px, 98vw);
+  height: min(860px, 94vh);
   display: flex;
   flex-direction: column;
   padding: 16px;
@@ -801,6 +998,16 @@ button.danger:hover {
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.teleport-guidance {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(127, 178, 255, 0.35);
+  border-radius: 8px;
+  background: rgba(127, 178, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .full-map-header {
@@ -817,6 +1024,13 @@ button.danger:hover {
 .full-map-actions {
   display: flex;
   gap: 8px;
+}
+
+.full-map-actions button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: rgba(242, 200, 121, 0.18);
+  color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .full-map-viewport {
@@ -839,17 +1053,15 @@ button.danger:hover {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
   gap: 12px;
 }
 
 .full-map-canvas {
   position: absolute;
-  top: 50%;
-  left: 50%;
+  top: 0;
+  left: 0;
   transform-origin: 0 0;
-  /* The transform set inline overrides this; translate(-50%, -50%) is just
-     a fallback so the map starts roughly centered before any pan. */
   will-change: transform;
 }
 
@@ -865,12 +1077,27 @@ button.danger:hover {
 .teleport-room-list {
   display: grid;
   gap: 6px;
-  max-height: 220px;
+  max-height: clamp(240px, 42vh, 460px);
   overflow-y: auto;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: var(--bg-panel-soft);
   padding: 6px;
+}
+
+.full-map-teleport-section {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.full-map-selected-section {
+  display: grid;
+  gap: 8px;
+  max-height: 32vh;
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 2px;
 }
 
 .teleport-room-item {
@@ -903,12 +1130,12 @@ button.danger:hover {
 
 @media (max-width: 900px) {
   .room-panel {
-    top: auto;
-    bottom: 12px;
+    top: 80px;
     left: 12px;
-    right: 12px;
+    right: auto;
     width: auto;
-    max-height: 45vh;
+    max-width: calc(100vw - 24px);
+    max-height: 60vh;
   }
 
   .hud-rail {
@@ -917,6 +1144,10 @@ button.danger:hover {
 
   .full-map-layout {
     grid-template-columns: 1fr;
+  }
+
+  .teleport-room-list {
+    max-height: 52vh;
   }
 
   .touch-rail {
@@ -989,8 +1220,83 @@ button.danger:hover {
   background: rgba(242, 200, 121, 0.15);
 }
 
+.note-section-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.note-section-chip {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel-soft);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.note-section-chip.is-active {
+  border-color: var(--accent);
+  background: rgba(242, 200, 121, 0.2);
+}
+
+.note-section-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
 .note-preview {
   min-height: 220px;
+}
+
+.npc-dialog {
+  position: fixed;
+  right: 18px;
+  bottom: 110px;
+  width: min(360px, calc(100vw - 32px));
+  z-index: 70;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(26, 18, 10, 0.94);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.npc-dialog--anchored {
+  right: auto;
+  bottom: auto;
+}
+
+.npc-dialog h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.npc-dialog p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.npc-dialog p + p {
+  margin-top: 8px;
+}
+
+.npc-dialog__eyebrow {
+  color: var(--accent-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.npc-dialog__action {
+  color: var(--text-primary);
 }
 
 .markdown-image {
@@ -1100,6 +1406,23 @@ button.danger:hover {
 
 :root[data-graphics='rpg'] button:hover {
   border-color: var(--accent);
+}
+
+:root[data-graphics='rpg'] .phase-card[aria-pressed='true'] {
+  background: linear-gradient(180deg, rgba(242, 200, 121, 0.28) 0%, rgba(58, 42, 26, 0.95) 100%);
+  border-color: #f2c879;
+}
+
+:root[data-graphics='rpg'] .class-card[aria-pressed='true'] {
+  background: linear-gradient(180deg, rgba(214, 136, 58, 0.28) 0%, rgba(58, 42, 26, 0.95) 100%);
+  border-color: #f2c879;
+}
+
+:root[data-graphics='rpg'] .selection-chip {
+  border-color: #f2c879;
+  background: rgba(242, 200, 121, 0.26);
+  color: #fff0d0;
+  box-shadow: 0 0 12px rgba(242, 200, 121, 0.24);
 }
 
 :root[data-graphics='rpg'] .hud-rail {

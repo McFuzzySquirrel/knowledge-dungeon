@@ -10,19 +10,14 @@ import {
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
 import { ToastStack } from '@/ui/components/ToastStack';
 import { Markdown } from '@/ui/utils/markdown';
+import {
+  composeNoteSections,
+  emptyNoteSections,
+  extractNoteSections,
+} from '@/ui/utils/noteSections';
 import { useToasts } from '@/ui/utils/useToasts';
 
-const TEMPLATE = `Summary
-(Write at least one paragraph summarising the topic in your own words.)
-
-Key Points
-- Point 1
-- Point 2
-- Point 3
-
-Recall Question
-Why does this matter? See also [related topic](#).
-`;
+const TEMPLATE = composeNoteSections(emptyNoteSections());
 
 export function NoteEditorModal(): JSX.Element | null {
   const isOpen = useSessionStore((s) => s.isNoteEditorOpen);
@@ -37,25 +32,36 @@ export function NoteEditorModal(): JSX.Element | null {
   const awardBadge = useProgressionStore((s) => s.awardBadge);
 
   const room = roomId ? snapshot?.rooms[roomId] : null;
-  const [noteText, setNoteText] = useState(TEMPLATE);
+  const [sections, setSections] = useState(() => emptyNoteSections());
+  const [activeSection, setActiveSection] = useState<(typeof REQUIRED_NOTE_SECTIONS)[number]>(
+    REQUIRED_NOTE_SECTIONS[0],
+  );
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [hasEditedNote, setHasEditedNote] = useState(false);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const { toasts, pushToast } = useToasts();
+  const noteText = useMemo(() => composeNoteSections(sections), [sections]);
 
   useEffect(() => {
     if (!isOpen || !room) return;
-    setNoteText(room.noteText || TEMPLATE);
+    setSections(extractNoteSections(room.noteText || TEMPLATE));
+    setActiveSection(REQUIRED_NOTE_SECTIONS[0]);
     setConfirm(room.validationState.manualConfirmed);
     setShowPreview(false);
+    setHasEditedNote(false);
   }, [isOpen, room]);
 
   useEffect(() => {
     if (!isOpen || !room || !pendingInsert) return;
-    setNoteText((current) => `${current.trimEnd()}\n\n${pendingInsert}\n`);
+    setSections((current) => ({
+      ...current,
+      [activeSection]: `${current[activeSection].trimEnd()}\n${pendingInsert}`.trim(),
+    }));
+    setHasEditedNote(true);
     clearPendingInsert();
-  }, [clearPendingInsert, isOpen, pendingInsert, room]);
+  }, [activeSection, clearPendingInsert, isOpen, pendingInsert, room]);
 
   const preview = useMemo(() => {
     if (!room) return null;
@@ -65,6 +71,22 @@ export function NoteEditorModal(): JSX.Element | null {
       roomTopic: room.topic,
     });
   }, [noteText, confirm, room]);
+
+  const showNeutralChecklist = !hasEditedNote && (room?.noteText.trim().length ?? 0) === 0;
+  const missingRequirementHints = useMemo(() => {
+    if (!preview || preview.finalPass) return [];
+    const hints: string[] = [];
+    const emptySections = REQUIRED_NOTE_SECTIONS.filter(
+      (section) => sections[section].trim().length === 0,
+    );
+    if (emptySections.length > 0) {
+      hints.push(`Add notes in: ${emptySections.join(', ')}.`);
+    }
+    if (!preview.manualConfirmed) {
+      hints.push('Check the confirmation box before defeating this encounter.');
+    }
+    return hints;
+  }, [preview, sections]);
 
   useEffect(() => {
     if (!isOpen || !room) {
@@ -142,6 +164,10 @@ export function NoteEditorModal(): JSX.Element | null {
           {NOTE_BADGE_WORD_COUNT}+ words to earn a special badge.
         </p>
         <p className="room-help-text">
+          Select a section chip and write that section. The editor keeps required headings for
+          you so accidental full-note replacement is less likely.
+        </p>
+        <p className="room-help-text">
           Rich text: use <code>[label](https://example.com)</code> for clickable links,
           <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, and{' '}
           <code>-</code> for bullets.
@@ -178,11 +204,38 @@ export function NoteEditorModal(): JSX.Element | null {
             />
           </div>
         ) : (
-          <textarea
-            rows={14}
-            value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
-          />
+          <>
+            <div className="note-section-chips" role="tablist" aria-label="Note sections">
+              {REQUIRED_NOTE_SECTIONS.map((section) => (
+                <button
+                  key={section}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSection === section}
+                  className={activeSection === section ? 'note-section-chip is-active' : 'note-section-chip'}
+                  onClick={() => setActiveSection(section)}
+                >
+                  {section}
+                </button>
+              ))}
+            </div>
+            <label className="note-section-label" htmlFor="note-section-editor">
+              {activeSection}
+            </label>
+            <textarea
+              id="note-section-editor"
+              rows={14}
+              value={sections[activeSection]}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setSections((current) => ({
+                  ...current,
+                  [activeSection]: nextValue,
+                }));
+                setHasEditedNote(true);
+              }}
+            />
+          </>
         )}
 
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
@@ -196,7 +249,19 @@ export function NoteEditorModal(): JSX.Element | null {
 
         {preview ? (
           <ul className="validation-list" style={{ marginTop: 12 }}>
-            {preview.criteria.map((c) => (
+            {(showNeutralChecklist
+              ? preview.criteria.map((criterion) => ({
+                  ...criterion,
+                  passed: true,
+                  message:
+                    criterion.code === 'VAL_REQUIRED_SECTION_MISSING'
+                      ? `Keep headings: ${REQUIRED_NOTE_SECTIONS.join(', ')}.`
+                      : criterion.code === 'VAL_MANUAL_CONFIRM_REQUIRED'
+                        ? 'Tick confirmation when your draft is ready to submit.'
+                        : criterion.message,
+                }))
+              : preview.criteria
+            ).map((c) => (
               <li key={c.code}>
                 <span>{c.message}</span>
                 <span
@@ -210,7 +275,15 @@ export function NoteEditorModal(): JSX.Element | null {
                         : 'fail'
                   }
                 >
-                  {c.code === 'VAL_WORD_COUNT_BONUS_TARGET' ? (c.passed ? '★' : '○') : c.passed ? '✓' : '✗'}
+                  {showNeutralChecklist
+                    ? '•'
+                    : c.code === 'VAL_WORD_COUNT_BONUS_TARGET'
+                      ? c.passed
+                        ? '★'
+                        : '○'
+                      : c.passed
+                        ? '✓'
+                        : '✗'}
                 </span>
               </li>
             ))}
@@ -226,6 +299,13 @@ export function NoteEditorModal(): JSX.Element | null {
         ) : null}
 
         <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          {missingRequirementHints.length > 0 ? (
+            <div className="note-submit-hints" aria-live="polite">
+              {missingRequirementHints.map((hint) => (
+                <p key={hint}>{hint}</p>
+              ))}
+            </div>
+          ) : null}
           <button type="button" onClick={close}>
             Cancel
           </button>

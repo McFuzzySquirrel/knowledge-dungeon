@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { Minimap } from '@/ui/components/Minimap';
 import type { DungeonMap } from '@/game/systems/dungeonTypes';
 
@@ -64,5 +64,6 @@ describe('Minimap rendering', () => {
     const { container } = render(<Minimap dungeonMap={dungeonMap} focusedRoomId={null} />);
     expect(container.querySelectorAll('rect').length).toBeGreaterThan(0);
     expect(container.querySelectorAll('ellipse').length).toBe(0);
+    expect(screen.getByText(/Focused room/i)).toBeInTheDocument();
   });
 });

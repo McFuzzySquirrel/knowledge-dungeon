@@ -124,6 +124,11 @@ export function Minimap({
           );
         })}
       </svg>
+      <div className="minimap-legend" aria-label="Minimap legend">
+        <span><i className="minimap-legend-swatch minimap-legend-swatch--focus" /> Focused room</span>
+        <span><i className="minimap-legend-swatch minimap-legend-swatch--neighbor" /> Connected room</span>
+        <span><i className="minimap-legend-swatch minimap-legend-swatch--portal" /> Portal room / floor link</span>
+      </div>
     </div>
   );
 }

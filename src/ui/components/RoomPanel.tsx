@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistence';
 import {
   deriveGraphHierarchy,
@@ -18,6 +28,30 @@ import {
 } from '@/core/review';
 
 type RoomTab = 'topic' | 'notes' | 'artifact' | 'selfcheck';
+
+interface PanelPosition {
+  x: number;
+  y: number;
+}
+
+const PANEL_MARGIN = 12;
+const PANEL_MIN_TOP = 72;
+const DEFAULT_PANEL_WIDTH = 360;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getInitialPanelPosition(): PanelPosition {
+  if (typeof window === 'undefined') {
+    return { x: PANEL_MARGIN, y: 80 };
+  }
+  const rightAnchoredX = window.innerWidth - DEFAULT_PANEL_WIDTH - PANEL_MARGIN;
+  return {
+    x: Math.max(PANEL_MARGIN, rightAnchoredX),
+    y: 80,
+  };
+}
 
 interface RoomPanelProps {
   snapshot: SubjectSnapshot;
@@ -54,6 +88,7 @@ export function RoomPanel({
   const removeRoom = useSubjectStore((s) => s.removeRoom);
   const lastError = useSubjectStore((s) => s.lastError);
   const phase = useSessionStore((s) => s.phase);
+  const setPhase = useSessionStore((s) => s.setPhase);
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
   const openNoteEditorWithInsert = useSessionStore((s) => s.openNoteEditorWithInsert);
   const [draftTopics, setDraftTopics] = useState('');
@@ -68,7 +103,83 @@ export function RoomPanel({
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const [isSavingAttachment, setIsSavingAttachment] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const [panelPosition, setPanelPosition] = useState<PanelPosition>(getInitialPanelPosition);
+  const [dragState, setDragState] = useState<
+    { pointerId: number; offsetX: number; offsetY: number } | null
+  >(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const { toasts, pushToast } = useToasts();
+
+  const clampPanelPosition = useCallback((position: PanelPosition): PanelPosition => {
+    if (typeof window === 'undefined') return position;
+    const panelWidth = panelRef.current?.offsetWidth ?? DEFAULT_PANEL_WIDTH;
+    const panelHeight = panelRef.current?.offsetHeight ?? 520;
+    const maxX = Math.max(PANEL_MARGIN, window.innerWidth - panelWidth - PANEL_MARGIN);
+    const maxY = Math.max(PANEL_MIN_TOP, window.innerHeight - panelHeight - PANEL_MARGIN);
+    return {
+      x: clamp(position.x, PANEL_MARGIN, maxX),
+      y: clamp(position.y, PANEL_MIN_TOP, maxY),
+    };
+  }, []);
+
+  useEffect(() => {
+    setPanelPosition((current) => clampPanelPosition(current));
+  }, [clampPanelPosition, panelExpanded]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setPanelPosition((current) => clampPanelPosition(current));
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+    };
+  }, [clampPanelPosition]);
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      setPanelPosition(
+        clampPanelPosition({
+          x: event.clientX - dragState.offsetX,
+          y: event.clientY - dragState.offsetY,
+        }),
+      );
+    };
+
+    const stopDragging = (event: globalThis.PointerEvent) => {
+      if (event.pointerId !== dragState.pointerId) return;
+      setDragState(null);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', stopDragging);
+    window.addEventListener('pointercancel', stopDragging);
+
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', stopDragging);
+      window.removeEventListener('pointercancel', stopDragging);
+    };
+  }, [clampPanelPosition, dragState]);
+
+  function onDragHandlePointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (event.button !== 0) return;
+    const panelRect = panelRef.current?.getBoundingClientRect();
+    if (!panelRect) return;
+    event.preventDefault();
+    setDragState({
+      pointerId: event.pointerId,
+      offsetX: event.clientX - panelRect.left,
+      offsetY: event.clientY - panelRect.top,
+    });
+  }
+
+  const panelStyle: CSSProperties = {
+    left: `${panelPosition.x}px`,
+    top: `${panelPosition.y}px`,
+  };
 
   const hierarchy = useMemo(() => deriveGraphHierarchy(snapshot.dungeon), [snapshot.dungeon]);
 
@@ -122,6 +233,7 @@ export function RoomPanel({
     : null;
   const hasNoteText = Boolean(focusedRoom?.noteText.trim().length);
   const noteWordCount = focusedRoom?.validationState.wordCount ?? 0;
+  const artifactTabsLocked = !focusedRoom?.validationState.finalPass;
 
   const connectedRoomIds = focusedRoomId
     ? getConnectedRoomIds(snapshot.dungeon, focusedRoomId)
@@ -331,7 +443,18 @@ export function RoomPanel({
 
   if (!focusedRoom) {
     return (
-      <aside className="room-panel">
+      <aside
+        ref={panelRef}
+        className={`room-panel${dragState ? ' room-panel--dragging' : ''}`}
+        style={panelStyle}
+      >
+        <div
+          className="room-panel-drag-handle"
+          data-testid="room-panel-drag-handle"
+          onPointerDown={onDragHandlePointerDown}
+        >
+          Drag panel
+        </div>
         <div className="room-tabs">
           <button type="button" aria-selected>
             No room
@@ -345,7 +468,19 @@ export function RoomPanel({
   }
 
   return (
-    <aside className={`room-panel${panelExpanded ? ' room-panel--expanded' : ''}`} aria-label="Room information">
+    <aside
+      ref={panelRef}
+      className={`room-panel${panelExpanded ? ' room-panel--expanded' : ''}${dragState ? ' room-panel--dragging' : ''}`}
+      style={panelStyle}
+      aria-label="Room information"
+    >
+      <div
+        className="room-panel-drag-handle"
+        data-testid="room-panel-drag-handle"
+        onPointerDown={onDragHandlePointerDown}
+      >
+        Drag panel
+      </div>
       <div className="room-tabs" role="tablist">
         <button
           type="button"
@@ -369,6 +504,7 @@ export function RoomPanel({
           aria-selected={tab === 'artifact'}
           onClick={() => setTab('artifact')}
           disabled={!focusedRoom.validationState.finalPass}
+          title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
         >
           Artifact
         </button>
@@ -378,6 +514,7 @@ export function RoomPanel({
           aria-selected={tab === 'selfcheck'}
           onClick={() => setTab('selfcheck')}
           disabled={!focusedRoom.validationState.finalPass}
+          title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
         >
           Self-check
         </button>
@@ -391,10 +528,33 @@ export function RoomPanel({
           {panelExpanded ? 'Collapse' : 'Expand'}
         </button>
       </div>
+      {artifactTabsLocked ? (
+        <p className="room-tab-lock-hint">
+          Artifact and Self-check unlock after you defeat this room encounter.
+        </p>
+      ) : null}
 
       <div className="room-tab-body">
         {tab === 'topic' ? (
           <>
+            <div className="room-progress-card" aria-label="Archaeologist unlock progress">
+              <strong>
+                Archaeologist unlock: {unlock.clearedRooms}/{unlock.totalRooms} rooms cleared
+              </strong>
+              <p className="room-help-text">
+                {unlock.unlocked
+                  ? 'Review phase is available.'
+                  : 'Clear every room encounter to unlock full review mode.'}
+              </p>
+            </div>
+            <div className="room-section" style={{ marginBottom: 12 }}>
+              <button type="button" className="touch-rail interact" onClick={onInteract}>
+                {phase === 'archaeologist' ? 'Mark reviewed' : 'Open encounter'}
+              </button>
+              <p className="room-help-text">
+                Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.
+              </p>
+            </div>
             <div className="room-quick-actions" aria-label="Collections">
               <button type="button" className="room-quick-action" onClick={onOpenInventory}>
                 🎒 Inventory ({inventoryCount})
@@ -408,13 +568,23 @@ export function RoomPanel({
             </div>
             <h2>{focusedRoom.topic}</h2>
             <span className="room-status-chip">{focusedRoom.state}</span>
-            <p className="room-meta-line">Room id: {focusedRoom.roomId}</p>
             <p className="room-meta-line">Floor: {currentFloorLabel}</p>
             <p className="room-meta-line">
               Breadcrumbs:{' '}
               {breadcrumbRooms.map((room) => room.topic).join(' → ')}
             </p>
             <p className="room-meta-line">Edges: {relatedTopics.length}</p>
+
+            {phase === 'creator' && snapshot.dungeon.rooms.length >= 3 ? (
+              <div className="room-section room-phase-nudge" aria-live="polite">
+                <p className="room-help-text">
+                  Your map has enough rooms to start Scribe encounters.
+                </p>
+                <button type="button" onClick={() => setPhase('scribe')}>
+                  Switch to Scribe
+                </button>
+              </div>
+            ) : null}
 
             {sameFloorConnections.length > 0 ? (
               <div className="room-section">
@@ -619,15 +789,6 @@ export function RoomPanel({
 
             {lastError ? <p className="room-error-text">{lastError}</p> : null}
 
-            <div style={{ marginTop: 16 }}>
-              <button type="button" className="touch-rail interact" onClick={onInteract}>
-                {phase === 'archaeologist' ? 'Mark reviewed' : 'Open encounter'}
-              </button>
-            </div>
-            <p style={{ marginTop: 16, color: 'var(--text-muted)' }}>
-              Review unlock: {unlock.clearedRooms}/{unlock.totalRooms} rooms cleared
-              {unlock.unlocked ? ' (Archaeologist phase available)' : ''}.
-            </p>
           </>
         ) : null}
 
