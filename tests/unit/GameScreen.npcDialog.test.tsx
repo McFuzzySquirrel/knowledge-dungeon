@@ -6,12 +6,41 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 
-const createGameMock = vi.fn();
-let capturedCallbacks: Record<string, unknown> | null = null;
+interface NpcDialogPayload {
+  roomId: string;
+  clientX: number;
+  clientY: number;
+}
+
+interface CapturedCallbacks {
+  onNpcInteract?: (payload: NpcDialogPayload) => void;
+  onNpcOutOfRange?: (roomId: string) => void;
+  onInteract?: (roomId: string) => void;
+}
+
+interface MockScene {
+  setArtifactRooms: ReturnType<typeof vi.fn>;
+  setFloorVisibility: ReturnType<typeof vi.fn>;
+  teleportToRoom: ReturnType<typeof vi.fn>;
+  triggerInteract: ReturnType<typeof vi.fn>;
+}
+
+interface MockGame {
+  events: {
+    once: (_event: string, cb: () => void) => void;
+  };
+  scene: {
+    getScene: () => MockScene;
+  };
+  destroy: ReturnType<typeof vi.fn>;
+}
+
+const createGameMock = vi.fn<[Record<string, unknown>], MockGame>();
+let capturedCallbacks: CapturedCallbacks | null = null;
 
 vi.mock('@/game/createGame', () => ({
   createGame: (options: Record<string, unknown>) => {
-    capturedCallbacks = (options.callbacks as Record<string, unknown>) ?? null;
+    capturedCallbacks = (options.callbacks as CapturedCallbacks) ?? null;
     return createGameMock(options);
   },
 }));
@@ -182,19 +211,15 @@ describe('GameScreen NPC dialog callbacks', () => {
       expect(capturedCallbacks).not.toBeNull();
     });
 
-    await act(async () => {
-      (
-        capturedCallbacks?.onNpcInteract as
-          | ((payload: { roomId: string; clientX: number; clientY: number }) => void)
-          | undefined
-      )?.({ roomId: 'room-1', clientX: 420, clientY: 260 });
+    act(() => {
+      capturedCallbacks?.onNpcInteract?.({ roomId: 'room-1', clientX: 420, clientY: 260 });
     });
 
     expect(screen.getByText(/Room Guide/i)).toBeInTheDocument();
     expect(screen.getByText(/Scribe Brief: Vector Spaces/i)).toBeInTheDocument();
 
-    await act(async () => {
-      (capturedCallbacks?.onNpcOutOfRange as ((roomId: string) => void) | undefined)?.('room-1');
+    act(() => {
+      capturedCallbacks?.onNpcOutOfRange?.('room-1');
     });
 
     expect(screen.queryByText(/Room Guide/i)).toBeNull();
@@ -207,17 +232,13 @@ describe('GameScreen NPC dialog callbacks', () => {
       expect(capturedCallbacks).not.toBeNull();
     });
 
-    await act(async () => {
-      (
-        capturedCallbacks?.onNpcInteract as
-          | ((payload: { roomId: string; clientX: number; clientY: number }) => void)
-          | undefined
-      )?.({ roomId: 'room-1', clientX: 420, clientY: 260 });
+    act(() => {
+      capturedCallbacks?.onNpcInteract?.({ roomId: 'room-1', clientX: 420, clientY: 260 });
     });
     expect(screen.getByText(/Room Guide/i)).toBeInTheDocument();
 
-    await act(async () => {
-      (capturedCallbacks?.onInteract as ((roomId: string) => void) | undefined)?.('room-1');
+    act(() => {
+      capturedCallbacks?.onInteract?.('room-1');
     });
 
     expect(screen.queryByText(/Room Guide/i)).toBeNull();
