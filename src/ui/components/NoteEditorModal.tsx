@@ -41,6 +41,7 @@ export function NoteEditorModal(): JSX.Element | null {
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [hasEditedNote, setHasEditedNote] = useState(false);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const { toasts, pushToast } = useToasts();
 
@@ -49,6 +50,7 @@ export function NoteEditorModal(): JSX.Element | null {
     setNoteText(room.noteText || TEMPLATE);
     setConfirm(room.validationState.manualConfirmed);
     setShowPreview(false);
+    setHasEditedNote(false);
   }, [isOpen, room]);
 
   useEffect(() => {
@@ -65,6 +67,19 @@ export function NoteEditorModal(): JSX.Element | null {
       roomTopic: room.topic,
     });
   }, [noteText, confirm, room]);
+
+  const showNeutralChecklist = !hasEditedNote && (room?.noteText.trim().length ?? 0) === 0;
+  const missingRequirementHints = useMemo(() => {
+    if (!preview || preview.finalPass) return [];
+    const hints: string[] = [];
+    if (preview.missingSections.length > 0) {
+      hints.push(`Add sections: ${preview.missingSections.join(', ')}.`);
+    }
+    if (!preview.manualConfirmed) {
+      hints.push('Check the confirmation box before defeating this encounter.');
+    }
+    return hints;
+  }, [preview]);
 
   useEffect(() => {
     if (!isOpen || !room) {
@@ -142,6 +157,10 @@ export function NoteEditorModal(): JSX.Element | null {
           {NOTE_BADGE_WORD_COUNT}+ words to earn a special badge.
         </p>
         <p className="room-help-text">
+          Replace the template placeholders with your own notes. Keep section headings so the
+          encounter validator can detect your structure.
+        </p>
+        <p className="room-help-text">
           Rich text: use <code>[label](https://example.com)</code> for clickable links,
           <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, and{' '}
           <code>-</code> for bullets.
@@ -181,7 +200,10 @@ export function NoteEditorModal(): JSX.Element | null {
           <textarea
             rows={14}
             value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
+            onChange={(e) => {
+              setNoteText(e.target.value);
+              setHasEditedNote(true);
+            }}
           />
         )}
 
@@ -196,7 +218,19 @@ export function NoteEditorModal(): JSX.Element | null {
 
         {preview ? (
           <ul className="validation-list" style={{ marginTop: 12 }}>
-            {preview.criteria.map((c) => (
+            {(showNeutralChecklist
+              ? preview.criteria.map((criterion) => ({
+                  ...criterion,
+                  passed: true,
+                  message:
+                    criterion.code === 'VAL_REQUIRED_SECTION_MISSING'
+                      ? `Keep headings: ${REQUIRED_NOTE_SECTIONS.join(', ')}.`
+                      : criterion.code === 'VAL_MANUAL_CONFIRM_REQUIRED'
+                        ? 'Tick confirmation when your draft is ready to submit.'
+                        : criterion.message,
+                }))
+              : preview.criteria
+            ).map((c) => (
               <li key={c.code}>
                 <span>{c.message}</span>
                 <span
@@ -210,7 +244,15 @@ export function NoteEditorModal(): JSX.Element | null {
                         : 'fail'
                   }
                 >
-                  {c.code === 'VAL_WORD_COUNT_BONUS_TARGET' ? (c.passed ? '★' : '○') : c.passed ? '✓' : '✗'}
+                  {showNeutralChecklist
+                    ? '•'
+                    : c.code === 'VAL_WORD_COUNT_BONUS_TARGET'
+                      ? c.passed
+                        ? '★'
+                        : '○'
+                      : c.passed
+                        ? '✓'
+                        : '✗'}
                 </span>
               </li>
             ))}
@@ -226,6 +268,13 @@ export function NoteEditorModal(): JSX.Element | null {
         ) : null}
 
         <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          {missingRequirementHints.length > 0 ? (
+            <div className="note-submit-hints" aria-live="polite">
+              {missingRequirementHints.map((hint) => (
+                <p key={hint}>{hint}</p>
+              ))}
+            </div>
+          ) : null}
           <button type="button" onClick={close}>
             Cancel
           </button>

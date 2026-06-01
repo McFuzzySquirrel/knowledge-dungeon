@@ -24,8 +24,8 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             notes.
           </li>
           <li>
-            Use <kbd>Teleport</kbd> to jump to a room from the map. After teleporting, wait for the
-            cooldown before using it again.
+            Use <kbd>Teleport</kbd> to arm Teleport Mode and jump to a room from the map. After
+            teleporting, wait for the cooldown before using it again.
           </li>
           <li>
             In the <strong>Creator</strong> phase, use the Topic tab or the map edit tools to add,
@@ -40,7 +40,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             want a larger writing/media workspace.
           </li>
           <li>
-            Press <kbd>?</kbd> to toggle this help overlay.
+            Press <kbd>?</kbd> to toggle this Help overlay.
           </li>
         </ul>
         <button type="button" onClick={onClose}>

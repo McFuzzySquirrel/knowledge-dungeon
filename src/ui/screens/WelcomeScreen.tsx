@@ -53,8 +53,15 @@ export function WelcomeScreen(): JSX.Element {
   const [rootTopic, setRootTopic] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [existingSubjects, setExistingSubjects] = useState<
-    { id: string; subjectName: string; roomCount: number }[]
+    {
+      id: string;
+      subjectName: string;
+      roomCount: number;
+      clearedRoomCount: number;
+      suggestedPhase: 'Create' | 'Scribe' | 'Review';
+    }[]
   >([]);
+  const [selectedExistingSubjectId, setSelectedExistingSubjectId] = useState<string | null>(null);
   const [loadingExisting, setLoadingExisting] = useState(true);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
@@ -64,6 +71,7 @@ export function WelcomeScreen(): JSX.Element {
   const selectedClassLabel =
     PLAYER_CLASSES.find((playerClass) => playerClass.id === selectedClass)?.name ?? 'Not selected yet';
   const isReadyToEnter = Boolean(selectedClass);
+  const isFirstTimeUser = !snapshot && existingSubjects.length === 0;
 
   async function fetchExistingSubjects() {
     try {
@@ -71,10 +79,22 @@ export function WelcomeScreen(): JSX.Element {
       const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
       return ids.map((id, index) => {
         const snapshotAtIndex = snapshots[index];
+        const roomCount = snapshotAtIndex?.dungeon.rooms.length ?? 0;
+        const clearedRoomCount = snapshotAtIndex
+          ? Object.values(snapshotAtIndex.rooms).filter((room) => room.validationState.finalPass).length
+          : 0;
+        const suggestedPhase: 'Create' | 'Scribe' | 'Review' =
+          roomCount > 0 && clearedRoomCount === roomCount
+            ? 'Review'
+            : roomCount > 1
+              ? 'Scribe'
+              : 'Create';
         return {
           id,
           subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
-          roomCount: snapshotAtIndex?.dungeon.rooms.length ?? 0,
+          roomCount,
+          clearedRoomCount,
+          suggestedPhase,
         };
       });
     } catch {
@@ -84,7 +104,11 @@ export function WelcomeScreen(): JSX.Element {
 
   async function refreshExistingSubjects() {
     setLoadingExisting(true);
-    setExistingSubjects(await fetchExistingSubjects());
+    const subjects = await fetchExistingSubjects();
+    setExistingSubjects(subjects);
+    if (selectedExistingSubjectId && !subjects.some((subject) => subject.id === selectedExistingSubjectId)) {
+      setSelectedExistingSubjectId(null);
+    }
     setLoadingExisting(false);
   }
 
@@ -95,6 +119,9 @@ export function WelcomeScreen(): JSX.Element {
       const subjects = await fetchExistingSubjects();
       if (cancelled) return;
       setExistingSubjects(subjects);
+      setSelectedExistingSubjectId((current) =>
+        current && subjects.some((subject) => subject.id === current) ? current : null,
+      );
       setLoadingExisting(false);
     }
     void loadExisting();
@@ -104,7 +131,7 @@ export function WelcomeScreen(): JSX.Element {
   }, []);
 
   async function handleCreate() {
-    if (!subjectName.trim() || !rootTopic.trim()) return;
+    if (!subjectName.trim() || !rootTopic.trim() || !isReadyToEnter) return;
     setSubmitting(true);
     try {
       const created = await initSubject({
@@ -118,11 +145,22 @@ export function WelcomeScreen(): JSX.Element {
   }
 
   async function handleLoad(id: string) {
+    if (!isReadyToEnter) return;
     const loaded = await loadSubject(id);
     if (loaded) {
       setActiveSubjectId(loaded.dungeon.dungeonId);
     }
   }
+
+  async function handleEnterSelectedSubject() {
+    if (!selectedExistingSubjectId) return;
+    await handleLoad(selectedExistingSubjectId);
+  }
+
+  const selectedExistingSubject =
+    selectedExistingSubjectId
+      ? existingSubjects.find((subject) => subject.id === selectedExistingSubjectId) ?? null
+      : null;
 
   async function handleOpenSubjectsFolder() {
     setAdminBusy(true);
@@ -209,7 +247,7 @@ export function WelcomeScreen(): JSX.Element {
           role="status"
           aria-live="polite"
         >
-          {isReadyToEnter ? 'Ready to enter dungeon' : 'Select an archetype to enter dungeon'}
+          {isReadyToEnter ? 'Ready to Enter Dungeon' : 'Select an Archetype to Enter Dungeon'}
         </p>
         <div className="welcome-selection-grid">
           <div className="welcome-selection-card">
@@ -223,6 +261,18 @@ export function WelcomeScreen(): JSX.Element {
         </div>
       </section>
 
+      <section className="room-section" aria-label="Gameplay loop overview">
+        <h2>Gameplay loop</h2>
+        <p className="room-help-text">
+          Knowledge Dungeon works as a loop: map your ideas in Creator, clear encounters by writing
+          notes in Scribe, then run review passes in Archaeologist once rooms are cleared.
+        </p>
+        <p className="room-help-text">
+          For your first subject, start in Creator to build a few connected rooms, then switch to
+          Scribe when you are ready to clear encounters.
+        </p>
+      </section>
+
       <section>
         <h2>1. Choose a phase</h2>
         <div className="phase-grid">
@@ -234,6 +284,7 @@ export function WelcomeScreen(): JSX.Element {
               aria-pressed={phase === phaseDef.id}
               onClick={() => setPhase(phaseDef.id)}
             >
+              {phase === phaseDef.id ? <span className="selection-chip">Selected</span> : null}
               <h3>{phaseDef.title}</h3>
               <p>{phaseDef.description}</p>
             </button>
@@ -242,7 +293,7 @@ export function WelcomeScreen(): JSX.Element {
       </section>
 
       <section>
-        <h2>2. Pick a study archetype</h2>
+        <h2>2. Pick a Study Archetype</h2>
         <div className="class-grid">
           {PLAYER_CLASSES.map((cls) => (
             <button
@@ -252,6 +303,7 @@ export function WelcomeScreen(): JSX.Element {
               aria-pressed={selectedClass === cls.id}
               onClick={() => setSelectedClass(cls.id)}
             >
+              {selectedClass === cls.id ? <span className="selection-chip">Selected</span> : null}
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <img
                   src={CLASS_SPRITES[cls.id]}
@@ -274,7 +326,7 @@ export function WelcomeScreen(): JSX.Element {
         {snapshot ? (
           <p>
             Active subject: <strong>{snapshot.dungeon.subjectName}</strong> ({snapshot.dungeon.rooms.length}{' '}
-            rooms). Pick a phase above and an archetype to enter the dungeon.
+            rooms). Choose a phase and archetype, then Enter Dungeon.
           </p>
         ) : null}
         <div style={{ display: 'grid', gap: 8 }}>
@@ -294,7 +346,7 @@ export function WelcomeScreen(): JSX.Element {
             <button
               type="button"
               onClick={() => void handleCreate()}
-              disabled={!subjectName.trim() || !rootTopic.trim() || submitting}
+              disabled={!subjectName.trim() || !rootTopic.trim() || submitting || !isReadyToEnter}
             >
               {submitting ? 'Creating…' : 'Create new subject'}
             </button>
@@ -316,16 +368,53 @@ export function WelcomeScreen(): JSX.Element {
         {existingSubjects.length > 0 ? (
           <div style={{ marginTop: 16 }}>
             <h3>Previously created</h3>
+            <p className="room-help-text">Select a subject, then confirm with Enter Dungeon.</p>
             <div className="welcome-actions">
               {existingSubjects.map((subject) => (
-                <button key={subject.id} type="button" onClick={() => void handleLoad(subject.id)}>
+                <button
+                  key={subject.id}
+                  type="button"
+                  className={selectedExistingSubjectId === subject.id ? 'ghost room-travel-item--selected' : 'ghost'}
+                  aria-pressed={selectedExistingSubjectId === subject.id}
+                  onClick={() => setSelectedExistingSubjectId(subject.id)}
+                >
                   {subject.subjectName}
                   <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 12 }}>
-                    ({subject.roomCount} rooms)
+                    ({subject.clearedRoomCount}/{subject.roomCount} cleared · Suggested: {subject.suggestedPhase})
                   </span>
                 </button>
               ))}
             </div>
+            {selectedExistingSubject ? (
+              <div style={{ marginTop: 12 }} className="room-section" aria-live="polite">
+                <p>
+                  Selected subject: <strong>{selectedExistingSubject.subjectName}</strong>
+                </p>
+                <p className="room-help-text">
+                  Progress: {selectedExistingSubject.clearedRoomCount}/{selectedExistingSubject.roomCount} rooms
+                  cleared. Suggested phase: {selectedExistingSubject.suggestedPhase}.
+                </p>
+                {!isReadyToEnter ? (
+                  <p className="room-help-text">Pick an archetype above to enter this dungeon.</p>
+                ) : null}
+                <div className="welcome-actions">
+                  <button
+                    type="button"
+                    onClick={() => void handleEnterSelectedSubject()}
+                    disabled={!isReadyToEnter}
+                  >
+                    Enter Dungeon
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setSelectedExistingSubjectId(null)}
+                  >
+                    Choose different subject
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -334,24 +423,12 @@ export function WelcomeScreen(): JSX.Element {
         <h2>Admin</h2>
         {electronAvailable ? (
           <>
-            <p>Use these tools to export your local subject data between machines.</p>
+            <p>
+              {isFirstTimeUser
+                ? 'Import is available here. Advanced export tools are tucked away until you need them.'
+                : 'Use these tools to export your local subject data between machines.'}
+            </p>
             <div className="welcome-actions" aria-busy={adminBusy}>
-              <button
-                type="button"
-                onClick={() => void handleOpenSubjectsFolder()}
-                disabled={adminBusy}
-                aria-disabled={adminBusy}
-              >
-                Open subjects folder
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleExportSubjectsRoot()}
-                disabled={adminBusy}
-                aria-disabled={adminBusy}
-              >
-                Export subjects root
-              </button>
               <button
                 type="button"
                 onClick={() => void handleImportSubjectFolder()}
@@ -360,18 +437,39 @@ export function WelcomeScreen(): JSX.Element {
               >
                 Import subject folder
               </button>
-              {existingSubjects.map((subject) => (
+            </div>
+            <details className="welcome-admin-advanced" open={!isFirstTimeUser}>
+              <summary>Advanced admin tools</summary>
+              <div className="welcome-actions" aria-busy={adminBusy}>
                 <button
-                  key={`export-${subject.id}`}
                   type="button"
-                  onClick={() => void handleExportSubject(subject.id)}
+                  onClick={() => void handleOpenSubjectsFolder()}
                   disabled={adminBusy}
                   aria-disabled={adminBusy}
                 >
-                  Export {subject.subjectName}
+                  Open subjects folder
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => void handleExportSubjectsRoot()}
+                  disabled={adminBusy}
+                  aria-disabled={adminBusy}
+                >
+                  Export subjects root
+                </button>
+                {existingSubjects.map((subject) => (
+                  <button
+                    key={`export-${subject.id}`}
+                    type="button"
+                    onClick={() => void handleExportSubject(subject.id)}
+                    disabled={adminBusy}
+                    aria-disabled={adminBusy}
+                  >
+                    Export {subject.subjectName}
+                  </button>
+                ))}
+              </div>
+            </details>
           </>
         ) : (
           <p>Admin export tools are available in desktop mode.</p>

@@ -54,6 +54,7 @@ export function RoomPanel({
   const removeRoom = useSubjectStore((s) => s.removeRoom);
   const lastError = useSubjectStore((s) => s.lastError);
   const phase = useSessionStore((s) => s.phase);
+  const setPhase = useSessionStore((s) => s.setPhase);
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
   const openNoteEditorWithInsert = useSessionStore((s) => s.openNoteEditorWithInsert);
   const [draftTopics, setDraftTopics] = useState('');
@@ -122,6 +123,7 @@ export function RoomPanel({
     : null;
   const hasNoteText = Boolean(focusedRoom?.noteText.trim().length);
   const noteWordCount = focusedRoom?.validationState.wordCount ?? 0;
+  const artifactTabsLocked = !focusedRoom?.validationState.finalPass;
 
   const connectedRoomIds = focusedRoomId
     ? getConnectedRoomIds(snapshot.dungeon, focusedRoomId)
@@ -369,6 +371,7 @@ export function RoomPanel({
           aria-selected={tab === 'artifact'}
           onClick={() => setTab('artifact')}
           disabled={!focusedRoom.validationState.finalPass}
+          title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
         >
           Artifact
         </button>
@@ -378,6 +381,7 @@ export function RoomPanel({
           aria-selected={tab === 'selfcheck'}
           onClick={() => setTab('selfcheck')}
           disabled={!focusedRoom.validationState.finalPass}
+          title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
         >
           Self-check
         </button>
@@ -391,10 +395,33 @@ export function RoomPanel({
           {panelExpanded ? 'Collapse' : 'Expand'}
         </button>
       </div>
+      {artifactTabsLocked ? (
+        <p className="room-tab-lock-hint">
+          Artifact and Self-check unlock after you defeat this room encounter.
+        </p>
+      ) : null}
 
       <div className="room-tab-body">
         {tab === 'topic' ? (
           <>
+            <div className="room-progress-card" aria-label="Archaeologist unlock progress">
+              <strong>
+                Archaeologist unlock: {unlock.clearedRooms}/{unlock.totalRooms} rooms cleared
+              </strong>
+              <p className="room-help-text">
+                {unlock.unlocked
+                  ? 'Review phase is available.'
+                  : 'Clear every room encounter to unlock full review mode.'}
+              </p>
+            </div>
+            <div className="room-section" style={{ marginBottom: 12 }}>
+              <button type="button" className="touch-rail interact" onClick={onInteract}>
+                {phase === 'archaeologist' ? 'Mark reviewed' : 'Open encounter'}
+              </button>
+              <p className="room-help-text">
+                Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.
+              </p>
+            </div>
             <div className="room-quick-actions" aria-label="Collections">
               <button type="button" className="room-quick-action" onClick={onOpenInventory}>
                 🎒 Inventory ({inventoryCount})
@@ -408,13 +435,23 @@ export function RoomPanel({
             </div>
             <h2>{focusedRoom.topic}</h2>
             <span className="room-status-chip">{focusedRoom.state}</span>
-            <p className="room-meta-line">Room id: {focusedRoom.roomId}</p>
             <p className="room-meta-line">Floor: {currentFloorLabel}</p>
             <p className="room-meta-line">
               Breadcrumbs:{' '}
               {breadcrumbRooms.map((room) => room.topic).join(' → ')}
             </p>
             <p className="room-meta-line">Edges: {relatedTopics.length}</p>
+
+            {phase === 'creator' && snapshot.dungeon.rooms.length >= 3 ? (
+              <div className="room-section room-phase-nudge" aria-live="polite">
+                <p className="room-help-text">
+                  Your map has enough rooms to start Scribe encounters.
+                </p>
+                <button type="button" onClick={() => setPhase('scribe')}>
+                  Switch to Scribe
+                </button>
+              </div>
+            ) : null}
 
             {sameFloorConnections.length > 0 ? (
               <div className="room-section">
@@ -619,15 +656,6 @@ export function RoomPanel({
 
             {lastError ? <p className="room-error-text">{lastError}</p> : null}
 
-            <div style={{ marginTop: 16 }}>
-              <button type="button" className="touch-rail interact" onClick={onInteract}>
-                {phase === 'archaeologist' ? 'Mark reviewed' : 'Open encounter'}
-              </button>
-            </div>
-            <p style={{ marginTop: 16, color: 'var(--text-muted)' }}>
-              Review unlock: {unlock.clearedRooms}/{unlock.totalRooms} rooms cleared
-              {unlock.unlocked ? ' (Archaeologist phase available)' : ''}.
-            </p>
           </>
         ) : null}
 

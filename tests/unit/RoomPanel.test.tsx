@@ -103,4 +103,30 @@ describe('RoomPanel', () => {
       screen.getByText(/Missing image \(att-missing\)\. Reattach it or remove this token\./i),
     ).toBeInTheDocument();
   });
+
+  it('shows lock messaging and archaeologist progress card for uncleared rooms', () => {
+    const snapshot = createSnapshot();
+
+    render(
+      <RoomPanel
+        snapshot={snapshot}
+        focusedRoom={snapshot.rooms['room-1']}
+        onInteract={() => undefined}
+        onTravelToRoom={() => undefined}
+        inventoryCount={0}
+        badgeCount={0}
+        journalCount={0}
+        onOpenInventory={() => undefined}
+        onOpenBadges={() => undefined}
+        onOpenJournal={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Artifact and Self-check unlock after you defeat this room encounter\./i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Archaeologist unlock: 0\/1 rooms cleared/i),
+    ).toBeInTheDocument();
+  });
 });

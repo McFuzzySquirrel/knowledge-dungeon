@@ -32,10 +32,11 @@ interface FullMapViewProps {
   onClose: () => void;
 }
 
-const SCALE = 6;
+const SCALE = 10;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.0015;
+const CANVAS_PADDING = 220;
 
 interface RoomOffset {
   x: number;
@@ -116,8 +117,8 @@ export function FullMapView({
     () => Math.min(2, 1 + Math.max(0, maxTopicLength - 18) / 42),
     [maxTopicLength],
   );
-  const innerWidth = (bounds.maxX - bounds.minX) * SCALE * layoutSpread;
-  const innerHeight = (bounds.maxY - bounds.minY) * SCALE * layoutSpread;
+  const innerWidth = (bounds.maxX - bounds.minX) * SCALE * layoutSpread + CANVAS_PADDING * 2;
+  const innerHeight = (bounds.maxY - bounds.minY) * SCALE * layoutSpread + CANVAS_PADDING * 2;
   const hierarchy = useMemo(() => deriveGraphHierarchy(snapshot.dungeon), [snapshot.dungeon]);
   const [mode, setMode] = useState<'navigate' | 'edit'>('navigate');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(focusedRoomId);
@@ -186,11 +187,24 @@ export function FullMapView({
   }
 
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: -innerWidth / 2, y: -innerHeight / 2 });
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [floorFilterOn, setFloorFilterOn] = useState(true);
   const [roomOffsets, setRoomOffsets] = useState<Record<string, RoomOffset>>({});
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+
+  const applyZoom = useCallback((requestedZoom: number, anchorX: number, anchorY: number) => {
+    setZoom((currentZoom) => {
+      const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, requestedZoom));
+      if (Math.abs(clamped - currentZoom) < 0.0001) return currentZoom;
+      const ratio = clamped / currentZoom;
+      setPan((currentPan) => ({
+        x: anchorX - (anchorX - currentPan.x) * ratio,
+        y: anchorY - (anchorY - currentPan.y) * ratio,
+      }));
+      return clamped;
+    });
+  }, []);
 
   const neighborIds = new Set<string>();
   if (focusedRoomId) {
@@ -217,25 +231,79 @@ export function FullMapView({
     if (portalRoomId) set.add(portalRoomId);
     return set;
   }, [floorFilterOn, floorRoomIdSet, portalRoomId, rooms]);
-  const visibleRooms = floorFilterOn
-    ? rooms.filter((room) => visibleRoomIdSet.has(room.roomId))
-    : rooms;
-  const visibleCorridors = floorFilterOn
-    ? corridors.filter(
-        (c) => visibleRoomIdSet.has(c.fromRoomId) && visibleRoomIdSet.has(c.toRoomId),
-      )
-    : corridors;
+  const visibleRooms = useMemo(
+    () => (floorFilterOn ? rooms.filter((room) => visibleRoomIdSet.has(room.roomId)) : rooms),
+    [floorFilterOn, rooms, visibleRoomIdSet],
+  );
+  const visibleCorridors = useMemo(
+    () =>
+      floorFilterOn
+        ? corridors.filter(
+            (c) => visibleRoomIdSet.has(c.fromRoomId) && visibleRoomIdSet.has(c.toRoomId),
+          )
+        : corridors,
+    [floorFilterOn, corridors, visibleRoomIdSet],
+  );
   const roomById = useMemo(() => {
     const map = new Map<string, DungeonMap['rooms'][number]>();
     for (const room of rooms) map.set(room.roomId, room);
     return map;
   }, [rooms]);
 
+  const fitMapToViewport = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || visibleRooms.length === 0) return;
+
+    let minGridX = Number.POSITIVE_INFINITY;
+    let maxGridX = Number.NEGATIVE_INFINITY;
+    let minGridY = Number.POSITIVE_INFINITY;
+    let maxGridY = Number.NEGATIVE_INFINITY;
+
+    for (const room of visibleRooms) {
+      minGridX = Math.min(minGridX, room.gridX);
+      maxGridX = Math.max(maxGridX, room.gridX + room.width);
+      minGridY = Math.min(minGridY, room.gridY);
+      maxGridY = Math.max(maxGridY, room.gridY + room.height);
+    }
+
+    if (!Number.isFinite(minGridX)) return;
+
+    const contentMinX = (minGridX - bounds.minX) * SCALE * layoutSpread + CANVAS_PADDING;
+    const contentMaxX = (maxGridX - bounds.minX) * SCALE * layoutSpread + CANVAS_PADDING;
+    const contentMinY = (minGridY - bounds.minY) * SCALE * layoutSpread + CANVAS_PADDING;
+    const contentMaxY = (maxGridY - bounds.minY) * SCALE * layoutSpread + CANVAS_PADDING;
+
+    const contentWidth = Math.max(1, contentMaxX - contentMinX);
+    const contentHeight = Math.max(1, contentMaxY - contentMinY);
+    const contentCenterX = (contentMinX + contentMaxX) / 2;
+    const contentCenterY = (contentMinY + contentMaxY) / 2;
+
+    const viewportWidth = viewport.clientWidth;
+    const viewportHeight = viewport.clientHeight;
+    const padding = 40;
+    const zoomX = Math.max(MIN_ZOOM, (viewportWidth - padding) / contentWidth);
+    const zoomY = Math.max(MIN_ZOOM, (viewportHeight - padding) / contentHeight);
+    const fittedZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(zoomX, zoomY)));
+
+    setZoom(fittedZoom);
+    setPan({
+      x: viewportWidth / 2 - contentCenterX * fittedZoom,
+      y: viewportHeight / 2 - contentCenterY * fittedZoom,
+    });
+  }, [visibleRooms, bounds.minX, bounds.minY, layoutSpread]);
+
+  useEffect(() => {
+    const raf = window.requestAnimationFrame(() => {
+      fitMapToViewport();
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [fitMapToViewport, floorId, floorFilterOn, visibleRooms.length]);
+
   const getRoomLayout = useCallback(
     (room: DungeonMap['rooms'][number]) => {
       const offset = roomOffsets[room.roomId] ?? { x: 0, y: 0 };
-      const x = (room.gridX - bounds.minX) * SCALE * layoutSpread + offset.x;
-      const y = (room.gridY - bounds.minY) * SCALE * layoutSpread + offset.y;
+      const x = (room.gridX - bounds.minX) * SCALE * layoutSpread + CANVAS_PADDING + offset.x;
+      const y = (room.gridY - bounds.minY) * SCALE * layoutSpread + CANVAS_PADDING + offset.y;
       const w = room.width * SCALE;
       const h = room.height * SCALE;
       return {
@@ -280,14 +348,18 @@ export function FullMapView({
 
   const onWheel = useCallback((e: WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
-    setZoom((z) => {
-      const next = z * (1 - e.deltaY * ZOOM_STEP);
-      return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
-    });
-  }, []);
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const anchorX = e.clientX - rect.left;
+    const anchorY = e.clientY - rect.top;
+    const zoomFactor = Math.exp(-e.deltaY * ZOOM_STEP);
+    applyZoom(zoom * zoomFactor, anchorX, anchorY);
+  }, [applyZoom, zoom]);
 
   const onPointerDown = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
       if ((e.target as Element).closest('[data-room-id]')) return;
       viewportRef.current?.setPointerCapture?.(e.pointerId);
       dragRef.current = {
@@ -332,6 +404,7 @@ export function FullMapView({
 
   const onRoomPointerDown = useCallback(
     (roomId: string, e: PointerEvent<SVGGElement>) => {
+      if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
       setSelectedRoomId(roomId);
@@ -351,9 +424,8 @@ export function FullMapView({
   );
 
   const resetView = useCallback(() => {
-    setZoom(1);
-    setPan({ x: -innerWidth / 2, y: -innerHeight / 2 });
-  }, [innerWidth, innerHeight]);
+    fitMapToViewport();
+  }, [fitMapToViewport]);
 
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
 
@@ -364,7 +436,7 @@ export function FullMapView({
           <div>
             <h2>Full Map</h2>
             <p className="full-map-subtitle">
-              Explore and edit your dungeon graph, then teleport between floors.
+              Explore or edit your dungeon graph, then teleport across floors.
               Use drag-to-pan, scroll-to-zoom, and drag nodes to refine layout.
             </p>
           </div>
@@ -395,10 +467,24 @@ export function FullMapView({
                 </button>
               </>
             ) : null}
-            <button type="button" onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.2))}>
+            <button
+              type="button"
+              onClick={() => {
+                const viewport = viewportRef.current;
+                if (!viewport) return;
+                applyZoom(zoom * 1.2, viewport.clientWidth / 2, viewport.clientHeight / 2);
+              }}
+            >
               +
             </button>
-            <button type="button" onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.2))}>
+            <button
+              type="button"
+              onClick={() => {
+                const viewport = viewportRef.current;
+                if (!viewport) return;
+                applyZoom(zoom / 1.2, viewport.clientWidth / 2, viewport.clientHeight / 2);
+              }}
+            >
               −
             </button>
             <button type="button" onClick={resetView}>
@@ -528,7 +614,7 @@ export function FullMapView({
                         y={cy}
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        fontSize={9}
+                        fontSize={11}
                         fill={textFill}
                         stroke={textStroke}
                         strokeWidth={2.2}
@@ -536,10 +622,10 @@ export function FullMapView({
                       >
                         {isPortal ? <tspan x={cx} dy={-10}>↑</tspan> : null}
                         {topicLines.map((line, index) => {
-                          const lineOffset = (index - (topicLines.length - 1) / 2) * 10;
+                          const lineOffset = (index - (topicLines.length - 1) / 2) * 12;
                           const dy = isPortal && index === 0 ? lineOffset + 10 : lineOffset;
                           return (
-                            <tspan key={`${room.roomId}-${index}`} x={cx} dy={index === 0 ? dy : 10}>
+                            <tspan key={`${room.roomId}-${index}`} x={cx} dy={index === 0 ? dy : 12}>
                               {line}
                             </tspan>
                           );
@@ -553,8 +639,13 @@ export function FullMapView({
           </div>
 
           <aside className="full-map-sidebar">
-            <div className="room-section room-section--scrollable">
+            <div className="room-section full-map-teleport-section">
               <h3>Teleport</h3>
+              <p className="teleport-guidance" role="status" aria-live="polite">
+                {teleportModeArmed
+                  ? 'Teleport Mode active: 1) choose a room, 2) press Teleport Now or hit Enter.'
+                  : 'Press Teleport in the HUD to arm Teleport Mode and auto-open this map.'}
+              </p>
               <select value={floorId} onChange={(e) => setFloorId(e.target.value)}>
                 {hierarchy.floorIds.map((entryFloorId) => (
                   <option key={entryFloorId} value={entryFloorId}>
@@ -608,12 +699,12 @@ export function FullMapView({
                 {teleportRemainingMs > 0
                   ? `Ready in ${Math.floor(teleportSeconds / 60)}:${String(teleportSeconds % 60).padStart(2, '0')}`
                   : teleportModeArmed
-                    ? 'Teleport now'
+                    ? 'Teleport Now'
                     : 'Teleport to selection'}
               </button>
             </div>
 
-            <div className="room-section room-section--scrollable">
+            <div className="room-section full-map-selected-section">
               <h3>Selected topic</h3>
               {selectedRoom ? (
                 <>

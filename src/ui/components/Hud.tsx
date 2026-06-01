@@ -10,6 +10,8 @@ interface HudProps {
   currentFloorLabel: string;
   teleportRemainingMs: number;
   teleportModeArmed: boolean;
+  phaseChangeNeedsConfirmation: boolean;
+  showScribeNudge: boolean;
   onPhaseChange: (phase: GamePhase) => void;
   onHelp: () => void;
   onOpenMap: () => void;
@@ -32,11 +34,13 @@ export function Hud({
   currentFloorLabel,
   teleportRemainingMs,
   teleportModeArmed,
+  phaseChangeNeedsConfirmation,
   onPhaseChange,
   onHelp,
   onOpenMap,
   onTeleport,
   onHome,
+  showScribeNudge,
 }: HudProps): JSX.Element {
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
   const teleportLabel =
@@ -45,6 +49,17 @@ export function Hud({
       : teleportModeArmed
         ? 'Choose teleport'
         : 'Teleport';
+
+  function requestPhaseChange(nextPhase: GamePhase): void {
+    if (nextPhase === phase) return;
+    if (phaseChangeNeedsConfirmation) {
+      const ok = window.confirm(
+        'Switch phase now? Active overlays may interrupt your current flow.',
+      );
+      if (!ok) return;
+    }
+    onPhaseChange(nextPhase);
+  }
 
   return (
     <div className="hud-rail" role="banner">
@@ -73,16 +88,19 @@ export function Hud({
         </div>
       </div>
       <div className="hud-actions">
-        {(Object.keys(PHASE_LABELS) as GamePhase[]).map((p) => (
-          <button
-            key={p}
-            type="button"
-            aria-pressed={p === phase}
-            onClick={() => onPhaseChange(p)}
-          >
-            {PHASE_LABELS[p]}
-          </button>
-        ))}
+        <div className="hud-phase-controls" aria-label="Phase controls">
+          <span className="hud-phase-controls-label">Switch Phase</span>
+          {(Object.keys(PHASE_LABELS) as GamePhase[]).map((p) => (
+            <button
+              key={p}
+              type="button"
+              aria-pressed={p === phase}
+              onClick={() => requestPhaseChange(p)}
+            >
+              {PHASE_LABELS[p]}
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={onOpenMap} aria-label="Open full map">
           Map
         </button>
@@ -97,10 +115,23 @@ export function Hud({
         <button type="button" onClick={onHome} aria-label="Return to subject selection">
           Home
         </button>
-        <button type="button" onClick={onHelp} aria-label="Open help">
-          ?
+        {showScribeNudge ? (
+          <div className="hud-scribe-nudge" role="status" aria-live="polite">
+            <span>Your map has enough rooms to start Scribe encounters.</span>
+            <button type="button" onClick={() => requestPhaseChange('scribe')}>
+              Switch to Scribe
+            </button>
+          </div>
+        ) : null}
+        <button type="button" onClick={onHelp} aria-label="Open help" className="hud-help-button">
+          Help (?)
         </button>
       </div>
+      {teleportModeArmed ? (
+        <p className="hud-inline-hint" role="status" aria-live="polite">
+          Teleport Mode armed: open map, pick a destination room, then confirm teleport.
+        </p>
+      ) : null}
     </div>
   );
 }
