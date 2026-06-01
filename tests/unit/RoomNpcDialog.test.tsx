@@ -30,4 +30,19 @@ describe('RoomNpcDialog', () => {
     expect(screen.getByText(/not ready for review passes/i)).toBeInTheDocument();
     expect(screen.getByText(/Switch to Scribe phase first/i)).toBeInTheDocument();
   });
+
+  it('switches to anchored mode when an NPC anchor position is provided', () => {
+    render(
+      <RoomNpcDialog
+        topic="Matrix Multiplication"
+        phase="scribe"
+        roomState="Created"
+        isCleared={false}
+        anchorPosition={{ x: 420, y: 260 }}
+      />,
+    );
+
+    const dialog = screen.getByRole('status', { name: 'Room guide' });
+    expect(dialog.className).toContain('npc-dialog--anchored');
+  });
 });

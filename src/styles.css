@@ -605,9 +605,9 @@ textarea {
 .room-panel {
   position: absolute;
   top: 80px;
-  right: 12px;
-  bottom: 12px;
+  left: 12px;
   width: min(360px, 38vw);
+  max-height: calc(100vh - 92px);
   z-index: 20;
   background: rgba(22, 26, 38, 0.92);
   backdrop-filter: blur(6px);
@@ -622,6 +622,28 @@ textarea {
 
 .room-panel--expanded {
   width: min(680px, 72vw);
+}
+
+.room-panel--dragging {
+  user-select: none;
+}
+
+.room-panel-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: rgba(11, 13, 20, 0.55);
+  border-bottom: 1px solid var(--border-soft);
+  cursor: grab;
+}
+
+.room-panel-drag-handle:active {
+  cursor: grabbing;
 }
 
 .room-tabs {
@@ -1108,12 +1130,12 @@ button.danger:hover {
 
 @media (max-width: 900px) {
   .room-panel {
-    top: auto;
-    bottom: 12px;
+    top: 80px;
     left: 12px;
-    right: 12px;
+    right: auto;
     width: auto;
-    max-height: 45vh;
+    max-width: calc(100vw - 24px);
+    max-height: 60vh;
   }
 
   .hud-rail {
@@ -1243,6 +1265,11 @@ button.danger:hover {
   padding: 10px 12px;
   background: rgba(26, 18, 10, 0.94);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+}
+
+.npc-dialog--anchored {
+  right: auto;
+  bottom: auto;
 }
 
 .npc-dialog h3 {

@@ -21,7 +21,8 @@ import { isEditableElementFocused } from '@/ui/utils/editableElement';
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
   onInteract: (roomId: string) => void;
-  onNpcInteract?: (roomId: string) => void;
+  onNpcInteract?: (payload: NpcDialogAnchor) => void;
+  onNpcDialogPosition?: (payload: NpcDialogAnchor) => void;
   onNpcOutOfRange?: (roomId: string) => void;
   onArtifactCollected?: (roomId: string) => void;
   /**
@@ -34,6 +35,12 @@ export interface DungeonSceneEvents {
     fromRoomId: string;
     direction: 'up' | 'down';
   }) => void;
+}
+
+export interface NpcDialogAnchor {
+  roomId: string;
+  clientX: number;
+  clientY: number;
 }
 
 export interface FloorVisibilityInput {
@@ -609,7 +616,10 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     this.activeNpcRoomId = this.currentRoomId;
-    this.callbacks?.onNpcInteract?.(this.currentRoomId);
+    const anchor = this.resolveNpcDialogAnchor(this.currentRoomId);
+    if (anchor) {
+      this.callbacks?.onNpcInteract?.(anchor);
+    }
     return true;
   }
 
@@ -636,7 +646,29 @@ export class DungeonScene extends Phaser.Scene {
       const roomId = this.activeNpcRoomId;
       this.activeNpcRoomId = null;
       this.callbacks?.onNpcOutOfRange?.(roomId);
+      return;
     }
+
+    const anchor = this.resolveNpcDialogAnchor(this.activeNpcRoomId);
+    if (anchor) {
+      this.callbacks?.onNpcDialogPosition?.(anchor);
+    }
+  }
+
+  private resolveNpcDialogAnchor(roomId: string): NpcDialogAnchor | null {
+    const npc = this.roomNpcs.get(roomId);
+    if (!npc) return null;
+
+    const camera = this.cameras.main;
+    const screenX = (npc.x - camera.worldView.x) * camera.zoom;
+    const screenY = (npc.y - camera.worldView.y) * camera.zoom;
+    const canvasRect = this.game.canvas?.getBoundingClientRect();
+
+    return {
+      roomId,
+      clientX: (canvasRect?.left ?? 0) + screenX,
+      clientY: (canvasRect?.top ?? 0) + screenY,
+    };
   }
 
   /**

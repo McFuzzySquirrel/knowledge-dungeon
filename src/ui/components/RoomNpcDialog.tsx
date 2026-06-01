@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import type { GamePhase } from '@/store/sessionStore';
 import type { RoomState } from '@/core/validation/persistence';
 
@@ -7,6 +7,7 @@ interface RoomNpcDialogProps {
   phase: GamePhase;
   roomState: RoomState;
   isCleared: boolean;
+  anchorPosition?: { x: number; y: number } | null;
 }
 
 interface GuidanceCopy {
@@ -61,11 +62,70 @@ function buildGuidance(
   };
 }
 
-export function RoomNpcDialog({ topic, phase, roomState, isCleared }: RoomNpcDialogProps): JSX.Element {
+export function RoomNpcDialog({
+  topic,
+  phase,
+  roomState,
+  isCleared,
+  anchorPosition,
+}: RoomNpcDialogProps): JSX.Element {
   const guidance = buildGuidance(phase, topic, roomState, isCleared);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const [anchoredStyle, setAnchoredStyle] = useState<CSSProperties | null>(null);
+
+  useLayoutEffect(() => {
+    if (!anchorPosition) {
+      setAnchoredStyle(null);
+      return;
+    }
+
+    const margin = 12;
+    const updatePosition = () => {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      const dialogWidth = dialog.offsetWidth || 360;
+      const dialogHeight = dialog.offsetHeight || 170;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      const preferRight = anchorPosition.x + dialogWidth + 24 <= viewportWidth - margin;
+      const preferredLeft = preferRight
+        ? anchorPosition.x + 24
+        : anchorPosition.x - dialogWidth - 24;
+
+      const preferredTopAbove = anchorPosition.y - dialogHeight - 18;
+      const preferredTop =
+        preferredTopAbove >= margin ? preferredTopAbove : anchorPosition.y + 18;
+
+      const maxLeft = Math.max(margin, viewportWidth - dialogWidth - margin);
+      const maxTop = Math.max(margin, viewportHeight - dialogHeight - margin);
+
+      const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
+      const top = Math.min(Math.max(preferredTop, margin), maxTop);
+
+      setAnchoredStyle({ left: `${left}px`, top: `${top}px` });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [anchorPosition]);
+
+  const dialogClassName = anchorPosition ? 'npc-dialog npc-dialog--anchored' : 'npc-dialog';
+  const dialogStyle = anchorPosition ? anchoredStyle ?? undefined : undefined;
 
   return (
-    <aside className="npc-dialog" role="status" aria-live="polite" aria-label="Room guide">
+    <aside
+      ref={dialogRef}
+      className={dialogClassName}
+      style={dialogStyle}
+      role="status"
+      aria-live="polite"
+      aria-label="Room guide"
+    >
       <p className="npc-dialog__eyebrow">Room Guide</p>
       <h3>{guidance.title}</h3>
       <p>{guidance.body}</p>

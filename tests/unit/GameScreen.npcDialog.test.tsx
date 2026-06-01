@@ -183,7 +183,11 @@ describe('GameScreen NPC dialog callbacks', () => {
     });
 
     await act(async () => {
-      (capturedCallbacks?.onNpcInteract as ((roomId: string) => void) | undefined)?.('room-1');
+      (
+        capturedCallbacks?.onNpcInteract as
+          | ((payload: { roomId: string; clientX: number; clientY: number }) => void)
+          | undefined
+      )?.({ roomId: 'room-1', clientX: 420, clientY: 260 });
     });
 
     expect(screen.getByText(/Room Guide/i)).toBeInTheDocument();
@@ -204,7 +208,11 @@ describe('GameScreen NPC dialog callbacks', () => {
     });
 
     await act(async () => {
-      (capturedCallbacks?.onNpcInteract as ((roomId: string) => void) | undefined)?.('room-1');
+      (
+        capturedCallbacks?.onNpcInteract as
+          | ((payload: { roomId: string; clientX: number; clientY: number }) => void)
+          | undefined
+      )?.({ roomId: 'room-1', clientX: 420, clientY: 260 });
     });
     expect(screen.getByText(/Room Guide/i)).toBeInTheDocument();
 
