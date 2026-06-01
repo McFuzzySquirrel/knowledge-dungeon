@@ -35,7 +35,7 @@ interface MockGame {
   destroy: ReturnType<typeof vi.fn>;
 }
 
-const createGameMock = vi.fn<[Record<string, unknown>], MockGame>();
+const createGameMock = vi.fn<(options: Record<string, unknown>) => MockGame>();
 let capturedCallbacks: CapturedCallbacks | null = null;
 
 vi.mock('@/game/createGame', () => ({
