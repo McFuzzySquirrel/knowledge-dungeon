@@ -36,6 +36,8 @@ This works especially well for onboarding, architecture reviews, and "what does 
 
 ## Screenshots
 
+![Knowledge Dungeon UI showcase](./docs/assets/showcase.gif)
+
 ### Home / subject management
 
 ![Welcome screen showing phase selection, class selection, saved subject browsing, and admin section](./docs/assets/ui/welcome-screen.png)
