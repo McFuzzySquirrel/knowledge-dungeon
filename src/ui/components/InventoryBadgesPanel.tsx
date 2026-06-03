@@ -95,12 +95,12 @@ function badgeDetail(badgeId: string): BadgeDetail {
     case 'ArchaeologistReviewPass3':
     case 'ArchaeologistReviewPass7':
     case 'ArchaeologistReviewPass15': {
-      const reviewPassTarget = badgeId.replace('ArchaeologistReviewPass', '');
+      const reviewPassCount = badgeId.replace('ArchaeologistReviewPass', '');
       return {
         label: badgeLabel(badgeId),
         description: badgeDescription(badgeId),
         category: 'Review streak milestone',
-        unlockDetail: `Complete at least ${reviewPassTarget} full archaeology review passes for this subject.`,
+        unlockDetail: `Complete at least ${reviewPassCount} full archaeology review passes for this subject.`,
       };
     }
     case SCRIBE_CENTURY_120_BADGE_ID:

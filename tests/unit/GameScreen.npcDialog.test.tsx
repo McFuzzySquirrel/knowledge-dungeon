@@ -39,7 +39,7 @@ interface MockGame {
 
 const createGameMock = vi.fn<(options: Record<string, unknown>) => MockGame>();
 let capturedCallbacks: CapturedCallbacks | null = null;
-let fakeScene: MockScene;
+let fakeScene: MockScene | null = null;
 
 vi.mock('@/game/createGame', () => ({
   createGame: (options: Record<string, unknown>) => {
@@ -314,7 +314,7 @@ describe('GameScreen NPC dialog callbacks', () => {
     const { unmount } = render(<GameScreen />);
 
     await waitFor(() => {
-      expect(fakeScene.setReviewedArtifactRooms).toHaveBeenCalledWith([]);
+      expect(fakeScene?.setReviewedArtifactRooms).toHaveBeenCalledWith([]);
     });
 
     unmount();
@@ -324,7 +324,7 @@ describe('GameScreen NPC dialog callbacks', () => {
     render(<GameScreen />);
 
     await waitFor(() => {
-      expect(fakeScene.setReviewedArtifactRooms).toHaveBeenLastCalledWith(['room-1']);
+      expect(fakeScene?.setReviewedArtifactRooms).toHaveBeenLastCalledWith(['room-1']);
     });
   });
 });
