@@ -753,6 +753,11 @@ export function WelcomeScreen(): JSX.Element {
               {adminMessage}
             </p>
           ) : null}
+          <p className="room-help-text" style={{ marginTop: 16 }}>
+            🔒 <strong>Privacy:</strong> All your data is stored{' '}
+            {electronAvailable ? 'on your local machine' : 'in your browser (localStorage)'} and is
+            never sent to any server. Nothing leaves your device.
+          </p>
         </section>
       </section>
     </div>

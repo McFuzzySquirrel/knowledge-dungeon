@@ -228,6 +228,12 @@ docs/                    # PRD + progress notes
 - **Web**: subjects fall back to `localStorage`; import/export is supported
   via the persistence facade.
 
+> 🔒 **Privacy**: all data — subjects, notes, progression, and images — is stored
+> **locally on your device only** (in your browser's `localStorage` for the web
+> version, or in your user-data folder for Electron). Nothing is ever sent to any
+> server. Clearing your browser's site data will permanently remove web subjects, so
+> use the **Export** tools in the **Data** tab to back up anything you want to keep.
+
 ## Why this exists
 
 `repo-dungeon` had great gameplay but its content provider (GitHub
