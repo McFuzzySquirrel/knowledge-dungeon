@@ -1,5 +1,7 @@
 # Knowledge Dungeon
 
+[![Play in browser](https://img.shields.io/badge/Play-GitHub%20Pages-2ea44f?logo=github)](https://mcfuzzysquirrel.github.io/knowledge-dungeon/)
+
 A local-first, offline-friendly **study dungeon-crawler** built on the
 [`repo-dungeon`](https://github.com/McFuzzySquirrel/repo-dungeon) engine,
 fed by the **mindmap-driven learning concept** from
@@ -48,7 +50,7 @@ The home screen is where you:
 - create a new subject from a root topic
 - browse previously created subjects by **name** and room count
 - refresh the local subject list before jumping back in
-- access desktop-only admin/export helpers from the Admin section
+- access Admin data tools for import/export (desktop includes folder-level helpers)
 
 ### In-dungeon study view
 
@@ -129,6 +131,12 @@ npm run build:web         # production web bundle
 npm run check:bundle-size # bundle-size guard used in CI
 npm run package:electron  # local Electron package (no signing)
 ```
+
+## Play in browser
+
+- Live web build: **https://mcfuzzysquirrel.github.io/knowledge-dungeon/**
+- Deployment is handled by `.github/workflows/deploy-pages.yml` on pushes to `main`.
+- One-time repo setup required: in **Settings → Pages**, set **Source** to **GitHub Actions**.
 
 ## Building an Electron install package
 

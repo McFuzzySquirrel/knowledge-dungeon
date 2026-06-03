@@ -8,8 +8,11 @@
  * layout (`dungeon-data/<subject-id>/...`).
  */
 
-import type { SubjectSnapshot } from '@/core/validation/persistence';
-import type { RoomAttachment } from '@/core/validation/persistence';
+import {
+  CURRENT_SCHEMA_VERSION,
+  type RoomAttachment,
+  type SubjectSnapshot,
+} from '@/core/validation/persistence';
 
 const STORAGE_PREFIX = 'knowledge-dungeon:v1';
 
@@ -307,10 +310,45 @@ export function exportSubjectToJson(snapshot: SubjectSnapshot): string {
   return JSON.stringify(snapshot, null, 2);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 export function importSubjectFromJson(raw: string): SubjectSnapshot {
-  const parsed = JSON.parse(raw) as SubjectSnapshot;
-  if (!parsed || typeof parsed !== 'object' || !('dungeon' in parsed) || !('rooms' in parsed)) {
+  const parsed = JSON.parse(raw) as unknown;
+  if (!isRecord(parsed) || !('dungeon' in parsed) || !('rooms' in parsed)) {
     throw new Error('Invalid subject snapshot format');
   }
-  return parsed;
+  const dungeon = parsed.dungeon;
+  const rooms = parsed.rooms;
+  if (!isRecord(dungeon) || !isRecord(rooms)) {
+    throw new Error('Invalid subject snapshot format');
+  }
+  if (typeof dungeon.schemaVersion !== 'string') {
+    throw new Error('Invalid subject snapshot format: missing schema version.');
+  }
+  if (dungeon.schemaVersion !== CURRENT_SCHEMA_VERSION) {
+    throw new Error(
+      `Unsupported subject schema version: ${dungeon.schemaVersion}. Expected ${CURRENT_SCHEMA_VERSION}.`,
+    );
+  }
+  if (
+    typeof dungeon.dungeonId !== 'string' ||
+    typeof dungeon.subjectName !== 'string' ||
+    !Array.isArray(dungeon.rooms)
+  ) {
+    throw new Error('Invalid subject snapshot format');
+  }
+
+  for (const roomSummary of dungeon.rooms) {
+    if (!isRecord(roomSummary) || typeof roomSummary.roomId !== 'string') {
+      throw new Error('Invalid subject snapshot format: room summary is malformed.');
+    }
+    const room = rooms[roomSummary.roomId];
+    if (!isRecord(room) || room.roomId !== roomSummary.roomId || !isRecord(room.validationState)) {
+      throw new Error(`Invalid subject snapshot format: missing room payload for "${roomSummary.roomId}".`);
+    }
+  }
+
+  return parsed as SubjectSnapshot;
 }

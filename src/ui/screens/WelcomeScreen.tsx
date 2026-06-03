@@ -1,15 +1,19 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type JSX } from 'react';
+import { CURRENT_SCHEMA_VERSION } from '@/core/validation/persistence';
 import { useSessionStore, type GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
 import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
 import {
+  exportSubjectToJson,
+  importSubjectFromJson,
   exportSubjectFolder,
   exportSubjectsRoot,
   importSubjectFolder,
   listSubjectIds,
   loadSubjectSnapshot,
   openSubjectsFolder,
+  saveSubjectSnapshot,
 } from '@/services/persistence/subjectPersistence';
 import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
@@ -49,6 +53,33 @@ const THEME_LABELS: Record<ColorTheme, string> = {
   aurora: 'Aurora',
 };
 
+function sanitizeFilePart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'subject';
+}
+
+function downloadTextFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read file.'));
+    reader.readAsText(file);
+  });
+}
+
 export function WelcomeScreen(): JSX.Element {
   const phase = useSessionStore((s) => s.phase);
   const setPhase = useSessionStore((s) => s.setPhase);
@@ -78,6 +109,7 @@ export function WelcomeScreen(): JSX.Element {
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<WelcomeTabId>('subjects');
+  const webImportInputRef = useRef<HTMLInputElement | null>(null);
   const env = getElectronEnvironmentLabel();
   const electronAvailable = isElectronAvailable();
   const selectedPhaseLabel = PHASES.find((phaseDef) => phaseDef.id === phase)?.title ?? phase;
@@ -227,6 +259,83 @@ export function WelcomeScreen(): JSX.Element {
       setSelectedExistingSubjectId(imported.dungeon.dungeonId);
       setActiveTab('setup');
       setAdminMessage(`Imported ${imported.dungeon.subjectName}. Select Enter Dungeon when ready.`);
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportSubjectJson(subjectId: string) {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const subject = await loadSubjectSnapshot(subjectId);
+      if (!subject) {
+        setAdminMessage('Unable to export: subject data not found.');
+        return;
+      }
+      const filename = `${sanitizeFilePart(subject.dungeon.subjectName)}.json`;
+      downloadTextFile(filename, exportSubjectToJson(subject));
+      setAdminMessage(`Exported ${subject.dungeon.subjectName} as ${filename}.`);
+    } catch {
+      setAdminMessage('Export failed.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportAllSubjectsJson() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const subjects = await Promise.all(existingSubjects.map((subject) => loadSubjectSnapshot(subject.id)));
+      const snapshots = subjects.filter((subject) => subject !== null);
+      if (snapshots.length === 0) {
+        setAdminMessage('No subject data available to export.');
+        return;
+      }
+      const filename = `knowledge-dungeon-subjects-${new Date().toISOString().slice(0, 10)}.json`;
+      const payload = JSON.stringify(
+        {
+          format: 'knowledge-dungeon-subject-bundle',
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          exportedAt: new Date().toISOString(),
+          subjects: snapshots,
+        },
+        null,
+        2,
+      );
+      downloadTextFile(filename, payload);
+      setAdminMessage(`Exported ${snapshots.length} subject${snapshots.length === 1 ? '' : 's'} as ${filename}.`);
+    } catch {
+      setAdminMessage('Export failed.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  function handleImportSubjectJsonClick() {
+    if (adminBusy) return;
+    webImportInputRef.current?.click();
+  }
+
+  async function handleImportSubjectJsonFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const raw = await readFileAsText(file);
+      const imported = importSubjectFromJson(raw);
+      await saveSubjectSnapshot(imported.dungeon.dungeonId, imported);
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(imported.dungeon.dungeonId);
+      setActiveTab('setup');
+      setAdminMessage(`Imported ${imported.dungeon.subjectName}. Select Enter Dungeon when ready.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Import failed.';
+      setAdminMessage(`Import failed: ${message}`);
     } finally {
       setAdminBusy(false);
     }
@@ -551,13 +660,11 @@ export function WelcomeScreen(): JSX.Element {
       >
         <section>
           <h2>Admin</h2>
+          <p>
+            Use import/export to move subject data between devices. Desktop mode includes advanced folder-level tools.
+          </p>
           {electronAvailable ? (
             <>
-              <p>
-                {isFirstTimeUser
-                  ? 'Import is available here. Advanced export tools are tucked away until you need them.'
-                  : 'Use these tools to export your local subject data between machines.'}
-              </p>
               <div className="welcome-actions" aria-busy={adminBusy}>
                 <button
                   type="button"
@@ -602,7 +709,44 @@ export function WelcomeScreen(): JSX.Element {
               </details>
             </>
           ) : (
-            <p>Admin export tools are available in desktop mode.</p>
+            <>
+              <div className="welcome-actions" aria-busy={adminBusy}>
+                <button
+                  type="button"
+                  onClick={handleImportSubjectJsonClick}
+                  disabled={adminBusy}
+                  aria-disabled={adminBusy}
+                >
+                  Import subject from JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExportAllSubjectsJson()}
+                  disabled={adminBusy || existingSubjects.length === 0}
+                  aria-disabled={adminBusy || existingSubjects.length === 0}
+                >
+                  Export all subjects as JSON
+                </button>
+                {existingSubjects.map((subject) => (
+                  <button
+                    key={`export-json-${subject.id}`}
+                    type="button"
+                    onClick={() => void handleExportSubjectJson(subject.id)}
+                    disabled={adminBusy}
+                    aria-disabled={adminBusy}
+                  >
+                    Export {subject.subjectName} as JSON
+                  </button>
+                ))}
+              </div>
+              <input
+                ref={webImportInputRef}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                onChange={(event) => void handleImportSubjectJsonFile(event)}
+              />
+            </>
           )}
           {adminMessage ? (
             <p style={{ marginTop: 8, color: 'var(--text-muted)', wordBreak: 'break-word' }}>
