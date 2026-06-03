@@ -33,7 +33,6 @@ interface PanelPosition {
 }
 
 const PANEL_MARGIN = 12;
-const PANEL_MIN_TOP = 72;
 const DEFAULT_PANEL_WIDTH = 360;
 
 function clamp(value: number, min: number, max: number): number {
@@ -41,14 +40,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function getInitialPanelPosition(): PanelPosition {
-  if (typeof window === 'undefined') {
-    return { x: PANEL_MARGIN, y: 80 };
-  }
-  const rightAnchoredX = window.innerWidth - DEFAULT_PANEL_WIDTH - PANEL_MARGIN;
-  return {
-    x: Math.max(PANEL_MARGIN, rightAnchoredX),
-    y: 80,
-  };
+  return { x: PANEL_MARGIN, y: PANEL_MARGIN };
 }
 
 interface RoomPanelProps {
@@ -103,13 +95,18 @@ export function RoomPanel({
 
   const clampPanelPosition = useCallback((position: PanelPosition): PanelPosition => {
     if (typeof window === 'undefined') return position;
+    const offsetParent = panelRef.current?.offsetParent;
+    const viewportWidth =
+      offsetParent instanceof HTMLElement ? offsetParent.clientWidth : window.innerWidth;
+    const viewportHeight =
+      offsetParent instanceof HTMLElement ? offsetParent.clientHeight : window.innerHeight;
     const panelWidth = panelRef.current?.offsetWidth ?? DEFAULT_PANEL_WIDTH;
     const panelHeight = panelRef.current?.offsetHeight ?? 520;
-    const maxX = Math.max(PANEL_MARGIN, window.innerWidth - panelWidth - PANEL_MARGIN);
-    const maxY = Math.max(PANEL_MIN_TOP, window.innerHeight - panelHeight - PANEL_MARGIN);
+    const maxX = Math.max(PANEL_MARGIN, viewportWidth - panelWidth - PANEL_MARGIN);
+    const maxY = Math.max(PANEL_MARGIN, viewportHeight - panelHeight - PANEL_MARGIN);
     return {
       x: clamp(position.x, PANEL_MARGIN, maxX),
-      y: clamp(position.y, PANEL_MIN_TOP, maxY),
+      y: clamp(position.y, PANEL_MARGIN, maxY),
     };
   }, []);
 
