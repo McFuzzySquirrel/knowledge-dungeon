@@ -277,7 +277,9 @@ describe('GameScreen NPC dialog callbacks', () => {
       },
     };
     useSubjectStore.setState({ snapshot, lastError: null });
-    useSessionStore.setState({ phase: 'archaeologist' });
+    act(() => {
+      useSessionStore.setState({ phase: 'archaeologist' });
+    });
 
     render(<GameScreen />);
 
