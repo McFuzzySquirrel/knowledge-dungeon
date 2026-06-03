@@ -350,5 +350,5 @@ export function importSubjectFromJson(raw: string): SubjectSnapshot {
     }
   }
 
-  return parsed as SubjectSnapshot;
+  return parsed as unknown as SubjectSnapshot;
 }
