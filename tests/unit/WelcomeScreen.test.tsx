@@ -181,6 +181,10 @@ describe('WelcomeScreen', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Data/i }));
     fireEvent.click(screen.getByRole('button', { name: /Import subject folder/i }));
+    await screen.findByText(/Imported Imported Subject\. Select Enter Dungeon when ready\./i);
+    fireEvent.click(screen.getByRole('tab', { name: /Setup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Scholar/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Enter Dungeon/i }));
 
     await waitFor(() => {
       expect(useSessionStore.getState().activeSubjectId).toBe('imported-1');

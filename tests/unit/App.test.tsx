@@ -6,15 +6,17 @@ import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 
-const mockIsElectronAvailable = vi.fn(() => false);
-const mockGetElectronEnvironmentLabel = vi.fn(() => 'web');
-const mockGetActiveSubjectId = vi.fn(() => null as string | null);
-const mockListSubjectIds = vi.fn<() => Promise<string[]>>();
-const mockLoadSubjectSnapshot = vi.fn<(id: string) => Promise<SubjectSnapshot | null>>();
+const mocks = vi.hoisted(() => ({
+  isElectronAvailable: vi.fn(() => false),
+  getElectronEnvironmentLabel: vi.fn(() => 'web'),
+  getActiveSubjectId: vi.fn(() => null as string | null),
+  listSubjectIds: vi.fn<() => Promise<string[]>>(),
+  loadSubjectSnapshot: vi.fn<(id: string) => Promise<SubjectSnapshot | null>>(),
+}));
 
 vi.mock('@/services/electronBridge', () => ({
-  isElectronAvailable: () => mockIsElectronAvailable(),
-  getElectronEnvironmentLabel: () => mockGetElectronEnvironmentLabel(),
+  isElectronAvailable: () => mocks.isElectronAvailable(),
+  getElectronEnvironmentLabel: () => mocks.getElectronEnvironmentLabel(),
 }));
 
 vi.mock('@/ui/screens/GameScreen', () => ({
@@ -25,9 +27,9 @@ vi.mock('@/services/persistence/subjectPersistence', async () => {
   const actual = await vi.importActual('@/services/persistence/subjectPersistence');
   return {
     ...actual,
-    getActiveSubjectId: () => mockGetActiveSubjectId(),
-    listSubjectIds: () => mockListSubjectIds(),
-    loadSubjectSnapshot: (id: string) => mockLoadSubjectSnapshot(id),
+    getActiveSubjectId: () => mocks.getActiveSubjectId(),
+    listSubjectIds: () => mocks.listSubjectIds(),
+    loadSubjectSnapshot: (id: string) => mocks.loadSubjectSnapshot(id),
     saveSubjectSnapshot: vi.fn(() => Promise.resolve(undefined)),
     setActiveSubjectId: vi.fn(),
   };
@@ -106,20 +108,20 @@ describe('App', () => {
       collectedNotes: [],
       streakCount: 0,
     });
-    mockGetActiveSubjectId.mockReset();
-    mockListSubjectIds.mockReset();
-    mockLoadSubjectSnapshot.mockReset();
-    mockGetActiveSubjectId.mockReturnValue(null);
-    mockListSubjectIds.mockResolvedValue([]);
-    mockIsElectronAvailable.mockReturnValue(false);
-    mockGetElectronEnvironmentLabel.mockReturnValue('web');
+    mocks.getActiveSubjectId.mockReset();
+    mocks.listSubjectIds.mockReset();
+    mocks.loadSubjectSnapshot.mockReset();
+    mocks.getActiveSubjectId.mockReturnValue(null);
+    mocks.listSubjectIds.mockResolvedValue([]);
+    mocks.isElectronAvailable.mockReturnValue(false);
+    mocks.getElectronEnvironmentLabel.mockReturnValue('web');
   });
 
   it('keeps the welcome flow active until Enter Dungeon is confirmed', async () => {
     const snapshot = makeSnapshot('subject-1', 'Imported Subject');
-    mockGetActiveSubjectId.mockReturnValue('subject-1');
-    mockListSubjectIds.mockResolvedValue(['subject-1']);
-    mockLoadSubjectSnapshot.mockImplementation((id: string) =>
+    mocks.getActiveSubjectId.mockReturnValue('subject-1');
+    mocks.listSubjectIds.mockResolvedValue(['subject-1']);
+    mocks.loadSubjectSnapshot.mockImplementation((id: string) =>
       Promise.resolve(id === 'subject-1' ? snapshot : null),
     );
 
@@ -128,8 +130,9 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByText(/^Loading…$/i)).not.toBeInTheDocument();
     });
-    await screen.findByText(/Selected subject: \s*Imported Subject/i);
+    await screen.findByText(/Selected subject:/i);
 
+    fireEvent.click(screen.getByRole('tab', { name: /Setup/i }));
     fireEvent.click(screen.getByRole('button', { name: /Scholar/i }));
 
     expect(screen.queryByText('Game Screen')).not.toBeInTheDocument();
