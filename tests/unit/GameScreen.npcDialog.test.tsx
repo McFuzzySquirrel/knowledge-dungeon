@@ -311,13 +311,17 @@ describe('GameScreen NPC dialog callbacks', () => {
     };
     useSubjectStore.setState({ snapshot, lastError: null });
 
-    render(<GameScreen />);
+    const { unmount } = render(<GameScreen />);
 
     await waitFor(() => {
       expect(fakeScene.setReviewedArtifactRooms).toHaveBeenCalledWith([]);
     });
 
+    unmount();
+    createGameMock.mockClear();
     useSessionStore.setState({ phase: 'archaeologist' });
+
+    render(<GameScreen />);
 
     await waitFor(() => {
       expect(fakeScene.setReviewedArtifactRooms).toHaveBeenLastCalledWith(['room-1']);
