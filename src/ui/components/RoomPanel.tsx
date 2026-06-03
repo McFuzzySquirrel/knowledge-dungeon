@@ -19,8 +19,6 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
 import { Markdown } from '@/ui/utils/markdown';
-import { ToastStack } from '@/ui/components/ToastStack';
-import { useToasts } from '@/ui/utils/useToasts';
 import {
   evaluateReviewUnlock,
   extractMarkdownHeadings,
@@ -80,9 +78,6 @@ export function RoomPanel({
       : 0;
   const [tab, setTab] = useState<RoomTab>('topic');
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
-  const addLocalAttachment = useSubjectStore((s) => s.addLocalAttachment);
-  const addExternalAttachment = useSubjectStore((s) => s.addExternalAttachment);
-  const removeAttachment = useSubjectStore((s) => s.removeAttachment);
   const resolveAttachmentUrl = useSubjectStore((s) => s.resolveAttachmentUrl);
   const reparentRoom = useSubjectStore((s) => s.reparentRoom);
   const removeRoom = useSubjectStore((s) => s.removeRoom);
@@ -90,7 +85,6 @@ export function RoomPanel({
   const phase = useSessionStore((s) => s.phase);
   const setPhase = useSessionStore((s) => s.setPhase);
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
-  const openNoteEditorWithInsert = useSessionStore((s) => s.openNoteEditorWithInsert);
   const [draftTopics, setDraftTopics] = useState('');
   const [reparentTargetId, setReparentTargetId] = useState('');
   const [sameFloorFilter, setSameFloorFilter] = useState('');
@@ -99,16 +93,13 @@ export function RoomPanel({
   const [selectedTravelRoomId, setSelectedTravelRoomId] = useState<string | null>(null);
   const [portalFilter, setPortalFilter] = useState('');
   const [selectedPortalRoomId, setSelectedPortalRoomId] = useState<string | null>(null);
-  const [externalImageUrl, setExternalImageUrl] = useState('');
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
-  const [isSavingAttachment, setIsSavingAttachment] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [panelPosition, setPanelPosition] = useState<PanelPosition>(getInitialPanelPosition);
   const [dragState, setDragState] = useState<
     { pointerId: number; offsetX: number; offsetY: number } | null
   >(null);
   const panelRef = useRef<HTMLElement | null>(null);
-  const { toasts, pushToast } = useToasts();
 
   const clampPanelPosition = useCallback((position: PanelPosition): PanelPosition => {
     if (typeof window === 'undefined') return position;
@@ -825,74 +816,10 @@ export function RoomPanel({
                 <div className="room-section" style={{ marginTop: 16 }}>
                   <h3>Images</h3>
                   {phase === 'scribe' ? (
-                    <div className="attachment-actions">
-                      <button
-                        type="button"
-                        disabled={isSavingAttachment}
-                        onClick={() => {
-                          setIsSavingAttachment(true);
-                          void addLocalAttachment(focusedRoom.roomId)
-                            .then((created) => {
-                              if (!created) {
-                                pushToast('info', 'No image selected.');
-                                return;
-                              }
-                              pushToast('info', 'Image attached to room.');
-                            })
-                            .catch((error: unknown) => {
-                              const message =
-                                error instanceof Error ? error.message : 'Failed to attach local image.';
-                              pushToast('error', message);
-                            })
-                            .finally(() => {
-                              setIsSavingAttachment(false);
-                            });
-                        }}
-                      >
-                        Add local image
-                      </button>
-                      <input
-                        type="url"
-                        value={externalImageUrl}
-                        onChange={(event) => setExternalImageUrl(event.target.value)}
-                        placeholder="https://example.com/image.png"
-                        aria-label="External image URL"
-                      />
-                      <button
-                        type="button"
-                        disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
-                        onClick={() => {
-                          const nextUrl = externalImageUrl.trim();
-                          if (nextUrl.length === 0) return;
-                          setIsSavingAttachment(true);
-                          void addExternalAttachment(focusedRoom.roomId, nextUrl)
-                            .then((created) => {
-                              if (!created) {
-                                pushToast('info', 'No external image was added.');
-                                return;
-                              }
-                              setExternalImageUrl('');
-                              pushToast('info', 'External image attached to room.');
-                            })
-                            .catch((error: unknown) => {
-                              const message =
-                                error instanceof Error ? error.message : 'Failed to attach external image URL.';
-                              pushToast('error', message);
-                            })
-                            .finally(() => {
-                              setIsSavingAttachment(false);
-                            });
-                        }}
-                      >
-                        Add URL image
-                      </button>
-                    </div>
-                  ) : (
                     <p className="room-help-text">
-                      Image editing is available only during the Scribe phase.
+                      Open the note editor (<kbd>E</kbd>) to add images and insert them into notes.
                     </p>
-                  )}
-                  <ToastStack toasts={toasts} className="toast-stack--inline" />
+                  ) : null}
                   {focusedRoom.attachments.length === 0 ? (
                     <p className="room-help-text">No room images yet.</p>
                   ) : (
@@ -902,10 +829,6 @@ export function RoomPanel({
                           attachment.sourceType === 'external'
                             ? attachment.externalUrl ?? null
                             : resolveLocalImage(attachment.attachmentId);
-                        const markdownToken =
-                          attachment.sourceType === 'local'
-                            ? `![${attachment.altText ?? attachment.fileName}](local:${attachment.attachmentId})`
-                            : `![${attachment.altText ?? attachment.fileName}](${attachment.externalUrl ?? ''})`;
                         return (
                           <li key={attachment.attachmentId} className="attachment-card">
                             {previewUrl ? (
@@ -922,40 +845,6 @@ export function RoomPanel({
                             <div className="attachment-meta">
                               <strong>{attachment.fileName}</strong>
                               <p className="room-help-text">{attachment.sourceType}</p>
-                            </div>
-                            <div className="attachment-card-actions">
-                              {phase === 'scribe' ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="ghost"
-                                    onClick={() => {
-                                      openNoteEditorWithInsert(focusedRoom.roomId, markdownToken);
-                                    }}
-                                  >
-                                    Insert in note
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="danger"
-                                    onClick={() => {
-                                      void removeAttachment(focusedRoom.roomId, attachment.attachmentId)
-                                        .then(() => {
-                                          pushToast('info', 'Attachment removed from room.');
-                                        })
-                                        .catch((error: unknown) => {
-                                          const message =
-                                            error instanceof Error
-                                              ? error.message
-                                              : 'Failed to remove attachment.';
-                                          pushToast('error', message);
-                                        });
-                                    }}
-                                  >
-                                    Remove
-                                  </button>
-                                </>
-                              ) : null}
                             </div>
                           </li>
                         );
