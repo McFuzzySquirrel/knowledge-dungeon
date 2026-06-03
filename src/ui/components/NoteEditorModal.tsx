@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -24,9 +24,13 @@ export function NoteEditorModal(): JSX.Element | null {
   const roomId = useSessionStore((s) => s.noteEditorRoomId);
   const pendingInsert = useSessionStore((s) => s.noteEditorPendingInsert);
   const clearPendingInsert = useSessionStore((s) => s.clearNoteEditorPendingInsert);
+  const phase = useSessionStore((s) => s.phase);
   const close = useSessionStore((s) => s.closeNoteEditor);
   const snapshot = useSubjectStore((s) => s.snapshot);
   const submitNote = useSubjectStore((s) => s.submitNote);
+  const addLocalAttachment = useSubjectStore((s) => s.addLocalAttachment);
+  const addExternalAttachment = useSubjectStore((s) => s.addExternalAttachment);
+  const removeAttachment = useSubjectStore((s) => s.removeAttachment);
   const resolveAttachmentUrl = useSubjectStore((s) => s.resolveAttachmentUrl);
   const awardRoomClear = useProgressionStore((s) => s.awardRoomClear);
   const awardBadge = useProgressionStore((s) => s.awardBadge);
@@ -40,6 +44,8 @@ export function NoteEditorModal(): JSX.Element | null {
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [hasEditedNote, setHasEditedNote] = useState(false);
+  const [externalImageUrl, setExternalImageUrl] = useState('');
+  const [isSavingAttachment, setIsSavingAttachment] = useState(false);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const { toasts, pushToast } = useToasts();
   const noteText = useMemo(() => composeNoteSections(sections), [sections]);
@@ -51,6 +57,7 @@ export function NoteEditorModal(): JSX.Element | null {
     setConfirm(room.validationState.manualConfirmed);
     setShowPreview(false);
     setHasEditedNote(false);
+    setExternalImageUrl('');
   }, [isOpen, room]);
 
   useEffect(() => {
@@ -120,6 +127,14 @@ export function NoteEditorModal(): JSX.Element | null {
     };
   }, [isOpen, resolveAttachmentUrl, room]);
 
+  const insertAttachmentToken = useCallback((token: string) => {
+    setSections((current) => ({
+      ...current,
+      [activeSection]: `${current[activeSection].trimEnd()}\n${token}`.trim(),
+    }));
+    setHasEditedNote(true);
+  }, [activeSection]);
+
   if (!isOpen || !room || !snapshot) return null;
 
   async function handleSubmit() {
@@ -173,8 +188,8 @@ export function NoteEditorModal(): JSX.Element | null {
           <code>-</code> for bullets.
         </p>
         <p className="room-help-text">
-          In Scribe phase, use the room Images section and tap <code>Insert in note</code>
-          to place images in your notes.
+          In Scribe phase, manage room images below and tap <code>Insert in note</code> to place
+          them into your notes.
         </p>
         <div className="note-editor-toolbar">
           <button
@@ -193,6 +208,146 @@ export function NoteEditorModal(): JSX.Element | null {
           </button>
         </div>
         <ToastStack toasts={toasts} className="toast-stack--inline" />
+        <div className="room-section" style={{ marginTop: 12 }}>
+          <h3>Images</h3>
+          {phase === 'scribe' ? (
+            <div className="attachment-actions">
+              <button
+                type="button"
+                disabled={isSavingAttachment}
+                onClick={() => {
+                  setIsSavingAttachment(true);
+                  void addLocalAttachment(room.roomId)
+                    .then((created) => {
+                      if (!created) {
+                        pushToast('info', 'No image selected.');
+                        return;
+                      }
+                      pushToast('info', 'Image attached to room.');
+                    })
+                    .catch((error: unknown) => {
+                      const message =
+                        error instanceof Error ? error.message : 'Failed to attach local image.';
+                      pushToast('error', message);
+                    })
+                    .finally(() => {
+                      setIsSavingAttachment(false);
+                    });
+                }}
+              >
+                Add local image
+              </button>
+              <input
+                type="url"
+                value={externalImageUrl}
+                onChange={(event) => setExternalImageUrl(event.target.value)}
+                placeholder="https://example.com/image.png"
+                aria-label="External image URL"
+              />
+              <button
+                type="button"
+                disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
+                onClick={() => {
+                  const nextUrl = externalImageUrl.trim();
+                  if (nextUrl.length === 0) return;
+                  setIsSavingAttachment(true);
+                  void addExternalAttachment(room.roomId, nextUrl)
+                    .then((created) => {
+                      if (!created) {
+                        pushToast('info', 'No external image was added.');
+                        return;
+                      }
+                      setExternalImageUrl('');
+                      pushToast('info', 'External image attached to room.');
+                    })
+                    .catch((error: unknown) => {
+                      const message =
+                        error instanceof Error ? error.message : 'Failed to attach external image URL.';
+                      pushToast('error', message);
+                    })
+                    .finally(() => {
+                      setIsSavingAttachment(false);
+                    });
+                }}
+              >
+                Add URL image
+              </button>
+            </div>
+          ) : (
+            <p className="room-help-text">
+              Image editing is available only during the Scribe phase.
+            </p>
+          )}
+          {room.attachments.length === 0 ? (
+            <p className="room-help-text">No room images yet.</p>
+          ) : (
+            <ul className="attachment-grid">
+              {room.attachments.map((attachment) => {
+                const previewUrl =
+                  attachment.sourceType === 'external'
+                    ? attachment.externalUrl ?? null
+                    : attachmentUrls[attachment.attachmentId] ?? null;
+                const markdownToken =
+                  attachment.sourceType === 'local'
+                    ? `![${attachment.altText ?? attachment.fileName}](local:${attachment.attachmentId})`
+                    : `![${attachment.altText ?? attachment.fileName}](${attachment.externalUrl ?? ''})`;
+                return (
+                  <li key={attachment.attachmentId} className="attachment-card">
+                    {previewUrl ? (
+                      <img
+                        src={previewUrl}
+                        alt={attachment.altText ?? attachment.fileName}
+                        className="attachment-image"
+                      />
+                    ) : (
+                      <div className="attachment-image attachment-image--missing">
+                        Missing image source
+                      </div>
+                    )}
+                    <div className="attachment-meta">
+                      <strong>{attachment.fileName}</strong>
+                      <p className="room-help-text">{attachment.sourceType}</p>
+                    </div>
+                    <div className="attachment-card-actions">
+                      {phase === 'scribe' ? (
+                        <>
+                          <button
+                            type="button"
+                            className="ghost"
+                            aria-label={`Insert ${attachment.fileName} in note`}
+                            onClick={() => insertAttachmentToken(markdownToken)}
+                          >
+                            Insert in note
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            aria-label={`Remove ${attachment.fileName}`}
+                            onClick={() => {
+                              void removeAttachment(room.roomId, attachment.attachmentId)
+                                .then(() => {
+                                  pushToast('info', 'Attachment removed from room.');
+                                })
+                                .catch((error: unknown) => {
+                                  const message =
+                                    error instanceof Error
+                                      ? error.message
+                                      : 'Failed to remove attachment.';
+                                  pushToast('error', message);
+                                });
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
         {showPreview ? (
           <div
             className="markdown-body note-body note-preview"
