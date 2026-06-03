@@ -576,11 +576,10 @@ export class DungeonScene extends Phaser.Scene {
   private refreshRoomNpcs(): void {
     if (!this.dungeonMap || !this.textures.exists(NPC_GUIDE_TEXTURE_KEY)) return;
 
-    const visibleRoomIds = new Set(
-      this.dungeonMap.rooms
-        .map((room) => room.roomId)
-        .filter((roomId) => !this.visibleRoomIds || this.visibleRoomIds.has(roomId)),
-    );
+    const visibleRoomIds = new Set<string>();
+    if (this.currentRoomId && (!this.visibleRoomIds || this.visibleRoomIds.has(this.currentRoomId))) {
+      visibleRoomIds.add(this.currentRoomId);
+    }
 
     for (const [roomId, npc] of this.roomNpcs) {
       if (!visibleRoomIds.has(roomId)) {
@@ -590,6 +589,7 @@ export class DungeonScene extends Phaser.Scene {
     }
 
     for (const room of this.dungeonMap.rooms) {
+      if (room.roomId !== this.currentRoomId) continue;
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
       if (this.roomNpcs.has(room.roomId)) continue;
       const { x: npcX, y: npcY } = this.resolveNpcPosition(room, this.dungeonMap);
@@ -1244,6 +1244,7 @@ export class DungeonScene extends Phaser.Scene {
 
   private enterRoom(roomId: string): void {
     this.currentRoomId = roomId;
+    this.refreshRoomNpcs();
     this.callbacks?.onRoomEntered(roomId);
     this.refreshPortalHint();
   }

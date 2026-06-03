@@ -14,7 +14,7 @@ describe('RoomNpcDialog', () => {
     );
 
     expect(screen.getByText(/Creator Brief: Vector Spaces/i)).toBeInTheDocument();
-    expect(screen.getByText(/Open map tools to add rooms/i)).toBeInTheDocument();
+    expect(screen.getByText(/Press E to open topic activities for this room/i)).toBeInTheDocument();
   });
 
   it('shows archaeologist fallback guidance when room is uncleared', () => {

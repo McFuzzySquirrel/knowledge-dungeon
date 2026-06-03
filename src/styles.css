@@ -954,12 +954,61 @@ textarea {
   font-size: 13px;
 }
 
+.badge-card-button {
+  width: 100%;
+  text-align: left;
+  border-radius: 16px;
+  cursor: pointer;
+}
+
+.badge-card-button:hover {
+  border-color: var(--accent-soft);
+}
+
 .badge-icon {
   font-size: 18px;
 }
 
 .badge-label {
   font-weight: 600;
+}
+
+.badge-detail-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.badge-detail-icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.badge-detail-meta {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.badge-detail-meta div {
+  display: grid;
+  gap: 4px;
+}
+
+.badge-detail-meta dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-detail-meta dd {
+  margin: 0;
+  color: var(--text-secondary);
 }
 
 .game-area {
@@ -1270,6 +1319,10 @@ button.ghost {
   max-height: 90vh;
   overflow-y: auto;
   padding: 20px;
+}
+
+.note-editor-modal--expanded {
+  width: min(960px, 96vw);
 }
 
 .modal h2 {

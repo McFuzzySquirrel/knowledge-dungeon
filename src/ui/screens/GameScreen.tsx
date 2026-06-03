@@ -13,6 +13,7 @@ import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
 import { Hud } from '@/ui/components/Hud';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
+import type { RoomTab } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
 import { Minimap } from '@/ui/components/Minimap';
@@ -63,10 +64,15 @@ export function GameScreen(): JSX.Element {
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<DungeonScene | null>(null);
   const npcDialogRoomIdRef = useRef<string | null>(null);
+  const roomPanelTabRequestSequenceRef = useRef(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
+  const [roomPanelTabRequest, setRoomPanelTabRequest] = useState<{
+    tab: RoomTab;
+    sequence: number;
+  } | null>(null);
   const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges' | 'journal'>(
     null,
   );
@@ -80,6 +86,11 @@ export function GameScreen(): JSX.Element {
     Record<string, Record<string, string>>
   >({});
   const { toasts, pushToast } = useToasts();
+
+  const requestRoomPanelTab = useCallback((tab: RoomTab) => {
+    roomPanelTabRequestSequenceRef.current += 1;
+    setRoomPanelTabRequest({ tab, sequence: roomPanelTabRequestSequenceRef.current });
+  }, []);
 
   useEffect(() => {
     npcDialogRoomIdRef.current = npcDialogRoomId;
@@ -121,8 +132,15 @@ export function GameScreen(): JSX.Element {
     (roomId: string) => {
       setNpcDialogRoomId(null);
       setNpcDialogAnchor(null);
+      setFocusedRoomId(roomId);
 
-      if (phase !== 'archaeologist') {
+      if (phase === 'creator') {
+        requestRoomPanelTab('topic');
+        setIsInfoPanelOpen(true);
+        return;
+      }
+
+      if (phase === 'scribe') {
         openNoteEditor(roomId);
         return;
       }
@@ -202,9 +220,10 @@ export function GameScreen(): JSX.Element {
         }
       }
 
-      setFocusedRoomId(roomId);
+      requestRoomPanelTab('selfcheck');
+      setIsInfoPanelOpen(true);
     },
-    [openNoteEditor, phase, pushToast, recordReviewPass, setFocusedRoomId],
+    [openNoteEditor, phase, pushToast, recordReviewPass, requestRoomPanelTab, setFocusedRoomId],
   );
 
   useEffect(() => {
@@ -367,11 +386,14 @@ export function GameScreen(): JSX.Element {
     if (!sceneReady || !snapshot) return;
     const scene = sceneRef.current;
     if (!scene) return;
-    const reviewedArtifactRoomIds = Object.values(snapshot.rooms)
-      .filter((room) => room.reviewPassCount > 0)
-      .map((room) => room.roomId);
+    const reviewedArtifactRoomIds =
+      phase === 'archaeologist'
+        ? Object.values(snapshot.rooms)
+            .filter((room) => room.reviewPassCount > 0)
+            .map((room) => room.roomId)
+        : [];
     scene.setReviewedArtifactRooms(reviewedArtifactRoomIds);
-  }, [sceneReady, snapshot]);
+  }, [phase, sceneReady, snapshot]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -639,6 +661,7 @@ export function GameScreen(): JSX.Element {
                 handleRoomInteract(focusedRoom.roomId);
               }}
               onTravelToRoom={handleTravelToRoom}
+              requestedTab={roomPanelTabRequest}
               reviewPassesCompleted={reviewProgress.fullReviewPasses}
               reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
               reviewNextPassTarget={reviewProgress.nextPassTarget}

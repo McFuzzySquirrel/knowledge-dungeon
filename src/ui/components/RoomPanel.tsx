@@ -15,6 +15,7 @@ import {
   getConnectedRoomIds,
   isReachableViaSubtopics,
 } from '@/core/graph';
+import type { GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
@@ -25,7 +26,7 @@ import {
   generateSelfCheckPrompts,
 } from '@/core/review';
 
-type RoomTab = 'topic' | 'notes' | 'images' | 'artifact' | 'selfcheck';
+export type RoomTab = 'topic' | 'notes' | 'images' | 'artifact' | 'selfcheck';
 
 interface PanelPosition {
   x: number;
@@ -39,6 +40,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function getPrimaryActionLabel(phase: GamePhase): string {
+  if (phase === 'creator') return 'Open topic tools';
+  if (phase === 'archaeologist') return 'Mark reviewed';
+  return 'Open encounter';
+}
+
 function getInitialPanelPosition(): PanelPosition {
   return { x: PANEL_MARGIN, y: PANEL_MARGIN };
 }
@@ -48,6 +55,7 @@ interface RoomPanelProps {
   focusedRoom: RoomMetadata | null;
   onInteract: () => void;
   onTravelToRoom: (roomId: string) => void;
+  requestedTab?: { tab: RoomTab; sequence: number } | null;
   reviewPassesCompleted: number;
   reviewRoomsTowardNextPass: number;
   reviewNextPassTarget: number;
@@ -59,6 +67,7 @@ export function RoomPanel({
   focusedRoom,
   onInteract,
   onTravelToRoom,
+  requestedTab,
   reviewPassesCompleted,
   reviewRoomsTowardNextPass,
   reviewNextPassTarget,
@@ -178,6 +187,11 @@ export function RoomPanel({
     [snapshot],
   );
   const focusedRoomId = focusedRoom?.roomId ?? null;
+
+  useEffect(() => {
+    if (!requestedTab) return;
+    setTab(requestedTab.tab);
+  }, [requestedTab]);
 
   useEffect(() => {
     if (!focusedRoom) {
@@ -564,7 +578,7 @@ export function RoomPanel({
             </div>
             <div className="room-section" style={{ marginBottom: 12 }}>
               <button type="button" className="room-primary-action" onClick={onInteract}>
-                {phase === 'archaeologist' ? 'Mark reviewed' : 'Open encounter'}
+                {getPrimaryActionLabel(phase)}
               </button>
               <p className="room-help-text">
                 Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.

@@ -39,6 +39,7 @@ interface MockGame {
 
 const createGameMock = vi.fn<(options: Record<string, unknown>) => MockGame>();
 let capturedCallbacks: CapturedCallbacks | null = null;
+let fakeScene: MockScene;
 
 vi.mock('@/game/createGame', () => ({
   createGame: (options: Record<string, unknown>) => {
@@ -165,7 +166,7 @@ describe('GameScreen NPC dialog callbacks', () => {
     capturedCallbacks = null;
     createGameMock.mockReset();
 
-    const fakeScene = {
+    fakeScene = {
       setArtifactRooms: vi.fn(),
       setCollectedArtifactRooms: vi.fn(),
       setReviewedArtifactRooms: vi.fn(),
@@ -248,6 +249,23 @@ describe('GameScreen NPC dialog callbacks', () => {
     expect(useSessionStore.getState().isNoteEditorOpen).toBe(true);
   });
 
+  it('opens room topic activities instead of the note editor in creator phase', async () => {
+    useSessionStore.setState({ phase: 'creator' });
+
+    render(<GameScreen />);
+
+    await waitFor(() => {
+      expect(capturedCallbacks).not.toBeNull();
+    });
+
+    act(() => {
+      capturedCallbacks?.onInteract?.('room-1');
+    });
+
+    expect(screen.getByTestId('room-panel')).toBeInTheDocument();
+    expect(useSessionStore.getState().isNoteEditorOpen).toBe(false);
+  });
+
   it('awards archaeologist XP only on first review per room per pass', async () => {
     const snapshot = makeSnapshot();
     snapshot.rooms['room-1'] = {
@@ -259,7 +277,9 @@ describe('GameScreen NPC dialog callbacks', () => {
       },
     };
     useSubjectStore.setState({ snapshot, lastError: null });
-    useSessionStore.setState({ phase: 'archaeologist' });
+    act(() => {
+      useSessionStore.setState({ phase: 'archaeologist' });
+    });
 
     render(<GameScreen />);
 
@@ -276,5 +296,35 @@ describe('GameScreen NPC dialog callbacks', () => {
       capturedCallbacks?.onInteract?.('room-1');
     });
     expect(useProgressionStore.getState().xpTotal).toBe(6);
+  });
+
+  it('only shows reviewed markers in archaeologist phase', async () => {
+    const snapshot = makeSnapshot();
+    snapshot.rooms['room-1'] = {
+      ...snapshot.rooms['room-1'],
+      state: 'ArtifactCollected',
+      reviewPassCount: 1,
+      validationState: {
+        ...snapshot.rooms['room-1'].validationState,
+        finalPass: true,
+      },
+    };
+    useSubjectStore.setState({ snapshot, lastError: null });
+
+    const { unmount } = render(<GameScreen />);
+
+    await waitFor(() => {
+      expect(fakeScene?.setReviewedArtifactRooms).toHaveBeenCalledWith([]);
+    });
+
+    unmount();
+    createGameMock.mockClear();
+    useSessionStore.setState({ phase: 'archaeologist' });
+
+    render(<GameScreen />);
+
+    await waitFor(() => {
+      expect(fakeScene?.setReviewedArtifactRooms).toHaveBeenLastCalledWith(['room-1']);
+    });
   });
 });

@@ -138,4 +138,13 @@ describe('NoteEditorModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Show image library \(1\)/i }));
     expect(screen.getByText('diagram.png')).toBeInTheDocument();
   });
+
+  it('can expand the encounter modal for a wider workspace', () => {
+    const { container } = render(<NoteEditorModal />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+
+    expect(container.querySelector('.note-editor-modal--expanded')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument();
+  });
 });
