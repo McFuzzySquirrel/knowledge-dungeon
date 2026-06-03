@@ -39,7 +39,7 @@ interface MockGame {
 
 const createGameMock = vi.fn<(options: Record<string, unknown>) => MockGame>();
 let capturedCallbacks: CapturedCallbacks | null = null;
-let fakeScene: MockScene | null = null;
+let fakeScene: MockScene;
 
 vi.mock('@/game/createGame', () => ({
   createGame: (options: Record<string, unknown>) => {
@@ -164,7 +164,6 @@ function makeSnapshot(): SubjectSnapshot {
 describe('GameScreen NPC dialog callbacks', () => {
   beforeEach(() => {
     capturedCallbacks = null;
-    fakeScene = null;
     createGameMock.mockReset();
 
     fakeScene = {

@@ -15,6 +15,7 @@ import {
   getConnectedRoomIds,
   isReachableViaSubtopics,
 } from '@/core/graph';
+import type { GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
