@@ -18,6 +18,9 @@ interface HudProps {
   showScribeNudge: boolean;
   infoOpen: boolean;
   focusedRoomTopic: string | null;
+  inventoryCount: number;
+  badgeCount: number;
+  journalCount: number;
   onPhaseChange: (phase: GamePhase) => void;
   onHelp: () => void;
   onOpenSettings: () => void;
@@ -25,6 +28,9 @@ interface HudProps {
   onTeleport: () => void;
   onHome: () => void;
   onToggleInfo: () => void;
+  onOpenInventory: () => void;
+  onOpenBadges: () => void;
+  onOpenJournal: () => void;
 }
 
 const PHASE_LABELS: Record<GamePhase, string> = {
@@ -59,18 +65,22 @@ export function Hud({
   infoOpen,
   focusedRoomTopic,
   onToggleInfo,
+  inventoryCount,
+  badgeCount,
+  journalCount,
+  onOpenInventory,
+  onOpenBadges,
+  onOpenJournal,
 }: HudProps): JSX.Element {
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
   const reviewProgressPercent =
     reviewTotalRooms > 0
       ? Math.min(100, Math.round((reviewRoomsTowardNextPass / reviewTotalRooms) * 100))
       : 0;
-  const teleportLabel =
+  const teleportCountdownLabel =
     teleportRemainingMs > 0
-      ? `Teleport ${Math.floor(teleportSeconds / 60)}:${String(teleportSeconds % 60).padStart(2, '0')}`
-      : teleportModeArmed
-        ? 'Choose teleport'
-        : 'Teleport';
+      ? `${Math.floor(teleportSeconds / 60)}:${String(teleportSeconds % 60).padStart(2, '0')}`
+      : null;
 
   function requestPhaseChange(nextPhase: GamePhase): void {
     if (nextPhase === phase) return;
@@ -128,6 +138,39 @@ export function Hud({
         <strong>{currentFloorLabel}</strong>
       </div>
 
+      <div className="hud-collections" aria-label="Collections">
+        <button
+          type="button"
+          className="hud-collection-btn"
+          onClick={onOpenInventory}
+          aria-label={`Open inventory (${inventoryCount} items)`}
+          title="Inventory"
+        >
+          <span className="hud-collection-icon" aria-hidden="true">🎒</span>
+          <span className="hud-collection-count">{inventoryCount}</span>
+        </button>
+        <button
+          type="button"
+          className="hud-collection-btn"
+          onClick={onOpenBadges}
+          aria-label={`Open badges (${badgeCount} earned)`}
+          title="Badges"
+        >
+          <span className="hud-collection-icon" aria-hidden="true">🏅</span>
+          <span className="hud-collection-count">{badgeCount}</span>
+        </button>
+        <button
+          type="button"
+          className="hud-collection-btn"
+          onClick={onOpenJournal}
+          aria-label={`Open diary (${journalCount} notes)`}
+          title="Diary"
+        >
+          <span className="hud-collection-icon" aria-hidden="true">📚</span>
+          <span className="hud-collection-count">{journalCount}</span>
+        </button>
+      </div>
+
       <div className="hud-spacer" />
 
       <div className="hud-actions">
@@ -155,23 +198,70 @@ export function Hud({
             </button>
           ))}
         </div>
-        <button type="button" onClick={onOpenMap} aria-label="Open full map">
-          Map
-        </button>
-        <button
-          type="button"
-          onClick={onTeleport}
-          disabled={teleportRemainingMs > 0}
-          aria-pressed={teleportModeArmed}
-        >
-          {teleportLabel}
-        </button>
-        <button type="button" onClick={onHome} aria-label="Return to subject selection">
-          Home
-        </button>
-        <button type="button" onClick={onOpenSettings} aria-label="Open settings">
-          Settings
-        </button>
+
+        <div className="hud-action-row">
+          <button
+            type="button"
+            className="hud-action-icon-btn"
+            onClick={onOpenMap}
+            aria-label="Open full map"
+            title="Map (M)"
+          >
+            <span aria-hidden="true">🗺️</span>
+            <span className="hud-action-icon-label">Map</span>
+          </button>
+          <button
+            type="button"
+            className="hud-action-icon-btn"
+            onClick={onTeleport}
+            disabled={teleportRemainingMs > 0}
+            aria-pressed={teleportModeArmed}
+            aria-label={
+              teleportModeArmed
+                ? 'Cancel teleport mode'
+                : teleportRemainingMs > 0
+                  ? `Teleport on cooldown (${teleportCountdownLabel})`
+                  : 'Teleport'
+            }
+            title="Teleport"
+          >
+            <span aria-hidden="true">⚡</span>
+            <span className="hud-action-icon-label">
+              {teleportCountdownLabel ?? (teleportModeArmed ? 'Pick' : 'Warp')}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="hud-action-icon-btn"
+            onClick={onHome}
+            aria-label="Return to subject selection"
+            title="Home"
+          >
+            <span aria-hidden="true">🏠</span>
+            <span className="hud-action-icon-label">Home</span>
+          </button>
+          <button
+            type="button"
+            className="hud-action-icon-btn"
+            onClick={onOpenSettings}
+            aria-label="Open settings"
+            title="Settings"
+          >
+            <span aria-hidden="true">⚙️</span>
+            <span className="hud-action-icon-label">Settings</span>
+          </button>
+          <button
+            type="button"
+            className="hud-action-icon-btn hud-help-button"
+            onClick={onHelp}
+            aria-label="Open help"
+            title="Help (?)"
+          >
+            <span aria-hidden="true">❓</span>
+            <span className="hud-action-icon-label">Help</span>
+          </button>
+        </div>
+
         {showScribeNudge ? (
           <div className="hud-scribe-nudge" role="status" aria-live="polite">
             <span>Your map has enough rooms to start Scribe encounters.</span>
@@ -180,9 +270,6 @@ export function Hud({
             </button>
           </div>
         ) : null}
-        <button type="button" onClick={onHelp} aria-label="Open help" className="hud-help-button">
-          Help (?)
-        </button>
       </div>
       {teleportModeArmed ? (
         <p className="hud-inline-hint" role="status" aria-live="polite">

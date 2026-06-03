@@ -558,6 +558,9 @@ export function GameScreen(): JSX.Element {
           showScribeNudge={showScribeNudge}
           infoOpen={isInfoPanelOpen}
           focusedRoomTopic={focusedRoom?.topic ?? null}
+          inventoryCount={inventory.length}
+          badgeCount={badges.length}
+          journalCount={subjectCollectedNotes.length}
           onPhaseChange={setPhase}
           onHelp={() => setHelpOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -565,6 +568,9 @@ export function GameScreen(): JSX.Element {
           onTeleport={handleTeleport}
           onHome={handleHome}
           onToggleInfo={() => setIsInfoPanelOpen((open) => !open)}
+          onOpenInventory={() => setInventoryView('inventory')}
+          onOpenBadges={() => setInventoryView('badges')}
+          onOpenJournal={() => setInventoryView('journal')}
         />
       </div>
 
@@ -594,12 +600,6 @@ export function GameScreen(): JSX.Element {
               reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
               reviewNextPassTarget={reviewProgress.nextPassTarget}
               reviewTotalRooms={reviewProgress.totalRooms}
-              inventoryCount={inventory.length}
-              badgeCount={badges.length}
-              journalCount={subjectCollectedNotes.length}
-              onOpenInventory={() => setInventoryView('inventory')}
-              onOpenBadges={() => setInventoryView('badges')}
-              onOpenJournal={() => setInventoryView('journal')}
             />
           ) : null}
 

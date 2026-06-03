@@ -23,6 +23,9 @@ describe('Hud', () => {
         showScribeNudge={false}
         infoOpen={false}
         focusedRoomTopic={null}
+        inventoryCount={0}
+        badgeCount={0}
+        journalCount={0}
         onPhaseChange={() => undefined}
         onHelp={() => undefined}
         onOpenSettings={() => undefined}
@@ -30,6 +33,9 @@ describe('Hud', () => {
         onTeleport={() => undefined}
         onHome={() => undefined}
         onToggleInfo={() => undefined}
+        onOpenInventory={() => undefined}
+        onOpenBadges={() => undefined}
+        onOpenJournal={() => undefined}
       />,
     );
 
@@ -62,6 +68,9 @@ describe('Hud', () => {
         showScribeNudge={true}
         infoOpen={false}
         focusedRoomTopic={null}
+        inventoryCount={0}
+        badgeCount={0}
+        journalCount={0}
         onPhaseChange={onPhaseChange}
         onHelp={() => undefined}
         onOpenSettings={() => undefined}
@@ -69,6 +78,9 @@ describe('Hud', () => {
         onTeleport={() => undefined}
         onHome={() => undefined}
         onToggleInfo={() => undefined}
+        onOpenInventory={() => undefined}
+        onOpenBadges={() => undefined}
+        onOpenJournal={() => undefined}
       />,
     );
 

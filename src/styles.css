@@ -553,14 +553,21 @@ textarea {
 }
 
 .hud-sidebar-wrapper {
-  display: contents;
+  flex: 0 0 220px;
+  width: 220px;
+  height: 100vh;
+  display: flex;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 .hud-rail {
-  flex: 0 0 220px;
-  width: 220px;
+  flex: 1;
+  width: 100%;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -652,6 +659,68 @@ textarea {
 
 .hud-spacer {
   flex: 1;
+}
+
+.hud-collections {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.hud-collection-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 2px;
+  font-size: 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.hud-collection-btn .hud-collection-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.hud-collection-btn .hud-collection-count {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.hud-action-row {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.hud-action-icon-btn {
+  flex: 1;
+  min-width: 30px;
+  padding: 6px 4px;
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-direction: column;
+}
+
+.hud-action-icon-btn .hud-action-icon-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
 }
 
 .hud-phase-controls {
@@ -1504,6 +1573,14 @@ button.danger:hover {
 @media (max-width: 900px) {
   .game-shell {
     flex-direction: column;
+  }
+
+  .hud-sidebar-wrapper {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    position: static;
+    align-self: auto;
   }
 
   .hud-rail {
