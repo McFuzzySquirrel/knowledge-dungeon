@@ -16,12 +16,15 @@ interface HudProps {
   teleportModeArmed: boolean;
   phaseChangeNeedsConfirmation: boolean;
   showScribeNudge: boolean;
+  infoOpen: boolean;
+  focusedRoomTopic: string | null;
   onPhaseChange: (phase: GamePhase) => void;
   onHelp: () => void;
   onOpenSettings: () => void;
   onOpenMap: () => void;
   onTeleport: () => void;
   onHome: () => void;
+  onToggleInfo: () => void;
 }
 
 const PHASE_LABELS: Record<GamePhase, string> = {
@@ -51,6 +54,9 @@ export function Hud({
   onTeleport,
   onHome,
   showScribeNudge,
+  infoOpen,
+  focusedRoomTopic,
+  onToggleInfo,
 }: HudProps): JSX.Element {
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
   const reviewProgressPercent =
@@ -77,51 +83,63 @@ export function Hud({
 
   return (
     <div className="hud-rail" role="banner">
-      <div style={{ display: 'flex', gap: 18 }}>
-        <div className="hud-stat">
-          <span>Subject</span>
-          <strong>{subjectName}</strong>
-        </div>
-        <div className="hud-stat">
-          <span>Rooms</span>
-          <strong>{roomCount}</strong>
-        </div>
-        <div className="hud-stat">
-          <span>XP / Rank</span>
-          <strong>
-            {xpTotal} · {rank}
-          </strong>
-        </div>
-        <div className="hud-stat">
-          <span>Review Passes</span>
-          <strong>{reviewPassesCompleted}</strong>
-          <span className="hud-stat-subtle">
-            {reviewRoomsTowardNextPass}/{reviewTotalRooms} toward pass {reviewNextPassTarget}
-          </span>
-          <div
-            className="review-progress-bar"
-            role="progressbar"
-            aria-label="Review progress toward next pass"
-            aria-valuemin={0}
-            aria-valuemax={reviewTotalRooms}
-            aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}
-          >
-            <span
-              className="review-progress-bar-fill"
-              style={{ width: `${reviewProgressPercent}%` }}
-            />
-          </div>
-        </div>
-        <div className="hud-stat">
-          <span>Phase</span>
-          <strong>{PHASE_LABELS[phase]}</strong>
-        </div>
-        <div className="hud-stat">
-          <span>Floor</span>
-          <strong>{currentFloorLabel}</strong>
+      <div className="hud-subject-label" title={subjectName}>
+        {subjectName}
+      </div>
+
+      <div className="hud-stat">
+        <span>Rooms</span>
+        <strong>{roomCount}</strong>
+      </div>
+      <div className="hud-stat">
+        <span>XP / Rank</span>
+        <strong>
+          {xpTotal} · {rank}
+        </strong>
+      </div>
+      <div className="hud-stat">
+        <span>Review Passes</span>
+        <strong>{reviewPassesCompleted}</strong>
+        <span className="hud-stat-subtle">
+          {reviewRoomsTowardNextPass}/{reviewTotalRooms} toward pass {reviewNextPassTarget}
+        </span>
+        <div
+          className="review-progress-bar"
+          role="progressbar"
+          aria-label="Review progress toward next pass"
+          aria-valuemin={0}
+          aria-valuemax={reviewTotalRooms}
+          aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}
+        >
+          <span
+            className="review-progress-bar-fill"
+            style={{ width: `${reviewProgressPercent}%` }}
+          />
         </div>
       </div>
+      <div className="hud-stat">
+        <span>Phase</span>
+        <strong>{PHASE_LABELS[phase]}</strong>
+      </div>
+      <div className="hud-stat">
+        <span>Floor</span>
+        <strong>{currentFloorLabel}</strong>
+      </div>
+
+      <div className="hud-spacer" />
+
       <div className="hud-actions">
+        <button
+          type="button"
+          className="hud-info-button"
+          aria-pressed={infoOpen}
+          onClick={onToggleInfo}
+          aria-label={infoOpen ? 'Close room info panel' : 'Open room info panel'}
+          title="Press I to toggle room info"
+        >
+          {infoOpen ? 'Info ✕' : focusedRoomTopic ? `Info: ${focusedRoomTopic.slice(0, 18)}…` : 'Info (I)'}
+        </button>
+
         <div className="hud-phase-controls" aria-label="Phase controls">
           <span className="hud-phase-controls-label">Switch Phase</span>
           {(Object.keys(PHASE_LABELS) as GamePhase[]).map((p) => (

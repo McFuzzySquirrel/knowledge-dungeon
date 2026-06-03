@@ -29,7 +29,7 @@ function buildGuidance(
         roomState === 'Created'
           ? 'This room is still a sketch. Expand the map by linking follow-up topics and refining the room graph.'
           : 'Your map is taking shape. Keep connections meaningful so future notes and reviews stay easy to navigate.',
-      action: 'Open map tools to add rooms, then switch to Scribe when ready to clear encounters.',
+      action: 'Open map tools to add rooms, then switch to Scribe when ready. Press I to view room details.',
     };
   }
 
@@ -39,7 +39,7 @@ function buildGuidance(
         title: `Scribe Brief: ${topic}`,
         body:
           'This encounter is already cleared. You can still improve your notes or attach images for richer artifacts.',
-        action: 'Press E away from me to reopen the encounter editor and refine the note.',
+        action: 'Press E away from me to reopen the encounter editor and refine the note. Press I to view room details.',
       };
     }
 
@@ -47,7 +47,7 @@ function buildGuidance(
       title: `Scribe Brief: ${topic}`,
       body:
         'Capture this topic in your own words. Keep Summary, Key Points, and Recall Question so the validator can pass it.',
-      action: 'Step away from me and press E to open the encounter editor for this room.',
+      action: 'Step away from me and press E to open the encounter editor. Press I to view room details.',
     };
   }
 
@@ -57,8 +57,8 @@ function buildGuidance(
       ? 'Artifacts are ready for review passes. Revisit this room to strengthen recall and streak progress.'
       : 'This room is not cleared yet, so it is not ready for review passes.',
     action: isCleared
-      ? 'Step away and press E to record a review pass for this room.'
-      : 'Switch to Scribe phase first, clear the encounter, then return for review.',
+      ? 'Step away and press E to record a review pass. Press I to view room details.'
+      : 'Switch to Scribe phase first, clear the encounter, then return for review. Press I to view room details.',
   };
 }
 

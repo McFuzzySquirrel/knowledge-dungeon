@@ -21,12 +21,15 @@ describe('Hud', () => {
         teleportModeArmed={false}
         phaseChangeNeedsConfirmation={false}
         showScribeNudge={false}
+        infoOpen={false}
+        focusedRoomTopic={null}
         onPhaseChange={() => undefined}
         onHelp={() => undefined}
         onOpenSettings={() => undefined}
         onOpenMap={() => undefined}
         onTeleport={() => undefined}
         onHome={() => undefined}
+        onToggleInfo={() => undefined}
       />,
     );
 
@@ -57,12 +60,15 @@ describe('Hud', () => {
         teleportModeArmed={true}
         phaseChangeNeedsConfirmation={true}
         showScribeNudge={true}
+        infoOpen={false}
+        focusedRoomTopic={null}
         onPhaseChange={onPhaseChange}
         onHelp={() => undefined}
         onOpenSettings={() => undefined}
         onOpenMap={() => undefined}
         onTeleport={() => undefined}
         onHome={() => undefined}
+        onToggleInfo={() => undefined}
       />,
     );
 

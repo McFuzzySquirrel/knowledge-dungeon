@@ -40,6 +40,10 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             want a larger writing/media workspace.
           </li>
           <li>
+            Press <kbd>I</kbd> to open or close the room info panel (topic details, notes, and
+            review stats for the current room).
+          </li>
+          <li>
             Press <kbd>?</kbd> to toggle this Help overlay.
           </li>
         </ul>
