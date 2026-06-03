@@ -31,7 +31,7 @@ function buildGuidance(
         roomState === 'Created'
           ? 'This room is still a sketch. Expand the map by linking follow-up topics and refining the room graph.'
           : 'Your map is taking shape. Keep connections meaningful so future notes and reviews stay easy to navigate.',
-      action: `Open map tools to add rooms, then switch to Scribe when ready. ${INFO_PANEL_HINT}`,
+      action: `Press E to open topic activities for this room, or use map tools to add rooms. ${INFO_PANEL_HINT}`,
     };
   }
 
@@ -59,7 +59,7 @@ function buildGuidance(
       ? 'Artifacts are ready for review passes. Revisit this room to strengthen recall and streak progress.'
       : 'This room is not cleared yet, so it is not ready for review passes.',
     action: isCleared
-      ? `Step away and press E to record a review pass. ${INFO_PANEL_HINT}`
+      ? `Step away and press E to mark this room reviewed, then check Self-check for the updated count. ${INFO_PANEL_HINT}`
       : `Switch to Scribe phase first, clear the encounter, then return for review. ${INFO_PANEL_HINT}`,
   };
 }

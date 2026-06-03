@@ -12,7 +12,8 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
         <ul>
           <li>
             Move with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrow keys, and
-            press <kbd>E</kbd> or tap <kbd>Interact</kbd> to open the room you&rsquo;re standing in.
+            press <kbd>E</kbd> or tap <kbd>Interact</kbd> to trigger the current phase action for
+            the room you&rsquo;re standing in.
           </li>
           <li>
             Use the HUD <kbd>Map</kbd> button or <kbd>M</kbd> to open the full map. From there you

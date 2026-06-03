@@ -43,6 +43,7 @@ export function NoteEditorModal(): JSX.Element | null {
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [hasEditedNote, setHasEditedNote] = useState(false);
   const [externalImageUrl, setExternalImageUrl] = useState('');
   const [isSavingAttachment, setIsSavingAttachment] = useState(false);
@@ -57,6 +58,7 @@ export function NoteEditorModal(): JSX.Element | null {
     setActiveSection(REQUIRED_NOTE_SECTIONS[0]);
     setConfirm(room.validationState.manualConfirmed);
     setShowPreview(false);
+    setExpanded(false);
     setHasEditedNote(false);
     setExternalImageUrl('');
     setShowImageLibrary(false);
@@ -173,7 +175,7 @@ export function NoteEditorModal(): JSX.Element | null {
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Note editor">
-      <div className="modal">
+      <div className={`modal note-editor-modal${expanded ? ' note-editor-modal--expanded' : ''}`}>
         <h2>Encounter: {room.topic}</h2>
         <p>
           Write as much or as little as needed. Include {REQUIRED_NOTE_SECTIONS.join(', ')}{' '}
@@ -207,6 +209,9 @@ export function NoteEditorModal(): JSX.Element | null {
             onClick={() => setShowPreview(true)}
           >
             Preview
+          </button>
+          <button type="button" aria-pressed={expanded} onClick={() => setExpanded((value) => !value)}>
+            {expanded ? 'Collapse' : 'Expand'}
           </button>
         </div>
         <ToastStack toasts={toasts} className="toast-stack--inline" />

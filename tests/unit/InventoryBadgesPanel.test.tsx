@@ -84,6 +84,32 @@ describe('InventoryBadgesPanel', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens extra detail when a badge is clicked', () => {
+    render(
+      <InventoryBadgesPanel
+        view="badges"
+        inventory={[]}
+        badges={['CreatorPhaseComplete']}
+        collectedNotes={[]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
+        xpTotal={50}
+        rank="Apprentice"
+        onSwitchView={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Open badge details for CreatorPhaseComplete/i }));
+
+    expect(screen.getByText('Creator milestone')).toBeInTheDocument();
+    expect(
+      screen.getByText('Map at least 90% of the dungeon rooms during the creator phase.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to badges' })).toBeInTheDocument();
+  });
+
   it('renders collected notes journal entries', () => {
     render(
       <InventoryBadgesPanel

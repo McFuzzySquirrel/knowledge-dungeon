@@ -25,7 +25,7 @@ import {
   generateSelfCheckPrompts,
 } from '@/core/review';
 
-type RoomTab = 'topic' | 'notes' | 'images' | 'artifact' | 'selfcheck';
+export type RoomTab = 'topic' | 'notes' | 'images' | 'artifact' | 'selfcheck';
 
 interface PanelPosition {
   x: number;
@@ -48,6 +48,7 @@ interface RoomPanelProps {
   focusedRoom: RoomMetadata | null;
   onInteract: () => void;
   onTravelToRoom: (roomId: string) => void;
+  requestedTab?: { tab: RoomTab; sequence: number } | null;
   reviewPassesCompleted: number;
   reviewRoomsTowardNextPass: number;
   reviewNextPassTarget: number;
@@ -59,6 +60,7 @@ export function RoomPanel({
   focusedRoom,
   onInteract,
   onTravelToRoom,
+  requestedTab,
   reviewPassesCompleted,
   reviewRoomsTowardNextPass,
   reviewNextPassTarget,
@@ -178,6 +180,11 @@ export function RoomPanel({
     [snapshot],
   );
   const focusedRoomId = focusedRoom?.roomId ?? null;
+
+  useEffect(() => {
+    if (!requestedTab) return;
+    setTab(requestedTab.tab);
+  }, [requestedTab]);
 
   useEffect(() => {
     if (!focusedRoom) {
@@ -564,7 +571,11 @@ export function RoomPanel({
             </div>
             <div className="room-section" style={{ marginBottom: 12 }}>
               <button type="button" className="room-primary-action" onClick={onInteract}>
-                {phase === 'archaeologist' ? 'Mark reviewed' : 'Open encounter'}
+                {phase === 'creator'
+                  ? 'Open topic tools'
+                  : phase === 'archaeologist'
+                    ? 'Mark reviewed'
+                    : 'Open encounter'}
               </button>
               <p className="room-help-text">
                 Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.

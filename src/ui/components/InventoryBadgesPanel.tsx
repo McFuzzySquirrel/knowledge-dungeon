@@ -27,6 +27,13 @@ interface InventoryBadgesPanelProps {
   onClose: () => void;
 }
 
+interface BadgeDetail {
+  label: string;
+  description: string;
+  category: string;
+  unlockDetail: string;
+}
+
 const RARITY_COLOR: Record<LootItem['rarity'], string> = {
   common: 'var(--text-secondary)',
   rare: 'var(--accent-cool)',
@@ -62,6 +69,55 @@ function badgeDescription(badgeId: string): string {
   return BADGE_DESCRIPTIONS[badgeId] ?? 'Milestone badge earned during your dungeon journey.';
 }
 
+function badgeDetail(badgeId: string): BadgeDetail {
+  switch (badgeId) {
+    case 'CreatorPhaseComplete':
+      return {
+        label: badgeLabel(badgeId),
+        description: badgeDescription(badgeId),
+        category: 'Creator milestone',
+        unlockDetail: 'Map at least 90% of the dungeon rooms during the creator phase.',
+      };
+    case 'ScribePhaseComplete':
+      return {
+        label: badgeLabel(badgeId),
+        description: badgeDescription(badgeId),
+        category: 'Scribe milestone',
+        unlockDetail: 'Clear every room encounter by submitting valid scribe notes.',
+      };
+    case 'ArchaeologistPhaseComplete':
+      return {
+        label: badgeLabel(badgeId),
+        description: badgeDescription(badgeId),
+        category: 'Archaeologist milestone',
+        unlockDetail: 'Complete at least two full archaeology review passes across the dungeon.',
+      };
+    case 'ArchaeologistReviewPass3':
+    case 'ArchaeologistReviewPass7':
+    case 'ArchaeologistReviewPass15':
+      return {
+        label: badgeLabel(badgeId),
+        description: badgeDescription(badgeId),
+        category: 'Review streak milestone',
+        unlockDetail: `Track long-term retention by finishing the review-pass target named in ${badgeId}.`,
+      };
+    case SCRIBE_CENTURY_120_BADGE_ID:
+      return {
+        label: badgeLabel(badgeId),
+        description: badgeDescription(badgeId),
+        category: 'Bonus note badge',
+        unlockDetail: 'Write at least 120 words in a valid encounter note for one room.',
+      };
+    default:
+      return {
+        label: badgeLabel(badgeId),
+        description: badgeDescription(badgeId),
+        category: 'Milestone badge',
+        unlockDetail: 'Earned by reaching a progression milestone in the dungeon.',
+      };
+  }
+}
+
 function formatTimestamp(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -90,10 +146,12 @@ export function InventoryBadgesPanel({
   onClose,
 }: InventoryBadgesPanelProps): JSX.Element {
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
   useEffect(() => {
     if (!autoOpenNoteId) return;
     const noteExists = collectedNotes.some((entry) => entry.noteId === autoOpenNoteId);
     if (!noteExists) return;
+    setSelectedBadgeId(null);
     setSelectedNoteId(autoOpenNoteId);
   }, [autoOpenNoteId, collectedNotes]);
 
@@ -101,10 +159,16 @@ export function InventoryBadgesPanel({
     () => collectedNotes.find((entry) => entry.noteId === selectedNoteId) ?? null,
     [collectedNotes, selectedNoteId],
   );
+  const selectedBadge = useMemo(
+    () => (selectedBadgeId && badges.includes(selectedBadgeId) ? badgeDetail(selectedBadgeId) : null),
+    [badges, selectedBadgeId],
+  );
 
   const dialogLabel =
     selectedNote !== null
       ? `Collected note: ${selectedNote.topic}`
+      : selectedBadge !== null
+        ? `Badge: ${selectedBadge.label}`
       : view === 'inventory'
         ? 'Inventory'
         : view === 'badges'
@@ -137,6 +201,7 @@ export function InventoryBadgesPanel({
               aria-selected={view === 'inventory'}
               onClick={() => {
                 setSelectedNoteId(null);
+                setSelectedBadgeId(null);
                 onSwitchView('inventory');
               }}
             >
@@ -151,6 +216,7 @@ export function InventoryBadgesPanel({
               aria-selected={view === 'badges'}
               onClick={() => {
                 setSelectedNoteId(null);
+                setSelectedBadgeId(null);
                 onSwitchView('badges');
               }}
             >
@@ -165,6 +231,7 @@ export function InventoryBadgesPanel({
               aria-selected={view === 'journal'}
               onClick={() => {
                 setSelectedNoteId(null);
+                setSelectedBadgeId(null);
                 onSwitchView('journal');
               }}
             >
@@ -239,6 +306,34 @@ export function InventoryBadgesPanel({
               />
             </div>
           </section>
+        ) : selectedBadge ? (
+          <section className="journal-note-view" aria-label="Badge details">
+            <div className="journal-note-view-header">
+              <div>
+                <h3>{selectedBadge.label}</h3>
+                <p className="room-help-text">{selectedBadge.category}</p>
+              </div>
+              <button type="button" className="ghost" onClick={() => setSelectedBadgeId(null)}>
+                Back to badges
+              </button>
+            </div>
+            <div className="badge-detail-card">
+              <div className="badge-detail-icon" aria-hidden="true">
+                🏅
+              </div>
+              <p>{selectedBadge.description}</p>
+              <dl className="badge-detail-meta">
+                <div>
+                  <dt>Unlock</dt>
+                  <dd>{selectedBadge.unlockDetail}</dd>
+                </div>
+                <div>
+                  <dt>Badge ID</dt>
+                  <dd>{selectedBadgeId}</dd>
+                </div>
+              </dl>
+            </div>
+          </section>
         ) : view === 'inventory' ? (
           inventory.length === 0 ? (
             <p className="room-help-text">
@@ -276,14 +371,25 @@ export function InventoryBadgesPanel({
         ) : (
           <ul className="badge-grid">
             {badges.map((badge) => (
-              <li key={badge} className="badge-card">
-                <span className="badge-icon" aria-hidden="true">
-                  🏅
-                </span>
-                <div>
-                  <div className="badge-label">{badgeLabel(badge)}</div>
-                  <p className="room-help-text">{badgeDescription(badge)}</p>
-                </div>
+              <li key={badge}>
+                <button
+                  type="button"
+                  className="badge-card badge-card-button"
+                  onClick={() => {
+                    setSelectedNoteId(null);
+                    setSelectedBadgeId(badge);
+                  }}
+                  aria-label={`Open badge details for ${badgeLabel(badge)}`}
+                >
+                  <span className="badge-icon" aria-hidden="true">
+                    🏅
+                  </span>
+                  <div>
+                    <div className="badge-label">{badgeLabel(badge)}</div>
+                    <p className="room-help-text">{badgeDescription(badge)}</p>
+                    <p className="room-help-text">Click for more detail.</p>
+                  </div>
+                </button>
               </li>
             ))}
           </ul>
