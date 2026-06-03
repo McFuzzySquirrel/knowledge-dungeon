@@ -1,5 +1,4 @@
 import { useEffect, useState, type JSX } from 'react';
-import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore, type GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
@@ -41,7 +40,7 @@ const CLASS_SPRITES: Record<PlayerClassId, string> = {
   archivist: `${BASE}assets/sprites/player-archivist.svg`,
 };
 
-const WELCOME_TABS = ['setup', 'subjects', 'guide', 'data'] as const;
+const WELCOME_TABS = ['subjects', 'setup', 'guide', 'data'] as const;
 type WelcomeTabId = (typeof WELCOME_TABS)[number];
 
 const THEME_LABELS: Record<ColorTheme, string> = {
@@ -55,8 +54,6 @@ export function WelcomeScreen(): JSX.Element {
   const setPhase = useSessionStore((s) => s.setPhase);
   const selectedClass = useSessionStore((s) => s.selectedClass);
   const setSelectedClass = useSessionStore((s) => s.setSelectedClass);
-  const setActiveSubjectId = useSessionStore((s) => s.setActiveSubjectId);
-  const setProgressionActiveSubject = useProgressionStore((s) => s.setActiveSubject);
 
   const snapshot = useSubjectStore((s) => s.snapshot);
   const initSubject = useSubjectStore((s) => s.initSubject);
@@ -80,7 +77,7 @@ export function WelcomeScreen(): JSX.Element {
   const [loadingExisting, setLoadingExisting] = useState(true);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
-  const [activeTab, setActiveTab] = useState<WelcomeTabId>('setup');
+  const [activeTab, setActiveTab] = useState<WelcomeTabId>('subjects');
   const env = getElectronEnvironmentLabel();
   const electronAvailable = isElectronAvailable();
   const selectedPhaseLabel = PHASES.find((phaseDef) => phaseDef.id === phase)?.title ?? phase;
@@ -88,6 +85,12 @@ export function WelcomeScreen(): JSX.Element {
     PLAYER_CLASSES.find((playerClass) => playerClass.id === selectedClass)?.name ?? 'Not selected yet';
   const isReadyToEnter = Boolean(selectedClass);
   const isFirstTimeUser = !snapshot && existingSubjects.length === 0;
+  const selectedExistingSubject =
+    selectedExistingSubjectId
+      ? existingSubjects.find((subject) => subject.id === selectedExistingSubjectId) ?? null
+      : null;
+  const selectedSubjectLabel = selectedExistingSubject?.subjectName ?? 'Not selected yet';
+  const canEnterDungeon = Boolean(selectedExistingSubjectId && isReadyToEnter);
 
   async function fetchExistingSubjects() {
     try {
@@ -136,7 +139,11 @@ export function WelcomeScreen(): JSX.Element {
       if (cancelled) return;
       setExistingSubjects(subjects);
       setSelectedExistingSubjectId((current) =>
-        current && subjects.some((subject) => subject.id === current) ? current : null,
+        current && subjects.some((subject) => subject.id === current)
+          ? current
+          : snapshot && subjects.some((subject) => subject.id === snapshot.dungeon.dungeonId)
+            ? snapshot.dungeon.dungeonId
+            : null,
       );
       setLoadingExisting(false);
     }
@@ -144,26 +151,21 @@ export function WelcomeScreen(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    if (snapshot) return;
-    if (existingSubjects.length === 0) return;
-    if (activeTab === 'setup') {
-      setActiveTab('subjects');
-    }
-  }, [activeTab, existingSubjects.length, snapshot]);
+  }, [snapshot]);
 
   async function handleCreate() {
-    if (!subjectName.trim() || !rootTopic.trim() || !isReadyToEnter) return;
+    if (!subjectName.trim() || !rootTopic.trim()) return;
     setSubmitting(true);
     try {
       const created = await initSubject({
         subjectName: subjectName.trim(),
         rootTopic: rootTopic.trim(),
       });
-      setActiveSubjectId(created.dungeon.dungeonId);
-      setProgressionActiveSubject(created.dungeon.dungeonId);
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(created.dungeon.dungeonId);
+      setSubjectName('');
+      setRootTopic('');
+      setActiveTab('setup');
     } finally {
       setSubmitting(false);
     }
@@ -178,11 +180,6 @@ export function WelcomeScreen(): JSX.Element {
     if (!selectedExistingSubjectId) return;
     await handleLoad(selectedExistingSubjectId);
   }
-
-  const selectedExistingSubject =
-    selectedExistingSubjectId
-      ? existingSubjects.find((subject) => subject.id === selectedExistingSubjectId) ?? null
-      : null;
 
   async function handleOpenSubjectsFolder() {
     setAdminBusy(true);
@@ -227,12 +224,9 @@ export function WelcomeScreen(): JSX.Element {
         return;
       }
       await refreshExistingSubjects();
-      const activated = await loadSubjectFlow(imported.dungeon.dungeonId);
-      setAdminMessage(
-        activated
-          ? `Imported ${imported.dungeon.subjectName}.`
-          : `Imported ${imported.dungeon.subjectName}, but failed to load it.`,
-      );
+      setSelectedExistingSubjectId(imported.dungeon.dungeonId);
+      setActiveTab('setup');
+      setAdminMessage(`Imported ${imported.dungeon.subjectName}. Select Enter Dungeon when ready.`);
     } finally {
       setAdminBusy(false);
     }
@@ -308,22 +302,22 @@ export function WelcomeScreen(): JSX.Element {
           <button
             type="button"
             role="tab"
-            aria-selected={activeTab === 'setup'}
-            aria-controls="welcome-panel-setup"
-            onKeyDown={(event) => handleTabKeyDown(event, 'setup')}
-            onClick={() => setActiveTab('setup')}
-          >
-            Setup
-          </button>
-          <button
-            type="button"
-            role="tab"
             aria-selected={activeTab === 'subjects'}
             aria-controls="welcome-panel-subjects"
             onKeyDown={(event) => handleTabKeyDown(event, 'subjects')}
             onClick={() => setActiveTab('subjects')}
           >
             Create / Load
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'setup'}
+            aria-controls="welcome-panel-setup"
+            onKeyDown={(event) => handleTabKeyDown(event, 'setup')}
+            onClick={() => setActiveTab('setup')}
+          >
+            Setup
           </button>
           <button
             type="button"
@@ -351,13 +345,21 @@ export function WelcomeScreen(): JSX.Element {
       <section className="welcome-selection-summary" aria-label="Current selections">
         <h2>Current selections</h2>
         <p
-          className={isReadyToEnter ? 'welcome-ready-indicator welcome-ready-indicator--ready' : 'welcome-ready-indicator'}
+          className={canEnterDungeon ? 'welcome-ready-indicator welcome-ready-indicator--ready' : 'welcome-ready-indicator'}
           role="status"
           aria-live="polite"
         >
-          {isReadyToEnter ? 'Ready to Enter Dungeon' : 'Select an Archetype to Enter Dungeon'}
+          {canEnterDungeon
+            ? 'Ready to Enter Dungeon'
+            : selectedExistingSubjectId
+              ? 'Select an Archetype to Enter Dungeon'
+              : 'Create or select a subject to Enter Dungeon'}
         </p>
         <div className="welcome-selection-grid">
+          <div className="welcome-selection-card">
+            <span className="welcome-selection-label">Subject</span>
+            <strong>{selectedSubjectLabel}</strong>
+          </div>
           <div className="welcome-selection-card">
             <span className="welcome-selection-label">Phase</span>
             <strong>{selectedPhaseLabel}</strong>
@@ -366,6 +368,11 @@ export function WelcomeScreen(): JSX.Element {
             <span className="welcome-selection-label">Archetype</span>
             <strong>{selectedClassLabel}</strong>
           </div>
+        </div>
+        <div className="welcome-actions" style={{ marginTop: 12 }}>
+          <button type="button" onClick={() => void handleEnterSelectedSubject()} disabled={!canEnterDungeon}>
+            Enter Dungeon
+          </button>
         </div>
       </section>
 
@@ -376,7 +383,7 @@ export function WelcomeScreen(): JSX.Element {
         hidden={activeTab !== 'setup'}
       >
         <section>
-          <h2>1. Choose a phase</h2>
+          <h2>2. Choose a phase</h2>
           <div className="phase-grid">
             {PHASES.map((phaseDef) => (
               <button
@@ -395,7 +402,7 @@ export function WelcomeScreen(): JSX.Element {
         </section>
 
         <section>
-          <h2>2. Pick a Study Archetype</h2>
+          <h2>3. Pick a Study Archetype</h2>
           <div className="class-grid">
             {PLAYER_CLASSES.map((cls) => (
               <button
@@ -422,15 +429,16 @@ export function WelcomeScreen(): JSX.Element {
             ))}
           </div>
         </section>
+      </section>
 
+      <section
+        id="welcome-panel-subjects"
+        role="tabpanel"
+        aria-label="Create or load subject"
+        hidden={activeTab !== 'subjects'}
+      >
         <section>
-          <h2>3. Start a subject</h2>
-          {snapshot ? (
-            <p>
-              Active subject: <strong>{snapshot.dungeon.subjectName}</strong> ({snapshot.dungeon.rooms.length}{' '}
-              rooms). Choose a phase and archetype, then Enter Dungeon.
-            </p>
-          ) : null}
+          <h2>1. Choose or create a subject</h2>
           <div style={{ display: 'grid', gap: 8 }}>
             <input
               type="text"
@@ -448,22 +456,12 @@ export function WelcomeScreen(): JSX.Element {
               <button
                 type="button"
                 onClick={() => void handleCreate()}
-                disabled={!subjectName.trim() || !rootTopic.trim() || submitting || !isReadyToEnter}
+                disabled={!subjectName.trim() || !rootTopic.trim() || submitting}
               >
                 {submitting ? 'Creating…' : 'Create new subject'}
               </button>
             </div>
           </div>
-        </section>
-      </section>
-
-      <section
-        id="welcome-panel-subjects"
-        role="tabpanel"
-        aria-label="Create or load subject"
-        hidden={activeTab !== 'subjects'}
-      >
-        <section>
           <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
             <button
               type="button"
@@ -479,7 +477,7 @@ export function WelcomeScreen(): JSX.Element {
           {existingSubjects.length > 0 ? (
             <div style={{ marginTop: 16 }}>
               <h3>Previously created</h3>
-              <p className="room-help-text">Select a subject, then confirm with Enter Dungeon.</p>
+              <p className="room-help-text">Select a subject, then choose Setup options and Enter Dungeon.</p>
               <div className="welcome-actions">
                 {existingSubjects.map((subject) => (
                   <button
@@ -507,15 +505,10 @@ export function WelcomeScreen(): JSX.Element {
                   </p>
                   {!isReadyToEnter ? (
                     <p className="room-help-text">Pick an archetype in Setup to enter this dungeon.</p>
-                  ) : null}
+                  ) : (
+                    <p className="room-help-text">Use Enter Dungeon above when you are ready to continue.</p>
+                  )}
                   <div className="welcome-actions">
-                    <button
-                      type="button"
-                      onClick={() => void handleEnterSelectedSubject()}
-                      disabled={!isReadyToEnter}
-                    >
-                      Enter Dungeon
-                    </button>
                     <button
                       type="button"
                       className="ghost"

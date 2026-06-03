@@ -118,7 +118,7 @@ describe('WelcomeScreen', () => {
     mockGetElectronEnvironmentLabel.mockReturnValue('web');
   });
 
-  it('keeps create disabled until an archetype is selected', async () => {
+  it('allows creating a subject before choosing an archetype', async () => {
     mockListSubjectIds.mockResolvedValue([]);
 
     render(<WelcomeScreen />);
@@ -134,10 +134,6 @@ describe('WelcomeScreen', () => {
     });
 
     const createButton = screen.getByRole('button', { name: /Create new subject/i });
-    expect(createButton).toBeDisabled();
-
-    fireEvent.click(screen.getByRole('button', { name: /Scholar/i }));
-
     expect(createButton).not.toBeDisabled();
   });
 
@@ -185,6 +181,10 @@ describe('WelcomeScreen', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Data/i }));
     fireEvent.click(screen.getByRole('button', { name: /Import subject folder/i }));
+    await screen.findByText(/Imported Imported Subject\. Select Enter Dungeon when ready\./i);
+    fireEvent.click(screen.getByRole('tab', { name: /Setup/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Scholar/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Enter Dungeon/i }));
 
     await waitFor(() => {
       expect(useSessionStore.getState().activeSubjectId).toBe('imported-1');

@@ -1,9 +1,9 @@
 import { useEffect, useState, type JSX } from 'react';
+import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { WelcomeScreen } from '@/ui/screens/WelcomeScreen';
 import { GameScreen } from '@/ui/screens/GameScreen';
-import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
 import {
   getActiveSubjectId,
   listSubjectIds,
@@ -11,8 +11,11 @@ import {
 
 export function App(): JSX.Element {
   const snapshot = useSubjectStore((state) => state.snapshot);
+  const loadSubject = useSubjectStore((state) => state.loadSubject);
   const selectedClass = useSessionStore((state) => state.selectedClass);
-  const loadSubjectFlow = useLoadSubjectFlow();
+  const activeSubjectId = useSessionStore((state) => state.activeSubjectId);
+  const setActiveSubjectId = useSessionStore((state) => state.setActiveSubjectId);
+  const setProgressionActiveSubject = useProgressionStore((state) => state.setActiveSubject);
   const [bootstrapped, setBootstrapped] = useState(false);
 
   useEffect(() => {
@@ -28,8 +31,10 @@ export function App(): JSX.Element {
     async function hydrate() {
       const active = getActiveSubjectId();
       if (active) {
-        if (!cancelled) {
-          await loadSubjectFlow(active);
+        const loaded = await loadSubject(active);
+        if (!cancelled && loaded) {
+          setActiveSubjectId(null);
+          setProgressionActiveSubject(null);
         }
       } else {
         await listSubjectIds(); // warm cache
@@ -40,7 +45,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [loadSubjectFlow]);
+  }, [loadSubject, setActiveSubjectId, setProgressionActiveSubject]);
 
   if (!bootstrapped) {
     return (
@@ -51,7 +56,7 @@ export function App(): JSX.Element {
     );
   }
 
-  if (!snapshot || !selectedClass) {
+  if (!snapshot || !selectedClass || !activeSubjectId) {
     return <WelcomeScreen />;
   }
 
