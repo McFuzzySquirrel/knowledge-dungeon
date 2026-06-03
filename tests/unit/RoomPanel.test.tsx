@@ -65,12 +65,6 @@ describe('RoomPanel', () => {
         reviewRoomsTowardNextPass={0}
         reviewNextPassTarget={1}
         reviewTotalRooms={1}
-        inventoryCount={0}
-        badgeCount={0}
-        journalCount={0}
-        onOpenInventory={() => undefined}
-        onOpenBadges={() => undefined}
-        onOpenJournal={() => undefined}
       />,
     );
 
@@ -97,12 +91,6 @@ describe('RoomPanel', () => {
         reviewRoomsTowardNextPass={0}
         reviewNextPassTarget={1}
         reviewTotalRooms={1}
-        inventoryCount={0}
-        badgeCount={0}
-        journalCount={0}
-        onOpenInventory={() => undefined}
-        onOpenBadges={() => undefined}
-        onOpenJournal={() => undefined}
       />,
     );
 
@@ -125,12 +113,6 @@ describe('RoomPanel', () => {
         reviewRoomsTowardNextPass={0}
         reviewNextPassTarget={1}
         reviewTotalRooms={1}
-        inventoryCount={0}
-        badgeCount={0}
-        journalCount={0}
-        onOpenInventory={() => undefined}
-        onOpenBadges={() => undefined}
-        onOpenJournal={() => undefined}
       />,
     );
 
@@ -155,12 +137,6 @@ describe('RoomPanel', () => {
         reviewRoomsTowardNextPass={0}
         reviewNextPassTarget={1}
         reviewTotalRooms={1}
-        inventoryCount={0}
-        badgeCount={0}
-        journalCount={0}
-        onOpenInventory={() => undefined}
-        onOpenBadges={() => undefined}
-        onOpenJournal={() => undefined}
       />,
     );
 

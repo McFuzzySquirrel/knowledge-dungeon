@@ -65,6 +65,7 @@ export function GameScreen(): JSX.Element {
   const [helpOpen, setHelpOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
   const [inventoryView, setInventoryView] = useState<null | 'inventory' | 'badges' | 'journal'>(
     null,
   );
@@ -411,6 +412,9 @@ export function GameScreen(): JSX.Element {
         } else {
           openMapView();
         }
+      } else if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        setIsInfoPanelOpen((open) => !open);
       }
     }
     window.addEventListener('keydown', onKey);
@@ -536,18 +540,7 @@ export function GameScreen(): JSX.Element {
 
   return (
     <div className="game-shell">
-      <div className="game-canvas">
-        <div className="game-canvas-host" ref={containerRef} />
-        <Minimap
-          dungeonMap={dungeonMap}
-          colorTheme={colorTheme}
-          focusedRoomId={focusedRoomId}
-          visibleRoomIds={floorVisibility?.visibleRoomIds}
-          portalUpRoomId={floorVisibility?.portalUpRoomId ?? null}
-          portalDownRoomIds={floorVisibility?.portalDownRoomIds}
-        />
-      </div>
-      <div className="game-ui ui-skin" data-theme={colorTheme}>
+      <div className="ui-skin hud-sidebar-wrapper" data-theme={colorTheme}>
         <Hud
           subjectName={snapshot.dungeon.subjectName}
           roomCount={snapshot.dungeon.rooms.length}
@@ -563,101 +556,121 @@ export function GameScreen(): JSX.Element {
           teleportModeArmed={teleportModeArmed}
           phaseChangeNeedsConfirmation={phaseChangeNeedsConfirmation}
           showScribeNudge={showScribeNudge}
+          infoOpen={isInfoPanelOpen}
+          focusedRoomTopic={focusedRoom?.topic ?? null}
+          inventoryCount={inventory.length}
+          badgeCount={badges.length}
+          journalCount={subjectCollectedNotes.length}
           onPhaseChange={setPhase}
           onHelp={() => setHelpOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenMap={openMapView}
           onTeleport={handleTeleport}
           onHome={handleHome}
-        />
-
-        <RoomPanel
-          snapshot={snapshot}
-          focusedRoom={focusedRoom}
-          onInteract={() => {
-            if (!focusedRoom) return;
-            handleRoomInteract(focusedRoom.roomId);
-          }}
-          onTravelToRoom={handleTravelToRoom}
-          reviewPassesCompleted={reviewProgress.fullReviewPasses}
-          reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
-          reviewNextPassTarget={reviewProgress.nextPassTarget}
-          reviewTotalRooms={reviewProgress.totalRooms}
-          inventoryCount={inventory.length}
-          badgeCount={badges.length}
-          journalCount={subjectCollectedNotes.length}
+          onToggleInfo={() => setIsInfoPanelOpen((open) => !open)}
           onOpenInventory={() => setInventoryView('inventory')}
           onOpenBadges={() => setInventoryView('badges')}
           onOpenJournal={() => setInventoryView('journal')}
         />
+      </div>
 
-        <ToastStack toasts={toasts} />
-
-        {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
-          <RoomNpcDialog
-            topic={snapshot.rooms[npcDialogRoomId].topic}
-            phase={phase}
-            roomState={snapshot.rooms[npcDialogRoomId].state}
-            isCleared={snapshot.rooms[npcDialogRoomId].validationState.finalPass}
-            anchorPosition={npcDialogAnchor}
-          />
-        ) : null}
-
-        <NoteEditorModal />
-        {isMapViewOpen ? (
-          <FullMapView
-            snapshot={snapshot}
+      <div className="game-area">
+        <div className="game-canvas">
+          <div className="game-canvas-host" ref={containerRef} />
+          <Minimap
             dungeonMap={dungeonMap}
             colorTheme={colorTheme}
             focusedRoomId={focusedRoomId}
-            phase={phase}
-            teleportModeArmed={teleportModeArmed}
-            teleportRemainingMs={teleportRemainingMs}
-            onTravelToRoom={handleTravelToRoom}
-            onTeleportToRoom={handleTeleportToRoom}
-            onClose={closeMapView}
+            visibleRoomIds={floorVisibility?.visibleRoomIds}
+            portalUpRoomId={floorVisibility?.portalUpRoomId ?? null}
+            portalDownRoomIds={floorVisibility?.portalDownRoomIds}
           />
-        ) : null}
-        {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
-        {showOnboarding ? (
-          <GameplayOnboardingModal
-            subjectName={snapshot.dungeon.subjectName}
-            onClose={handleCloseOnboarding}
-          />
-        ) : null}
-        {inventoryView ? (
-          <InventoryBadgesPanel
-            view={inventoryView}
-            inventory={inventory}
-            badges={badges}
-            collectedNotes={subjectCollectedNotes}
-            noteMarkdownByRoomId={noteMarkdownByRoomId}
-            subjectName={snapshot.dungeon.subjectName}
-            clearedRoomCount={clearedRoomsCount}
-            totalRoomCount={snapshot.dungeon.rooms.length}
-            xpTotal={xpTotal}
-            rank={rank}
-            autoOpenNoteId={inventoryView === 'journal' ? autoOpenCollectedNoteId : null}
-            onSwitchView={(v) => {
-              setInventoryView(v);
-              if (v !== 'journal') {
-                setAutoOpenCollectedNoteId(null);
-              }
-            }}
-            onClose={() => {
-              setInventoryView(null);
-              setAutoOpenCollectedNoteId(null);
-            }}
-          />
-        ) : null}
+        </div>
+        <div className="game-ui ui-skin" data-theme={colorTheme}>
+          {isInfoPanelOpen ? (
+            <RoomPanel
+              snapshot={snapshot}
+              focusedRoom={focusedRoom}
+              onInteract={() => {
+                if (!focusedRoom) return;
+                handleRoomInteract(focusedRoom.roomId);
+              }}
+              onTravelToRoom={handleTravelToRoom}
+              reviewPassesCompleted={reviewProgress.fullReviewPasses}
+              reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
+              reviewNextPassTarget={reviewProgress.nextPassTarget}
+              reviewTotalRooms={reviewProgress.totalRooms}
+            />
+          ) : null}
 
-        {settingsOpen ? (
-          <SettingsModal
-            currentTheme={colorTheme}
-            onThemeChange={setColorTheme}
-            onClose={() => setSettingsOpen(false)}
-          />
-        ) : null}
+          <ToastStack toasts={toasts} />
+
+          {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
+            <RoomNpcDialog
+              topic={snapshot.rooms[npcDialogRoomId].topic}
+              phase={phase}
+              roomState={snapshot.rooms[npcDialogRoomId].state}
+              isCleared={snapshot.rooms[npcDialogRoomId].validationState.finalPass}
+              anchorPosition={npcDialogAnchor}
+            />
+          ) : null}
+
+          <NoteEditorModal />
+          {isMapViewOpen ? (
+            <FullMapView
+              snapshot={snapshot}
+              dungeonMap={dungeonMap}
+              colorTheme={colorTheme}
+              focusedRoomId={focusedRoomId}
+              phase={phase}
+              teleportModeArmed={teleportModeArmed}
+              teleportRemainingMs={teleportRemainingMs}
+              onTravelToRoom={handleTravelToRoom}
+              onTeleportToRoom={handleTeleportToRoom}
+              onClose={closeMapView}
+            />
+          ) : null}
+          {helpOpen ? <HelpOverlay onClose={() => setHelpOpen(false)} /> : null}
+          {showOnboarding ? (
+            <GameplayOnboardingModal
+              subjectName={snapshot.dungeon.subjectName}
+              onClose={handleCloseOnboarding}
+            />
+          ) : null}
+          {inventoryView ? (
+            <InventoryBadgesPanel
+              view={inventoryView}
+              inventory={inventory}
+              badges={badges}
+              collectedNotes={subjectCollectedNotes}
+              noteMarkdownByRoomId={noteMarkdownByRoomId}
+              subjectName={snapshot.dungeon.subjectName}
+              clearedRoomCount={clearedRoomsCount}
+              totalRoomCount={snapshot.dungeon.rooms.length}
+              xpTotal={xpTotal}
+              rank={rank}
+              autoOpenNoteId={inventoryView === 'journal' ? autoOpenCollectedNoteId : null}
+              onSwitchView={(v) => {
+                setInventoryView(v);
+                if (v !== 'journal') {
+                  setAutoOpenCollectedNoteId(null);
+                }
+              }}
+              onClose={() => {
+                setInventoryView(null);
+                setAutoOpenCollectedNoteId(null);
+              }}
+            />
+          ) : null}
+
+          {settingsOpen ? (
+            <SettingsModal
+              currentTheme={colorTheme}
+              onThemeChange={setColorTheme}
+              onClose={() => setSettingsOpen(false)}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );

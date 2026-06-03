@@ -545,31 +545,44 @@ textarea {
 
 .game-shell {
   flex: 1;
-  position: relative;
-  display: block;
+  display: flex;
+  flex-direction: row;
   min-height: 0;
   height: 100vh;
   overflow: hidden;
 }
 
+.hud-sidebar-wrapper {
+  flex: 0 0 220px;
+  width: 220px;
+  height: 100vh;
+  display: flex;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
 .hud-rail {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
   z-index: 20;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 14px;
-  background: rgba(22, 26, 38, 0.82);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 12px 10px;
+  background: rgba(22, 26, 38, 0.96);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  border-right: 1px solid var(--border-soft);
+  border-radius: 0;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.35);
   pointer-events: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .hud-stat {
@@ -577,6 +590,12 @@ textarea {
   flex-direction: column;
   gap: 2px;
   font-size: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.hud-stat:last-child {
+  border-bottom: none;
 }
 
 .hud-stat strong {
@@ -591,21 +610,23 @@ textarea {
 
 .hud-actions {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  margin-top: 8px;
 }
 
 .hud-inline-hint {
-  margin: 0 0 0 12px;
+  margin: 6px 0 0;
   font-size: 12px;
   color: var(--text-muted);
 }
 
 .hud-scribe-nudge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
   border-radius: 8px;
   border: 1px solid rgba(127, 178, 255, 0.35);
   background: rgba(127, 178, 255, 0.12);
@@ -616,11 +637,98 @@ textarea {
   font-weight: 600;
 }
 
-.hud-phase-controls {
-  display: inline-flex;
+.hud-info-button {
+  font-weight: 600;
+}
+
+.hud-info-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.hud-subject-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.hud-spacer {
+  flex: 1;
+}
+
+.hud-collections {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.hud-collection-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
+  gap: 2px;
+  padding: 5px 2px;
+  font-size: 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.hud-collection-btn .hud-collection-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.hud-collection-btn .hud-collection-count {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.hud-action-row {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.hud-action-icon-btn {
+  flex: 1;
+  min-width: 30px;
+  padding: 6px 4px;
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-direction: column;
+}
+
+.hud-action-icon-btn .hud-action-icon-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.hud-phase-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: rgba(13, 16, 24, 0.45);
@@ -854,6 +962,24 @@ textarea {
   font-weight: 600;
 }
 
+.game-area {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.game-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.game-ui > * {
+  pointer-events: auto;
+}
+
 .game-canvas {
   position: absolute;
   inset: 0;
@@ -868,13 +994,13 @@ textarea {
 .minimap {
   position: absolute;
   bottom: 12px;
-  left: 12px;
+  right: 12px;
   background: rgba(11, 13, 20, 0.85);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   padding: 8px;
   pointer-events: none;
-  z-index: 15;
+  z-index: 5;
 }
 
 .minimap-legend {
@@ -914,10 +1040,10 @@ textarea {
 
 .room-panel {
   position: absolute;
-  top: 80px;
+  top: 12px;
   left: 12px;
-  width: min(360px, 38vw);
-  max-height: calc(100vh - 92px);
+  width: min(380px, calc(100% - 24px));
+  max-height: calc(100vh - 24px);
   z-index: 20;
   background: rgba(22, 26, 38, 0.92);
   backdrop-filter: blur(6px);
@@ -1445,17 +1571,59 @@ button.danger:hover {
 }
 
 @media (max-width: 900px) {
+  .game-shell {
+    flex-direction: column;
+  }
+
+  .hud-sidebar-wrapper {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    position: static;
+    align-self: auto;
+  }
+
+  .hud-rail {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+    border-radius: 0;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    padding: 8px 12px;
+    gap: 8px;
+    overflow: visible;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .hud-stat {
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .hud-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 0;
+  }
+
+  .hud-phase-controls {
+    flex-direction: row;
+    align-items: center;
+  }
+
   .room-panel {
-    top: 80px;
+    top: 12px;
     left: 12px;
     right: auto;
     width: auto;
     max-width: calc(100vw - 24px);
     max-height: 60vh;
-  }
-
-  .hud-rail {
-    flex-wrap: wrap;
   }
 
   .full-map-layout {
@@ -1750,7 +1918,8 @@ button.danger:hover {
     color-mix(in srgb, var(--bg-panel) 86%, var(--accent-cool) 14%) 0%,
     color-mix(in srgb, var(--bg-panel) 92%, #000000 8%) 100%
   );
-  border-bottom: 2px solid var(--control-border);
+  border-right: 2px solid var(--control-border);
+  border-bottom: none;
 }
 
 :root[data-graphics='rpg'] .room-panel,

@@ -62,12 +62,6 @@ interface RoomPanelProps {
   reviewRoomsTowardNextPass: number;
   reviewNextPassTarget: number;
   reviewTotalRooms: number;
-  inventoryCount: number;
-  badgeCount: number;
-  journalCount: number;
-  onOpenInventory: () => void;
-  onOpenBadges: () => void;
-  onOpenJournal: () => void;
 }
 
 export function RoomPanel({
@@ -79,12 +73,6 @@ export function RoomPanel({
   reviewRoomsTowardNextPass,
   reviewNextPassTarget,
   reviewTotalRooms,
-  inventoryCount,
-  badgeCount,
-  journalCount,
-  onOpenInventory,
-  onOpenBadges,
-  onOpenJournal,
 }: RoomPanelProps): JSX.Element {
   const reviewProgressPercent =
     reviewTotalRooms > 0
@@ -587,17 +575,6 @@ export function RoomPanel({
               <p className="room-help-text">
                 Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.
               </p>
-            </div>
-            <div className="room-quick-actions" aria-label="Collections">
-              <button type="button" className="room-quick-action" onClick={onOpenInventory}>
-                🎒 Inventory ({inventoryCount})
-              </button>
-              <button type="button" className="room-quick-action" onClick={onOpenBadges}>
-                🏅 Badges ({badgeCount})
-              </button>
-              <button type="button" className="room-quick-action" onClick={onOpenJournal}>
-                📚 Diary ({journalCount})
-              </button>
             </div>
             <h2>{focusedRoom.topic}</h2>
             <span className="room-status-chip">{focusedRoom.state}</span>
