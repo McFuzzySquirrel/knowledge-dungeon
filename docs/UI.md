@@ -208,6 +208,60 @@ don't clutter authoring/exploration.
 
 ## 10) Inventory, badges, and diary panel
 
+## 11) Mobile-responsive layout
+
+Knowledge Dungeon adapts to three distinct viewport tiers. Electron and standard desktop
+browsers (≥ 960 px wide) are completely unaffected — the sidebar HUD, minimap, and all
+stats remain identical.
+
+### 11a) Desktop game screen (≥ 960 px) — no regression
+
+![Desktop game screen — sidebar HUD and minimap intact](./assets/ui/desktop-game-screen.png)
+
+The full desktop layout: left sidebar with subject label, room/XP/phase stats, collection
+icons, phase-switcher, and action row. Minimap in the bottom-right corner.
+
+### 11b) Welcome screen — mobile (≤ 480 px)
+
+![Welcome screen at 390px mobile viewport](./assets/ui/mobile-welcome-screen.png)
+
+At ≤ 480 px the welcome screen gets tighter margins and padding so it fits comfortably
+on a phone screen without horizontal scrolling.
+
+### 11c) Setup tab — single-column phase and archetype grids (≤ 600 px)
+
+![Setup tab with single-column phase and class grids on mobile](./assets/ui/mobile-setup-screen.png)
+
+Below 600 px the phase grid and archetype grid each collapse to a single column so every
+card is full-width and tap targets remain comfortable.
+
+### 11d) Tablet HUD (≤ 900 px) — compact top rail
+
+![Game HUD at 768px tablet viewport](./assets/ui/tablet-game-hud.png)
+
+Between 768–900 px (e.g. a landscape phone or portrait tablet) the HUD rearranges into
+a horizontal top rail: subject stats flow inline across the top, with the info button,
+phase switcher, and action row beneath. The minimap stays visible.
+
+### 11e) Mobile game HUD (≤ 480 px) — stripped top rail
+
+![Game HUD at 390px mobile viewport](./assets/ui/mobile-game-hud.png)
+
+On phones (≤ 480 px) the verbose stat labels are hidden, the minimap is hidden to
+maximise canvas space, and all HUD action buttons have a minimum 44 × 44 px touch
+target. The subject label is truncated with an ellipsis. The phase controls and
+action row remain fully accessible.
+
+### 11f) Room panel — mobile (≤ 480 px)
+
+![Room panel open at 390px mobile viewport](./assets/ui/mobile-room-panel.png)
+
+The room info panel slides up from the bottom at mobile sizes and stretches to the full
+viewport width. Tabs (Topic / Notes / Images / Artifact / Self-check) remain accessible
+via a horizontal scroll row, and the panel itself scrolls vertically for long content.
+
+
+
 ![Inventory, badges, and diary modal opened from the room panel](./assets/ui/inventory-badges.png)
 
 The room panel **Collections** buttons (**🎒 Inventory**, **🏅 Badges**,
