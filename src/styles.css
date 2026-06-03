@@ -1661,7 +1661,7 @@ button.danger:hover {
   .hud-stat {
     padding: 0;
     border-bottom: none;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .hud-subject-label {
@@ -1793,7 +1793,7 @@ button.danger:hover {
 
   .hud-subject-label {
     max-width: 30vw;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .room-panel {
