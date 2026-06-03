@@ -183,4 +183,45 @@ describe('InventoryBadgesPanel', () => {
     expect(screen.getByText('Depth-first and breadth-first traversal notes.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back to journal' })).toBeInTheDocument();
   });
+
+  it('renders local images in collected note view when a resolver is provided', () => {
+    render(
+      <InventoryBadgesPanel
+        view="journal"
+        inventory={[]}
+        badges={[]}
+        collectedNotes={[
+          {
+            noteId: 'dungeon:room-3',
+            dungeonId: 'dungeon',
+            roomId: 'room-3',
+            topic: 'Matrices',
+            floorLabel: 'Linear Algebra',
+            artifactPreview: 'Matrix summary',
+            noteMarkdown: '![matrix diagram](local:asset-42)',
+            artifactMarkdown: 'Artifact fallback',
+            collectedAt: '2026-01-03T00:00:00.000Z',
+          },
+        ]}
+        autoOpenNoteId="dungeon:room-3"
+        resolveCollectedNoteImage={(roomId, attachmentId) =>
+          roomId === 'room-3' && attachmentId === 'asset-42'
+            ? 'https://example.com/matrix.png'
+            : null
+        }
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
+        xpTotal={10}
+        rank="Novice"
+        onSwitchView={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'matrix diagram' })).toHaveAttribute(
+      'src',
+      'https://example.com/matrix.png',
+    );
+  });
 });

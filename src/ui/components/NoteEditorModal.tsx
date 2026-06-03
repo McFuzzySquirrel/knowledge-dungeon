@@ -46,6 +46,7 @@ export function NoteEditorModal(): JSX.Element | null {
   const [hasEditedNote, setHasEditedNote] = useState(false);
   const [externalImageUrl, setExternalImageUrl] = useState('');
   const [isSavingAttachment, setIsSavingAttachment] = useState(false);
+  const [showImageLibrary, setShowImageLibrary] = useState(false);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const { toasts, pushToast } = useToasts();
   const noteText = useMemo(() => composeNoteSections(sections), [sections]);
@@ -58,6 +59,7 @@ export function NoteEditorModal(): JSX.Element | null {
     setShowPreview(false);
     setHasEditedNote(false);
     setExternalImageUrl('');
+    setShowImageLibrary(false);
   }, [isOpen, room]);
 
   useEffect(() => {
@@ -282,71 +284,85 @@ export function NoteEditorModal(): JSX.Element | null {
           {room.attachments.length === 0 ? (
             <p className="room-help-text">No room images yet.</p>
           ) : (
-            <ul className="attachment-grid">
-              {room.attachments.map((attachment) => {
-                const previewUrl =
-                  attachment.sourceType === 'external'
-                    ? attachment.externalUrl ?? null
-                    : attachmentUrls[attachment.attachmentId] ?? null;
-                const markdownToken =
-                  attachment.sourceType === 'local'
-                    ? `![${attachment.altText ?? attachment.fileName}](local:${attachment.attachmentId})`
-                    : `![${attachment.altText ?? attachment.fileName}](${attachment.externalUrl ?? ''})`;
-                return (
-                  <li key={attachment.attachmentId} className="attachment-card">
-                    {previewUrl ? (
-                      <img
-                        src={previewUrl}
-                        alt={attachment.altText ?? attachment.fileName}
-                        className="attachment-image"
-                      />
-                    ) : (
-                      <div className="attachment-image attachment-image--missing">
-                        Missing image source
-                      </div>
-                    )}
-                    <div className="attachment-meta">
-                      <strong>{attachment.fileName}</strong>
-                      <p className="room-help-text">{attachment.sourceType}</p>
-                    </div>
-                    <div className="attachment-card-actions">
-                      {phase === 'scribe' ? (
-                        <>
-                          <button
-                            type="button"
-                            className="ghost"
-                            aria-label={`Insert ${attachment.fileName} in note`}
-                            onClick={() => insertAttachmentToken(markdownToken)}
-                          >
-                            Insert in note
-                          </button>
-                          <button
-                            type="button"
-                            className="danger"
-                            aria-label={`Remove ${attachment.fileName}`}
-                            onClick={() => {
-                              void removeAttachment(room.roomId, attachment.attachmentId)
-                                .then(() => {
-                                  pushToast('info', 'Attachment removed from room.');
-                                })
-                                .catch((error: unknown) => {
-                                  const message =
-                                    error instanceof Error
-                                      ? error.message
-                                      : 'Failed to remove attachment.';
-                                  pushToast('error', message);
-                                });
-                            }}
-                          >
-                            Remove
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              <button
+                type="button"
+                className="ghost"
+                aria-expanded={showImageLibrary}
+                onClick={() => setShowImageLibrary((current) => !current)}
+              >
+                {showImageLibrary
+                  ? `Hide image library (${room.attachments.length})`
+                  : `Show image library (${room.attachments.length})`}
+              </button>
+              {showImageLibrary ? (
+                <ul className="attachment-grid attachment-grid--compact">
+                  {room.attachments.map((attachment) => {
+                    const previewUrl =
+                      attachment.sourceType === 'external'
+                        ? attachment.externalUrl ?? null
+                        : attachmentUrls[attachment.attachmentId] ?? null;
+                    const markdownToken =
+                      attachment.sourceType === 'local'
+                        ? `![${attachment.altText ?? attachment.fileName}](local:${attachment.attachmentId})`
+                        : `![${attachment.altText ?? attachment.fileName}](${attachment.externalUrl ?? ''})`;
+                    return (
+                      <li key={attachment.attachmentId} className="attachment-card attachment-card--compact">
+                        {previewUrl ? (
+                          <img
+                            src={previewUrl}
+                            alt={attachment.altText ?? attachment.fileName}
+                            className="attachment-image"
+                          />
+                        ) : (
+                          <div className="attachment-image attachment-image--missing">
+                            Missing image source
+                          </div>
+                        )}
+                        <div className="attachment-meta">
+                          <strong>{attachment.fileName}</strong>
+                          <p className="room-help-text">{attachment.sourceType}</p>
+                        </div>
+                        <div className="attachment-card-actions">
+                          {phase === 'scribe' ? (
+                            <>
+                              <button
+                                type="button"
+                                className="ghost"
+                                aria-label={`Insert ${attachment.fileName} in note`}
+                                onClick={() => insertAttachmentToken(markdownToken)}
+                              >
+                                Insert in note
+                              </button>
+                              <button
+                                type="button"
+                                className="danger"
+                                aria-label={`Remove ${attachment.fileName}`}
+                                onClick={() => {
+                                  void removeAttachment(room.roomId, attachment.attachmentId)
+                                    .then(() => {
+                                      pushToast('info', 'Attachment removed from room.');
+                                    })
+                                    .catch((error: unknown) => {
+                                      const message =
+                                        error instanceof Error
+                                          ? error.message
+                                          : 'Failed to remove attachment.';
+                                      pushToast('error', message);
+                                    });
+                                }}
+                              >
+                                Remove
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </>
           )}
         </div>
         {showPreview ? (

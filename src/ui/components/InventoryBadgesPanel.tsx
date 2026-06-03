@@ -22,6 +22,7 @@ interface InventoryBadgesPanelProps {
   xpTotal: number;
   rank: string;
   autoOpenNoteId?: string | null;
+  resolveCollectedNoteImage?: (roomId: string, attachmentId: string) => string | null;
   onSwitchView: (view: 'inventory' | 'badges' | 'journal') => void;
   onClose: () => void;
 }
@@ -84,6 +85,7 @@ export function InventoryBadgesPanel({
   xpTotal,
   rank,
   autoOpenNoteId,
+  resolveCollectedNoteImage,
   onSwitchView,
   onClose,
 }: InventoryBadgesPanelProps): JSX.Element {
@@ -229,7 +231,12 @@ export function InventoryBadgesPanel({
               </button>
             </div>
             <div className="journal-note-markdown journal-note-markdown--wide">
-              <Markdown source={selectedNoteMarkdown} />
+              <Markdown
+                source={selectedNoteMarkdown}
+                resolveLocalImage={(attachmentId) =>
+                  selectedNote ? resolveCollectedNoteImage?.(selectedNote.roomId, attachmentId) ?? null : null
+                }
+              />
             </div>
           </section>
         ) : view === 'inventory' ? (
