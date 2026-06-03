@@ -1000,7 +1000,7 @@ textarea {
   border-radius: 8px;
   padding: 8px;
   pointer-events: none;
-  z-index: 15;
+  z-index: 5;
 }
 
 .minimap-legend {
