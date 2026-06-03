@@ -208,12 +208,13 @@ export function NoteEditorModal(): JSX.Element | null {
           </button>
         </div>
         <ToastStack toasts={toasts} className="toast-stack--inline" />
-        <div className="room-section" style={{ marginTop: 12 }}>
-          <h3>Images</h3>
+        <div className="note-images-section">
+          <span className="note-images-label">Images</span>
           {phase === 'scribe' ? (
-            <div className="attachment-actions">
+            <div className="note-images-actions">
               <button
                 type="button"
+                className="ghost"
                 disabled={isSavingAttachment}
                 onClick={() => {
                   setIsSavingAttachment(true);
@@ -235,7 +236,7 @@ export function NoteEditorModal(): JSX.Element | null {
                     });
                 }}
               >
-                Add local image
+                + Local
               </button>
               <input
                 type="url"
@@ -243,9 +244,11 @@ export function NoteEditorModal(): JSX.Element | null {
                 onChange={(event) => setExternalImageUrl(event.target.value)}
                 placeholder="https://example.com/image.png"
                 aria-label="External image URL"
+                className="note-images-url-input"
               />
               <button
                 type="button"
+                className="ghost"
                 disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
                 onClick={() => {
                   const nextUrl = externalImageUrl.trim();
@@ -270,13 +273,11 @@ export function NoteEditorModal(): JSX.Element | null {
                     });
                 }}
               >
-                Add URL image
+                + URL
               </button>
             </div>
           ) : (
-            <p className="room-help-text">
-              Image editing is available only during the Scribe phase.
-            </p>
+            <span className="room-help-text">Scribe phase only.</span>
           )}
           {room.attachments.length === 0 ? (
             <p className="room-help-text">No room images yet.</p>

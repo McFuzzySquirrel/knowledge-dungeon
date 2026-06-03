@@ -25,7 +25,7 @@ import {
   generateSelfCheckPrompts,
 } from '@/core/review';
 
-type RoomTab = 'topic' | 'notes' | 'artifact' | 'selfcheck';
+type RoomTab = 'topic' | 'notes' | 'images' | 'artifact' | 'selfcheck';
 
 interface PanelPosition {
   x: number;
@@ -492,6 +492,14 @@ export function RoomPanel({
         <button
           type="button"
           role="tab"
+          aria-selected={tab === 'images'}
+          onClick={() => setTab('images')}
+        >
+          Images
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={tab === 'artifact'}
           onClick={() => setTab('artifact')}
           disabled={!focusedRoom.validationState.finalPass}
@@ -813,46 +821,49 @@ export function RoomPanel({
                     resolveLocalImage={resolveLocalImage}
                   />
                 ) : null}
-                <div className="room-section" style={{ marginTop: 16 }}>
-                  <h3>Images</h3>
-                  {phase === 'scribe' ? (
-                    <p className="room-help-text">
-                      Open the note editor (<kbd>E</kbd>) to add images and insert them into notes.
-                    </p>
-                  ) : null}
-                  {focusedRoom.attachments.length === 0 ? (
-                    <p className="room-help-text">No room images yet.</p>
-                  ) : (
-                    <ul className="attachment-grid">
-                      {focusedRoom.attachments.map((attachment) => {
-                        const previewUrl =
-                          attachment.sourceType === 'external'
-                            ? attachment.externalUrl ?? null
-                            : resolveLocalImage(attachment.attachmentId);
-                        return (
-                          <li key={attachment.attachmentId} className="attachment-card">
-                            {previewUrl ? (
-                              <img
-                                src={previewUrl}
-                                alt={attachment.altText ?? attachment.fileName}
-                                className="attachment-image"
-                              />
-                            ) : (
-                              <div className="attachment-image attachment-image--missing">
-                                Missing image source
-                              </div>
-                            )}
-                            <div className="attachment-meta">
-                              <strong>{attachment.fileName}</strong>
-                              <p className="room-help-text">{attachment.sourceType}</p>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
               </>
+            )}
+          </>
+        ) : null}
+
+        {tab === 'images' ? (
+          <>
+            <h2>Images</h2>
+            {phase === 'scribe' ? (
+              <p className="room-help-text">
+                Open the note editor (<kbd>E</kbd>) to add images and insert them into notes.
+              </p>
+            ) : null}
+            {focusedRoom.attachments.length === 0 ? (
+              <p className="room-help-text">No room images yet.</p>
+            ) : (
+              <ul className="attachment-grid">
+                {focusedRoom.attachments.map((attachment) => {
+                  const previewUrl =
+                    attachment.sourceType === 'external'
+                      ? attachment.externalUrl ?? null
+                      : resolveLocalImage(attachment.attachmentId);
+                  return (
+                    <li key={attachment.attachmentId} className="attachment-card">
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt={attachment.altText ?? attachment.fileName}
+                          className="attachment-image"
+                        />
+                      ) : (
+                        <div className="attachment-image attachment-image--missing">
+                          Missing image source
+                        </div>
+                      )}
+                      <div className="attachment-meta">
+                        <strong>{attachment.fileName}</strong>
+                        <p className="room-help-text">{attachment.sourceType}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </>
         ) : null}
