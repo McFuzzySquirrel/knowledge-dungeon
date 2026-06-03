@@ -96,10 +96,10 @@ export function RoomPanel({
   const clampPanelPosition = useCallback((position: PanelPosition): PanelPosition => {
     if (typeof window === 'undefined') return position;
     const offsetParent = panelRef.current?.offsetParent;
-    const viewportWidth =
-      offsetParent instanceof HTMLElement ? offsetParent.clientWidth : window.innerWidth;
+    const parentRect = offsetParent?.getBoundingClientRect();
+    const viewportWidth = parentRect?.width && parentRect.width > 0 ? parentRect.width : window.innerWidth;
     const viewportHeight =
-      offsetParent instanceof HTMLElement ? offsetParent.clientHeight : window.innerHeight;
+      parentRect?.height && parentRect.height > 0 ? parentRect.height : window.innerHeight;
     const panelWidth = panelRef.current?.offsetWidth ?? DEFAULT_PANEL_WIDTH;
     const panelHeight = panelRef.current?.offsetHeight ?? 520;
     const maxX = Math.max(PANEL_MARGIN, viewportWidth - panelWidth - PANEL_MARGIN);
