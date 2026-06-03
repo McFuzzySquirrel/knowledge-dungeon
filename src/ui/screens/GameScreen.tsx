@@ -64,6 +64,7 @@ export function GameScreen(): JSX.Element {
   const gameRef = useRef<Phaser.Game | null>(null);
   const sceneRef = useRef<DungeonScene | null>(null);
   const npcDialogRoomIdRef = useRef<string | null>(null);
+  const roomPanelTabRequestSequenceRef = useRef(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -87,7 +88,8 @@ export function GameScreen(): JSX.Element {
   const { toasts, pushToast } = useToasts();
 
   const requestRoomPanelTab = useCallback((tab: RoomTab) => {
-    setRoomPanelTabRequest({ tab, sequence: Date.now() });
+    roomPanelTabRequestSequenceRef.current += 1;
+    setRoomPanelTabRequest({ tab, sequence: roomPanelTabRequestSequenceRef.current });
   }, []);
 
   useEffect(() => {

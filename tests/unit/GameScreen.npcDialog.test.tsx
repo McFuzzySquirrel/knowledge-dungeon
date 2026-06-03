@@ -164,6 +164,7 @@ function makeSnapshot(): SubjectSnapshot {
 describe('GameScreen NPC dialog callbacks', () => {
   beforeEach(() => {
     capturedCallbacks = null;
+    fakeScene = null;
     createGameMock.mockReset();
 
     fakeScene = {
