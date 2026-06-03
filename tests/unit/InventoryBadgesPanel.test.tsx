@@ -101,7 +101,7 @@ describe('InventoryBadgesPanel', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Open badge details for CreatorPhaseComplete/i }));
+    fireEvent.click(screen.getByRole('button', { name: /CreatorPhaseComplete/i }));
 
     expect(screen.getByText('Creator milestone')).toBeInTheDocument();
     expect(

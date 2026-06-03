@@ -94,13 +94,15 @@ function badgeDetail(badgeId: string): BadgeDetail {
       };
     case 'ArchaeologistReviewPass3':
     case 'ArchaeologistReviewPass7':
-    case 'ArchaeologistReviewPass15':
+    case 'ArchaeologistReviewPass15': {
+      const reviewPassTarget = badgeId.replace('ArchaeologistReviewPass', '');
       return {
         label: badgeLabel(badgeId),
         description: badgeDescription(badgeId),
         category: 'Review streak milestone',
-        unlockDetail: `Track long-term retention by finishing the review-pass target named in ${badgeId}.`,
+        unlockDetail: `Complete at least ${reviewPassTarget} full archaeology review passes for this subject.`,
       };
+    }
     case SCRIBE_CENTURY_120_BADGE_ID:
       return {
         label: badgeLabel(badgeId),
@@ -379,7 +381,6 @@ export function InventoryBadgesPanel({
                     setSelectedNoteId(null);
                     setSelectedBadgeId(badge);
                   }}
-                  aria-label={`Open badge details for ${badgeLabel(badge)}`}
                 >
                   <span className="badge-icon" aria-hidden="true">
                     🏅
