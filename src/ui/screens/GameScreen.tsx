@@ -49,6 +49,7 @@ export function GameScreen(): JSX.Element {
   const cancelTeleportMode = useSessionStore((s) => s.cancelTeleportMode);
   const markTeleported = useSessionStore((s) => s.markTeleported);
   const recordReviewPass = useSubjectStore((s) => s.recordReviewPass);
+  const resolveAttachmentUrl = useSubjectStore((s) => s.resolveAttachmentUrl);
   const xpTotal = useProgressionStore((s) => s.xpTotal);
   const rank = useProgressionStore((s) => s.rank);
   const inventory = useProgressionStore((s) => s.inventory);
@@ -75,6 +76,9 @@ export function GameScreen(): JSX.Element {
   const [npcDialogRoomId, setNpcDialogRoomId] = useState<string | null>(null);
   const [npcDialogAnchor, setNpcDialogAnchor] = useState<{ x: number; y: number } | null>(null);
   const [autoOpenCollectedNoteId, setAutoOpenCollectedNoteId] = useState<string | null>(null);
+  const [attachmentUrlsByRoomId, setAttachmentUrlsByRoomId] = useState<
+    Record<string, Record<string, string>>
+  >({});
   const { toasts, pushToast } = useToasts();
 
   useEffect(() => {
@@ -439,6 +443,46 @@ export function GameScreen(): JSX.Element {
     );
   }, [snapshot]);
 
+  useEffect(() => {
+    if (!snapshot) {
+      setAttachmentUrlsByRoomId({});
+      return;
+    }
+
+    let cancelled = false;
+    const roomsWithLocalAttachments = Object.values(snapshot.rooms).filter((room) =>
+      room.attachments.some((attachment) => attachment.sourceType === 'local'),
+    );
+
+    if (roomsWithLocalAttachments.length === 0) {
+      setAttachmentUrlsByRoomId({});
+      return;
+    }
+
+    void Promise.all(
+      roomsWithLocalAttachments.map(async (room) => {
+        const localAttachments = room.attachments.filter((attachment) => attachment.sourceType === 'local');
+        const resolvedEntries = await Promise.all(
+          localAttachments.map(async (attachment) => {
+            const resolved = await resolveAttachmentUrl(room.roomId, attachment.attachmentId);
+            return [attachment.attachmentId, resolved] as const;
+          }),
+        );
+        const resolvedMap = Object.fromEntries(
+          resolvedEntries.filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
+        );
+        return [room.roomId, resolvedMap] as const;
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setAttachmentUrlsByRoomId(Object.fromEntries(results));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolveAttachmentUrl, snapshot]);
+
   const reviewProgress = useMemo(() => {
     if (!snapshot) {
       return {
@@ -649,6 +693,9 @@ export function GameScreen(): JSX.Element {
               xpTotal={xpTotal}
               rank={rank}
               autoOpenNoteId={inventoryView === 'journal' ? autoOpenCollectedNoteId : null}
+              resolveCollectedNoteImage={(roomId, attachmentId) =>
+                attachmentUrlsByRoomId[roomId]?.[attachmentId] ?? null
+              }
               onSwitchView={(v) => {
                 setInventoryView(v);
                 if (v !== 'journal') {

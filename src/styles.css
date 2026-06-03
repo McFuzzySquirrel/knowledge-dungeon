@@ -973,7 +973,7 @@ textarea {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 10;
+  z-index: 30;
 }
 
 .game-ui > * {
@@ -1853,12 +1853,38 @@ button.danger:hover {
   margin-top: 4px;
 }
 
+.note-images-section .attachment-grid--compact {
+  gap: 6px;
+}
+
+.note-images-section .attachment-card--compact {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 6px 8px;
+  align-items: center;
+  padding: 6px;
+}
+
 .note-images-section .attachment-image {
-  max-height: 80px;
+  width: 64px;
+  height: 48px;
+  max-height: 48px;
 }
 
 .note-images-section .attachment-image--missing {
   min-height: 48px;
+  width: 64px;
+}
+
+.note-images-section .attachment-card--compact .attachment-meta {
+  gap: 1px;
+}
+
+.note-images-section .attachment-card--compact .attachment-meta strong {
+  font-size: 12px;
+}
+
+.note-images-section .attachment-card--compact .attachment-card-actions {
+  grid-column: 1 / -1;
 }
 
 .attachment-grid {

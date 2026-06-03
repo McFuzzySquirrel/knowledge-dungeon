@@ -3,9 +3,13 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
-import type { SubjectSnapshot } from '@/core/validation/persistence';
+import type { RoomAttachment, SubjectSnapshot } from '@/core/validation/persistence';
 
-function makeSnapshot(): SubjectSnapshot {
+function makeSnapshot({
+  attachments = [],
+}: {
+  attachments?: RoomAttachment[];
+} = {}): SubjectSnapshot {
   return {
     dungeon: {
       schemaVersion: '1.0.0',
@@ -46,7 +50,7 @@ function makeSnapshot(): SubjectSnapshot {
           finalPass: false,
         },
         reviewPassCount: 0,
-        attachments: [],
+        attachments,
       },
     },
   };
@@ -109,5 +113,29 @@ describe('NoteEditorModal', () => {
     render(<NoteEditorModal />);
 
     expect(screen.getByRole('textbox')).toHaveValue('![diagram](local:asset-1)');
+  });
+
+  it('keeps the image library collapsed until expanded', () => {
+    useSubjectStore.setState({
+      snapshot: makeSnapshot({
+        attachments: [
+          {
+            attachmentId: 'ext-1',
+            sourceType: 'external',
+            fileName: 'diagram.png',
+            mimeType: 'image/png',
+            externalUrl: 'https://example.com/diagram.png',
+            addedAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    });
+    render(<NoteEditorModal />);
+
+    expect(screen.getByRole('button', { name: /Show image library \(1\)/i })).toBeInTheDocument();
+    expect(screen.queryByText('diagram.png')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show image library \(1\)/i }));
+    expect(screen.getByText('diagram.png')).toBeInTheDocument();
   });
 });
