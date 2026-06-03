@@ -1810,6 +1810,57 @@ button.danger:hover {
   align-items: center;
 }
 
+/* Compact images bar in NoteEditorModal */
+.note-images-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--bg-panel-soft);
+}
+
+.note-images-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.note-images-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.note-images-url-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 3px 6px;
+  height: 28px;
+}
+
+.note-images-section .attachment-grid {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.note-images-section .attachment-image {
+  max-height: 80px;
+}
+
+.note-images-section .attachment-image--missing {
+  min-height: 48px;
+}
+
 .attachment-grid {
   margin: 10px 0 0;
   padding: 0;

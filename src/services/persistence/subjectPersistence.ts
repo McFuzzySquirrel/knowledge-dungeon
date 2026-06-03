@@ -235,6 +235,15 @@ export async function addRoomLocalAttachment(
   return invokeBridge(() => handler(subjectId, roomId), null);
 }
 
+const MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+};
+
 export async function addRoomExternalAttachment(
   subjectId: string,
   roomId: string,
@@ -242,8 +251,34 @@ export async function addRoomExternalAttachment(
 ): Promise<RoomAttachment | null> {
   const bridge = typeof window !== 'undefined' ? window.electronKnowledgeBridge : undefined;
   const handler = bridge?.addRoomExternalAttachment;
-  if (!handler) return null;
-  return invokeBridge(() => handler(subjectId, roomId, url), null);
+  if (handler) {
+    return invokeBridge(() => handler(subjectId, roomId, url), null);
+  }
+  // Web build fallback: create the attachment locally without server-side mime validation.
+  const normalized = url.trim();
+  try {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    const pathBase = parsed.pathname.split('/').pop() ?? '';
+    const fileName = pathBase.length > 0 ? pathBase : parsed.hostname;
+    const altText = fileName.replace(/[_-]+/g, ' ').replace(/\.[a-z0-9]+$/i, '').trim();
+    const ext = fileName.includes('.') ? `.${fileName.split('.').pop()!.toLowerCase()}` : '';
+    const mimeType = MIME_BY_EXT[ext] ?? 'image/jpeg';
+    const attachmentId = `att-${typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`}`;
+    return {
+      attachmentId,
+      sourceType: 'external',
+      fileName,
+      mimeType,
+      externalUrl: normalized,
+      ...(altText.length > 0 ? { altText } : {}),
+      addedAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteRoomAttachment(
