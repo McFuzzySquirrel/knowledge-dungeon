@@ -335,7 +335,6 @@ export function GameScreen(): JSX.Element {
     dungeonMap,
     handleRoomInteract,
     hierarchy,
-    currentFloorId,
     selectedClass,
     setFocusedRoomId,
   ]);
