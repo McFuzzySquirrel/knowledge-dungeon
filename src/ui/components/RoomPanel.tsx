@@ -39,6 +39,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function getPrimaryActionLabel(phase: GamePhase): string {
+  if (phase === 'creator') return 'Open topic tools';
+  if (phase === 'archaeologist') return 'Mark reviewed';
+  return 'Open encounter';
+}
+
 function getInitialPanelPosition(): PanelPosition {
   return { x: PANEL_MARGIN, y: PANEL_MARGIN };
 }
@@ -571,11 +577,7 @@ export function RoomPanel({
             </div>
             <div className="room-section" style={{ marginBottom: 12 }}>
               <button type="button" className="room-primary-action" onClick={onInteract}>
-                {phase === 'creator'
-                  ? 'Open topic tools'
-                  : phase === 'archaeologist'
-                    ? 'Mark reviewed'
-                    : 'Open encounter'}
+                {getPrimaryActionLabel(phase)}
               </button>
               <p className="room-help-text">
                 Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.
