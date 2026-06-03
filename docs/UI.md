@@ -13,7 +13,12 @@ Use this screen to:
 - Create a new subject from a root topic.
 - Browse previously created subjects by **subject name** instead of raw id, with room counts visible from home.
 - Refresh the saved subject list if you want to rescan local data before loading one.
-- Access the **Admin** section, which in desktop mode exposes local subject export/open-folder tools.
+- Access the **Data** tab, which exposes import/export tools. In desktop mode you also get folder-level helpers.
+
+> 🔒 **Privacy**: all data is stored **locally on your device only**. In the web version this means
+> your browser's `localStorage`; in the desktop app it is written to your user-data folder.
+> Nothing is ever sent to a server. Use the **Export** tools in the **Data** tab to back up
+> subjects before clearing browser storage.
 
 This is the entry point for every session and determines how the rest of the UI behaves.
 
