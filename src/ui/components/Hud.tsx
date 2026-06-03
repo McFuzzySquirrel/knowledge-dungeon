@@ -33,6 +33,8 @@ const PHASE_LABELS: Record<GamePhase, string> = {
   archaeologist: 'Archaeologist',
 };
 
+const MAX_TOPIC_DISPLAY_LENGTH = 18;
+
 export function Hud({
   subjectName,
   roomCount,
@@ -137,7 +139,7 @@ export function Hud({
           aria-label={infoOpen ? 'Close room info panel' : 'Open room info panel'}
           title="Press I to toggle room info"
         >
-          {infoOpen ? 'Info ✕' : focusedRoomTopic ? `Info: ${focusedRoomTopic.slice(0, 18)}…` : 'Info (I)'}
+          {infoOpen ? 'Info ✕' : focusedRoomTopic ? `Info: ${focusedRoomTopic.slice(0, MAX_TOPIC_DISPLAY_LENGTH)}…` : 'Info (I)'}
         </button>
 
         <div className="hud-phase-controls" aria-label="Phase controls">
