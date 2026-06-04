@@ -164,6 +164,24 @@ export class DungeonScene extends Phaser.Scene {
   private floorSeed = 0;
   private floorBiomeOverride: FloorBiomeId | null = null;
 
+  // ── Touch / pointer input state ──────────────────────────────────────────
+  /** True while a single-finger drag/tap gesture is in progress. */
+  private touchPointerActive = false;
+  private touchPointerStartX = 0;
+  private touchPointerStartY = 0;
+  private touchPointerStartTime = 0;
+  /**
+   * Normalised direction vector derived from the active single-finger drag.
+   * Written by {@link handlePointerMove} and read in {@link update} to
+   * contribute to the player velocity alongside keyboard input.
+   */
+  private touchMoveVx = 0;
+  private touchMoveVy = 0;
+  /** True while a two-finger pinch gesture is driving the camera zoom. */
+  private pinchActive = false;
+  private pinchStartDistance = 0;
+  private pinchStartZoom = 1;
+
   constructor() {
     super({ key: 'DungeonScene' });
   }
@@ -300,6 +318,15 @@ export class DungeonScene extends Phaser.Scene {
       ]);
     }
 
+    // ── Touch / pointer controls ───────────────────────────────────────────
+    // Enable a second pointer slot so Phaser can track two simultaneous touch
+    // points; needed for pinch-to-zoom detection.
+    this.input.addPointer(1);
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => { this.handlePointerDown(p); });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => { this.handlePointerMove(p); });
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => { this.handlePointerUp(p); });
+    this.input.on('pointercancel', (p: Phaser.Input.Pointer) => { this.handlePointerUp(p); });
+
     // Configure world & camera bounds based on the dungeon layout.
     const left = map.bounds.minX * map.tileSize;
     const top = map.bounds.minY * map.tileSize;
@@ -343,6 +370,13 @@ export class DungeonScene extends Phaser.Scene {
     if (right) vx += 1;
     if (up) vy -= 1;
     if (down) vy += 1;
+
+    // Merge touch/pointer drag direction into the movement vector.
+    // touchMoveVx/Vy is a normalised direction set by handlePointerMove.
+    if (!typingInTextField) {
+      vx += this.touchMoveVx;
+      vy += this.touchMoveVy;
+    }
 
     if (vx !== 0 || vy !== 0) {
       const length = Math.hypot(vx, vy) || 1;
@@ -759,8 +793,8 @@ export class DungeonScene extends Phaser.Scene {
     }
     const message =
       this.currentRoomId === this.portalUpRoomId
-        ? 'Press E to ascend'
-        : 'Press E to descend';
+        ? 'Tap or press E to ascend'
+        : 'Tap or press E to descend';
     if (!this.portalHintText) {
       this.portalHintText = this.add
         .text(0, 0, message, {
@@ -1259,6 +1293,114 @@ export class DungeonScene extends Phaser.Scene {
       duration: ZOOM_TWEEN_MS,
       ease: 'Sine.easeInOut',
     });
+  }
+
+  // ── Touch / pointer event handlers ──────────────────────────────────────
+
+  /**
+   * Minimum pixel travel before a touch/pointer contact is treated as a drag
+   * rather than a tap.
+   */
+  private static readonly TOUCH_DRAG_THRESHOLD = 12;
+  /** Maximum milliseconds for a contact to qualify as a tap. */
+  private static readonly TOUCH_TAP_MAX_MS = 300;
+  /** Minimum and maximum allowed camera zoom when pinching. */
+  private static readonly PINCH_ZOOM_MIN = 0.4;
+  private static readonly PINCH_ZOOM_MAX = 3.5;
+
+  private handlePointerDown(pointer: Phaser.Input.Pointer): void {
+    const p1 = this.input.pointer1;
+    const p2 = this.input.pointer2;
+
+    if (p1?.isDown && p2?.isDown) {
+      // Two fingers are now active — start a pinch-to-zoom gesture.
+      const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+      // Guard against the degenerate case where both touch points are at the same position.
+      if (dist < 1) return;
+      this.pinchStartDistance = dist;
+      this.pinchStartZoom = this.cameras.main.zoom;
+      this.pinchActive = true;
+      // A pinch cancels any single-finger movement/tap that was in progress.
+      this.touchPointerActive = false;
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+      return;
+    }
+
+    // Single finger — begin tracking for drag (movement) or tap (interact).
+    if (!this.touchPointerActive) {
+      this.touchPointerActive = true;
+      this.touchPointerStartX = pointer.x;
+      this.touchPointerStartY = pointer.y;
+      this.touchPointerStartTime = pointer.time;
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+    }
+  }
+
+  private handlePointerMove(pointer: Phaser.Input.Pointer): void {
+    // ── Pinch zoom ────────────────────────────────────────────────────────
+    if (this.pinchActive) {
+      const p1 = this.input.pointer1;
+      const p2 = this.input.pointer2;
+      if (p1.isDown && p2.isDown && this.pinchStartDistance > 0) {
+        const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+        const newZoom = Phaser.Math.Clamp(
+          this.pinchStartZoom * (dist / this.pinchStartDistance),
+          DungeonScene.PINCH_ZOOM_MIN,
+          DungeonScene.PINCH_ZOOM_MAX,
+        );
+        // Stop any ongoing auto-zoom tween so pinch takes full control.
+        this.tweens.killTweensOf(this.cameras.main);
+        this.cameras.main.setZoom(newZoom);
+        // Keep currentZoomTarget in sync so the auto-zoom guard in update()
+        // does not immediately re-trigger a tween for the same target level.
+        this.currentZoomTarget = newZoom;
+      }
+      return;
+    }
+
+    // ── Single-finger drag → directional movement ─────────────────────────
+    if (!this.touchPointerActive || !pointer.isDown) return;
+
+    const dx = pointer.x - this.touchPointerStartX;
+    const dy = pointer.y - this.touchPointerStartY;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist > DungeonScene.TOUCH_DRAG_THRESHOLD) {
+      this.touchMoveVx = dx / dist;
+      this.touchMoveVy = dy / dist;
+    } else {
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+    }
+  }
+
+  private handlePointerUp(pointer: Phaser.Input.Pointer): void {
+    // End pinch when fewer than two fingers remain on screen.
+    if (this.pinchActive && (!this.input.pointer1.isDown || !this.input.pointer2.isDown)) {
+      this.pinchActive = false;
+      this.touchPointerActive = false;
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+      return;
+    }
+
+    if (!this.touchPointerActive) return;
+
+    const dx = pointer.x - this.touchPointerStartX;
+    const dy = pointer.y - this.touchPointerStartY;
+    const dist = Math.hypot(dx, dy);
+    const elapsed = pointer.time - this.touchPointerStartTime;
+
+    // A short contact with minimal movement is a tap → trigger the room action.
+    if (dist < DungeonScene.TOUCH_DRAG_THRESHOLD && elapsed < DungeonScene.TOUCH_TAP_MAX_MS) {
+      this.triggerInteract();
+    }
+
+    this.touchPointerActive = false;
+    this.touchMoveVx = 0;
+    this.touchMoveVy = 0;
   }
 }
 

@@ -133,6 +133,17 @@ type DragState =
       offsetY: number;
     };
 
+type PinchState = {
+  id1: number;
+  id2: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  startDist: number;
+  startZoom: number;
+};
+
 function splitTopicLabel(topic: string, maxCharsPerLine: number, maxLines: number): string[] {
   const words = topic.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return [''];
@@ -265,6 +276,9 @@ export function FullMapView({
   const [roomOffsets, setRoomOffsets] = useState<Record<string, RoomOffset>>({});
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const pinchRef = useRef<PinchState | null>(null);
+  /** Tracks all currently active pointer IDs and their positions for pinch detection. */
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
 
   const applyZoom = useCallback((requestedZoom: number, anchorX: number, anchorY: number) => {
     setZoom((currentZoom) => {
@@ -433,6 +447,25 @@ export function FullMapView({
   const onPointerDown = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return;
+
+      // Track this pointer
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      // If two pointers are now active, start a pinch-to-zoom gesture
+      if (activePointersRef.current.size === 2) {
+        const entries = [...activePointersRef.current.entries()];
+        const [id1, p1] = entries[0] as [number, {x:number;y:number}];
+        const [id2, p2] = entries[1] as [number, {x:number;y:number}];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        pinchRef.current = { id1, id2, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, startDist: dist, startZoom: zoom };
+        // Cancel any single-pointer pan
+        if (dragRef.current) {
+          viewportRef.current?.releasePointerCapture?.(dragRef.current.pointerId);
+          dragRef.current = null;
+        }
+        return;
+      }
+
       if ((e.target as Element).closest('[data-room-id]')) return;
       viewportRef.current?.setPointerCapture?.(e.pointerId);
       dragRef.current = {
@@ -444,10 +477,33 @@ export function FullMapView({
         panY: pan.y,
       };
     },
-    [pan.x, pan.y],
+    [pan.x, pan.y, zoom],
   );
 
   const onPointerMove = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    // Update tracked position for this pointer
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    // Handle pinch-to-zoom
+    const pinch = pinchRef.current;
+    if (pinch) {
+      const p1 = activePointersRef.current.get(pinch.id1);
+      const p2 = activePointersRef.current.get(pinch.id2);
+      if (p1 && p2 && pinch.startDist > 0) {
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        const viewport = viewportRef.current;
+        if (viewport) {
+          const rect = viewport.getBoundingClientRect();
+          applyZoom(pinch.startZoom * (dist / pinch.startDist), midX - rect.left, midY - rect.top);
+        }
+      }
+      return;
+    }
+
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
     if (drag.kind === 'pan') {
@@ -466,9 +522,18 @@ export function FullMapView({
         y: drag.offsetY + deltaY,
       },
     }));
-  }, [zoom]);
+  }, [applyZoom, zoom]);
 
   const onPointerUp = useCallback((e: PointerEvent<HTMLDivElement>) => {
+    // Remove from active pointer tracking
+    activePointersRef.current.delete(e.pointerId);
+
+    // End pinch if one of its pointers was lifted
+    const pinch = pinchRef.current;
+    if (pinch && (e.pointerId === pinch.id1 || e.pointerId === pinch.id2)) {
+      pinchRef.current = null;
+    }
+
     if (dragRef.current && dragRef.current.pointerId === e.pointerId) {
       viewportRef.current?.releasePointerCapture?.(e.pointerId);
       dragRef.current = null;
@@ -510,7 +575,7 @@ export function FullMapView({
             <h2>Full Map</h2>
             <p className="full-map-subtitle">
               Explore or edit your dungeon graph, then teleport across floors.
-              Use drag-to-pan, scroll-to-zoom, and drag nodes to refine layout.
+              Use drag-to-pan, scroll-to-zoom (or pinch on touch), and drag nodes to refine layout.
             </p>
           </div>
           <div className="full-map-actions">

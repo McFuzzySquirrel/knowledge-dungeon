@@ -1043,6 +1043,43 @@ textarea {
   inset: 0;
 }
 
+/* ── Touch interact button ──────────────────────────────────────────────── */
+/* Shown on touch/coarse-pointer devices only; sits above the minimap in the
+   bottom-left corner of the game canvas so it doesn't overlap the minimap. */
+.touch-interact-btn {
+  display: none; /* hidden on desktop / fine-pointer devices */
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  z-index: 6;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: rgba(11, 13, 20, 0.82);
+  color: var(--accent);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.touch-interact-btn:active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  transform: scale(0.93);
+}
+
+@media (pointer: coarse) {
+  .touch-interact-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 .minimap {
   position: absolute;
   bottom: 12px;
