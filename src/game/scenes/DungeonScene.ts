@@ -426,6 +426,7 @@ export class DungeonScene extends Phaser.Scene {
     if (shouldBeInsideRoom !== this.insideRoom) {
       this.insideRoom = shouldBeInsideRoom;
       this.setZoomTarget(shouldBeInsideRoom ? ZOOM_INSIDE_ROOM : ZOOM_ON_PATH);
+      this.refreshImageFrameIcons();
     }
 
     this.checkArtifactCollection();
@@ -515,8 +516,8 @@ export class DungeonScene extends Phaser.Scene {
 
   /**
    * Tell the scene which rooms have image attachments. A small picture-frame
-   * icon will be shown in the lower-right corner of those rooms as a visual
-   * hint — visible in both Scribe and Archaeologist phases.
+   * icon will be shown in the lower-right corner of the active room as a
+   * contextual visual hint in both Scribe and Archaeologist phases.
    */
   setImageRooms(roomIds: readonly string[]): void {
     this.imageRoomIds = new Set(roomIds);
@@ -530,7 +531,9 @@ export class DungeonScene extends Phaser.Scene {
     for (const [roomId, icon] of this.imageFrameIcons) {
       const stillVisible =
         this.imageRoomIds.has(roomId) &&
-        (!this.visibleRoomIds || this.visibleRoomIds.has(roomId));
+        (!this.visibleRoomIds || this.visibleRoomIds.has(roomId)) &&
+        this.insideRoom &&
+        this.currentRoomId === roomId;
       if (!stillVisible) {
         icon.destroy();
         this.imageFrameIcons.delete(roomId);
@@ -539,6 +542,7 @@ export class DungeonScene extends Phaser.Scene {
     for (const room of map.rooms) {
       if (!this.imageRoomIds.has(room.roomId)) continue;
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
+      if (!this.insideRoom || this.currentRoomId !== room.roomId) continue;
       if (this.imageFrameIcons.has(room.roomId)) continue;
       const center = this.roomCenter(room, map.tileSize);
       // Place the icon in the lower-right area of the room, mirroring the
@@ -1333,6 +1337,7 @@ export class DungeonScene extends Phaser.Scene {
     this.refreshRoomNpcs();
     this.callbacks?.onRoomEntered(roomId);
     this.refreshPortalHint();
+    this.refreshImageFrameIcons();
   }
 
   private setZoomTarget(zoom: number): void {
