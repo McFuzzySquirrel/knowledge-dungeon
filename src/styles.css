@@ -1177,6 +1177,18 @@ textarea {
   border-bottom: 1px solid var(--border-soft);
 }
 
+.room-panel-header {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.room-panel-header .room-tabs {
+  flex: 1;
+  border-bottom: none;
+  min-width: 0;
+}
+
 .room-tabs button {
   flex: 1;
   border: none;
@@ -1187,10 +1199,38 @@ textarea {
   color: var(--text-secondary);
 }
 
-.room-tabs .room-panel-toggle {
+.room-panel-header-actions {
+  display: flex;
+  border-left: 1px solid var(--border-soft);
+}
+
+.room-panel-header-actions button {
+  border: none;
+  border-radius: 0;
+  min-width: 46px;
+}
+
+.room-tabs .room-panel-toggle,
+.room-panel-header-actions .room-panel-toggle {
   flex: 0 0 auto;
   min-width: 86px;
-  border-left: 1px solid var(--border-soft);
+}
+
+.room-panel-menu-button,
+.room-panel-close {
+  color: var(--text-secondary);
+}
+
+.room-phase-actions,
+.room-secondary-panel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.room-phase-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
 }
 
 .room-tabs button[aria-selected='true'] {
@@ -1920,6 +1960,7 @@ button.danger:hover {
 
 .note-editor-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin: 8px 0;
 }
@@ -1927,6 +1968,16 @@ button.danger:hover {
 .note-editor-toolbar button[aria-pressed='true'] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.note-editor-help {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-panel-soft);
 }
 
 .note-section-chips {

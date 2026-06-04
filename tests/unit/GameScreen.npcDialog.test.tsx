@@ -40,6 +40,9 @@ interface MockGame {
 const createGameMock = vi.fn<(options: Record<string, unknown>) => MockGame>();
 let capturedCallbacks: CapturedCallbacks | null = null;
 let fakeScene: MockScene;
+const roomPanelProps = vi.fn<
+  (props: { onClose: () => void; requestedTab?: { tab: string; sequence: number } | null }) => void
+>();
 
 vi.mock('@/game/createGame', () => ({
   createGame: (options: Record<string, unknown>) => {
@@ -90,7 +93,20 @@ vi.mock('@/ui/components/InventoryBadgesPanel', () => ({
   InventoryBadgesPanel: () => null,
 }));
 vi.mock('@/ui/components/RoomPanel', () => ({
-  RoomPanel: () => <div data-testid="room-panel" />,
+  RoomPanel: (props: {
+    onClose: () => void;
+    requestedTab?: { tab: string; sequence: number } | null;
+  }) => {
+    roomPanelProps(props);
+    return (
+      <div data-testid="room-panel">
+        <button type="button" onClick={props.onClose}>
+          Close room panel
+        </button>
+        <span>{props.requestedTab?.tab ?? 'no-tab'}</span>
+      </div>
+    );
+  },
 }));
 vi.mock('@/ui/components/NoteEditorModal', () => ({ NoteEditorModal: () => null }));
 vi.mock('@/ui/components/Minimap', () => ({ Minimap: () => null }));
@@ -165,6 +181,7 @@ describe('GameScreen NPC dialog callbacks', () => {
   beforeEach(() => {
     capturedCallbacks = null;
     createGameMock.mockReset();
+    roomPanelProps.mockReset();
 
     fakeScene = {
       setArtifactRooms: vi.fn(),
@@ -325,6 +342,47 @@ describe('GameScreen NPC dialog callbacks', () => {
 
     await waitFor(() => {
       expect(fakeScene?.setReviewedArtifactRooms).toHaveBeenLastCalledWith(['room-1']);
+    });
+
+    it('defers archaeologist review until the note panel is closed', async () => {
+      useSessionStore.setState({ phase: 'archaeologist' });
+      useSubjectStore.setState({
+        snapshot: {
+          ...makeSnapshot(),
+          rooms: {
+            'room-1': {
+              ...makeSnapshot().rooms['room-1'],
+              noteText: 'Review these notes.',
+              validationState: {
+                ...makeSnapshot().rooms['room-1'].validationState,
+                finalPass: true,
+              },
+            },
+          },
+        },
+        recordReviewPass: vi.fn(),
+      });
+
+      render(<GameScreen />);
+
+      await waitFor(() => {
+        expect(capturedCallbacks).not.toBeNull();
+      });
+
+      act(() => {
+        capturedCallbacks?.onInteract?.('room-1');
+      });
+
+      expect(useSessionStore.getState().isNoteEditorOpen).toBe(false);
+      expect(screen.getByTestId('room-panel')).toBeInTheDocument();
+      expect(screen.getByText('notes')).toBeInTheDocument();
+      expect(useSubjectStore.getState().recordReviewPass).not.toHaveBeenCalled();
+
+      act(() => {
+        screen.getByRole('button', { name: /Close room panel/i }).click();
+      });
+
+      expect(useSubjectStore.getState().recordReviewPass).toHaveBeenCalledWith('room-1');
     });
   });
 });

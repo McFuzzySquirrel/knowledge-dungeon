@@ -46,6 +46,10 @@ function getPrimaryActionLabel(phase: GamePhase): string {
   return 'Open encounter';
 }
 
+function getDefaultTabForPhase(phase: GamePhase): RoomTab {
+  return phase === 'archaeologist' ? 'notes' : 'topic';
+}
+
 function getInitialPanelPosition(): PanelPosition {
   return { x: PANEL_MARGIN, y: PANEL_MARGIN };
 }
@@ -54,6 +58,7 @@ interface RoomPanelProps {
   snapshot: SubjectSnapshot;
   focusedRoom: RoomMetadata | null;
   onInteract: () => void;
+  onClose: () => void;
   onTravelToRoom: (roomId: string) => void;
   requestedTab?: { tab: RoomTab; sequence: number } | null;
   reviewPassesCompleted: number;
@@ -66,6 +71,7 @@ export function RoomPanel({
   snapshot,
   focusedRoom,
   onInteract,
+  onClose,
   onTravelToRoom,
   requestedTab,
   reviewPassesCompleted,
@@ -96,6 +102,7 @@ export function RoomPanel({
   const [selectedPortalRoomId, setSelectedPortalRoomId] = useState<string | null>(null);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const [panelExpanded, setPanelExpanded] = useState(false);
+  const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [panelPosition, setPanelPosition] = useState<PanelPosition>(getInitialPanelPosition);
   const [dragState, setDragState] = useState<
     { pointerId: number; offsetX: number; offsetY: number } | null
@@ -194,6 +201,15 @@ export function RoomPanel({
   }, [requestedTab]);
 
   useEffect(() => {
+    if (!focusedRoomId) return;
+    setTab(getDefaultTabForPhase(phase));
+  }, [focusedRoomId, phase]);
+
+  useEffect(() => {
+    setShowPhaseMenu(false);
+  }, [focusedRoomId, phase]);
+
+  useEffect(() => {
     if (!focusedRoom) {
       setAttachmentUrls({});
       return;
@@ -234,6 +250,10 @@ export function RoomPanel({
   const hasNoteText = Boolean(focusedRoom?.noteText.trim().length);
   const noteWordCount = focusedRoom?.validationState.wordCount ?? 0;
   const artifactTabsLocked = !focusedRoom?.validationState.finalPass;
+  const primaryTab = getDefaultTabForPhase(phase);
+  const compactPhaseLayout = phase === 'creator' || phase === 'archaeologist';
+  const showSecondaryTabs = !compactPhaseLayout || showPhaseMenu;
+  const closeButtonLabel = phase === 'archaeologist' ? 'Done' : 'Close';
 
   const connectedRoomIds = focusedRoomId
     ? getConnectedRoomIds(snapshot.dungeon, focusedRoomId)
@@ -481,62 +501,88 @@ export function RoomPanel({
       >
         Drag panel
       </div>
-      <div className="room-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'topic'}
-          onClick={() => setTab('topic')}
-        >
-          Topic
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'notes'}
-          onClick={() => setTab('notes')}
-        >
-          Notes
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'images'}
-          onClick={() => setTab('images')}
-        >
-          Images
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'artifact'}
-          onClick={() => setTab('artifact')}
-          disabled={!focusedRoom.validationState.finalPass}
-          title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
-        >
-          Artifact
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'selfcheck'}
-          onClick={() => setTab('selfcheck')}
-          disabled={!focusedRoom.validationState.finalPass}
-          title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
-        >
-          Self-check
-        </button>
-        <button
-          type="button"
-          className="room-panel-toggle"
-          aria-pressed={panelExpanded}
-          aria-label={panelExpanded ? 'Collapse room panel' : 'Expand room panel'}
-          onClick={() => setPanelExpanded((value) => !value)}
-        >
-          {panelExpanded ? 'Collapse' : 'Expand'}
-        </button>
+      <div className="room-panel-header">
+        <div className="room-tabs" role="tablist">
+          {(showSecondaryTabs || primaryTab === 'topic') && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'topic'}
+              onClick={() => setTab('topic')}
+            >
+              Topic
+            </button>
+          )}
+          {(showSecondaryTabs || primaryTab === 'notes') && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'notes'}
+              onClick={() => setTab('notes')}
+            >
+              Notes
+            </button>
+          )}
+          {showSecondaryTabs ? (
+            <>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'images'}
+                onClick={() => setTab('images')}
+              >
+                Images
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'artifact'}
+                onClick={() => setTab('artifact')}
+                disabled={!focusedRoom.validationState.finalPass}
+                title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
+              >
+                Artifact
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === 'selfcheck'}
+                onClick={() => setTab('selfcheck')}
+                disabled={!focusedRoom.validationState.finalPass}
+                title={!focusedRoom.validationState.finalPass ? 'Unlock by defeating this room encounter.' : undefined}
+              >
+                Self-check
+              </button>
+            </>
+          ) : null}
+        </div>
+        <div className="room-panel-header-actions">
+          {compactPhaseLayout ? (
+            <button
+              type="button"
+              className="room-panel-menu-button"
+              aria-pressed={showPhaseMenu}
+              aria-label={showPhaseMenu ? 'Hide room tools' : 'Show room tools'}
+              onClick={() => setShowPhaseMenu((value) => !value)}
+            >
+              ⋯
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="room-panel-toggle"
+            aria-pressed={panelExpanded}
+            aria-label={panelExpanded ? 'Collapse room panel' : 'Expand room panel'}
+            onClick={() => setPanelExpanded((value) => !value)}
+          >
+            {panelExpanded ? 'Collapse' : 'Expand'}
+          </button>
+          <button type="button" className="room-panel-close" onClick={onClose}>
+            {closeButtonLabel}
+          </button>
+        </div>
       </div>
-      {artifactTabsLocked ? (
+      {artifactTabsLocked && showSecondaryTabs ? (
         <p className="room-tab-lock-hint">
           Artifact and Self-check unlock after you defeat this room encounter.
         </p>
@@ -545,55 +591,64 @@ export function RoomPanel({
       <div className="room-tab-body">
         {tab === 'topic' ? (
           <>
-            <div className="room-progress-card" aria-label="Archaeologist unlock progress">
-              <strong>
-                Archaeologist unlock: {unlock.clearedRooms}/{unlock.totalRooms} rooms cleared
-              </strong>
-              <p className="room-help-text">
-                {unlock.unlocked
-                  ? 'Review phase is available.'
-                  : 'Clear every room encounter to unlock full review mode.'}
-              </p>
-            </div>
-            <div className="room-progress-card" aria-label="Archaeologist review pass progress">
-              <strong>
-                Review passes: {reviewPassesCompleted} complete
-              </strong>
-              <p className="room-help-text">
-                {reviewRoomsTowardNextPass}/{reviewTotalRooms} rooms toward pass {reviewNextPassTarget}.
-              </p>
-              <div
-                className="review-progress-bar"
-                role="progressbar"
-                aria-label="Room review progress toward next pass"
-                aria-valuemin={0}
-                aria-valuemax={reviewTotalRooms}
-                aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}
-              >
-                <span
-                  className="review-progress-bar-fill"
-                  style={{ width: `${reviewProgressPercent}%` }}
-                />
-              </div>
-            </div>
-            <div className="room-section" style={{ marginBottom: 12 }}>
-              <button type="button" className="room-primary-action" onClick={onInteract}>
-                {getPrimaryActionLabel(phase)}
-              </button>
-              <p className="room-help-text">
-                Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.
-              </p>
-            </div>
             <h2>{focusedRoom.topic}</h2>
             <span className="room-status-chip">{focusedRoom.state}</span>
-            <p className="room-meta-line">Floor: {currentFloorLabel}</p>
-            <p className="room-meta-line">
-              Breadcrumbs:{' '}
-              {breadcrumbRooms.map((room) => room.topic).join(' → ')}
-            </p>
-            <p className="room-meta-line">Edges: {relatedTopics.length}</p>
+            {phase !== 'creator' ? (
+              <>
+                <div className="room-progress-card" aria-label="Archaeologist unlock progress">
+                  <strong>
+                    Archaeologist unlock: {unlock.clearedRooms}/{unlock.totalRooms} rooms cleared
+                  </strong>
+                  <p className="room-help-text">
+                    {unlock.unlocked
+                      ? 'Review phase is available.'
+                      : 'Clear every room encounter to unlock full review mode.'}
+                  </p>
+                </div>
+                <div className="room-progress-card" aria-label="Archaeologist review pass progress">
+                  <strong>
+                    Review passes: {reviewPassesCompleted} complete
+                  </strong>
+                  <p className="room-help-text">
+                    {reviewRoomsTowardNextPass}/{reviewTotalRooms} rooms toward pass {reviewNextPassTarget}.
+                  </p>
+                  <div
+                    className="review-progress-bar"
+                    role="progressbar"
+                    aria-label="Room review progress toward next pass"
+                    aria-valuemin={0}
+                    aria-valuemax={reviewTotalRooms}
+                    aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}
+                  >
+                    <span
+                      className="review-progress-bar-fill"
+                      style={{ width: `${reviewProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="room-section" style={{ marginBottom: 12 }}>
+                  <button type="button" className="room-primary-action" onClick={onInteract}>
+                    {getPrimaryActionLabel(phase)}
+                  </button>
+                  <p className="room-help-text">
+                    Primary action for this room. Use <kbd>E</kbd> in the dungeon to trigger the same action.
+                  </p>
+                </div>
+              </>
+            ) : null}
 
-            {phase === 'creator' && snapshot.dungeon.rooms.length >= 3 ? (
+            {phase !== 'creator' || showPhaseMenu ? (
+              <div className="room-secondary-panel">
+                <p className="room-meta-line">Floor: {currentFloorLabel}</p>
+                <p className="room-meta-line">
+                  Breadcrumbs:{' '}
+                  {breadcrumbRooms.map((room) => room.topic).join(' → ')}
+                </p>
+                <p className="room-meta-line">Edges: {relatedTopics.length}</p>
+              </div>
+            ) : null}
+
+            {phase === 'creator' && snapshot.dungeon.rooms.length >= 3 && showPhaseMenu ? (
               <div className="room-section room-phase-nudge" aria-live="polite">
                 <p className="room-help-text">
                   Your map has enough rooms to start Scribe encounters.
@@ -604,7 +659,7 @@ export function RoomPanel({
               </div>
             ) : null}
 
-            {sameFloorConnections.length > 0 ? (
+            {sameFloorConnections.length > 0 && phase !== 'creator' ? (
               <div className="room-section">
                 <h3>Connected topics on this floor</h3>
                 <input
@@ -643,7 +698,7 @@ export function RoomPanel({
               </div>
             ) : null}
 
-            {parentFloorRoom || otherFloorConnections.length > 0 ? (
+            {(parentFloorRoom || otherFloorConnections.length > 0) && phase !== 'creator' ? (
               <div className="room-section">
                 <h3>Travel to related floors</h3>
                 <input
@@ -687,7 +742,7 @@ export function RoomPanel({
               </div>
             ) : null}
 
-            {portalRooms.length > 0 ? (
+            {portalRooms.length > 0 && phase !== 'creator' ? (
               <div className="room-section">
                 <h3>Portals to deeper floors</h3>
                 <input
@@ -780,7 +835,7 @@ export function RoomPanel({
               </div>
             ) : null}
 
-            {phase === 'creator' ? (
+            {phase === 'creator' && showPhaseMenu ? (
               <div className="room-section">
                 {focusedRoom.roomId !== snapshot.dungeon.rootRoomId ? (
                   <button
@@ -817,12 +872,31 @@ export function RoomPanel({
               <p>No notes drafted yet. Press <kbd>E</kbd> in the dungeon to open the editor.</p>
             ) : (
               <>
-                <p>Words: {noteWordCount > 0 ? noteWordCount : focusedRoom.noteText.trim().split(/\s+/).filter(Boolean).length}</p>
-                <p>
-                  Required sections present:{' '}
-                  {focusedRoom.validationState.requiredSectionsPresent ? 'yes' : 'no'}
-                </p>
-                <p>Quality bonus: {focusedRoom.validationState.qualityBonus}/10</p>
+                {phase === 'archaeologist' ? (
+                  <div className="room-phase-actions">
+                    <p className="room-help-text">
+                      Close this panel when you are done reviewing to count the pass.
+                    </p>
+                    <button type="button" className="ghost" onClick={onClose}>
+                      Done reviewing
+                    </button>
+                  </div>
+                ) : null}
+                {phase !== 'archaeologist' || showPhaseMenu ? (
+                  <div className="room-secondary-panel">
+                    <p>
+                      Words:{' '}
+                      {noteWordCount > 0
+                        ? noteWordCount
+                        : focusedRoom.noteText.trim().split(/\s+/).filter(Boolean).length}
+                    </p>
+                    <p>
+                      Required sections present:{' '}
+                      {focusedRoom.validationState.requiredSectionsPresent ? 'yes' : 'no'}
+                    </p>
+                    <p>Quality bonus: {focusedRoom.validationState.qualityBonus}/10</p>
+                  </div>
+                ) : null}
                 {focusedRoom.noteText ? (
                   <Markdown
                     source={focusedRoom.noteText}
