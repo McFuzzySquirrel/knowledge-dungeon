@@ -1,0 +1,224 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dungeon-snapshot",
+  "title": "SubjectSnapshot",
+  "description": "Full Knowledge Dungeon subject snapshot. This is the exact object that must be written to dungeon.json so that the web JSON-import and Electron folder-import both succeed.",
+  "type": "object",
+  "required": ["dungeon", "rooms"],
+  "additionalProperties": false,
+  "properties": {
+    "dungeon": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "dungeonId",
+        "subjectName",
+        "createdAt",
+        "updatedAt",
+        "phaseState",
+        "rootRoomId",
+        "rooms",
+        "edges",
+        "progression"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "1.0.0",
+          "description": "Must be exactly '1.0.0'. Any other value causes import to fail."
+        },
+        "dungeonId": {
+          "type": "string",
+          "description": "Kebab-case identifier, e.g. 'my-topic-dungeon'. Must be unique."
+        },
+        "subjectName": {
+          "type": "string",
+          "description": "Human-readable subject name."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO-8601 timestamp."
+        },
+        "phaseState": {
+          "type": "string",
+          "enum": [
+            "SubjectCreated",
+            "CreatorActive",
+            "CreatorComplete",
+            "ScribeActive",
+            "ScribePartial",
+            "ScribeComplete",
+            "ArchaeologistUnlocked",
+            "ArchaeologistActive",
+            "SubjectMastered"
+          ],
+          "description": "Use 'SubjectCreated' for freshly generated subjects."
+        },
+        "rootRoomId": {
+          "type": "string",
+          "description": "roomId of the introduction / entry room."
+        },
+        "rooms": {
+          "type": "array",
+          "description": "Summary list used for graph rendering. Each entry must have a matching key in the top-level 'rooms' map.",
+          "items": {
+            "type": "object",
+            "required": ["roomId", "topic", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "roomId": { "type": "string" },
+              "topic": { "type": "string" },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "Uncreated",
+                  "Created",
+                  "Visited",
+                  "NotesDrafted",
+                  "EncounterDefeated",
+                  "ArtifactCollected",
+                  "NeedsRevalidation"
+                ]
+              }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["fromRoomId", "toRoomId", "relationType", "createdAt", "createdByPhase"],
+            "additionalProperties": false,
+            "properties": {
+              "fromRoomId": { "type": "string" },
+              "toRoomId": { "type": "string" },
+              "relationType": {
+                "type": "string",
+                "enum": ["prerequisite", "subtopic", "analogy", "depends_on", "related"]
+              },
+              "createdAt": { "type": "string", "format": "date-time" },
+              "createdByPhase": {
+                "type": "string",
+                "enum": ["Creator", "Scribe", "Archaeologist"]
+              }
+            }
+          }
+        },
+        "progression": {
+          "type": "object",
+          "required": ["xpTotal", "rank", "badges"],
+          "additionalProperties": false,
+          "properties": {
+            "xpTotal": { "type": "number", "default": 0 },
+            "rank": { "type": "string", "default": "Novice" },
+            "badges": { "type": "array", "items": { "type": "string" }, "default": [] }
+          }
+        }
+      }
+    },
+    "rooms": {
+      "type": "object",
+      "description": "Map of roomId → full room payload. Every roomId listed in dungeon.rooms must have an entry here.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "roomId",
+          "topic",
+          "createdAt",
+          "updatedAt",
+          "state",
+          "notePath",
+          "artifactPath",
+          "noteText",
+          "artifactMarkdown",
+          "validationState",
+          "reviewPassCount",
+          "attachments"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "roomId": { "type": "string" },
+          "topic": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" },
+          "state": {
+            "type": "string",
+            "enum": [
+              "Uncreated",
+              "Created",
+              "Visited",
+              "NotesDrafted",
+              "EncounterDefeated",
+              "ArtifactCollected",
+              "NeedsRevalidation"
+            ]
+          },
+          "notePath": {
+            "type": "string",
+            "description": "Relative path, e.g. 'rooms/room-intro/notes.txt'."
+          },
+          "artifactPath": {
+            "type": "string",
+            "description": "Relative path, e.g. 'rooms/room-intro/artifact.md'."
+          },
+          "noteText": {
+            "type": "string",
+            "description": "Full plain-text note content (same text as notes.txt). Must contain the Summary, Key Points, and Recall Question sections."
+          },
+          "artifactMarkdown": {
+            "type": ["string", "null"],
+            "description": "Markdown artifact content, or null if not yet generated."
+          },
+          "validationState": {
+            "type": "object",
+            "required": [
+              "wordCount",
+              "requiredSectionsPresent",
+              "manualConfirmed",
+              "criterionScores",
+              "failedChecks",
+              "qualityBonus",
+              "finalPass"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "wordCount": { "type": "number", "default": 0 },
+              "requiredSectionsPresent": { "type": "boolean", "default": false },
+              "manualConfirmed": { "type": "boolean", "default": false },
+              "criterionScores": {
+                "type": "object",
+                "required": [
+                  "sectionCompleteness",
+                  "conceptTermCoverage",
+                  "linkReferences",
+                  "recallQuestionQuality",
+                  "clarityReadability"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "sectionCompleteness": { "type": "number", "default": 0 },
+                  "conceptTermCoverage": { "type": "number", "default": 0 },
+                  "linkReferences": { "type": "number", "default": 0 },
+                  "recallQuestionQuality": { "type": "number", "default": 0 },
+                  "clarityReadability": { "type": "number", "default": 0 }
+                }
+              },
+              "failedChecks": { "type": "array", "items": { "type": "string" }, "default": [] },
+              "qualityBonus": { "type": "number", "default": 0 },
+              "finalPass": { "type": "boolean", "default": false }
+            }
+          },
+          "reviewPassCount": { "type": "number", "default": 0 },
+          "attachments": { "type": "array", "items": {}, "default": [] }
+        }
+      }
+    }
+  }
+}
