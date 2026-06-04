@@ -1094,8 +1094,9 @@ textarea {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Layering baseline: HUD rail at 20/30, game UI at 40, room panel at 80+, mobile room panel at 90. */
-  z-index: 40;
+  /* Layering baseline: HUD sidebar at 80 (desktop) / 30 (mobile), game UI at 90 (above HUD),
+     modal-backdrop / help-overlay at 100 (above all), mobile room panel at 90 (fixed). */
+  z-index: 90;
 }
 
 .game-ui > * {
@@ -1459,7 +1460,7 @@ button.ghost {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 50;
+  z-index: 100;
 }
 
 .modal {
@@ -1602,7 +1603,7 @@ button.ghost {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 60;
+  z-index: 100;
   padding: 20px;
 }
 
