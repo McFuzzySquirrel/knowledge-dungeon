@@ -364,30 +364,30 @@ export function WelcomeScreen(): JSX.Element {
 
   return (
     <div className="welcome-screen ui-skin" data-theme={colorTheme}>
-      <header style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+      <header className="welcome-hero">
         <img
           src={WELCOME_ICON}
           alt="Knowledge Dungeon crystal icon"
           width={88}
           height={88}
-          style={{
-            flex: '0 0 auto',
-            borderRadius: 18,
-            padding: 6,
-            background: 'linear-gradient(180deg, rgba(123, 227, 255, 0.16), rgba(12, 22, 44, 0.42))',
-            border: '1px solid rgba(123, 227, 255, 0.32)',
-            boxShadow: '0 10px 24px rgba(0, 0, 0, 0.35)',
-          }}
+          className="welcome-hero-icon"
         />
-        <div>
-          <h1>Knowledge Dungeon</h1>
-          <p>
-            A local-first study dungeon-crawler. Build a subject as a mindmap of topic-rooms,
-            then defeat each room&rsquo;s encounter by writing structured notes. Currently running
-            in <strong>{env}</strong> mode.
-          </p>
-        </div>
+        <h1>Knowledge Dungeon</h1>
+        <p className="welcome-hero-subtitle">
+          A local-first study dungeon-crawler. Build a subject as a mindmap of topic-rooms, then
+          defeat each room&rsquo;s encounter by writing structured notes.
+        </p>
+        <p className="welcome-hero-mode">
+          Currently running in <strong>{env}</strong> mode.
+        </p>
       </header>
+
+      <section className="welcome-highlights" aria-label="Welcome highlights">
+        <p>🗺️ Every subject becomes a dungeon to explore</p>
+        <p>⚡ Earn XP, loot, and badges as you progress</p>
+        <p>👥 Meet NPCs and interact with room objects</p>
+        <p>🌍 Switch phases to create, clear, and review rooms</p>
+      </section>
 
       <section className="welcome-theme-picker" aria-label="Visual theme">
         <h2>Visual theme</h2>
@@ -487,6 +487,7 @@ export function WelcomeScreen(): JSX.Element {
 
       <section
         id="welcome-panel-setup"
+        className="welcome-panel-card"
         role="tabpanel"
         aria-label="Setup"
         hidden={activeTab !== 'setup'}
@@ -542,6 +543,7 @@ export function WelcomeScreen(): JSX.Element {
 
       <section
         id="welcome-panel-subjects"
+        className="welcome-panel-card"
         role="tabpanel"
         aria-label="Create or load subject"
         hidden={activeTab !== 'subjects'}
@@ -635,6 +637,7 @@ export function WelcomeScreen(): JSX.Element {
 
       <section
         id="welcome-panel-guide"
+        className="welcome-panel-card"
         role="tabpanel"
         aria-label="Guide"
         hidden={activeTab !== 'guide'}
@@ -654,6 +657,7 @@ export function WelcomeScreen(): JSX.Element {
 
       <section
         id="welcome-panel-data"
+        className="welcome-panel-card"
         role="tabpanel"
         aria-label="Data management"
         hidden={activeTab !== 'data'}
