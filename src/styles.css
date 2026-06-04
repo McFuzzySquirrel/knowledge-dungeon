@@ -18,6 +18,8 @@
   --control-selected-bg: linear-gradient(135deg, #4f78d6, #7be3ff);
   --control-selected-text: #fbfbff;
   --control-selected-border: #a9deff;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --text-title: #f0e6cc;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
 }
@@ -108,10 +110,16 @@ button {
   -webkit-user-select: none;
   caret-color: transparent;
   border: 1px solid var(--control-border);
-  background: var(--control-bg);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--control-bg) 88%, var(--accent) 12%) 0%,
+    color-mix(in srgb, var(--control-bg) 92%, #000000 8%) 100%
+  );
   color: var(--text-primary);
-  padding: 8px 14px;
-  border-radius: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   transition:
     background 120ms ease,
     border-color 120ms ease,
@@ -158,9 +166,15 @@ textarea {
   max-width: 720px;
   margin: 60px auto;
   padding: 28px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  background:
+    radial-gradient(circle at 22% 15%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 50%),
+    radial-gradient(circle at 84% 8%, color-mix(in srgb, var(--accent-cool) 16%, transparent), transparent 46%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 90%, #000000 10%), color-mix(in srgb, var(--bg-panel) 84%, #000000 16%));
+  border: 1px solid color-mix(in srgb, var(--control-border) 56%, transparent);
+  border-radius: 16px;
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 color-mix(in srgb, var(--accent-soft) 22%, transparent);
 }
 
 .ui-skin .welcome-screen,
@@ -241,6 +255,10 @@ textarea {
 .welcome-main-tabs {
   display: grid;
   gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--control-border) 45%, transparent);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-panel-soft) 80%, #000000 20%);
 }
 
 .welcome-theme-picker h2,
@@ -378,6 +396,13 @@ textarea {
 .welcome-screen h1 {
   margin: 0;
   font-size: 28px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-title);
+  text-shadow:
+    0 0 10px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 .welcome-screen p {
@@ -406,12 +431,12 @@ textarea {
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid var(--border-soft);
+  border: 1px solid color-mix(in srgb, var(--control-border) 55%, transparent);
   border-radius: 10px;
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--accent-cool) 20%, transparent),
-    color-mix(in srgb, var(--accent) 14%, transparent)
+    color-mix(in srgb, var(--accent-cool) 16%, var(--bg-panel-soft)),
+    color-mix(in srgb, var(--accent) 12%, var(--bg-panel-soft))
   );
 }
 
@@ -429,6 +454,31 @@ textarea {
 .welcome-ready-indicator--ready {
   color: var(--good);
   font-weight: 600;
+}
+
+.welcome-enter-dungeon--ready {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 0 14px color-mix(in srgb, var(--accent) 48%, transparent),
+    0 0 28px color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: enter-dungeon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes enter-dungeon-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent),
+      0 0 14px color-mix(in srgb, var(--accent) 48%, transparent),
+      0 0 28px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--accent) 42%, transparent),
+      0 0 22px color-mix(in srgb, var(--accent) 62%, transparent),
+      0 0 44px color-mix(in srgb, var(--accent) 32%, transparent);
+  }
 }
 
 .welcome-selection-grid {
@@ -562,7 +612,7 @@ textarea {
   align-self: flex-start;
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 80;
 }
 
 .hud-rail {
@@ -574,14 +624,18 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0;
+  gap: 8px;
   padding: 12px 10px;
-  background: rgba(22, 26, 38, 0.96);
+  background:
+    radial-gradient(circle at 18% 10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 40%),
+    linear-gradient(180deg, rgba(12, 18, 34, 0.98), rgba(9, 14, 28, 0.98));
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border-right: 1px solid var(--border-soft);
+  border-right: 2px solid color-mix(in srgb, var(--control-border) 75%, transparent);
   border-radius: 0;
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    4px 0 16px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 color-mix(in srgb, var(--accent-soft) 20%, transparent);
   pointer-events: auto;
   overflow-y: auto;
   overflow-x: hidden;
@@ -592,8 +646,10 @@ textarea {
   flex-direction: column;
   gap: 2px;
   font-size: 12px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--control-border) 48%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel-soft) 82%, #000000 18%);
 }
 
 .hud-stat:last-child {
@@ -653,9 +709,11 @@ textarea {
   font-size: 13px;
   font-weight: 700;
   color: var(--accent);
-  padding: 4px 0 8px;
-  border-bottom: 1px solid var(--border-soft);
-  margin-bottom: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--control-border) 56%, transparent);
+  border-radius: 10px;
+  margin-bottom: 0;
+  background: color-mix(in srgb, var(--bg-panel-soft) 86%, #000000 14%);
   word-break: break-word;
 }
 
@@ -667,8 +725,10 @@ textarea {
   display: flex;
   flex-direction: row;
   gap: 4px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border-soft);
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--control-border) 48%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel-soft) 80%, #000000 20%);
 }
 
 .hud-collection-btn {
@@ -705,7 +765,7 @@ textarea {
 .hud-action-icon-btn {
   flex: 1;
   min-width: 30px;
-  padding: 6px 4px;
+  padding: 5px 3px;
   font-size: 15px;
   line-height: 1;
   text-align: center;
@@ -731,9 +791,9 @@ textarea {
   align-items: stretch;
   gap: 4px;
   padding: 6px;
-  border: 1px solid var(--border-soft);
+  border: 1px solid color-mix(in srgb, var(--control-border) 48%, transparent);
   border-radius: 8px;
-  background: rgba(13, 16, 24, 0.45);
+  background: color-mix(in srgb, var(--bg-panel-soft) 82%, #000000 18%);
 }
 
 .hud-phase-controls button[aria-pressed='true'] {
@@ -1025,7 +1085,8 @@ textarea {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 30;
+  /* Layering baseline: HUD rail at 20/30, game UI at 40, room panel at 80+, mobile room panel at 90. */
+  z-index: 40;
 }
 
 .game-ui > * {
@@ -1714,25 +1775,31 @@ button.danger:hover {
     flex: 0 0 auto;
     width: 100%;
     height: auto;
-    position: static;
+    position: sticky;
+    top: 0;
     align-self: auto;
+    z-index: 30;
   }
 
   .hud-rail {
     flex: 0 0 auto;
     width: 100%;
     height: auto;
-    flex-direction: row;
+    flex-direction: column;
     flex-wrap: wrap;
     border-right: none;
-    border-bottom: 1px solid var(--border-soft);
+    border-bottom: 2px solid color-mix(in srgb, var(--control-border) 72%, transparent);
     border-radius: 0;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
     padding: 8px 12px;
     gap: 8px;
     overflow: visible;
-    align-items: center;
-    justify-content: space-between;
+    align-items: stretch;
+    justify-content: flex-start;
+    max-height: 42vh;
+    /* Older engines ignore `dvh` and keep the `vh` value above; modern engines use `dvh`. */
+    max-height: 42dvh;
+    overflow-y: auto;
   }
 
   .hud-stat {
@@ -1742,7 +1809,7 @@ button.danger:hover {
   }
 
   .hud-subject-label {
-    max-width: 40vw;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1757,15 +1824,15 @@ button.danger:hover {
   }
 
   .hud-actions {
-    flex-direction: row;
+    flex-direction: column;
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 0;
   }
 
   .hud-phase-controls {
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .hud-action-icon-btn {
@@ -1779,13 +1846,14 @@ button.danger:hover {
   }
 
   .room-panel {
-    top: 12px;
-    left: 12px;
-    right: auto;
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    left: 8px;
+    right: 8px;
     width: auto;
-    max-width: calc(100vw - 24px);
-    max-height: 60vh;
-    max-height: 60dvh;
+    max-width: none;
+    max-height: calc(100dvh - 16px);
+    z-index: 90;
   }
 
   .full-map-layout {
@@ -1874,11 +1942,10 @@ button.danger:hover {
   }
 
   .room-panel {
-    top: 8px;
-    left: 8px;
-    max-width: calc(100vw - 16px);
-    max-height: 65vh;
-    max-height: 65dvh;
+    top: calc(env(safe-area-inset-top, 0px) + 6px);
+    left: 6px;
+    right: 6px;
+    max-height: calc(100dvh - 12px);
   }
 
   .minimap {
