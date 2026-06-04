@@ -1,0 +1,10 @@
+Summary
+The README provides script references for linting, type-checking, tests, production build, bundle-size checks, and Electron packaging.
+
+Key Points
+- npm run lint, npm run typecheck, and npm run test cover baseline quality checks.
+- npm run build:web produces the production web bundle.
+- npm run check:bundle-size is used as a CI guard.
+
+Recall Question
+Which scripts are identified for verification and production packaging workflows?

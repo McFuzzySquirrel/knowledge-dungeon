@@ -1,0 +1,10 @@
+Summary
+Knowledge Dungeon is a local-first, offline-friendly study dungeon-crawler that combines a room-based mindmap with structured note-taking and review.
+
+Key Points
+- It merges the repo-dungeon engine with mindmap-dungeon's learning model.
+- Learners clear rooms by writing notes that pass deterministic quality gates.
+- Clearing all rooms unlocks Archaeologist review prompts and streak tracking.
+
+Recall Question
+How does Knowledge Dungeon turn studying into an interactive progression loop?

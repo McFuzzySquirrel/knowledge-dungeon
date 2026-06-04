@@ -1,0 +1,10 @@
+Summary
+The README frames Knowledge Dungeon as useful for students, developers, researchers, teams, and anyone using mindmaps plus notes.
+
+Key Points
+- Students can use Recall Questions for active memory practice.
+- Developers can map architecture and dependencies as traversable rooms.
+- Teams can build shared onboarding subjects for conventions and workflows.
+
+Recall Question
+Which user groups are explicitly called out as beneficiaries in the README?

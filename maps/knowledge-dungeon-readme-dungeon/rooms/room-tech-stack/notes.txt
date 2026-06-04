@@ -1,0 +1,10 @@
+Summary
+Knowledge Dungeon is built with React, Phaser, Zustand, Vite, TypeScript, Electron, Vitest, and ESLint.
+
+Key Points
+- React + Phaser power UI shell and dungeon gameplay rendering.
+- Vite + TypeScript handle build and typing workflows.
+- Electron enables desktop packaging for macOS, Windows, and Linux.
+
+Recall Question
+Which stack components are named for frontend, desktop, and quality tooling?

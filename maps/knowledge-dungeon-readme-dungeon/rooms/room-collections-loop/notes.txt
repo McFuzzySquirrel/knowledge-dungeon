@@ -1,0 +1,10 @@
+Summary
+Progression is reinforced with inventory loot, achievement badges, and a diary that reopens collected notes for review.
+
+Key Points
+- Inventory stores artifacts from defeated encounters.
+- Badges reward learning behaviors beyond raw XP totals.
+- Diary entries open full notes as a recall index during review runs.
+
+Recall Question
+How do Inventory, Badges, and Diary support both motivation and retention?

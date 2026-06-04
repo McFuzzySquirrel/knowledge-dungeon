@@ -1,0 +1,10 @@
+Summary
+The in-dungeon view keeps study context centralized with HUD, room panel, Phaser canvas, minimap, and map overlay controls.
+
+Key Points
+- HUD exposes progression, navigation, and help controls.
+- Room panel supports topic context, breadcrumbs, portals, and creator edits.
+- The full map can switch between floor-focused and whole-graph views.
+
+Recall Question
+Which major UI surfaces are described as the main in-dungeon loop workspace?

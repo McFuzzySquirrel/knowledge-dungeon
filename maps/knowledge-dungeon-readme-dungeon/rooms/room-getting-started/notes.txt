@@ -1,0 +1,10 @@
+Summary
+Initial setup uses npm install, then either npm run dev for web or npm run electron for web build plus desktop shell.
+
+Key Points
+- npm install is the first required step.
+- npm run dev starts the web development server.
+- npm run electron runs a web build and launches Electron.
+
+Recall Question
+Which commands are listed as the quickest way to start running the project locally?

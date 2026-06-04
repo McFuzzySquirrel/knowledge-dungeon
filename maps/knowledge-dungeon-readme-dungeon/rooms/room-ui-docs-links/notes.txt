@@ -1,0 +1,10 @@
+Summary
+The README points to dedicated docs for UI walkthroughs, customization details, and create-repo-mindmap skill usage.
+
+Key Points
+- UI.md provides a walkthrough with screenshots.
+- CUSTOMIZATION.md covers images, subject storage, and desktop export helpers.
+- SKILL.md and portable skill docs cover repo mindmap generation usage.
+
+Recall Question
+Which linked docs should you open for deeper UI customization and skill guidance?

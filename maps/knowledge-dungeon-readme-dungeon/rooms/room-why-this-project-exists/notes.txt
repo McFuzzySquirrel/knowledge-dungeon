@@ -1,0 +1,10 @@
+Summary
+Knowledge Dungeon is described as combining repo-dungeon gameplay shell with mindmap-dungeon subject modeling to better fit study use cases and maintainer preferences.
+
+Key Points
+- repo-dungeon gameplay was kept, but repository-as-content was replaced.
+- mindmap-dungeon learning loop was retained, but implementation stack changed.
+- The result is a study-focused content model on an existing game shell.
+
+Recall Question
+What tradeoff between earlier projects does the README say Knowledge Dungeon resolves?

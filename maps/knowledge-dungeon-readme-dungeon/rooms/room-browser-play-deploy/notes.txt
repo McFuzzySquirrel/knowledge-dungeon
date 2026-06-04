@@ -1,0 +1,10 @@
+Summary
+The project is playable via GitHub Pages, with deployment automated from pushes to main through a GitHub Actions workflow.
+
+Key Points
+- The README links a live web build URL.
+- Deployment is tied to .github/workflows/deploy-pages.yml.
+- Repository Pages source should be configured to GitHub Actions.
+
+Recall Question
+What repository setting is required for the GitHub Pages deployment path described in the README?

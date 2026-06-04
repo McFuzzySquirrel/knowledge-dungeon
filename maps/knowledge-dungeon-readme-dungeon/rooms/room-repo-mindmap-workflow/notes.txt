@@ -1,0 +1,10 @@
+Summary
+The project supports generating a subject from a repository, refreshing it in-app, and exploring relationships as an architecture map.
+
+Key Points
+- The README lists a 3-step flow: generate, refresh/load, then traverse.
+- The flow is positioned for onboarding and architecture review sessions.
+- It emphasizes understanding module boundaries and runtime flow through graph traversal.
+
+Recall Question
+What are the three steps described for exploring a repository as a dungeon mindmap?

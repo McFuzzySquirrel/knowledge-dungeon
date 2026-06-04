@@ -1,0 +1,10 @@
+Summary
+Electron packaging outputs installers in release/ with platform-specific commands and signing prerequisites for macOS and Windows.
+
+Key Points
+- Separate commands exist for mac, win, linux, and full multi-platform packaging.
+- macOS and Windows signing rely on platform-specific certificates/environment variables.
+- The README shows a step-by-step package flow using build:electron then package command.
+
+Recall Question
+What sequence is shown for creating a distributable Electron package?

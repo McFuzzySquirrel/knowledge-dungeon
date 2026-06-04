@@ -1,0 +1,10 @@
+Summary
+Persistence differs by runtime: Electron writes subject files under userData while web uses localStorage with import/export support, and all data remains local.
+
+Key Points
+- Electron stores subjects under user data with timestamped backups.
+- Web stores subjects in localStorage and supports data import/export via persistence facade.
+- The README explicitly states notes and progression are local-only with no server upload.
+
+Recall Question
+What differences and privacy guarantees does the README describe for web versus Electron persistence?
