@@ -655,7 +655,7 @@ export function GameScreen(): JSX.Element {
               type="button"
               className="touch-interact-btn"
               aria-label="Interact with current room"
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
               onClick={() => sceneRef.current?.triggerInteract()}
             >
               ⚔

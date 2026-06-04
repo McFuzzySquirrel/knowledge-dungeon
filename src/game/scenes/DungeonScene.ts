@@ -1312,9 +1312,12 @@ export class DungeonScene extends Phaser.Scene {
     const p1 = this.input.pointer1;
     const p2 = this.input.pointer2;
 
-    if (p1.isDown && p2.isDown) {
+    if (p1?.isDown && p2?.isDown) {
       // Two fingers are now active — start a pinch-to-zoom gesture.
-      this.pinchStartDistance = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+      const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+      // Guard against the degenerate case where both touch points are at the same position.
+      if (dist < 1) return;
+      this.pinchStartDistance = dist;
       this.pinchStartZoom = this.cameras.main.zoom;
       this.pinchActive = true;
       // A pinch cancels any single-finger movement/tap that was in progress.

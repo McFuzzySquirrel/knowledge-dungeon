@@ -453,7 +453,9 @@ export function FullMapView({
 
       // If two pointers are now active, start a pinch-to-zoom gesture
       if (activePointersRef.current.size === 2) {
-        const [[id1, p1], [id2, p2]] = [...activePointersRef.current.entries()];
+        const entries = [...activePointersRef.current.entries()];
+        if (entries.length !== 2) return;
+        const [[id1, p1], [id2, p2]] = entries as [[number, {x:number;y:number}], [number, {x:number;y:number}]];
         const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
         pinchRef.current = { id1, id2, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, startDist: dist, startZoom: zoom };
         // Cancel any single-pointer pan
