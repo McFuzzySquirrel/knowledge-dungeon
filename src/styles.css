@@ -1094,8 +1094,9 @@ textarea {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Layering baseline: HUD sidebar at 80 (desktop) / 30 (mobile), game UI at 90 (above HUD),
-     modal-backdrop / help-overlay at 100 (above all), mobile room panel at 90 (fixed). */
+  /* Layering baseline: HUD sidebar at 80 (desktop) / 30 (mobile); game UI at 90 sits above HUD on
+     both breakpoints. modal-backdrop / help-overlay at 100 (above all). On mobile, .room-panel is
+     additionally promoted to position:fixed z-index:90 in the root context (see mobile overrides). */
   z-index: 90;
 }
 
