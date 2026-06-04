@@ -1017,6 +1017,10 @@ textarea {
   font-size: 13px;
 }
 
+.badge-card > div {
+  min-width: 0;
+}
+
 .badge-card-button {
   width: 100%;
   text-align: left;
@@ -1034,6 +1038,7 @@ textarea {
 
 .badge-label {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .badge-detail-card {
