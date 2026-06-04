@@ -253,7 +253,7 @@ export function RoomPanel({
   const primaryTab = getDefaultTabForPhase(phase);
   const compactPhaseLayout = phase === 'creator' || phase === 'archaeologist';
   const showSecondaryTabs = !compactPhaseLayout || showPhaseMenu;
-  const closeButtonLabel = phase === 'archaeologist' ? 'Done' : 'Close';
+  const closeButtonLabel = phase === 'archaeologist' ? 'Close review' : 'Close';
 
   const connectedRoomIds = focusedRoomId
     ? getConnectedRoomIds(snapshot.dungeon, focusedRoomId)

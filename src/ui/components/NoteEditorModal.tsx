@@ -18,6 +18,7 @@ import {
 import { useToasts } from '@/ui/utils/useToasts';
 
 const TEMPLATE = composeNoteSections(emptyNoteSections());
+const DEFAULT_EXPANDED = true;
 
 export function NoteEditorModal(): JSX.Element | null {
   const isOpen = useSessionStore((s) => s.isNoteEditorOpen);
@@ -43,7 +44,7 @@ export function NoteEditorModal(): JSX.Element | null {
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(DEFAULT_EXPANDED);
   const [showHelp, setShowHelp] = useState(false);
   const [showChecks, setShowChecks] = useState(false);
   const [showImagesPanel, setShowImagesPanel] = useState(false);
@@ -61,7 +62,7 @@ export function NoteEditorModal(): JSX.Element | null {
     setActiveSection(REQUIRED_NOTE_SECTIONS[0]);
     setConfirm(room.validationState.manualConfirmed);
     setShowPreview(false);
-    setExpanded(true);
+    setExpanded(DEFAULT_EXPANDED);
     setShowHelp(false);
     setShowChecks(false);
     setShowImagesPanel(false);
