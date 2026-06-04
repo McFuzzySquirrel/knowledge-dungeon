@@ -84,6 +84,29 @@ describe('InventoryBadgesPanel', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens detail for long unbroken badge ids', () => {
+    render(
+      <InventoryBadgesPanel
+        view="badges"
+        inventory={[]}
+        badges={['ArchaeologistPhaseComplete']}
+        collectedNotes={[]}
+        subjectName="Linear Algebra"
+        clearedRoomCount={0}
+        totalRoomCount={1}
+        xpTotal={50}
+        rank="Apprentice"
+        onSwitchView={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /ArchaeologistPhaseComplete/i }));
+
+    expect(screen.getByText('Archaeologist milestone')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back to badges' })).toBeInTheDocument();
+  });
+
   it('opens extra detail when a badge is clicked', () => {
     render(
       <InventoryBadgesPanel

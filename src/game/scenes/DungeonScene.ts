@@ -79,6 +79,7 @@ const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
 const DOOR_SPRITE = `${BASE}assets/sprites/objects/door.svg`;
 const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
 const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
+const PICTURE_FRAME_SPRITE = `${BASE}assets/sprites/objects/picture-frame.svg`;
 const DECOR_SPRITES = {
   bookshelf: `${BASE}assets/sprites/objects/bookshelf.svg`,
   brazier: `${BASE}assets/sprites/objects/brazier.svg`,
@@ -100,6 +101,7 @@ const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
 const DOOR_TEXTURE_KEY = 'kd-door';
 const STAIRS_UP_TEXTURE_KEY = 'kd-stairs-up';
 const STAIRS_DOWN_TEXTURE_KEY = 'kd-stairs-down';
+const PICTURE_FRAME_TEXTURE_KEY = 'kd-picture-frame';
 const PLAYER_SPRITE_SIZE = 32;
 const SIGNPOST_SPRITE_SIZE = 28;
 const NPC_GUIDE_SPRITE_SIZE = 28;
@@ -109,6 +111,11 @@ const ARTIFACT_LOOT_SPRITE_SIZE = 26;
 const PORTAL_SPRITE_SIZE = 28;
 const PATHWAY_TILE_SIZE = 32;
 const DOOR_SPRITE_SIZE = 22;
+const PICTURE_FRAME_SPRITE_SIZE = 20;
+// Fraction of a room's half-width/height used to position the picture frame
+// icon in the lower-right quadrant, clear of the topic label and decor.
+const PICTURE_FRAME_OFFSET_X = 0.3;
+const PICTURE_FRAME_OFFSET_Y = 0.28;
 // Square collider, tighter than the rendered sprite so movement feels right.
 const PLAYER_COLLIDER_SIZE = 16;
 // Inset (in pixels) used when sampling the player's collider against the
@@ -136,6 +143,8 @@ export class DungeonScene extends Phaser.Scene {
   private collectedArtifactRoomIds = new Set<string>();
   private reviewedArtifactRoomIds = new Set<string>();
   private showArtifactIcons = false;
+  private imageRoomIds = new Set<string>();
+  private imageFrameIcons = new Map<string, Phaser.GameObjects.Image>();
   private currentFloorId: string | null = null;
   private visibleRoomIds: Set<string> | null = null;
   private portalUpRoomId: string | null = null;
@@ -233,6 +242,10 @@ export class DungeonScene extends Phaser.Scene {
     this.load.svg(STAIRS_DOWN_TEXTURE_KEY, STAIRS_DOWN_SPRITE, {
       width: PORTAL_SPRITE_SIZE,
       height: PORTAL_SPRITE_SIZE,
+    });
+    this.load.svg(PICTURE_FRAME_TEXTURE_KEY, PICTURE_FRAME_SPRITE, {
+      width: PICTURE_FRAME_SPRITE_SIZE,
+      height: PICTURE_FRAME_SPRITE_SIZE,
     });
     for (const key of DECOR_KEYS) {
       this.load.svg(DECOR_TEXTURE_KEYS[key], DECOR_SPRITES[key], {
@@ -341,6 +354,7 @@ export class DungeonScene extends Phaser.Scene {
 
     this.enterRoom(root.roomId);
     this.refreshArtifactIcons();
+    this.refreshImageFrameIcons();
     this.refreshPortalIcons();
   }
 
@@ -412,6 +426,7 @@ export class DungeonScene extends Phaser.Scene {
     if (shouldBeInsideRoom !== this.insideRoom) {
       this.insideRoom = shouldBeInsideRoom;
       this.setZoomTarget(shouldBeInsideRoom ? ZOOM_INSIDE_ROOM : ZOOM_ON_PATH);
+      this.refreshImageFrameIcons();
     }
 
     this.checkArtifactCollection();
@@ -497,6 +512,54 @@ export class DungeonScene extends Phaser.Scene {
   setReviewedArtifactRooms(roomIds: readonly string[]): void {
     this.reviewedArtifactRoomIds = new Set(roomIds);
     this.refreshArtifactReviewMarkers();
+  }
+
+  /**
+   * Tell the scene which rooms have image attachments. A small picture-frame
+   * icon will be shown in the lower-right corner of the active room as a
+   * contextual visual hint in both Scribe and Archaeologist phases.
+   */
+  setImageRooms(roomIds: readonly string[]): void {
+    this.imageRoomIds = new Set(roomIds);
+    this.refreshImageFrameIcons();
+  }
+
+  private refreshImageFrameIcons(): void {
+    if (!this.dungeonMap || !this.textures.exists(PICTURE_FRAME_TEXTURE_KEY)) return;
+    const map = this.dungeonMap;
+    // Remove icons for rooms no longer in the image set or hidden by the floor filter.
+    for (const [roomId, icon] of this.imageFrameIcons) {
+      const stillVisible = this.imageRoomIds.has(roomId) && this.isImageIconVisible(roomId);
+      if (!stillVisible) {
+        icon.destroy();
+        this.imageFrameIcons.delete(roomId);
+      }
+    }
+    for (const room of map.rooms) {
+      if (!this.imageRoomIds.has(room.roomId)) continue;
+      if (!this.isImageIconVisible(room.roomId)) continue;
+      if (this.imageFrameIcons.has(room.roomId)) continue;
+      const center = this.roomCenter(room, map.tileSize);
+      // Place the icon in the lower-right area of the room, mirroring the
+      // review dot in the upper-right. Depth 7 keeps it above decor/floors.
+      const frameX = center.x + room.width * map.tileSize * PICTURE_FRAME_OFFSET_X;
+      const frameY = center.y + room.height * map.tileSize * PICTURE_FRAME_OFFSET_Y;
+      const icon = this.add
+        .image(frameX, frameY, PICTURE_FRAME_TEXTURE_KEY)
+        .setDepth(7)
+        .setAlpha(0.88);
+      this.imageFrameIcons.set(room.roomId, icon);
+    }
+  }
+
+  private isImageIconVisible(roomId: string): boolean {
+    // Frame hints are contextual: only show while the player is actively inside
+    // that exact room, not while traveling corridors or viewing other rooms.
+    return (
+      (!this.visibleRoomIds || this.visibleRoomIds.has(roomId)) &&
+      this.insideRoom &&
+      this.currentRoomId === roomId
+    );
   }
 
   private checkArtifactCollection(): void {
@@ -828,6 +891,7 @@ export class DungeonScene extends Phaser.Scene {
       this.refreshDecor();
       this.refreshRoomNpcs();
       this.refreshArtifactIcons();
+      this.refreshImageFrameIcons();
       this.refreshPortalHint();
     }
   }
@@ -1281,6 +1345,7 @@ export class DungeonScene extends Phaser.Scene {
     this.refreshRoomNpcs();
     this.callbacks?.onRoomEntered(roomId);
     this.refreshPortalHint();
+    this.refreshImageFrameIcons();
   }
 
   private setZoomTarget(zoom: number): void {

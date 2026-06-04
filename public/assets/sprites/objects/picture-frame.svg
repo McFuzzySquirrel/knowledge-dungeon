@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Outer frame — warm gold -->
+  <rect x="1" y="2" width="22" height="20" rx="1.5" fill="#8b6914" stroke="#4a3508" stroke-width="0.5"/>
+  <!-- Frame border (inset) -->
+  <rect x="2.5" y="3.5" width="19" height="17" rx="1" fill="#6b4f10"/>
+  <!-- Canvas / inner picture area -->
+  <rect x="4" y="5" width="16" height="14" rx="0.5" fill="#1a2a4a"/>
+  <!-- Sky gradient suggestion -->
+  <rect x="4" y="5" width="16" height="8" rx="0.5" fill="#1e3860"/>
+  <!-- Ground -->
+  <rect x="4" y="13" width="16" height="6" fill="#152438"/>
+  <!-- Sun/moon -->
+  <circle cx="17" cy="9.5" r="2.2" fill="#f0c040" opacity="0.8"/>
+  <!-- Frame corner highlights -->
+  <rect x="1.5" y="2.5" width="3.5" height="3.5" rx="0.5" fill="#c8921a" opacity="0.55"/>
+  <rect x="19" y="2.5" width="3.5" height="3.5" rx="0.5" fill="#c8921a" opacity="0.55"/>
+  <rect x="1.5" y="18" width="3.5" height="3.5" rx="0.5" fill="#c8921a" opacity="0.55"/>
+  <rect x="19" y="18" width="3.5" height="3.5" rx="0.5" fill="#c8921a" opacity="0.55"/>
+</svg>

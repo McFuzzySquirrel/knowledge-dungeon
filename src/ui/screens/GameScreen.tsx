@@ -323,6 +323,8 @@ export function GameScreen(): JSX.Element {
           const previewSource = room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown;
           const preview = previewSource
             .replace(/^#\s+.*$/gm, '')
+            .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+            .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
             .replace(/\s+/g, ' ')
             .trim()
             .slice(0, 180);
@@ -425,6 +427,16 @@ export function GameScreen(): JSX.Element {
         : [];
     scene.setReviewedArtifactRooms(reviewedArtifactRoomIds);
   }, [phase, sceneReady, snapshot]);
+
+  useEffect(() => {
+    if (!sceneReady || !snapshot) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const imageRoomIds = Object.values(snapshot.rooms)
+      .filter((room) => room.attachments.length > 0)
+      .map((room) => room.roomId);
+    scene.setImageRooms(imageRoomIds);
+  }, [sceneReady, snapshot]);
 
   useEffect(() => {
     if (!snapshot) return;

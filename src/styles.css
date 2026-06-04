@@ -944,6 +944,10 @@ textarea {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .journal-note-link {
@@ -1017,6 +1021,10 @@ textarea {
   font-size: 13px;
 }
 
+.badge-card > div {
+  min-width: 0;
+}
+
 .badge-card-button {
   width: 100%;
   text-align: left;
@@ -1034,6 +1042,7 @@ textarea {
 
 .badge-label {
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .badge-detail-card {
@@ -1085,8 +1094,10 @@ textarea {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  /* Layering baseline: HUD rail at 20/30, game UI at 40, room panel at 80+, mobile room panel at 90. */
-  z-index: 40;
+  /* Layering baseline: HUD sidebar at 80 (desktop) / 30 (mobile); game UI at 90 sits above HUD on
+     both breakpoints. modal-backdrop / help-overlay at 100 (above all). On mobile, .room-panel is
+     additionally promoted to position:fixed z-index:90 in the root context (see mobile overrides). */
+  z-index: 90;
 }
 
 .game-ui > * {
@@ -1450,7 +1461,7 @@ button.ghost {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 50;
+  z-index: 100;
 }
 
 .modal {
@@ -1593,7 +1604,7 @@ button.ghost {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 60;
+  z-index: 100;
   padding: 20px;
 }
 
