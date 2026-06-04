@@ -18,6 +18,8 @@
   --control-selected-bg: linear-gradient(135deg, #4f78d6, #7be3ff);
   --control-selected-text: #fbfbff;
   --control-selected-border: #a9deff;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --text-title: #f0e6cc;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
 }
@@ -394,10 +396,10 @@ textarea {
 .welcome-screen h1 {
   margin: 0;
   font-size: 28px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #f0e6cc;
+  color: var(--text-title);
   text-shadow:
     0 0 10px color-mix(in srgb, var(--accent) 35%, transparent),
     0 2px 4px rgba(0, 0, 0, 0.8);
@@ -626,7 +628,7 @@ textarea {
 }
 
 .hud-stat:last-child {
-  border-bottom: 1px solid color-mix(in srgb, var(--control-border) 48%, transparent);
+  border-bottom: none;
 }
 
 .hud-stat strong {
@@ -1058,6 +1060,7 @@ textarea {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Layering baseline: HUD rail at 20/30, game UI at 40, room panel at 80+, mobile room panel at 90. */
   z-index: 40;
 }
 
@@ -1769,6 +1772,7 @@ button.danger:hover {
     align-items: stretch;
     justify-content: flex-start;
     max-height: 42vh;
+    /* Older engines ignore `dvh` and keep the `vh` value above; modern engines use `dvh`. */
     max-height: 42dvh;
     overflow-y: auto;
   }
