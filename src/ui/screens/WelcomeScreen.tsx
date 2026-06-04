@@ -479,7 +479,7 @@ export function WelcomeScreen(): JSX.Element {
           </div>
         </div>
         <div className="welcome-actions" style={{ marginTop: 12 }}>
-          <button type="button" onClick={() => void handleEnterSelectedSubject()} disabled={!canEnterDungeon}>
+          <button type="button" className={canEnterDungeon ? 'welcome-enter-dungeon--ready' : undefined} onClick={() => void handleEnterSelectedSubject()} disabled={!canEnterDungeon}>
             Enter Dungeon
           </button>
         </div>
@@ -587,7 +587,7 @@ export function WelcomeScreen(): JSX.Element {
             <div style={{ marginTop: 16 }}>
               <h3>Previously created</h3>
               <p className="room-help-text">Select a subject, then choose Setup options and Enter Dungeon.</p>
-              <div className="welcome-actions">
+              <div className="welcome-actions" style={{ marginTop: 8 }}>
                 {existingSubjects.map((subject) => (
                   <button
                     key={subject.id}

@@ -456,6 +456,31 @@ textarea {
   font-weight: 600;
 }
 
+.welcome-enter-dungeon--ready {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 0 14px color-mix(in srgb, var(--accent) 48%, transparent),
+    0 0 28px color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: enter-dungeon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes enter-dungeon-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent),
+      0 0 14px color-mix(in srgb, var(--accent) 48%, transparent),
+      0 0 28px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--accent) 42%, transparent),
+      0 0 22px color-mix(in srgb, var(--accent) 62%, transparent),
+      0 0 44px color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+}
+
 .welcome-selection-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
