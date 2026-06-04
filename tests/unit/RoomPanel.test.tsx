@@ -178,7 +178,7 @@ describe('RoomPanel', () => {
       />,
     );
 
-    expect(screen.getByRole('heading', { name: /Add child topics/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Add child rooms/i })).toBeInTheDocument();
     expect(screen.queryByText(/Floor:/i)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Show room tools/i }));

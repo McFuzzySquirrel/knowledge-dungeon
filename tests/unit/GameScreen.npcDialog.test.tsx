@@ -381,9 +381,10 @@ describe('GameScreen NPC dialog callbacks', () => {
       capturedCallbacks?.onInteract?.('room-1');
     });
 
+    const lastRoomPanelProps = roomPanelProps.mock.lastCall?.[0];
     expect(useSessionStore.getState().isNoteEditorOpen).toBe(false);
     expect(screen.getByTestId('room-panel')).toBeInTheDocument();
-    expect(screen.getByText('notes')).toBeInTheDocument();
+    expect(lastRoomPanelProps?.requestedTab?.tab).toBe('notes');
     expect(useSubjectStore.getState().recordReviewPass).not.toHaveBeenCalled();
 
     act(() => {
