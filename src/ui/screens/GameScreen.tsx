@@ -650,6 +650,17 @@ export function GameScreen(): JSX.Element {
             portalUpRoomId={floorVisibility?.portalUpRoomId ?? null}
             portalDownRoomIds={floorVisibility?.portalDownRoomIds}
           />
+          {sceneReady ? (
+            <button
+              type="button"
+              className="touch-interact-btn"
+              aria-label="Interact with current room"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => sceneRef.current?.triggerInteract()}
+            >
+              ⚔
+            </button>
+          ) : null}
         </div>
         <div className="game-ui ui-skin" data-theme={colorTheme}>
           {isInfoPanelOpen ? (

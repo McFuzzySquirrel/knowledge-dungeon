@@ -16,6 +16,11 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             the room you&rsquo;re standing in.
           </li>
           <li>
+            On touch screens, <strong>drag</strong> on the game canvas to move your character,
+            <strong>tap</strong> the canvas (or the <strong>⚔ Interact</strong> button) to trigger
+            the room action, and <strong>pinch</strong> with two fingers to zoom in or out.
+          </li>
+          <li>
             Use the HUD <kbd>Map</kbd> button or <kbd>M</kbd> to open the full map. From there you
             can drag the canvas, zoom, and drag individual room nodes to reshape the layout.
           </li>
