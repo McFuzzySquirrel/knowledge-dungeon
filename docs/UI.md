@@ -228,9 +228,9 @@ icons, phase-switcher, and action row. Minimap in the bottom-right corner.
 At ≤ 480 px the welcome screen gets tighter margins and padding so it fits comfortably
 on a phone screen without horizontal scrolling.
 
-### 11c) Setup tab — single-column phase and archetype grids (≤ 600 px)
+### 11c) Player Setup tab — single-column phase and archetype grids (≤ 600 px)
 
-![Setup tab with single-column phase and class grids on mobile](./assets/ui/mobile-setup-screen.png)
+![Player Setup tab with single-column phase and class grids on mobile](./assets/ui/mobile-setup-screen.png)
 
 Below 600 px the phase grid and archetype grid each collapse to a single column so every
 card is full-width and tap targets remain comfortable.
