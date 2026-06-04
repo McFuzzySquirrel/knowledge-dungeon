@@ -427,6 +427,16 @@ export function GameScreen(): JSX.Element {
   }, [phase, sceneReady, snapshot]);
 
   useEffect(() => {
+    if (!sceneReady || !snapshot) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const imageRoomIds = Object.values(snapshot.rooms)
+      .filter((room) => room.attachments.length > 0)
+      .map((room) => room.roomId);
+    scene.setImageRooms(imageRoomIds);
+  }, [sceneReady, snapshot]);
+
+  useEffect(() => {
     if (!snapshot) return;
     if (hasSeenGameplayLoopOnboarding()) return;
     setShowOnboarding(true);
