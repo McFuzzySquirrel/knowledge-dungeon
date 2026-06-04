@@ -426,7 +426,7 @@ export function WelcomeScreen(): JSX.Element {
             onKeyDown={(event) => handleTabKeyDown(event, 'setup')}
             onClick={() => setActiveTab('setup')}
           >
-            Setup
+            Player Setup
           </button>
           <button
             type="button"
@@ -488,7 +488,7 @@ export function WelcomeScreen(): JSX.Element {
       <section
         id="welcome-panel-setup"
         role="tabpanel"
-        aria-label="Setup"
+        aria-label="Player Setup"
         hidden={activeTab !== 'setup'}
       >
         <section>
@@ -586,7 +586,7 @@ export function WelcomeScreen(): JSX.Element {
           {existingSubjects.length > 0 ? (
             <div style={{ marginTop: 16 }}>
               <h3>Previously created</h3>
-              <p className="room-help-text">Select a subject, then choose Setup options and Enter Dungeon.</p>
+              <p className="room-help-text">Select a subject, then choose Player Setup options and Enter Dungeon.</p>
               <div className="welcome-actions" style={{ marginTop: 8 }}>
                 {existingSubjects.map((subject) => (
                   <button
@@ -613,7 +613,7 @@ export function WelcomeScreen(): JSX.Element {
                     cleared. Suggested phase: {selectedExistingSubject.suggestedPhase}.
                   </p>
                   {!isReadyToEnter ? (
-                    <p className="room-help-text">Pick an archetype in Setup to enter this dungeon.</p>
+                    <p className="room-help-text">Pick an archetype in Player Setup to enter this dungeon.</p>
                   ) : (
                     <p className="room-help-text">Use Enter Dungeon above when you are ready to continue.</p>
                   )}
