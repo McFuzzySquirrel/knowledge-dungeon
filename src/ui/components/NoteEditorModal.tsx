@@ -18,6 +18,7 @@ import {
 import { useToasts } from '@/ui/utils/useToasts';
 
 const TEMPLATE = composeNoteSections(emptyNoteSections());
+const DEFAULT_EXPANDED = true;
 
 export function NoteEditorModal(): JSX.Element | null {
   const isOpen = useSessionStore((s) => s.isNoteEditorOpen);
@@ -43,7 +44,10 @@ export function NoteEditorModal(): JSX.Element | null {
   const [confirm, setConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(DEFAULT_EXPANDED);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showChecks, setShowChecks] = useState(false);
+  const [showImagesPanel, setShowImagesPanel] = useState(false);
   const [hasEditedNote, setHasEditedNote] = useState(false);
   const [externalImageUrl, setExternalImageUrl] = useState('');
   const [isSavingAttachment, setIsSavingAttachment] = useState(false);
@@ -58,7 +62,10 @@ export function NoteEditorModal(): JSX.Element | null {
     setActiveSection(REQUIRED_NOTE_SECTIONS[0]);
     setConfirm(room.validationState.manualConfirmed);
     setShowPreview(false);
-    setExpanded(false);
+    setExpanded(DEFAULT_EXPANDED);
+    setShowHelp(false);
+    setShowChecks(false);
+    setShowImagesPanel(false);
     setHasEditedNote(false);
     setExternalImageUrl('');
     setShowImageLibrary(false);
@@ -177,24 +184,6 @@ export function NoteEditorModal(): JSX.Element | null {
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Note editor">
       <div className={`modal note-editor-modal${expanded ? ' note-editor-modal--expanded' : ''}`}>
         <h2>Encounter: {room.topic}</h2>
-        <p>
-          Write as much or as little as needed. Include {REQUIRED_NOTE_SECTIONS.join(', ')}{' '}
-          sections to defeat this encounter and generate its artifact. Reach{' '}
-          {NOTE_BADGE_WORD_COUNT}+ words to earn a special badge.
-        </p>
-        <p className="room-help-text">
-          Select a section chip and write that section. The editor keeps required headings for
-          you so accidental full-note replacement is less likely.
-        </p>
-        <p className="room-help-text">
-          Rich text: use <code>[label](https://example.com)</code> for clickable links,
-          <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, and{' '}
-          <code>-</code> for bullets.
-        </p>
-        <p className="room-help-text">
-          In Scribe phase, manage room images below and tap <code>Insert in note</code> to place
-          them into your notes.
-        </p>
         <div className="note-editor-toolbar">
           <button
             type="button"
@@ -210,166 +199,203 @@ export function NoteEditorModal(): JSX.Element | null {
           >
             Preview
           </button>
+          <button type="button" aria-pressed={showHelp} onClick={() => setShowHelp((value) => !value)}>
+            Help
+          </button>
+          <button
+            type="button"
+            aria-pressed={showImagesPanel}
+            onClick={() => setShowImagesPanel((value) => !value)}
+          >
+            Images
+          </button>
+          <button
+            type="button"
+            aria-pressed={showChecks}
+            onClick={() => setShowChecks((value) => !value)}
+          >
+            Checks
+          </button>
           <button type="button" aria-pressed={expanded} onClick={() => setExpanded((value) => !value)}>
             {expanded ? 'Collapse' : 'Expand'}
           </button>
         </div>
+        {showHelp ? (
+          <div className="note-editor-help">
+            <p>
+              Write as much or as little as needed. Include {REQUIRED_NOTE_SECTIONS.join(', ')}{' '}
+              sections to defeat this encounter and generate its artifact. Reach{' '}
+              {NOTE_BADGE_WORD_COUNT}+ words to earn a special badge.
+            </p>
+            <p className="room-help-text">
+              Select a section chip and write that section. The editor keeps required headings for
+              you so accidental full-note replacement is less likely.
+            </p>
+            <p className="room-help-text">
+              Rich text: use <code>[label](https://example.com)</code> for clickable links,
+              <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, and{' '}
+              <code>-</code> for bullets.
+            </p>
+          </div>
+        ) : null}
         <ToastStack toasts={toasts} className="toast-stack--inline" />
-        <div className="note-images-section">
-          <span className="note-images-label">Images</span>
-          {phase === 'scribe' ? (
-            <div className="note-images-actions">
-              <button
-                type="button"
-                className="ghost"
-                disabled={isSavingAttachment}
-                onClick={() => {
-                  setIsSavingAttachment(true);
-                  void addLocalAttachment(room.roomId)
-                    .then((created) => {
-                      if (!created) {
-                        pushToast('info', 'No image selected.');
-                        return;
-                      }
-                      pushToast('info', 'Image attached to room.');
-                    })
-                    .catch((error: unknown) => {
-                      const message =
-                        error instanceof Error ? error.message : 'Failed to attach local image.';
-                      pushToast('error', message);
-                    })
-                    .finally(() => {
-                      setIsSavingAttachment(false);
-                    });
-                }}
-              >
-                + Local
-              </button>
-              <input
-                type="url"
-                value={externalImageUrl}
-                onChange={(event) => setExternalImageUrl(event.target.value)}
-                placeholder="https://example.com/image.png"
-                aria-label="External image URL"
-                className="note-images-url-input"
-              />
-              <button
-                type="button"
-                className="ghost"
-                disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
-                onClick={() => {
-                  const nextUrl = externalImageUrl.trim();
-                  if (nextUrl.length === 0) return;
-                  setIsSavingAttachment(true);
-                  void addExternalAttachment(room.roomId, nextUrl)
-                    .then((created) => {
-                      if (!created) {
-                        pushToast('info', 'No external image was added.');
-                        return;
-                      }
-                      setExternalImageUrl('');
-                      pushToast('info', 'External image attached to room.');
-                    })
-                    .catch((error: unknown) => {
-                      const message =
-                        error instanceof Error ? error.message : 'Failed to attach external image URL.';
-                      pushToast('error', message);
-                    })
-                    .finally(() => {
-                      setIsSavingAttachment(false);
-                    });
-                }}
-              >
-                + URL
-              </button>
-            </div>
-          ) : (
-            <span className="room-help-text">Scribe phase only.</span>
-          )}
-          {room.attachments.length === 0 ? (
-            <p className="room-help-text">No room images yet.</p>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="ghost"
-                aria-expanded={showImageLibrary}
-                onClick={() => setShowImageLibrary((current) => !current)}
-              >
-                {showImageLibrary
-                  ? `Hide image library (${room.attachments.length})`
-                  : `Show image library (${room.attachments.length})`}
-              </button>
-              {showImageLibrary ? (
-                <ul className="attachment-grid attachment-grid--compact">
-                  {room.attachments.map((attachment) => {
-                    const previewUrl =
-                      attachment.sourceType === 'external'
-                        ? attachment.externalUrl ?? null
-                        : attachmentUrls[attachment.attachmentId] ?? null;
-                    const markdownToken =
-                      attachment.sourceType === 'local'
-                        ? `![${attachment.altText ?? attachment.fileName}](local:${attachment.attachmentId})`
-                        : `![${attachment.altText ?? attachment.fileName}](${attachment.externalUrl ?? ''})`;
-                    return (
-                      <li key={attachment.attachmentId} className="attachment-card attachment-card--compact">
-                        {previewUrl ? (
-                          <img
-                            src={previewUrl}
-                            alt={attachment.altText ?? attachment.fileName}
-                            className="attachment-image"
-                          />
-                        ) : (
-                          <div className="attachment-image attachment-image--missing">
-                            Missing image source
+        {showImagesPanel ? (
+          <div className="note-images-section">
+            <span className="note-images-label">Images</span>
+            {phase === 'scribe' ? (
+              <div className="note-images-actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={isSavingAttachment}
+                  onClick={() => {
+                    setIsSavingAttachment(true);
+                    void addLocalAttachment(room.roomId)
+                      .then((created) => {
+                        if (!created) {
+                          pushToast('info', 'No image selected.');
+                          return;
+                        }
+                        pushToast('info', 'Image attached to room.');
+                      })
+                      .catch((error: unknown) => {
+                        const message =
+                          error instanceof Error ? error.message : 'Failed to attach local image.';
+                        pushToast('error', message);
+                      })
+                      .finally(() => {
+                        setIsSavingAttachment(false);
+                      });
+                  }}
+                >
+                  + Local
+                </button>
+                <input
+                  type="url"
+                  value={externalImageUrl}
+                  onChange={(event) => setExternalImageUrl(event.target.value)}
+                  placeholder="https://example.com/image.png"
+                  aria-label="External image URL"
+                  className="note-images-url-input"
+                />
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
+                  onClick={() => {
+                    const nextUrl = externalImageUrl.trim();
+                    if (nextUrl.length === 0) return;
+                    setIsSavingAttachment(true);
+                    void addExternalAttachment(room.roomId, nextUrl)
+                      .then((created) => {
+                        if (!created) {
+                          pushToast('info', 'No external image was added.');
+                          return;
+                        }
+                        setExternalImageUrl('');
+                        pushToast('info', 'External image attached to room.');
+                      })
+                      .catch((error: unknown) => {
+                        const message =
+                          error instanceof Error ? error.message : 'Failed to attach external image URL.';
+                        pushToast('error', message);
+                      })
+                      .finally(() => {
+                        setIsSavingAttachment(false);
+                      });
+                  }}
+                >
+                  + URL
+                </button>
+              </div>
+            ) : (
+              <span className="room-help-text">Scribe phase only.</span>
+            )}
+            {room.attachments.length === 0 ? (
+              <p className="room-help-text">No room images yet.</p>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="ghost"
+                  aria-expanded={showImageLibrary}
+                  onClick={() => setShowImageLibrary((current) => !current)}
+                >
+                  {showImageLibrary
+                    ? `Hide image library (${room.attachments.length})`
+                    : `Show image library (${room.attachments.length})`}
+                </button>
+                {showImageLibrary ? (
+                  <ul className="attachment-grid attachment-grid--compact">
+                    {room.attachments.map((attachment) => {
+                      const previewUrl =
+                        attachment.sourceType === 'external'
+                          ? attachment.externalUrl ?? null
+                          : attachmentUrls[attachment.attachmentId] ?? null;
+                      const markdownToken =
+                        attachment.sourceType === 'local'
+                          ? `![${attachment.altText ?? attachment.fileName}](local:${attachment.attachmentId})`
+                          : `![${attachment.altText ?? attachment.fileName}](${attachment.externalUrl ?? ''})`;
+                      return (
+                        <li key={attachment.attachmentId} className="attachment-card attachment-card--compact">
+                          {previewUrl ? (
+                            <img
+                              src={previewUrl}
+                              alt={attachment.altText ?? attachment.fileName}
+                              className="attachment-image"
+                            />
+                          ) : (
+                            <div className="attachment-image attachment-image--missing">
+                              Missing image source
+                            </div>
+                          )}
+                          <div className="attachment-meta">
+                            <strong>{attachment.fileName}</strong>
+                            <p className="room-help-text">{attachment.sourceType}</p>
                           </div>
-                        )}
-                        <div className="attachment-meta">
-                          <strong>{attachment.fileName}</strong>
-                          <p className="room-help-text">{attachment.sourceType}</p>
-                        </div>
-                        <div className="attachment-card-actions">
-                          {phase === 'scribe' ? (
-                            <>
-                              <button
-                                type="button"
-                                className="ghost"
-                                aria-label={`Insert ${attachment.fileName} in note`}
-                                onClick={() => insertAttachmentToken(markdownToken)}
-                              >
-                                Insert in note
-                              </button>
-                              <button
-                                type="button"
-                                className="danger"
-                                aria-label={`Remove ${attachment.fileName}`}
-                                onClick={() => {
-                                  void removeAttachment(room.roomId, attachment.attachmentId)
-                                    .then(() => {
-                                      pushToast('info', 'Attachment removed from room.');
-                                    })
-                                    .catch((error: unknown) => {
-                                      const message =
-                                        error instanceof Error
-                                          ? error.message
-                                          : 'Failed to remove attachment.';
-                                      pushToast('error', message);
-                                    });
-                                }}
-                              >
-                                Remove
-                              </button>
-                            </>
-                          ) : null}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : null}
-            </>
-          )}
-        </div>
+                          <div className="attachment-card-actions">
+                            {phase === 'scribe' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="ghost"
+                                  aria-label={`Insert ${attachment.fileName} in note`}
+                                  onClick={() => insertAttachmentToken(markdownToken)}
+                                >
+                                  Insert in note
+                                </button>
+                                <button
+                                  type="button"
+                                  className="danger"
+                                  aria-label={`Remove ${attachment.fileName}`}
+                                  onClick={() => {
+                                    void removeAttachment(room.roomId, attachment.attachmentId)
+                                      .then(() => {
+                                        pushToast('info', 'Attachment removed from room.');
+                                      })
+                                      .catch((error: unknown) => {
+                                        const message =
+                                          error instanceof Error
+                                            ? error.message
+                                            : 'Failed to remove attachment.';
+                                        pushToast('error', message);
+                                      });
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </>
+            )}
+          </div>
+        ) : null}
         {showPreview ? (
           <div
             className="markdown-body note-body note-preview"
@@ -424,7 +450,7 @@ export function NoteEditorModal(): JSX.Element | null {
           I confirm these notes are my own and complete.
         </label>
 
-        {preview ? (
+        {preview && showChecks ? (
           <ul className="validation-list" style={{ marginTop: 12 }}>
             {(showNeutralChecklist
               ? preview.criteria.map((criterion) => ({

@@ -69,6 +69,9 @@ describe('NoteEditorModal', () => {
   it('shows a neutral checklist on first open before edits', () => {
     render(<NoteEditorModal />);
 
+    expect(screen.queryByText(/Keep headings: Summary, Key Points, Recall Question/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Checks' }));
     expect(
       screen.getByText(/Keep headings: Summary, Key Points, Recall Question/i),
     ).toBeInTheDocument();
@@ -132,6 +135,7 @@ describe('NoteEditorModal', () => {
     });
     render(<NoteEditorModal />);
 
+    fireEvent.click(screen.getByRole('button', { name: 'Images' }));
     expect(screen.getByRole('button', { name: /Show image library \(1\)/i })).toBeInTheDocument();
     expect(screen.queryByText('diagram.png')).not.toBeInTheDocument();
 
@@ -139,12 +143,25 @@ describe('NoteEditorModal', () => {
     expect(screen.getByText('diagram.png')).toBeInTheDocument();
   });
 
-  it('can expand the encounter modal for a wider workspace', () => {
+  it('opens expanded by default and can be collapsed back down', () => {
     const { container } = render(<NoteEditorModal />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-
     expect(container.querySelector('.note-editor-modal--expanded')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
+    expect(container.querySelector('.note-editor-modal--expanded')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Expand' })).toBeInTheDocument();
+  });
+
+  it('keeps help and image tools tucked away until requested', () => {
+    render(<NoteEditorModal />);
+
+    expect(screen.queryByText(/Write as much or as little as needed/i)).toBeNull();
+    expect(screen.queryByText(/No room images yet/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Help' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Images' }));
+
+    expect(screen.getByText(/Write as much or as little as needed/i)).toBeInTheDocument();
+    expect(screen.getByText(/No room images yet/i)).toBeInTheDocument();
   });
 });

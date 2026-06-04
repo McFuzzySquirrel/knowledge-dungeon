@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useSessionStore } from '@/store/sessionStore';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 import { RoomPanel } from '@/ui/components/RoomPanel';
 
@@ -52,6 +53,7 @@ function createSnapshot(): SubjectSnapshot {
 
 describe('RoomPanel', () => {
   it('renders imported note text even when validation count is zero', () => {
+    useSessionStore.setState({ phase: 'scribe' });
     const snapshot = createSnapshot();
     const focusedRoom = snapshot.rooms['room-1'];
 
@@ -60,6 +62,7 @@ describe('RoomPanel', () => {
         snapshot={snapshot}
         focusedRoom={focusedRoom}
         onInteract={() => undefined}
+        onClose={() => undefined}
         onTravelToRoom={() => undefined}
         reviewPassesCompleted={0}
         reviewRoomsTowardNextPass={0}
@@ -75,6 +78,7 @@ describe('RoomPanel', () => {
   });
 
   it('shows local-image fallback text when attachment token cannot be resolved', () => {
+    useSessionStore.setState({ phase: 'scribe' });
     const snapshot = createSnapshot();
     snapshot.rooms['room-1'] = {
       ...snapshot.rooms['room-1'],
@@ -86,6 +90,7 @@ describe('RoomPanel', () => {
         snapshot={snapshot}
         focusedRoom={snapshot.rooms['room-1']}
         onInteract={() => undefined}
+        onClose={() => undefined}
         onTravelToRoom={() => undefined}
         reviewPassesCompleted={0}
         reviewRoomsTowardNextPass={0}
@@ -101,6 +106,7 @@ describe('RoomPanel', () => {
   });
 
   it('shows lock messaging and archaeologist progress card for uncleared rooms', () => {
+    useSessionStore.setState({ phase: 'scribe' });
     const snapshot = createSnapshot();
 
     render(
@@ -108,6 +114,7 @@ describe('RoomPanel', () => {
         snapshot={snapshot}
         focusedRoom={snapshot.rooms['room-1']}
         onInteract={() => undefined}
+        onClose={() => undefined}
         onTravelToRoom={() => undefined}
         reviewPassesCompleted={0}
         reviewRoomsTowardNextPass={0}
@@ -125,6 +132,7 @@ describe('RoomPanel', () => {
   });
 
   it('drags the panel when using the drag handle', () => {
+    useSessionStore.setState({ phase: 'scribe' });
     const snapshot = createSnapshot();
 
     render(
@@ -132,6 +140,7 @@ describe('RoomPanel', () => {
         snapshot={snapshot}
         focusedRoom={snapshot.rooms['room-1']}
         onInteract={() => undefined}
+        onClose={() => undefined}
         onTravelToRoom={() => undefined}
         reviewPassesCompleted={0}
         reviewRoomsTowardNextPass={0}
@@ -149,5 +158,55 @@ describe('RoomPanel', () => {
 
     expect(panel.getAttribute('style')).toContain('left:');
     expect(panel.getAttribute('style')).toContain('top:');
+  });
+
+  it('keeps creator focus on topic editing until the tools menu is opened', () => {
+    useSessionStore.setState({ phase: 'creator' });
+    const snapshot = createSnapshot();
+
+    render(
+      <RoomPanel
+        snapshot={snapshot}
+        focusedRoom={snapshot.rooms['room-1']}
+        onInteract={() => undefined}
+        onClose={() => undefined}
+        onTravelToRoom={() => undefined}
+        reviewPassesCompleted={0}
+        reviewRoomsTowardNextPass={0}
+        reviewNextPassTarget={1}
+        reviewTotalRooms={1}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /Add child rooms/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Floor:/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show room tools/i }));
+    expect(screen.getByText(/Floor:/i)).toBeInTheDocument();
+  });
+
+  it('keeps archaeologist review focused on notes until the tools menu is opened', () => {
+    useSessionStore.setState({ phase: 'archaeologist' });
+    const snapshot = createSnapshot();
+
+    render(
+      <RoomPanel
+        snapshot={snapshot}
+        focusedRoom={snapshot.rooms['room-1']}
+        onInteract={() => undefined}
+        onClose={() => undefined}
+        onTravelToRoom={() => undefined}
+        reviewPassesCompleted={0}
+        reviewRoomsTowardNextPass={0}
+        reviewNextPassTarget={1}
+        reviewTotalRooms={1}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Done reviewing' })).toBeInTheDocument();
+    expect(screen.queryByText(/Quality bonus:/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show room tools/i }));
+    expect(screen.getByText(/Quality bonus:/i)).toBeInTheDocument();
   });
 });

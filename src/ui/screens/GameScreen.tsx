@@ -82,6 +82,7 @@ export function GameScreen(): JSX.Element {
   const [npcDialogRoomId, setNpcDialogRoomId] = useState<string | null>(null);
   const [npcDialogAnchor, setNpcDialogAnchor] = useState<{ x: number; y: number } | null>(null);
   const [autoOpenCollectedNoteId, setAutoOpenCollectedNoteId] = useState<string | null>(null);
+  const [pendingReviewRoomId, setPendingReviewRoomId] = useState<string | null>(null);
   const [attachmentUrlsByRoomId, setAttachmentUrlsByRoomId] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -133,6 +134,7 @@ export function GameScreen(): JSX.Element {
       setNpcDialogRoomId(null);
       setNpcDialogAnchor(null);
       setFocusedRoomId(roomId);
+      setPendingReviewRoomId(null);
 
       if (phase === 'creator') {
         requestRoomPanelTab('topic');
@@ -150,81 +152,110 @@ export function GameScreen(): JSX.Element {
       if (liveSnapshot) {
         const room = liveSnapshot.rooms[roomId];
         if (room && room.validationState.finalPass) {
-          const reviewableRoomIds = liveSnapshot.dungeon.rooms
-            .map((summary) => summary.roomId)
-            .filter((candidateRoomId) => {
-              const candidate = liveSnapshot.rooms[candidateRoomId];
-              return candidate ? isReviewableRoom(candidate) : false;
-            });
-          const analyticsBefore = summarizeReviewAnalytics({
-            rooms: liveSnapshot.rooms,
-            reviewableRoomIds,
-            currentReviewStreak: 0,
-            longestReviewStreak: 0,
-          });
-          const nextPassTarget = analyticsBefore.fullReviewPasses + 1;
-          const shouldAwardReviewXp = room.reviewPassCount < nextPassTarget;
-
-          void recordReviewPass(roomId);
-          const reviewProgression = shouldAwardReviewXp
-            ? useProgressionStore.getState().awardReviewPass()
-            : { xpGained: 0, newRank: useProgressionStore.getState().rank, rankChanged: false };
-
-          const roomsWithIncrement = {
-            ...liveSnapshot.rooms,
-            [roomId]: {
-              ...room,
-              reviewPassCount: room.reviewPassCount + 1,
-            },
-          };
-          const analytics = summarizeReviewAnalytics({
-            rooms: roomsWithIncrement,
-            reviewableRoomIds,
-            currentReviewStreak: 0,
-            longestReviewStreak: 0,
-          });
-
-          const unlockedBadges = evaluatePhaseBadgeUnlocks(
-            {
-              totalRooms: liveSnapshot.dungeon.rooms.length,
-              creatorMappedRooms: liveSnapshot.dungeon.rooms.length,
-              scribeClearedRooms: reviewableRoomIds.length,
-              archaeologistFullReviewPasses: analytics.fullReviewPasses,
-            },
-            useProgressionStore.getState().badges,
-          );
-          if (unlockedBadges.length > 0) {
-            const progression = useProgressionStore.getState();
-            unlockedBadges.forEach((badgeId) => {
-              progression.awardBadge(badgeId);
-            });
-            pushToast(
-              'info',
-              `Archaeologist badge unlocked: ${unlockedBadges.join(', ')}`,
-            );
-          }
-
-          const nextPassProgressTarget = analytics.fullReviewPasses + 1;
-          const reviewedTowardNextPass = liveSnapshot.dungeon.rooms.filter((summary) => {
-            const count = roomsWithIncrement[summary.roomId]?.reviewPassCount ?? 0;
-            return count >= nextPassProgressTarget;
-          }).length;
-          const xpMessage =
-            reviewProgression.xpGained > 0
-              ? ` (+${reviewProgression.xpGained} XP)`
-              : ' (already counted for this pass)';
-          pushToast(
-            'info',
-            `Review recorded${xpMessage}: ${reviewedTowardNextPass}/${liveSnapshot.dungeon.rooms.length} rooms toward pass ${nextPassProgressTarget}. Completed full passes: ${analytics.fullReviewPasses}.`,
-          );
+          setPendingReviewRoomId(roomId);
         }
       }
 
-      requestRoomPanelTab('selfcheck');
+      requestRoomPanelTab('notes');
       setIsInfoPanelOpen(true);
     },
-    [openNoteEditor, phase, pushToast, recordReviewPass, requestRoomPanelTab, setFocusedRoomId],
+    [openNoteEditor, phase, requestRoomPanelTab, setFocusedRoomId],
   );
+
+  const finalizePendingReview = useCallback(
+    (roomId: string) => {
+      const liveSnapshot = useSubjectStore.getState().snapshot;
+      if (!liveSnapshot) return;
+
+      const room = liveSnapshot.rooms[roomId];
+      if (!room || !room.validationState.finalPass) return;
+
+      const reviewableRoomIds = liveSnapshot.dungeon.rooms
+        .map((summary) => summary.roomId)
+        .filter((candidateRoomId) => {
+          const candidate = liveSnapshot.rooms[candidateRoomId];
+          return candidate ? isReviewableRoom(candidate) : false;
+        });
+      const analyticsBefore = summarizeReviewAnalytics({
+        rooms: liveSnapshot.rooms,
+        reviewableRoomIds,
+        currentReviewStreak: 0,
+        longestReviewStreak: 0,
+      });
+      const nextPassTarget = analyticsBefore.fullReviewPasses + 1;
+      const shouldAwardReviewXp = room.reviewPassCount < nextPassTarget;
+
+      void recordReviewPass(roomId);
+      const reviewProgression = shouldAwardReviewXp
+        ? useProgressionStore.getState().awardReviewPass()
+        : { xpGained: 0, newRank: useProgressionStore.getState().rank, rankChanged: false };
+
+      const roomsWithIncrement = {
+        ...liveSnapshot.rooms,
+        [roomId]: {
+          ...room,
+          reviewPassCount: room.reviewPassCount + 1,
+        },
+      };
+      const analytics = summarizeReviewAnalytics({
+        rooms: roomsWithIncrement,
+        reviewableRoomIds,
+        currentReviewStreak: 0,
+        longestReviewStreak: 0,
+      });
+
+      const unlockedBadges = evaluatePhaseBadgeUnlocks(
+        {
+          totalRooms: liveSnapshot.dungeon.rooms.length,
+          creatorMappedRooms: liveSnapshot.dungeon.rooms.length,
+          scribeClearedRooms: reviewableRoomIds.length,
+          archaeologistFullReviewPasses: analytics.fullReviewPasses,
+        },
+        useProgressionStore.getState().badges,
+      );
+      if (unlockedBadges.length > 0) {
+        const progression = useProgressionStore.getState();
+        unlockedBadges.forEach((badgeId) => {
+          progression.awardBadge(badgeId);
+        });
+        pushToast(
+          'info',
+          `Archaeologist badge unlocked: ${unlockedBadges.join(', ')}`,
+        );
+      }
+
+      const nextPassProgressTarget = analytics.fullReviewPasses + 1;
+      const reviewedTowardNextPass = liveSnapshot.dungeon.rooms.filter((summary) => {
+        const count = roomsWithIncrement[summary.roomId]?.reviewPassCount ?? 0;
+        return count >= nextPassProgressTarget;
+      }).length;
+      const xpMessage =
+        reviewProgression.xpGained > 0
+          ? ` (+${reviewProgression.xpGained} XP)`
+          : ' (already counted for this pass)';
+      pushToast(
+        'info',
+        `Review recorded${xpMessage}: ${reviewedTowardNextPass}/${liveSnapshot.dungeon.rooms.length} rooms toward pass ${nextPassProgressTarget}. Completed full passes: ${analytics.fullReviewPasses}.`,
+      );
+    },
+    [pushToast, recordReviewPass],
+  );
+
+  const closeInfoPanel = useCallback(() => {
+    setIsInfoPanelOpen(false);
+    if (phase === 'archaeologist' && pendingReviewRoomId) {
+      finalizePendingReview(pendingReviewRoomId);
+    }
+    setPendingReviewRoomId(null);
+  }, [finalizePendingReview, pendingReviewRoomId, phase]);
+
+  const toggleInfoPanel = useCallback(() => {
+    if (isInfoPanelOpen) {
+      closeInfoPanel();
+      return;
+    }
+    setIsInfoPanelOpen(true);
+  }, [closeInfoPanel, isInfoPanelOpen]);
 
   useEffect(() => {
     if (teleportRemainingMs <= 0) return;
@@ -439,17 +470,18 @@ export function GameScreen(): JSX.Element {
         }
       } else if (e.key === 'i' || e.key === 'I') {
         e.preventDefault();
-        setIsInfoPanelOpen((open) => !open);
+        toggleInfoPanel();
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [closeMapView, openMapView]);
+  }, [closeMapView, openMapView, toggleInfoPanel]);
 
   function handleHome() {
     // Clear the active subject so <App> falls back to <WelcomeScreen>, where
     // the user can pick an existing subject or create a new one.
     closeMapView();
+    setPendingReviewRoomId(null);
     setFocusedRoomId(null);
     setActiveSubjectId(null);
     persistActiveSubjectId(null);
@@ -632,7 +664,7 @@ export function GameScreen(): JSX.Element {
           onOpenMap={openMapView}
           onTeleport={handleTeleport}
           onHome={handleHome}
-          onToggleInfo={() => setIsInfoPanelOpen((open) => !open)}
+          onToggleInfo={toggleInfoPanel}
           onOpenInventory={() => setInventoryView('inventory')}
           onOpenBadges={() => setInventoryView('badges')}
           onOpenJournal={() => setInventoryView('journal')}
@@ -671,6 +703,7 @@ export function GameScreen(): JSX.Element {
                 if (!focusedRoom) return;
                 handleRoomInteract(focusedRoom.roomId);
               }}
+              onClose={closeInfoPanel}
               onTravelToRoom={handleTravelToRoom}
               requestedTab={roomPanelTabRequest}
               reviewPassesCompleted={reviewProgress.fullReviewPasses}
