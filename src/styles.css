@@ -162,64 +162,19 @@ textarea {
 .welcome-screen {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-width: 760px;
-  margin: 24px auto;
-  padding: 26px;
+  gap: 28px;
+  max-width: 720px;
+  margin: 60px auto;
+  padding: 28px;
   background:
-    radial-gradient(circle at 50% -8%, color-mix(in srgb, var(--accent-cool) 26%, transparent), transparent 44%),
-    radial-gradient(circle at 15% 8%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 50%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 82%, #020914 18%), color-mix(in srgb, var(--bg-panel) 88%, #020914 12%));
-  border: 1px solid color-mix(in srgb, var(--accent-cool) 26%, var(--border-soft));
-  border-radius: 18px;
+    radial-gradient(circle at 22% 15%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 50%),
+    radial-gradient(circle at 84% 8%, color-mix(in srgb, var(--accent-cool) 16%, transparent), transparent 46%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 90%, #000000 10%), color-mix(in srgb, var(--bg-panel) 84%, #000000 16%));
+  border: 1px solid color-mix(in srgb, var(--control-border) 56%, transparent);
+  border-radius: 16px;
   box-shadow:
-    0 0 56px color-mix(in srgb, var(--accent-cool) 20%, transparent),
-    0 20px 44px rgba(0, 0, 0, 0.5),
+    0 16px 38px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 color-mix(in srgb, var(--accent-soft) 22%, transparent);
-}
-
-.welcome-hero {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: 10px;
-  margin-bottom: 2px;
-}
-
-.welcome-hero-icon {
-  border-radius: 18px;
-  padding: 6px;
-  background: linear-gradient(180deg, rgba(123, 227, 255, 0.22), rgba(12, 22, 44, 0.46));
-  border: 1px solid rgba(123, 227, 255, 0.44);
-  box-shadow:
-    0 0 26px rgba(101, 223, 255, 0.56),
-    0 10px 24px rgba(0, 0, 0, 0.42);
-}
-
-.welcome-hero-subtitle {
-  max-width: 520px;
-  margin: 0;
-  color: var(--text-secondary);
-}
-
-.welcome-hero-mode {
-  margin: 0;
-  font-size: 13px;
-}
-
-.welcome-highlights {
-  display: grid;
-  gap: 10px;
-}
-
-.welcome-highlights p {
-  margin: 0;
-  padding: 11px 14px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--accent-cool) 36%, var(--border-soft));
-  background: color-mix(in srgb, var(--bg-panel-soft) 74%, #031729 26%);
-  color: var(--text-primary);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-cool) 24%, transparent);
 }
 
 .ui-skin .welcome-screen,
@@ -300,10 +255,10 @@ textarea {
 .welcome-main-tabs {
   display: grid;
   gap: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent-cool) 30%, var(--control-border));
+  border: 1px solid color-mix(in srgb, var(--control-border) 45%, transparent);
   border-radius: 10px;
-  padding: 12px;
-  background: color-mix(in srgb, var(--bg-panel-soft) 68%, #041729 32%);
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-panel-soft) 80%, #000000 20%);
 }
 
 .welcome-theme-picker h2,
@@ -316,11 +271,11 @@ textarea {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 0;
-  border: 1px solid color-mix(in srgb, var(--accent-cool) 30%, var(--border-soft));
+  border: 1px solid var(--border-soft);
   border-radius: 10px;
   overflow: hidden;
-  width: 100%;
-  background: color-mix(in srgb, var(--bg-panel-soft) 68%, #041729 32%);
+  width: fit-content;
+  background: var(--bg-panel-soft);
 }
 
 .welcome-tabs button {
@@ -329,7 +284,6 @@ textarea {
   background: transparent;
   color: var(--text-secondary);
   padding: 9px 14px;
-  flex: 1 1 120px;
 }
 
 .welcome-tabs button[aria-selected='true'] {
@@ -441,13 +395,13 @@ textarea {
 
 .welcome-screen h1 {
   margin: 0;
-  font-size: 58px;
+  font-size: 28px;
   font-family: var(--font-mono);
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--text-title) 88%, #f8fff7 12%);
+  color: var(--text-title);
   text-shadow:
-    0 0 22px color-mix(in srgb, var(--accent-cool) 45%, transparent),
+    0 0 10px color-mix(in srgb, var(--accent) 35%, transparent),
     0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
@@ -460,15 +414,6 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-}
-
-.welcome-screen button {
-  border-color: color-mix(in srgb, var(--accent-cool) 34%, var(--control-border));
-}
-
-.welcome-screen button:hover {
-  border-color: color-mix(in srgb, var(--accent-cool) 58%, var(--control-border));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-cool) 18%, transparent);
 }
 
 .welcome-admin-advanced {
@@ -486,24 +431,13 @@ textarea {
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--accent-cool) 28%, var(--control-border));
+  border: 1px solid color-mix(in srgb, var(--control-border) 55%, transparent);
   border-radius: 10px;
   background: linear-gradient(
     135deg,
-    color-mix(in srgb, var(--accent-cool) 20%, var(--bg-panel-soft)),
-    color-mix(in srgb, var(--accent) 14%, var(--bg-panel-soft))
+    color-mix(in srgb, var(--accent-cool) 16%, var(--bg-panel-soft)),
+    color-mix(in srgb, var(--accent) 12%, var(--bg-panel-soft))
   );
-}
-
-.welcome-panel-card {
-  padding: 16px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--accent-cool) 32%, var(--border-soft));
-  background: color-mix(in srgb, var(--bg-panel-soft) 72%, #051729 28%);
-}
-
-.welcome-panel-card > section:first-child > h2:first-child {
-  margin-top: 0;
 }
 
 .welcome-selection-summary h2 {
