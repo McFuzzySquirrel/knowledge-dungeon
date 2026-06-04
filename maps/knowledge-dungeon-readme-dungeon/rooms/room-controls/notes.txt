@@ -1,0 +1,10 @@
+Summary
+Controls map movement, interaction, and help toggling to both keyboard and touch-friendly input patterns.
+
+Key Points
+- Movement supports WASD, arrows, and a touch D-pad.
+- Interact uses E or the Interact touch button.
+- Help overlay toggle is mapped to the question-mark key.
+
+Recall Question
+Which actions are explicitly documented in the controls table?

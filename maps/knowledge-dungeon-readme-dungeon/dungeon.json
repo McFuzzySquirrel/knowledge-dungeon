@@ -1,0 +1,831 @@
+{
+  "dungeon": {
+    "schemaVersion": "1.0.0",
+    "dungeonId": "knowledge-dungeon-readme-dungeon",
+    "subjectName": "Knowledge Dungeon README Guide",
+    "createdAt": "2026-06-04T20:02:32.228Z",
+    "updatedAt": "2026-06-04T20:02:32.228Z",
+    "phaseState": "SubjectCreated",
+    "rootRoomId": "root-overview",
+    "rooms": [
+      {
+        "roomId": "root-overview",
+        "topic": "Knowledge Dungeon Overview",
+        "status": "Created"
+      },
+      {
+        "roomId": "why-use-this",
+        "topic": "Who It Helps and Why",
+        "status": "Created"
+      },
+      {
+        "roomId": "repo-mindmap-workflow",
+        "topic": "Repository Mindmap Workflow",
+        "status": "Created"
+      },
+      {
+        "roomId": "ui-home-screen",
+        "topic": "Home Screen and Subject Management",
+        "status": "Created"
+      },
+      {
+        "roomId": "ui-study-shell",
+        "topic": "In-Dungeon Study Shell",
+        "status": "Created"
+      },
+      {
+        "roomId": "ui-map-navigation",
+        "topic": "Navigation and Map Controls",
+        "status": "Created"
+      },
+      {
+        "roomId": "ui-notes-media",
+        "topic": "Notes, Drafts, and Images",
+        "status": "Created"
+      },
+      {
+        "roomId": "collections-loop",
+        "topic": "Inventory, Badges, and Diary",
+        "status": "Created"
+      },
+      {
+        "roomId": "tech-stack",
+        "topic": "Technology Stack Overview",
+        "status": "Created"
+      },
+      {
+        "roomId": "three-phases",
+        "topic": "Creator, Scribe, and Archaeologist Phases",
+        "status": "Created"
+      },
+      {
+        "roomId": "getting-started",
+        "topic": "Getting Started Commands",
+        "status": "Created"
+      },
+      {
+        "roomId": "script-catalog",
+        "topic": "Core Development Scripts",
+        "status": "Created"
+      },
+      {
+        "roomId": "browser-play-deploy",
+        "topic": "Browser Play and GitHub Pages Deploy",
+        "status": "Created"
+      },
+      {
+        "roomId": "electron-packaging",
+        "topic": "Electron Packaging and Distribution",
+        "status": "Created"
+      },
+      {
+        "roomId": "controls",
+        "topic": "Keyboard and Touch Controls",
+        "status": "Created"
+      },
+      {
+        "roomId": "ui-docs-links",
+        "topic": "Extended UI and Skill Documentation",
+        "status": "Created"
+      },
+      {
+        "roomId": "project-structure",
+        "topic": "Source Tree and Module Layout",
+        "status": "Created"
+      },
+      {
+        "roomId": "persistence-model",
+        "topic": "Persistence Model and Data Safety",
+        "status": "Created"
+      },
+      {
+        "roomId": "why-this-project-exists",
+        "topic": "Origin and Design Rationale",
+        "status": "Created"
+      }
+    ],
+    "edges": [
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "why-use-this",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "repo-mindmap-workflow",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "ui-home-screen",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "ui-study-shell",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "collections-loop",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "tech-stack",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "three-phases",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "getting-started",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "browser-play-deploy",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "electron-packaging",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "project-structure",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "persistence-model",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "why-this-project-exists",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "ui-study-shell",
+        "toRoomId": "ui-map-navigation",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "ui-study-shell",
+        "toRoomId": "ui-notes-media",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "ui-home-screen",
+        "toRoomId": "ui-docs-links",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "project-structure",
+        "relationType": "depends_on",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "tech-stack",
+        "toRoomId": "electron-packaging",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "getting-started",
+        "toRoomId": "script-catalog",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "script-catalog",
+        "toRoomId": "electron-packaging",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "three-phases",
+        "toRoomId": "ui-notes-media",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "three-phases",
+        "toRoomId": "collections-loop",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "persistence-model",
+        "toRoomId": "browser-play-deploy",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "repo-mindmap-workflow",
+        "toRoomId": "ui-docs-links",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "controls",
+        "toRoomId": "ui-study-shell",
+        "relationType": "related",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      },
+      {
+        "fromRoomId": "root-overview",
+        "toRoomId": "controls",
+        "relationType": "subtopic",
+        "createdAt": "2026-06-04T20:02:32.228Z",
+        "createdByPhase": "Creator"
+      }
+    ],
+    "progression": {
+      "xpTotal": 0,
+      "rank": "Novice",
+      "badges": []
+    }
+  },
+  "rooms": {
+    "root-overview": {
+      "roomId": "root-overview",
+      "topic": "Knowledge Dungeon Overview",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-root-overview/notes.txt",
+      "artifactPath": "rooms/room-root-overview/artifact.md",
+      "noteText": "Summary\nKnowledge Dungeon is a local-first, offline-friendly study dungeon-crawler that combines a room-based mindmap with structured note-taking and review.\n\nKey Points\n- It merges the repo-dungeon engine with mindmap-dungeon's learning model.\n- Learners clear rooms by writing notes that pass deterministic quality gates.\n- Clearing all rooms unlocks Archaeologist review prompts and streak tracking.\n\nRecall Question\nHow does Knowledge Dungeon turn studying into an interactive progression loop?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "why-use-this": {
+      "roomId": "why-use-this",
+      "topic": "Who It Helps and Why",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-why-use-this/notes.txt",
+      "artifactPath": "rooms/room-why-use-this/artifact.md",
+      "noteText": "Summary\nThe README frames Knowledge Dungeon as useful for students, developers, researchers, teams, and anyone using mindmaps plus notes.\n\nKey Points\n- Students can use Recall Questions for active memory practice.\n- Developers can map architecture and dependencies as traversable rooms.\n- Teams can build shared onboarding subjects for conventions and workflows.\n\nRecall Question\nWhich user groups are explicitly called out as beneficiaries in the README?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "repo-mindmap-workflow": {
+      "roomId": "repo-mindmap-workflow",
+      "topic": "Repository Mindmap Workflow",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-repo-mindmap-workflow/notes.txt",
+      "artifactPath": "rooms/room-repo-mindmap-workflow/artifact.md",
+      "noteText": "Summary\nThe project supports generating a subject from a repository, refreshing it in-app, and exploring relationships as an architecture map.\n\nKey Points\n- The README lists a 3-step flow: generate, refresh/load, then traverse.\n- The flow is positioned for onboarding and architecture review sessions.\n- It emphasizes understanding module boundaries and runtime flow through graph traversal.\n\nRecall Question\nWhat are the three steps described for exploring a repository as a dungeon mindmap?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "ui-home-screen": {
+      "roomId": "ui-home-screen",
+      "topic": "Home Screen and Subject Management",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-ui-home-screen/notes.txt",
+      "artifactPath": "rooms/room-ui-home-screen/artifact.md",
+      "noteText": "Summary\nThe home screen manages phase/class selection, subject creation, saved subject browsing, refresh, and admin data tools.\n\nKey Points\n- Users choose phase and study archetype before entering a subject.\n- Saved subjects are listed by name and room count.\n- Desktop adds folder-level import/export helpers in Admin tools.\n\nRecall Question\nWhat core actions does the README assign to the home screen?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "ui-study-shell": {
+      "roomId": "ui-study-shell",
+      "topic": "In-Dungeon Study Shell",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-ui-study-shell/notes.txt",
+      "artifactPath": "rooms/room-ui-study-shell/artifact.md",
+      "noteText": "Summary\nThe in-dungeon view keeps study context centralized with HUD, room panel, Phaser canvas, minimap, and map overlay controls.\n\nKey Points\n- HUD exposes progression, navigation, and help controls.\n- Room panel supports topic context, breadcrumbs, portals, and creator edits.\n- The full map can switch between floor-focused and whole-graph views.\n\nRecall Question\nWhich major UI surfaces are described as the main in-dungeon loop workspace?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "ui-map-navigation": {
+      "roomId": "ui-map-navigation",
+      "topic": "Navigation and Map Controls",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-ui-map-navigation/notes.txt",
+      "artifactPath": "rooms/room-ui-map-navigation/artifact.md",
+      "noteText": "Summary\nThe README highlights floor-aware travel, parent return shortcuts, map panning, and draggable room nodes for navigating deep mindmaps.\n\nKey Points\n- Connected topics are split into same-floor and related-floor travel sections.\n- The map overlay defaults to current-floor filtering with optional whole-graph mode.\n- Users can drag empty canvas to pan and drag nodes to reposition rooms.\n\nRecall Question\nHow does the UI keep deeply nested or multi-floor mindmaps navigable?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "ui-notes-media": {
+      "roomId": "ui-notes-media",
+      "topic": "Notes, Drafts, and Images",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-ui-notes-media/notes.txt",
+      "artifactPath": "rooms/room-ui-notes-media/artifact.md",
+      "noteText": "Summary\nScribe-focused note authoring supports lightweight Markdown, preview mode, draft saves, and image attachments with insert helpers.\n\nKey Points\n- Notes support links, emphasis, code, and bullet formatting.\n- Save draft allows iterative writing before all checks pass.\n- Image cards include an Insert in note action to avoid manual markdown token entry.\n\nRecall Question\nWhat note authoring safeguards and media features are called out for Scribe work?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "collections-loop": {
+      "roomId": "collections-loop",
+      "topic": "Inventory, Badges, and Diary",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-collections-loop/notes.txt",
+      "artifactPath": "rooms/room-collections-loop/artifact.md",
+      "noteText": "Summary\nProgression is reinforced with inventory loot, achievement badges, and a diary that reopens collected notes for review.\n\nKey Points\n- Inventory stores artifacts from defeated encounters.\n- Badges reward learning behaviors beyond raw XP totals.\n- Diary entries open full notes as a recall index during review runs.\n\nRecall Question\nHow do Inventory, Badges, and Diary support both motivation and retention?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "tech-stack": {
+      "roomId": "tech-stack",
+      "topic": "Technology Stack Overview",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-tech-stack/notes.txt",
+      "artifactPath": "rooms/room-tech-stack/artifact.md",
+      "noteText": "Summary\nKnowledge Dungeon is built with React, Phaser, Zustand, Vite, TypeScript, Electron, Vitest, and ESLint.\n\nKey Points\n- React + Phaser power UI shell and dungeon gameplay rendering.\n- Vite + TypeScript handle build and typing workflows.\n- Electron enables desktop packaging for macOS, Windows, and Linux.\n\nRecall Question\nWhich stack components are named for frontend, desktop, and quality tooling?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "three-phases": {
+      "roomId": "three-phases",
+      "topic": "Creator, Scribe, and Archaeologist Phases",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-three-phases/notes.txt",
+      "artifactPath": "rooms/room-three-phases/artifact.md",
+      "noteText": "Summary\nThe README defines a three-phase learning loop: author topics, clear encounters with notes, then review artifacts and prompts.\n\nKey Points\n- Creator is focused on architecture and graph authoring.\n- Scribe is focused on exploration and rubric-validated note submission.\n- Archaeologist is focused on consolidation and self-check review.\n\nRecall Question\nWhat distinct responsibility does each of the three phases have?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "getting-started": {
+      "roomId": "getting-started",
+      "topic": "Getting Started Commands",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-getting-started/notes.txt",
+      "artifactPath": "rooms/room-getting-started/artifact.md",
+      "noteText": "Summary\nInitial setup uses npm install, then either npm run dev for web or npm run electron for web build plus desktop shell.\n\nKey Points\n- npm install is the first required step.\n- npm run dev starts the web development server.\n- npm run electron runs a web build and launches Electron.\n\nRecall Question\nWhich commands are listed as the quickest way to start running the project locally?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "script-catalog": {
+      "roomId": "script-catalog",
+      "topic": "Core Development Scripts",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-script-catalog/notes.txt",
+      "artifactPath": "rooms/room-script-catalog/artifact.md",
+      "noteText": "Summary\nThe README provides script references for linting, type-checking, tests, production build, bundle-size checks, and Electron packaging.\n\nKey Points\n- npm run lint, npm run typecheck, and npm run test cover baseline quality checks.\n- npm run build:web produces the production web bundle.\n- npm run check:bundle-size is used as a CI guard.\n\nRecall Question\nWhich scripts are identified for verification and production packaging workflows?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "browser-play-deploy": {
+      "roomId": "browser-play-deploy",
+      "topic": "Browser Play and GitHub Pages Deploy",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-browser-play-deploy/notes.txt",
+      "artifactPath": "rooms/room-browser-play-deploy/artifact.md",
+      "noteText": "Summary\nThe project is playable via GitHub Pages, with deployment automated from pushes to main through a GitHub Actions workflow.\n\nKey Points\n- The README links a live web build URL.\n- Deployment is tied to .github/workflows/deploy-pages.yml.\n- Repository Pages source should be configured to GitHub Actions.\n\nRecall Question\nWhat repository setting is required for the GitHub Pages deployment path described in the README?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "electron-packaging": {
+      "roomId": "electron-packaging",
+      "topic": "Electron Packaging and Distribution",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-electron-packaging/notes.txt",
+      "artifactPath": "rooms/room-electron-packaging/artifact.md",
+      "noteText": "Summary\nElectron packaging outputs installers in release/ with platform-specific commands and signing prerequisites for macOS and Windows.\n\nKey Points\n- Separate commands exist for mac, win, linux, and full multi-platform packaging.\n- macOS and Windows signing rely on platform-specific certificates/environment variables.\n- The README shows a step-by-step package flow using build:electron then package command.\n\nRecall Question\nWhat sequence is shown for creating a distributable Electron package?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "controls": {
+      "roomId": "controls",
+      "topic": "Keyboard and Touch Controls",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-controls/notes.txt",
+      "artifactPath": "rooms/room-controls/artifact.md",
+      "noteText": "Summary\nControls map movement, interaction, and help toggling to both keyboard and touch-friendly input patterns.\n\nKey Points\n- Movement supports WASD, arrows, and a touch D-pad.\n- Interact uses E or the Interact touch button.\n- Help overlay toggle is mapped to the question-mark key.\n\nRecall Question\nWhich actions are explicitly documented in the controls table?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "ui-docs-links": {
+      "roomId": "ui-docs-links",
+      "topic": "Extended UI and Skill Documentation",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-ui-docs-links/notes.txt",
+      "artifactPath": "rooms/room-ui-docs-links/artifact.md",
+      "noteText": "Summary\nThe README points to dedicated docs for UI walkthroughs, customization details, and create-repo-mindmap skill usage.\n\nKey Points\n- UI.md provides a walkthrough with screenshots.\n- CUSTOMIZATION.md covers images, subject storage, and desktop export helpers.\n- SKILL.md and portable skill docs cover repo mindmap generation usage.\n\nRecall Question\nWhich linked docs should you open for deeper UI customization and skill guidance?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "project-structure": {
+      "roomId": "project-structure",
+      "topic": "Source Tree and Module Layout",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-project-structure/notes.txt",
+      "artifactPath": "rooms/room-project-structure/artifact.md",
+      "noteText": "Summary\nThe documented structure separates core domain logic, game systems, state stores, persistence services, Electron bridge code, UI, tests, and docs.\n\nKey Points\n- src/core contains graph, validation, progression, artifacts, and review domains.\n- src/game contains Phaser scenes and systems.\n- src/store and src/services/persistence handle state and storage mechanics.\n\nRecall Question\nHow does the README partition domain logic, game runtime, and UI/storage concerns in the source tree?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "persistence-model": {
+      "roomId": "persistence-model",
+      "topic": "Persistence Model and Data Safety",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-persistence-model/notes.txt",
+      "artifactPath": "rooms/room-persistence-model/artifact.md",
+      "noteText": "Summary\nPersistence differs by runtime: Electron writes subject files under userData while web uses localStorage with import/export support, and all data remains local.\n\nKey Points\n- Electron stores subjects under user data with timestamped backups.\n- Web stores subjects in localStorage and supports data import/export via persistence facade.\n- The README explicitly states notes and progression are local-only with no server upload.\n\nRecall Question\nWhat differences and privacy guarantees does the README describe for web versus Electron persistence?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    },
+    "why-this-project-exists": {
+      "roomId": "why-this-project-exists",
+      "topic": "Origin and Design Rationale",
+      "createdAt": "2026-06-04T20:02:32.228Z",
+      "updatedAt": "2026-06-04T20:02:32.228Z",
+      "state": "Created",
+      "notePath": "rooms/room-why-this-project-exists/notes.txt",
+      "artifactPath": "rooms/room-why-this-project-exists/artifact.md",
+      "noteText": "Summary\nKnowledge Dungeon is described as combining repo-dungeon gameplay shell with mindmap-dungeon subject modeling to better fit study use cases and maintainer preferences.\n\nKey Points\n- repo-dungeon gameplay was kept, but repository-as-content was replaced.\n- mindmap-dungeon learning loop was retained, but implementation stack changed.\n- The result is a study-focused content model on an existing game shell.\n\nRecall Question\nWhat tradeoff between earlier projects does the README say Knowledge Dungeon resolves?",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    }
+  }
+}

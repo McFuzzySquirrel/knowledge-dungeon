@@ -1,0 +1,10 @@
+Summary
+The home screen manages phase/class selection, subject creation, saved subject browsing, refresh, and admin data tools.
+
+Key Points
+- Users choose phase and study archetype before entering a subject.
+- Saved subjects are listed by name and room count.
+- Desktop adds folder-level import/export helpers in Admin tools.
+
+Recall Question
+What core actions does the README assign to the home screen?

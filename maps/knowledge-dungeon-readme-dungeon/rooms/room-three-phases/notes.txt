@@ -1,0 +1,10 @@
+Summary
+The README defines a three-phase learning loop: author topics, clear encounters with notes, then review artifacts and prompts.
+
+Key Points
+- Creator is focused on architecture and graph authoring.
+- Scribe is focused on exploration and rubric-validated note submission.
+- Archaeologist is focused on consolidation and self-check review.
+
+Recall Question
+What distinct responsibility does each of the three phases have?

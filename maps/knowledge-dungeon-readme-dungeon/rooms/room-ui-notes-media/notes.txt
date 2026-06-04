@@ -1,0 +1,10 @@
+Summary
+Scribe-focused note authoring supports lightweight Markdown, preview mode, draft saves, and image attachments with insert helpers.
+
+Key Points
+- Notes support links, emphasis, code, and bullet formatting.
+- Save draft allows iterative writing before all checks pass.
+- Image cards include an Insert in note action to avoid manual markdown token entry.
+
+Recall Question
+What note authoring safeguards and media features are called out for Scribe work?

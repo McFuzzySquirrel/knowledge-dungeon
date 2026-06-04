@@ -1,0 +1,10 @@
+Summary
+The documented structure separates core domain logic, game systems, state stores, persistence services, Electron bridge code, UI, tests, and docs.
+
+Key Points
+- src/core contains graph, validation, progression, artifacts, and review domains.
+- src/game contains Phaser scenes and systems.
+- src/store and src/services/persistence handle state and storage mechanics.
+
+Recall Question
+How does the README partition domain logic, game runtime, and UI/storage concerns in the source tree?

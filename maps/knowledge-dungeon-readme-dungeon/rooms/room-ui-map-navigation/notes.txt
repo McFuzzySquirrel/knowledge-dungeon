@@ -1,0 +1,10 @@
+Summary
+The README highlights floor-aware travel, parent return shortcuts, map panning, and draggable room nodes for navigating deep mindmaps.
+
+Key Points
+- Connected topics are split into same-floor and related-floor travel sections.
+- The map overlay defaults to current-floor filtering with optional whole-graph mode.
+- Users can drag empty canvas to pan and drag nodes to reposition rooms.
+
+Recall Question
+How does the UI keep deeply nested or multi-floor mindmaps navigable?
