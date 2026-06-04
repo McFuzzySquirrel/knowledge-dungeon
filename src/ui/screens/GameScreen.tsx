@@ -323,6 +323,8 @@ export function GameScreen(): JSX.Element {
           const previewSource = room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown;
           const preview = previewSource
             .replace(/^#\s+.*$/gm, '')
+            .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+            .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
             .replace(/\s+/g, ' ')
             .trim()
             .slice(0, 180);
