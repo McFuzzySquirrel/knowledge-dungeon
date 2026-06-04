@@ -203,7 +203,7 @@ describe('RoomPanel', () => {
       />,
     );
 
-    expect(screen.getByText(/Done reviewing/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done reviewing' })).toBeInTheDocument();
     expect(screen.queryByText(/Quality bonus:/i)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Show room tools/i }));
