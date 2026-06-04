@@ -549,6 +549,7 @@ textarea {
   flex-direction: row;
   min-height: 0;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -556,6 +557,7 @@ textarea {
   flex: 0 0 220px;
   width: 220px;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-self: flex-start;
   position: sticky;
@@ -785,6 +787,7 @@ textarea {
 .inventory-badges-modal {
   width: min(980px, 96vw);
   max-height: 86vh;
+  max-height: 86dvh;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1093,6 +1096,7 @@ textarea {
   left: 12px;
   width: min(380px, calc(100% - 24px));
   max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
   z-index: 20;
   background: rgba(22, 26, 38, 0.92);
   backdrop-filter: blur(6px);
@@ -1317,6 +1321,7 @@ button.ghost {
   border-radius: 10px;
   width: min(620px, 100%);
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
   padding: 20px;
 }
@@ -1656,6 +1661,22 @@ button.danger:hover {
   .hud-stat {
     padding: 0;
     border-bottom: none;
+    font-size: 12px;
+  }
+
+  .hud-subject-label {
+    max-width: 40vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+    font-size: 12px;
+  }
+
+  .hud-spacer {
+    display: none;
   }
 
   .hud-actions {
@@ -1670,6 +1691,16 @@ button.danger:hover {
     align-items: center;
   }
 
+  .hud-action-icon-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .hud-collection-btn {
+    min-height: 44px;
+    padding: 6px 6px;
+  }
+
   .room-panel {
     top: 12px;
     left: 12px;
@@ -1677,6 +1708,7 @@ button.danger:hover {
     width: auto;
     max-width: calc(100vw - 24px);
     max-height: 60vh;
+    max-height: 60dvh;
   }
 
   .full-map-layout {
@@ -1685,6 +1717,112 @@ button.danger:hover {
 
   .teleport-room-list {
     max-height: 52vh;
+    max-height: 52dvh;
+  }
+
+  .modal-backdrop {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal {
+    max-height: 94vh;
+    max-height: 94dvh;
+    border-radius: 12px 12px 10px 10px;
+  }
+
+  .inventory-badges-modal {
+    max-height: 92vh;
+    max-height: 92dvh;
+  }
+
+}
+
+@media (max-width: 600px) {
+  .welcome-screen {
+    margin: 20px auto;
+    padding: 16px;
+    gap: 16px;
+    border-radius: 10px;
+  }
+
+  .welcome-screen h1 {
+    font-size: 22px;
+  }
+
+  .phase-grid,
+  .class-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-selection-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .welcome-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .welcome-actions > button,
+  .welcome-actions > label {
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome-screen {
+    margin: 8px;
+    padding: 12px;
+    gap: 12px;
+    border-radius: 8px;
+  }
+
+  .welcome-screen h1 {
+    font-size: 20px;
+  }
+
+  .hud-rail {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .hud-stat {
+    display: none;
+  }
+
+  .hud-subject-label {
+    max-width: 30vw;
+    font-size: 12px;
+  }
+
+  .room-panel {
+    top: 8px;
+    left: 8px;
+    max-width: calc(100vw - 16px);
+    max-height: 65vh;
+    max-height: 65dvh;
+  }
+
+  .minimap {
+    display: none;
+  }
+
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .modal {
+    padding: 14px;
+    border-radius: 10px 10px 8px 8px;
+  }
+
+  .inventory-badges-modal {
+    width: 100%;
+  }
+
+  .note-editor-modal--expanded {
+    width: 100%;
   }
 
 }
