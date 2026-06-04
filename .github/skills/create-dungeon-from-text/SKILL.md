@@ -44,6 +44,7 @@ The subject must be directly importable by Knowledge Dungeon (valid `dungeon.jso
 1. Parse the source text and extract major topics, subtopics, and relationships.
 2. Build a connected room graph:
    - 12-40 rooms based on source size.
+   - Heuristic: target ~1 room per major concept (or about 1 room per 1-2 pages of source text).
    - no isolated rooms.
    - at least one root/introduction room.
 3. Write `rooms/<room-id>/notes.txt` for each room using **all required sections exactly**:

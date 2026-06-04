@@ -529,11 +529,7 @@ export class DungeonScene extends Phaser.Scene {
     const map = this.dungeonMap;
     // Remove icons for rooms no longer in the image set or hidden by the floor filter.
     for (const [roomId, icon] of this.imageFrameIcons) {
-      const stillVisible =
-        this.imageRoomIds.has(roomId) &&
-        (!this.visibleRoomIds || this.visibleRoomIds.has(roomId)) &&
-        this.insideRoom &&
-        this.currentRoomId === roomId;
+      const stillVisible = this.imageRoomIds.has(roomId) && this.isImageIconVisible(roomId);
       if (!stillVisible) {
         icon.destroy();
         this.imageFrameIcons.delete(roomId);
@@ -541,17 +537,29 @@ export class DungeonScene extends Phaser.Scene {
     }
     for (const room of map.rooms) {
       if (!this.imageRoomIds.has(room.roomId)) continue;
-      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
-      if (!this.insideRoom || this.currentRoomId !== room.roomId) continue;
+      if (!this.isImageIconVisible(room.roomId)) continue;
       if (this.imageFrameIcons.has(room.roomId)) continue;
       const center = this.roomCenter(room, map.tileSize);
       // Place the icon in the lower-right area of the room, mirroring the
       // review dot in the upper-right. Depth 7 keeps it above decor/floors.
-      const fx = center.x + room.width * map.tileSize * PICTURE_FRAME_OFFSET_X;
-      const fy = center.y + room.height * map.tileSize * PICTURE_FRAME_OFFSET_Y;
-      const icon = this.add.image(fx, fy, PICTURE_FRAME_TEXTURE_KEY).setDepth(7).setAlpha(0.88);
+      const frameX = center.x + room.width * map.tileSize * PICTURE_FRAME_OFFSET_X;
+      const frameY = center.y + room.height * map.tileSize * PICTURE_FRAME_OFFSET_Y;
+      const icon = this.add
+        .image(frameX, frameY, PICTURE_FRAME_TEXTURE_KEY)
+        .setDepth(7)
+        .setAlpha(0.88);
       this.imageFrameIcons.set(room.roomId, icon);
     }
+  }
+
+  private isImageIconVisible(roomId: string): boolean {
+    // Frame hints are contextual: only show while the player is actively inside
+    // that exact room, not while traveling corridors or viewing other rooms.
+    return (
+      (!this.visibleRoomIds || this.visibleRoomIds.has(roomId)) &&
+      this.insideRoom &&
+      this.currentRoomId === roomId
+    );
   }
 
   private checkArtifactCollection(): void {
