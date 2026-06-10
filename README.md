@@ -46,6 +46,7 @@ This works especially well for onboarding, architecture reviews, and "what does 
 
 The home screen is where you:
 
+- **start the 3-room tutorial walkthrough** that teaches notes, attachments, and navigation
 - choose the current phase and study archetype
 - create a new subject from a root topic
 - browse previously created subjects by **name** and room count
@@ -59,6 +60,7 @@ The home screen is where you:
 Once a subject is loaded, the in-dungeon view keeps the study loop visible in one place:
 
 - HUD for phase, progression, current floor, map, home, and help
+- **One-time tooltips** on Map, Teleport, and Info buttons to help discover features
 - room-panel **Collections** shortcuts for inventory, badges, and diary
 - HUD teleport spell for floor/room jumps with cooldown tracking
 - Phaser dungeon canvas for movement and room navigation
@@ -76,6 +78,9 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
   bullets) with a live Edit/Preview toggle
 - encounters that do not yet meet all validation checks can be safely stored
   with **Save draft**, so learners can continue iterating without losing work
+- the **Checks** panel shows a full rubric breakdown (section completeness,
+  concept coverage, link references, recall quality, readability) with scores
+  and actionable fix hints so you know exactly what to improve
 - in the Scribe phase, the Notes tab can attach local/URL images per room;
   each image card includes an **Insert in note** action so learners can place
   visuals without typing markdown tokens manually
@@ -189,7 +194,9 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 | ------ | -------- | ----- |
 | Move   | `W A S D` / arrows | On-screen D-pad |
 | Interact (open encounter / mark reviewed) | `E` | `Interact` button |
-| Toggle help | `?` | — |
+| Toggle room info panel | `I` | — |
+| Toggle full map | `M` | — |
+| Toggle help | `?` / `Shift+/` | — |
 
 ## UI docs
 
@@ -233,6 +240,7 @@ docs/                    # PRD + progress notes
 > version, or in your user-data folder for Electron). Nothing is ever sent to any
 > server. Clearing your browser's site data will permanently remove web subjects, so
 > use the **Export** tools in the **Data** tab to back up anything you want to keep.
+> The app periodically nudges web users to export a backup as a reminder.
 
 ## Why this exists
 

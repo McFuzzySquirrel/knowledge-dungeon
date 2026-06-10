@@ -22,7 +22,20 @@ Use this screen to:
 
 This is the entry point for every session and determines how the rest of the UI behaves.
 
-### 1a) Selection readiness state
+### 1b) Tutorial walkthrough
+
+The **Start Tutorial** card on the Create/Load tab loads a pre-built 3-room subject
+that teaches the core loop:
+
+- **Room 1 — "The Note"**: write Summary, Key Points, and Recall Question sections.
+- **Room 2 — "Tools of the Trade"**: attach an image or external URL to your note.
+- **Room 3 — "The Map & Beyond"**: use the full map, teleport, and explore floor portals.
+
+The tutorial sets the phase to **Scribe** automatically so new users can jump straight in.
+A persistent **TutorialOverlay** on the game canvas shows step-by-step guidance
+(objective, tip, next action) and tracks progress until all three rooms are cleared.
+
+### 1c) Selection readiness state
 
 ![Welcome screen with readiness summary](./assets/ui/welcome-selections-ready.png)
 
@@ -40,7 +53,9 @@ gets the maximum amount of screen space:
 - **Top HUD (floating):** subject, room count, XP/rank, active phase, plus
   **Map**, **Teleport**, **Home**, and **Help** buttons. `Map` opens the full
   topic-graph view, `Teleport` opens a floor/room jump flow with a cooldown,
-  `Home` returns to subject selection, `?` opens the help overlay.
+  `Home` returns to subject selection, `?` opens the help overlay. First-time
+  users see **one-time tooltips** on Map, Teleport, and Info buttons that explain
+  each feature with a "Got it" dismiss button.
 - **Center gameplay canvas:** Phaser dungeon movement and interactions. The
   camera automatically zooms **in** when the player is standing inside a
   room (so the active room feels focused) and **out** when traveling along
@@ -186,7 +201,9 @@ This modal appears when opening a room encounter. It provides:
   `-` bullet lists, and `[label](https://example.com)` links — rendered
   live in the Preview tab and persisted on submit.
 - A manual confirmation checkbox.
-- Deterministic validation checklist (word count + required sections).
+- **Rubric breakdown** in the Checks panel: each criterion (section completeness,
+  concept coverage, link references, recall quality, readability) is scored 0–2 with
+  a coloured indicator and an actionable fix hint when the score is low.
 - Quality bonus preview and submit/defeat action state.
 
 This is the core learning loop UI where players convert study notes into
@@ -248,9 +265,10 @@ phase switcher, and action row beneath. The minimap stays visible.
 ![Game HUD at 390px mobile viewport](./assets/ui/mobile-game-hud.png)
 
 On phones (≤ 480 px) the verbose stat labels are hidden, the minimap is hidden to
-maximise canvas space, and all HUD action buttons have a minimum 44 × 44 px touch
-target. The subject label is truncated with an ellipsis. The phase controls and
-action row remain fully accessible.
+maximise canvas space, and all HUD action buttons have a minimum 48 × 48 px touch
+target. The on-screen interact button grows to 64 × 64 px for easier tapping. The
+subject label is truncated with an ellipsis. The phase controls and action row
+remain fully accessible.
 
 ### 11f) Room panel — mobile (≤ 480 px)
 
