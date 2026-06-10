@@ -7,6 +7,7 @@ import {
   evaluateNoteValidation,
   REQUIRED_NOTE_SECTIONS,
 } from '@/core/validation/notes';
+import type { QualityScoreKey } from '@/core/validation/persistence';
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
 import { ToastStack } from '@/ui/components/ToastStack';
 import { Markdown } from '@/ui/utils/markdown';
@@ -16,6 +17,26 @@ import {
   extractNoteSections,
 } from '@/ui/utils/noteSections';
 import { useToasts } from '@/ui/utils/useToasts';
+
+const CRITERION_LABELS: Record<QualityScoreKey, string> = {
+  sectionCompleteness: 'Required sections',
+  conceptTermCoverage: 'Topic terms covered',
+  linkReferences: 'Links & references',
+  recallQuestionQuality: 'Recall questions',
+  clarityReadability: 'Readability',
+};
+
+function getCriterionHint(criterion: QualityScoreKey, score: number): string {
+  if (score === 2) return '';
+  const hints: Record<QualityScoreKey, string> = {
+    sectionCompleteness: 'Include Summary, Key Points, and Recall Question headings.',
+    conceptTermCoverage: 'Use key terms from the room topic throughout your note.',
+    linkReferences: score === 0 ? 'Add 2+ links or "see also" references.' : 'Add one more link or reference.',
+    recallQuestionQuality: 'Write 2+ questions in the Recall Question section.',
+    clarityReadability: 'Aim for 8-24 words per sentence and at least 2 paragraphs.',
+  };
+  return hints[criterion];
+}
 
 const TEMPLATE = composeNoteSections(emptyNoteSections());
 const DEFAULT_EXPANDED = true;
@@ -451,54 +472,89 @@ export function NoteEditorModal(): JSX.Element | null {
         </label>
 
         {preview && showChecks ? (
-          <ul className="validation-list" style={{ marginTop: 12 }}>
-            {(showNeutralChecklist
-              ? preview.criteria.map((criterion) => ({
-                  ...criterion,
-                  passed: true,
-                  message:
-                    criterion.code === 'VAL_REQUIRED_SECTION_MISSING'
-                      ? `Keep headings: ${REQUIRED_NOTE_SECTIONS.join(', ')}.`
-                      : criterion.code === 'VAL_MANUAL_CONFIRM_REQUIRED'
-                        ? 'Tick confirmation when your draft is ready to submit.'
-                        : criterion.message,
-                }))
-              : preview.criteria
-            ).map((c) => (
-              <li key={c.code}>
-                <span>{c.message}</span>
-                <span
-                  className={
-                    c.code === 'VAL_WORD_COUNT_BONUS_TARGET'
-                      ? c.passed
-                        ? 'pass'
-                        : ''
-                      : c.passed
-                        ? 'pass'
-                        : 'fail'
-                  }
-                >
-                  {showNeutralChecklist
-                    ? '•'
-                    : c.code === 'VAL_WORD_COUNT_BONUS_TARGET'
-                      ? c.passed
-                        ? '★'
-                        : '○'
-                      : c.passed
-                        ? '✓'
-                        : '✗'}
-                </span>
+          <div style={{ marginTop: 12 }}>
+            <ul className="validation-list">
+              {(showNeutralChecklist
+                ? preview.criteria.map((criterion) => ({
+                    ...criterion,
+                    passed: true,
+                    message:
+                      criterion.code === 'VAL_REQUIRED_SECTION_MISSING'
+                        ? `Keep headings: ${REQUIRED_NOTE_SECTIONS.join(', ')}.`
+                        : criterion.code === 'VAL_MANUAL_CONFIRM_REQUIRED'
+                          ? 'Tick confirmation when your draft is ready to submit.'
+                          : criterion.message,
+                  }))
+                : preview.criteria
+              ).map((c) => (
+                <li key={c.code}>
+                  <span>{c.message}</span>
+                  <span
+                    className={
+                      c.code === 'VAL_WORD_COUNT_BONUS_TARGET'
+                        ? c.passed
+                          ? 'pass'
+                          : ''
+                        : c.passed
+                          ? 'pass'
+                          : 'fail'
+                    }
+                  >
+                    {showNeutralChecklist
+                      ? '•'
+                      : c.code === 'VAL_WORD_COUNT_BONUS_TARGET'
+                        ? c.passed
+                          ? '★'
+                          : '○'
+                        : c.passed
+                          ? '✓'
+                          : '✗'}
+                  </span>
+                </li>
+              ))}
+              <li>
+                <span>Words</span>
+                <span>{preview.wordCount}</span>
               </li>
-            ))}
-            <li>
-              <span>Words</span>
-              <span>{preview.wordCount}</span>
-            </li>
-            <li>
-              <span>Quality bonus</span>
-              <span>{preview.qualityBonus}/10</span>
-            </li>
-          </ul>
+            </ul>
+
+            {!showNeutralChecklist ? (
+              <>
+                <hr style={{ opacity: 0.2, margin: '8px 0' }} />
+                <ul className="validation-list">
+                  {preview.rubric.map((entry) => {
+                    const score = entry.score;
+                    const hint = getCriterionHint(entry.criterion, score);
+                    return (
+                      <li key={entry.criterion}>
+                        <span>
+                          <strong>{CRITERION_LABELS[entry.criterion]}</strong>
+                          {hint ? <span style={{ display: 'block', fontSize: 12, opacity: 0.75 }}>{hint}</span> : null}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span className={score === 2 ? 'pass' : score === 1 ? '' : 'fail'}>
+                            {score}/2
+                          </span>
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              background: score === 2 ? '#4ade80' : score === 1 ? '#facc15' : '#f87171',
+                              display: 'inline-block',
+                            }}
+                          />
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p style={{ fontSize: 12, margin: '4px 0 0', opacity: 0.6 }}>
+                  Quality bonus: {preview.qualityBonus}/10 &middot; Each criterion scored 0–2
+                </p>
+              </>
+            ) : null}
+          </div>
         ) : null}
 
         <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

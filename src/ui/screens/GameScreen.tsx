@@ -13,6 +13,7 @@ import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
 import { Hud } from '@/ui/components/Hud';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
+import { TutorialOverlay } from '@/ui/components/TutorialOverlay';
 import type { RoomTab } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
@@ -24,6 +25,7 @@ import { SettingsModal } from '@/ui/components/SettingsModal';
 import { ToastStack } from '@/ui/components/ToastStack';
 import { isEditableElement } from '@/ui/utils/editableElement';
 import { useToasts } from '@/ui/utils/useToasts';
+import { useExportReminder } from '@/ui/hooks/useExportReminder';
 import {
   hasSeenGameplayLoopOnboarding,
   markGameplayLoopOnboardingSeen,
@@ -86,7 +88,8 @@ export function GameScreen(): JSX.Element {
   const [attachmentUrlsByRoomId, setAttachmentUrlsByRoomId] = useState<
     Record<string, Record<string, string>>
   >({});
-  const { toasts, pushToast } = useToasts();
+  const { toasts, pushToast, dismissToast } = useToasts();
+  useExportReminder(pushToast);
 
   const requestRoomPanelTab = useCallback((tab: RoomTab) => {
     roomPanelTabRequestSequenceRef.current += 1;
@@ -725,7 +728,13 @@ export function GameScreen(): JSX.Element {
             />
           ) : null}
 
-          <ToastStack toasts={toasts} />
+          <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
+          <TutorialOverlay
+            subjectId={snapshot.dungeon.dungeonId}
+            focusedRoomId={focusedRoomId}
+            rooms={snapshot.rooms}
+          />
 
           {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
             <RoomNpcDialog

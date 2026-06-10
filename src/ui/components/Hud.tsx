@@ -1,5 +1,6 @@
-import type { JSX } from 'react';
+import { type JSX } from 'react';
 import type { GamePhase } from '@/store/sessionStore';
+import { Tooltip } from '@/ui/components/Tooltip';
 
 interface HudProps {
   subjectName: string;
@@ -174,16 +175,21 @@ export function Hud({
       <div className="hud-spacer" />
 
       <div className="hud-actions">
-        <button
-          type="button"
-          className="hud-info-button"
-          aria-pressed={infoOpen}
-          onClick={onToggleInfo}
-          aria-label={infoOpen ? 'Close room info panel' : 'Open room info panel'}
-          title="Press I to toggle room info"
-        >
-          {infoOpen ? 'Info ✕' : focusedRoomTopic ? `Info: ${focusedRoomTopic.slice(0, MAX_TOPIC_DISPLAY_LENGTH)}…` : 'Info (I)'}
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            className="hud-info-button"
+            aria-pressed={infoOpen}
+            onClick={onToggleInfo}
+            aria-label={infoOpen ? 'Close room info panel' : 'Open room info panel'}
+            title="Press I to toggle room info"
+          >
+            {infoOpen ? 'Info ✕' : focusedRoomTopic ? `Info: ${focusedRoomTopic.slice(0, MAX_TOPIC_DISPLAY_LENGTH)}…` : 'Info (I)'}
+          </button>
+          <Tooltip id="hud-info">
+            View room details — notes, images, artifact summaries, and self-check prompts.
+          </Tooltip>
+        </div>
 
         <div className="hud-phase-controls" aria-label="Phase controls">
           <span className="hud-phase-controls-label">Switch Phase</span>
@@ -200,36 +206,46 @@ export function Hud({
         </div>
 
         <div className="hud-action-row">
-          <button
-            type="button"
-            className="hud-action-icon-btn"
-            onClick={onOpenMap}
-            aria-label="Open full map"
-            title="Map (M)"
-          >
-            <span aria-hidden="true">🗺️</span>
-            <span className="hud-action-icon-label">Map</span>
-          </button>
-          <button
-            type="button"
-            className="hud-action-icon-btn"
-            onClick={onTeleport}
-            disabled={teleportRemainingMs > 0}
-            aria-pressed={teleportModeArmed}
-            aria-label={
-              teleportModeArmed
-                ? 'Cancel teleport mode'
-                : teleportRemainingMs > 0
-                  ? `Teleport on cooldown (${teleportCountdownLabel})`
-                  : 'Teleport'
-            }
-            title="Teleport"
-          >
-            <span aria-hidden="true">⚡</span>
-            <span className="hud-action-icon-label">
-              {teleportCountdownLabel ?? (teleportModeArmed ? 'Pick' : 'Warp')}
-            </span>
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="hud-action-icon-btn"
+              onClick={onOpenMap}
+              aria-label="Open full map"
+              title="Map (M)"
+            >
+              <span aria-hidden="true">🗺️</span>
+              <span className="hud-action-icon-label">Map</span>
+            </button>
+            <Tooltip id="hud-map">
+              Open the dungeon map to see all rooms. Drag rooms to rearrange, or click a room to teleport.
+            </Tooltip>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="hud-action-icon-btn"
+              onClick={onTeleport}
+              disabled={teleportRemainingMs > 0}
+              aria-pressed={teleportModeArmed}
+              aria-label={
+                teleportModeArmed
+                  ? 'Cancel teleport mode'
+                  : teleportRemainingMs > 0
+                    ? `Teleport on cooldown (${teleportCountdownLabel})`
+                    : 'Teleport'
+              }
+              title="Teleport"
+            >
+              <span aria-hidden="true">⚡</span>
+              <span className="hud-action-icon-label">
+                {teleportCountdownLabel ?? (teleportModeArmed ? 'Pick' : 'Warp')}
+              </span>
+            </button>
+            <Tooltip id="hud-teleport">
+              Instantly travel to any room. Opens the map to pick a destination. Has a 2-minute cooldown.
+            </Tooltip>
+          </div>
           <button
             type="button"
             className="hud-action-icon-btn"

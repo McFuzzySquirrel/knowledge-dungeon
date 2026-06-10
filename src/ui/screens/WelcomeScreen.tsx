@@ -17,6 +17,7 @@ import {
 } from '@/services/persistence/subjectPersistence';
 import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
+import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 
 const PHASES: { id: GamePhase; title: string; description: string }[] = [
   {
@@ -88,6 +89,7 @@ export function WelcomeScreen(): JSX.Element {
 
   const snapshot = useSubjectStore((s) => s.snapshot);
   const initSubject = useSubjectStore((s) => s.initSubject);
+  const importSnapshot = useSubjectStore((s) => s.importSnapshot);
   const colorTheme = usePreferencesStore((s) => s.colorTheme);
   const setColorTheme = usePreferencesStore((s) => s.setColorTheme);
   const loadSubjectFlow = useLoadSubjectFlow();
@@ -184,6 +186,15 @@ export function WelcomeScreen(): JSX.Element {
       cancelled = true;
     };
   }, [snapshot]);
+
+  async function handleStartTutorial() {
+    const subject = createTutorialSubject();
+    await importSnapshot(subject);
+    setPhase('scribe');
+    await refreshExistingSubjects();
+    setSelectedExistingSubjectId(TUTORIAL_SUBJECT_ID);
+    setActiveTab('setup');
+  }
 
   async function handleCreate() {
     if (!subjectName.trim() || !rootTopic.trim()) return;
@@ -548,7 +559,41 @@ export function WelcomeScreen(): JSX.Element {
       >
         <section>
           <h2>1. Choose or create a subject</h2>
-          <div style={{ display: 'grid', gap: 8 }}>
+
+          <div className="tutorial-card" style={{
+            background: 'linear-gradient(135deg, rgba(99, 179, 237, 0.12), rgba(99, 179, 237, 0.04))',
+            border: '1px solid rgba(99, 179, 237, 0.35)',
+            borderRadius: 12,
+            padding: '16px 20px',
+            marginBottom: 20,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <span style={{ fontSize: 28, lineHeight: 1 }}>🎓</span>
+              <div>
+                <strong style={{ fontSize: 16 }}>New here? Start the tutorial</strong>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                  A 3-room guided dungeon that teaches notes, attachments, and navigation.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="ghost"
+              style={{
+                background: 'rgba(99, 179, 237, 0.15)',
+                border: '1px solid rgba(99, 179, 237, 0.4)',
+                padding: '8px 20px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+              onClick={() => void handleStartTutorial()}
+            >
+              Start Tutorial
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
             <input
               type="text"
               placeholder="Subject name (e.g. Linear Algebra)"

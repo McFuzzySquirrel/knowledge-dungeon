@@ -80,6 +80,13 @@ const DOOR_SPRITE = `${BASE}assets/sprites/objects/door.svg`;
 const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
 const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
 const PICTURE_FRAME_SPRITE = `${BASE}assets/sprites/objects/picture-frame.svg`;
+const CHEST_OPEN_SPRITE = `${BASE}assets/sprites/objects/chest-open.svg`;
+const CHEST_CLOSED_SPRITE = `${BASE}assets/sprites/objects/chest-closed.svg`;
+const DOOR_LOCKED_SPRITE = `${BASE}assets/sprites/objects/door-locked.svg`;
+const ICON_BOOK_SPRITE = `${BASE}assets/sprites/icon-book.svg`;
+const ICON_GEAR_SPRITE = `${BASE}assets/sprites/icon-gear.svg`;
+const ICON_QUESTION_SPRITE = `${BASE}assets/sprites/icon-question.svg`;
+
 const DECOR_SPRITES = {
   bookshelf: `${BASE}assets/sprites/objects/bookshelf.svg`,
   brazier: `${BASE}assets/sprites/objects/brazier.svg`,
@@ -99,6 +106,12 @@ const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
 const NPC_GUIDE_TEXTURE_KEY = 'kd-npc-guide';
 const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
 const DOOR_TEXTURE_KEY = 'kd-door';
+const DOOR_LOCKED_TEXTURE_KEY = 'kd-door-locked';
+const CHEST_OPEN_TEXTURE_KEY = 'kd-chest-open';
+const CHEST_CLOSED_TEXTURE_KEY = 'kd-chest-closed';
+const ICON_BOOK_TEXTURE_KEY = 'kd-icon-book';
+const ICON_GEAR_TEXTURE_KEY = 'kd-icon-gear';
+const ICON_QUESTION_TEXTURE_KEY = 'kd-icon-question';
 const STAIRS_UP_TEXTURE_KEY = 'kd-stairs-up';
 const STAIRS_DOWN_TEXTURE_KEY = 'kd-stairs-down';
 const PICTURE_FRAME_TEXTURE_KEY = 'kd-picture-frame';
@@ -111,6 +124,9 @@ const ARTIFACT_LOOT_SPRITE_SIZE = 26;
 const PORTAL_SPRITE_SIZE = 28;
 const PATHWAY_TILE_SIZE = 32;
 const DOOR_SPRITE_SIZE = 22;
+const DOOR_LOCKED_SPRITE_SIZE = 22;
+const CHEST_SPRITE_SIZE = 24;
+const ROOM_ICON_SIZE = 16;
 const PICTURE_FRAME_SPRITE_SIZE = 20;
 // Fraction of a room's half-width/height used to position the picture frame
 // icon in the lower-right quadrant, clear of the topic label and decor.
@@ -165,6 +181,7 @@ export class DungeonScene extends Phaser.Scene {
   private activeWalkableOffsetX = 0;
   private activeWalkableOffsetY = 0;
   private decorIcons: Phaser.GameObjects.Image[] = [];
+  private roomOverlayIcons: Phaser.GameObjects.Image[] = [];
   private roomNpcs = new Map<string, Phaser.GameObjects.Image>();
   private activeNpcRoomId: string | null = null;
   /** Per-room floor id, captured when visibility is applied — used to seed
@@ -247,6 +264,30 @@ export class DungeonScene extends Phaser.Scene {
       width: PICTURE_FRAME_SPRITE_SIZE,
       height: PICTURE_FRAME_SPRITE_SIZE,
     });
+    this.load.svg(DOOR_LOCKED_TEXTURE_KEY, DOOR_LOCKED_SPRITE, {
+      width: DOOR_LOCKED_SPRITE_SIZE,
+      height: DOOR_LOCKED_SPRITE_SIZE,
+    });
+    this.load.svg(CHEST_OPEN_TEXTURE_KEY, CHEST_OPEN_SPRITE, {
+      width: CHEST_SPRITE_SIZE,
+      height: CHEST_SPRITE_SIZE,
+    });
+    this.load.svg(CHEST_CLOSED_TEXTURE_KEY, CHEST_CLOSED_SPRITE, {
+      width: CHEST_SPRITE_SIZE,
+      height: CHEST_SPRITE_SIZE,
+    });
+    this.load.svg(ICON_BOOK_TEXTURE_KEY, ICON_BOOK_SPRITE, {
+      width: ROOM_ICON_SIZE,
+      height: ROOM_ICON_SIZE,
+    });
+    this.load.svg(ICON_GEAR_TEXTURE_KEY, ICON_GEAR_SPRITE, {
+      width: ROOM_ICON_SIZE,
+      height: ROOM_ICON_SIZE,
+    });
+    this.load.svg(ICON_QUESTION_TEXTURE_KEY, ICON_QUESTION_SPRITE, {
+      width: ROOM_ICON_SIZE,
+      height: ROOM_ICON_SIZE,
+    });
     for (const key of DECOR_KEYS) {
       this.load.svg(DECOR_TEXTURE_KEYS[key], DECOR_SPRITES[key], {
         width: DECOR_SPRITE_SIZE,
@@ -274,6 +315,7 @@ export class DungeonScene extends Phaser.Scene {
     this.drawCorridors(map);
     this.drawRooms(map);
     this.refreshDecor();
+    this.refreshRoomOverlays();
 
     const root = map.rooms.find((r) => r.isRoot) ?? map.rooms[0];
     if (!root) return;
@@ -889,6 +931,7 @@ export class DungeonScene extends Phaser.Scene {
       this.drawRooms(this.dungeonMap);
       this.refreshPortalIcons();
       this.refreshDecor();
+      this.refreshRoomOverlays();
       this.refreshRoomNpcs();
       this.refreshArtifactIcons();
       this.refreshImageFrameIcons();
@@ -1060,6 +1103,36 @@ export class DungeonScene extends Phaser.Scene {
         const py = (room.gridY + room.height * corner.ay) * map.tileSize;
         const icon = this.add.image(px, py, textureKey).setDepth(2);
         this.decorIcons.push(icon);
+      }
+    }
+  }
+
+  private refreshRoomOverlays(): void {
+    for (const icon of this.roomOverlayIcons) icon.destroy();
+    this.roomOverlayIcons = [];
+    if (!this.dungeonMap) return;
+    const map = this.dungeonMap;
+    for (const room of map.rooms) {
+      if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
+      const cx = (room.gridX + room.width / 2) * map.tileSize;
+      const cy = (room.gridY + room.height / 2) * map.tileSize;
+      const isPortalEdge =
+        room.roomId === this.portalUpRoomId || this.portalDownRoomIds.has(room.roomId);
+      if (isPortalEdge) continue;
+      if (room.status === 'EncounterDefeated' || room.status === 'ArtifactCollected') {
+        if (!this.textures.exists(CHEST_OPEN_TEXTURE_KEY)) continue;
+        const icon = this.add
+          .image(cx, cy - 4, CHEST_OPEN_TEXTURE_KEY)
+          .setDepth(2.1);
+        this.roomOverlayIcons.push(icon);
+      } else if (room.status === 'Created') {
+        if (!this.textures.exists(DOOR_LOCKED_TEXTURE_KEY)) continue;
+        const doorX = (room.gridX + room.width) * map.tileSize - 6;
+        const doorY = (room.gridY + room.height / 2) * map.tileSize;
+        const icon = this.add
+          .image(doorX, doorY, DOOR_LOCKED_TEXTURE_KEY)
+          .setDepth(2.1);
+        this.roomOverlayIcons.push(icon);
       }
     }
   }
