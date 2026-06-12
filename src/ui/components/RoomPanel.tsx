@@ -101,6 +101,11 @@ export function RoomPanel({
   const [portalFilter, setPortalFilter] = useState('');
   const [selectedPortalRoomId, setSelectedPortalRoomId] = useState<string | null>(null);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
+  const [isMobile] = useState(() => {
+    try { return window.matchMedia('(max-width: 768px)').matches; }
+    catch { return false; }
+  });
+  const [bottomsheetExpanded, setBottomsheetExpanded] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);
   const [panelPosition, setPanelPosition] = useState<PanelPosition>(getInitialPanelPosition);
@@ -490,16 +495,23 @@ export function RoomPanel({
   return (
     <aside
       ref={panelRef}
-      className={`room-panel${panelExpanded ? ' room-panel--expanded' : ''}${dragState ? ' room-panel--dragging' : ''}`}
+      className={`room-panel${panelExpanded ? ' room-panel--expanded' : ''}${dragState ? ' room-panel--dragging' : ''}${isMobile ? ` room-panel--bottomsheet${bottomsheetExpanded ? ' room-panel--bottomsheet-expanded' : ''}` : ''}`}
       style={panelStyle}
       aria-label="Room information"
     >
       <div
-        className="room-panel-drag-handle"
+        className={`room-panel-drag-handle${isMobile ? ' room-panel-drag-handle--mobile' : ''}`}
         data-testid="room-panel-drag-handle"
-        onPointerDown={onDragHandlePointerDown}
+        onPointerDown={isMobile ? undefined : onDragHandlePointerDown}
+        onClick={isMobile ? () => setBottomsheetExpanded((v) => !v) : undefined}
+        role={isMobile ? 'button' : undefined}
+        tabIndex={isMobile ? 0 : undefined}
+        aria-label={bottomsheetExpanded ? 'Collapse room panel' : 'Expand room panel'}
+        onKeyDown={isMobile ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setBottomsheetExpanded((v) => !v); } } : undefined}
       >
-        Drag panel
+        <span className="room-panel-drag-handle-grip" aria-hidden="true">
+          {isMobile ? '⠿' : 'Drag panel'}
+        </span>
       </div>
       <div className="room-panel-header">
         <div className="room-tabs" role="tablist">

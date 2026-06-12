@@ -11,6 +11,8 @@ import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
 import { Hud } from '@/ui/components/Hud';
+import { HudDrawer } from '@/ui/components/HudDrawer';
+import { FloatingActions } from '@/ui/components/FloatingActions';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
 import { TutorialOverlay } from '@/ui/components/TutorialOverlay';
@@ -88,6 +90,11 @@ export function GameScreen(): JSX.Element {
   const [attachmentUrlsByRoomId, setAttachmentUrlsByRoomId] = useState<
     Record<string, Record<string, string>>
   >({});
+  const [isMobile] = useState(() => {
+    try { return window.matchMedia('(max-width: 768px)').matches; }
+    catch { return false; }
+  });
+  const setMobileHudOpen = useSessionStore((s) => s.setMobileHudOpen);
   const { toasts, pushToast, dismissToast } = useToasts();
   useExportReminder(pushToast);
 
@@ -134,6 +141,7 @@ export function GameScreen(): JSX.Element {
 
   const handleRoomInteract = useCallback(
     (roomId: string) => {
+      setMobileHudOpen(false);
       setNpcDialogRoomId(null);
       setNpcDialogAnchor(null);
       setFocusedRoomId(roomId);
@@ -162,7 +170,7 @@ export function GameScreen(): JSX.Element {
       requestRoomPanelTab('notes');
       setIsInfoPanelOpen(true);
     },
-    [openNoteEditor, phase, requestRoomPanelTab, setFocusedRoomId],
+    [openNoteEditor, phase, requestRoomPanelTab, setFocusedRoomId, setMobileHudOpen],
   );
 
   const finalizePendingReview = useCallback(
@@ -650,41 +658,49 @@ export function GameScreen(): JSX.Element {
     setShowOnboarding(false);
   }
 
+  const hudContent = (
+    <Hud
+      subjectName={snapshot.dungeon.subjectName}
+      roomCount={snapshot.dungeon.rooms.length}
+      xpTotal={xpTotal}
+      rank={rank}
+      reviewPassesCompleted={reviewProgress.fullReviewPasses}
+      reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
+      reviewNextPassTarget={reviewProgress.nextPassTarget}
+      reviewTotalRooms={reviewProgress.totalRooms}
+      phase={phase}
+      currentFloorLabel={currentFloorLabel}
+      teleportRemainingMs={teleportRemainingMs}
+      teleportModeArmed={teleportModeArmed}
+      phaseChangeNeedsConfirmation={phaseChangeNeedsConfirmation}
+      showScribeNudge={showScribeNudge}
+      infoOpen={isInfoPanelOpen}
+      focusedRoomTopic={focusedRoom?.topic ?? null}
+      inventoryCount={inventory.length}
+      badgeCount={badges.length}
+      journalCount={subjectCollectedNotes.length}
+      onPhaseChange={setPhase}
+      onHelp={() => { setMobileHudOpen(false); setHelpOpen(true); }}
+      onOpenSettings={() => { setMobileHudOpen(false); setSettingsOpen(true); }}
+      onOpenMap={() => { setMobileHudOpen(false); openMapView(); }}
+      onTeleport={() => { setMobileHudOpen(false); handleTeleport(); }}
+      onHome={() => { setMobileHudOpen(false); handleHome(); }}
+      onToggleInfo={() => { setMobileHudOpen(false); toggleInfoPanel(); }}
+      onOpenInventory={() => setInventoryView('inventory')}
+      onOpenBadges={() => setInventoryView('badges')}
+      onOpenJournal={() => setInventoryView('journal')}
+    />
+  );
+
   return (
     <div className="game-shell">
-      <div className="ui-skin hud-sidebar-wrapper" data-theme={colorTheme}>
-        <Hud
-          subjectName={snapshot.dungeon.subjectName}
-          roomCount={snapshot.dungeon.rooms.length}
-          xpTotal={xpTotal}
-          rank={rank}
-          reviewPassesCompleted={reviewProgress.fullReviewPasses}
-          reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
-          reviewNextPassTarget={reviewProgress.nextPassTarget}
-          reviewTotalRooms={reviewProgress.totalRooms}
-          phase={phase}
-          currentFloorLabel={currentFloorLabel}
-          teleportRemainingMs={teleportRemainingMs}
-          teleportModeArmed={teleportModeArmed}
-          phaseChangeNeedsConfirmation={phaseChangeNeedsConfirmation}
-          showScribeNudge={showScribeNudge}
-          infoOpen={isInfoPanelOpen}
-          focusedRoomTopic={focusedRoom?.topic ?? null}
-          inventoryCount={inventory.length}
-          badgeCount={badges.length}
-          journalCount={subjectCollectedNotes.length}
-          onPhaseChange={setPhase}
-          onHelp={() => setHelpOpen(true)}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenMap={openMapView}
-          onTeleport={handleTeleport}
-          onHome={handleHome}
-          onToggleInfo={toggleInfoPanel}
-          onOpenInventory={() => setInventoryView('inventory')}
-          onOpenBadges={() => setInventoryView('badges')}
-          onOpenJournal={() => setInventoryView('journal')}
-        />
-      </div>
+      {isMobile ? (
+        <HudDrawer>{hudContent}</HudDrawer>
+      ) : (
+        <div className="ui-skin hud-sidebar-wrapper" data-theme={colorTheme}>
+          {hudContent}
+        </div>
+      )}
 
       <div className="game-area">
         <div className="game-canvas">
@@ -707,6 +723,13 @@ export function GameScreen(): JSX.Element {
             >
               ⚔
             </button>
+          ) : null}
+          {isMobile ? (
+            <FloatingActions
+              onOpenMap={() => { setMobileHudOpen(false); openMapView(); }}
+              onTeleport={() => { setMobileHudOpen(false); handleTeleport(); }}
+              onOpenInventory={() => setInventoryView('inventory')}
+            />
           ) : null}
         </div>
         <div className="game-ui ui-skin" data-theme={colorTheme}>
