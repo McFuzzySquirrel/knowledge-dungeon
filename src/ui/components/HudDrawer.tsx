@@ -18,8 +18,8 @@ export function HudDrawer({ children }: HudDrawerProps): JSX.Element {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <span aria-hidden="true" className="hud-drawer-tab-icon">{open ? '▼' : '▲'}</span>
-        <span className="hud-drawer-tab-label">HUD</span>
+        <span aria-hidden="true" className="hud-drawer-tab-icon">{open ? '✕' : '☰'}</span>
+        <span className="hud-drawer-tab-label">Menu</span>
       </button>
 
       <div className={`hud-drawer-panel${open ? ' hud-drawer-panel--open' : ''}`}>

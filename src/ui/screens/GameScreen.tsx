@@ -16,6 +16,7 @@ import { FloatingActions } from '@/ui/components/FloatingActions';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 import { RoomPanel } from '@/ui/components/RoomPanel';
 import { TutorialOverlay } from '@/ui/components/TutorialOverlay';
+import { MobileTouchHint } from '@/ui/components/MobileTouchHint';
 import type { RoomTab } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
@@ -743,6 +744,7 @@ export function GameScreen(): JSX.Element {
               onOpenInventory={() => setInventoryView('inventory')}
             />
           ) : null}
+          <MobileTouchHint />
         </div>
         <div className="game-ui ui-skin" data-theme={colorTheme}>
           {isInfoPanelOpen ? (

@@ -26,6 +26,7 @@ interface MockScene {
   setFloorVisibility: ReturnType<typeof vi.fn>;
   teleportToRoom: ReturnType<typeof vi.fn>;
   triggerInteract: ReturnType<typeof vi.fn>;
+  setRoomOverlayStates: ReturnType<typeof vi.fn>;
 }
 
 interface MockGame {
@@ -189,6 +190,7 @@ describe('GameScreen NPC dialog callbacks', () => {
       setCollectedArtifactRooms: vi.fn(),
       setReviewedArtifactRooms: vi.fn(),
       setImageRooms: vi.fn(),
+      setRoomOverlayStates: vi.fn(),
       setFloorVisibility: vi.fn(),
       teleportToRoom: vi.fn(),
       triggerInteract: vi.fn(),

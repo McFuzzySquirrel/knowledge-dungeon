@@ -16,7 +16,8 @@ export function FloatingActions({ onOpenMap, onTeleport, onOpenInventory }: Floa
         aria-label="Open full map"
         title="Map"
       >
-        <span aria-hidden="true">🗺️</span>
+        <span className="floating-action-icon" aria-hidden="true">🗺️</span>
+        <span className="floating-action-label">Map</span>
       </button>
       <button
         type="button"
@@ -25,7 +26,8 @@ export function FloatingActions({ onOpenMap, onTeleport, onOpenInventory }: Floa
         aria-label="Teleport"
         title="Teleport"
       >
-        <span aria-hidden="true">⚡</span>
+        <span className="floating-action-icon" aria-hidden="true">⚡</span>
+        <span className="floating-action-label">Warp</span>
       </button>
       <button
         type="button"
@@ -34,7 +36,8 @@ export function FloatingActions({ onOpenMap, onTeleport, onOpenInventory }: Floa
         aria-label="Inventory and badges"
         title="Inventory"
       >
-        <span aria-hidden="true">🎒</span>
+        <span className="floating-action-icon" aria-hidden="true">🎒</span>
+        <span className="floating-action-label">Items</span>
       </button>
     </div>
   );
