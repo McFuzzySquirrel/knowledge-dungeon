@@ -1235,7 +1235,7 @@ textarea {
   width: auto;
   max-width: none;
   z-index: 90;
-  transform: translateY(calc(100% - 48px));
+  transform: translateY(calc(100% - 82px));
   transition: transform 0.25s ease;
   border-radius: 12px 12px 0 0;
   max-height: 85dvh;
@@ -1962,6 +1962,34 @@ button.danger:hover {
   }
 }
 
+@media (max-width: 600px) {
+  .full-map-sidebar {
+    display: none;
+  }
+
+  .full-map {
+    padding: 10px;
+    gap: 8px;
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .full-map-header h2 {
+    font-size: 16px;
+  }
+
+  .full-map-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .full-map-actions button {
+    min-height: 40px;
+    font-size: 13px;
+  }
+}
+
 @media (max-width: 480px) {
   .welcome-screen {
     margin: 8px;
@@ -2630,7 +2658,7 @@ button.danger:hover {
     max-width: 400px;
     left: auto;
     right: 0;
-    transform: translateY(calc(100% - 48px));
+    transform: translateY(calc(100% - 82px));
   }
 
   .room-panel--bottomsheet-expanded {

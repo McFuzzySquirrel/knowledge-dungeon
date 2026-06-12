@@ -450,6 +450,18 @@ export function GameScreen(): JSX.Element {
   }, [sceneReady, snapshot]);
 
   useEffect(() => {
+    if (!sceneReady || !snapshot) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const roomStates: Record<string, string> = {};
+    for (const room of snapshot.dungeon.rooms) {
+      const meta = snapshot.rooms[room.roomId];
+      roomStates[room.roomId] = meta?.state ?? room.status;
+    }
+    scene.setRoomOverlayStates(roomStates);
+  }, [sceneReady, snapshot]);
+
+  useEffect(() => {
     if (!snapshot) return;
     if (hasSeenGameplayLoopOnboarding()) return;
     setShowOnboarding(true);
