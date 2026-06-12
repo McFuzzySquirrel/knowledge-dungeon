@@ -1,0 +1,13 @@
+services:
+  knowledge-dungeon:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - knowledge-dungeon-data:/data
+    environment:
+      - PORT=3000
+      - DATA_DIR=/data
+
+volumes:
+  knowledge-dungeon-data:

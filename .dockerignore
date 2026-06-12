@@ -1,0 +1,10 @@
+node_modules
+.git
+dist
+dist-electron
+data
+uploads
+*.md
+docs
+tests
+scripts
