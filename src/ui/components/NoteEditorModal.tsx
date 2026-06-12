@@ -361,7 +361,8 @@ export function NoteEditorModal(): JSX.Element | null {
                             pushToast('error', 'Upload failed. Make sure the server is running.');
                             return;
                           }
-                          const created = await addExternalAttachment(room.roomId, url);
+                          const absoluteUrl = new URL(url, window.location.origin).href;
+                          const created = await addExternalAttachment(room.roomId, absoluteUrl);
                           if (!created) {
                             pushToast('info', 'No image was added.');
                             return;
