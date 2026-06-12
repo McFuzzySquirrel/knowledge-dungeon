@@ -105,7 +105,7 @@ app.delete('/api/subjects/:subjectId', (req, res) => {
   }
 });
 
-app.use((err, _req, res, _next) => {
+app.use((err, _req, res, _next) => { // eslint-disable-line no-unused-vars
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.message });
   }

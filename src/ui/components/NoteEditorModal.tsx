@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ChangeEvent } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -25,7 +25,7 @@ async function uploadFile(file: File): Promise<string | null> {
   try {
     const res = await fetch('/api/upload', { method: 'POST', body: formData });
     if (!res.ok) return null;
-    const data = await res.json();
+    const data: { url?: string } = await res.json() as { url?: string };
     return data.url ?? null;
   } catch {
     return null;
@@ -351,29 +351,31 @@ export function NoteEditorModal(): JSX.Element | null {
                       type="file"
                       accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
                       hidden
-                      onChange={async (e) => {
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
                         setIsSavingAttachment(true);
-                        try {
-                          const url = await uploadFile(file);
-                          if (!url) {
-                            pushToast('error', 'Upload failed. Make sure the server is running.');
-                            return;
-                          }
-                          const absoluteUrl = new URL(url, window.location.origin).href;
-                          const created = await addExternalAttachment(room.roomId, absoluteUrl);
-                          if (!created) {
-                            pushToast('info', 'No image was added.');
-                            return;
-                          }
-                          pushToast('info', 'Image uploaded and attached to room.');
-                        } catch {
-                          pushToast('error', 'Upload failed.');
-                        } finally {
-                          setIsSavingAttachment(false);
-                          e.target.value = '';
-                        }
+                        uploadFile(file)
+                          .then((url) => {
+                            if (!url) {
+                              pushToast('error', 'Upload failed. Make sure the server is running.');
+                              return;
+                            }
+                            const absoluteUrl = new URL(url, window.location.origin).href;
+                            return addExternalAttachment(room.roomId, absoluteUrl);
+                          })
+                          .then((created) => {
+                            if (!created) {
+                              pushToast('info', 'No image was added.');
+                              return;
+                            }
+                            pushToast('info', 'Image uploaded and attached to room.');
+                          })
+                          .catch(() => pushToast('error', 'Upload failed.'))
+                          .finally(() => {
+                            setIsSavingAttachment(false);
+                            e.target.value = '';
+                          });
                       }}
                     />
                     <button
