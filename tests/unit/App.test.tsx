@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { App } from '@/ui/App';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
