@@ -27,9 +27,9 @@ After creating or selecting a subject, clicking "Enter Dungeon" takes you to the
 The **Start Tutorial** card on the Create/Load tab loads a pre-built 3-room subject
 that teaches the core loop:
 
-- **Room 1 — "The Note"**: write Summary, Key Points, and Recall Question sections.
-- **Room 2 — "Tools of the Trade"**: attach an image or external URL to your note.
-- **Room 3 — "The Map & Beyond"**: use the full map, teleport, and explore floor portals.
+- **Room 1 - "The Note"**: write Summary, Key Points, and Recall Question sections.
+- **Room 2 - "Tools of the Trade"**: attach an image or external URL to your note.
+- **Room 3 - "The Map & Beyond"**: use the full map, teleport, and explore floor portals.
 
 The tutorial sets the phase to **Scribe** automatically so new users can jump straight in.
 A persistent **TutorialOverlay** on the game canvas shows step-by-step guidance
@@ -48,7 +48,7 @@ shows a readiness line that turns green once an archetype is selected.
 
 ![Dungeon Village](./assets/ui/village-overview.png)
 
-After creating a subject, the player arrives in the **Dungeon Village** — a
+After creating a subject, the player arrives in the **Dungeon Village** - a
 Phaser-rendered top-down hub world. The village replaces the direct jump from
 welcome screen to dungeon, giving the player a persistent home base.
 
@@ -56,14 +56,14 @@ welcome screen to dungeon, giving the player a persistent home base.
 
 The village is a 36×30 tile map with a connecting stone-path road network:
 
-- **Village Gate** (south) — entrance from the welcome screen.
-- **Central Fountain** — landmark at the village center.
-- **Keeper's Tower** (north) — houses the quest board and the Keeper NPC.
-- **Library of Knowledge** (northwest) — in-game help panel.
-- **Training Grounds** (west) — launches the tutorial dungeon.
-- **Guild Hall** (northeast) — create new subjects.
-- **Trophy Hall** (southeast) — view your collection.
-- **Dungeon Portals** — up to 6 animated vortex icons scattered across
+- **Village Gate** (south) - entrance from the welcome screen.
+- **Central Fountain** - landmark at the village center.
+- **Keeper's Tower** (north) - houses the quest board and the Keeper NPC.
+- **Library of Knowledge** (northwest) - in-game help panel.
+- **Training Grounds** (west) - launches the tutorial dungeon.
+- **Guild Hall** (northeast) - create new subjects.
+- **Trophy Hall** (southeast) - view your collection.
+- **Dungeon Portals** - up to 6 animated vortex icons scattered across
   the map, one per subject.
 
 ### 2b) Village HUD (fixed sidebar)
@@ -72,14 +72,14 @@ The village is a 36×30 tile map with a connecting stone-path road network:
 
 The village HUD is a **fixed left sidebar** (like the dungeon HUD) containing:
 
-- **Header** — "Dungeon Village" title + theme picker (Night / Arcade / Aurora).
-- **Stats** — dungeon count and selected archetype.
-- **Archetype selector** — click a class to select it; clicking again shows
+- **Header** - "Dungeon Village" title + theme picker (Night / Arcade / Aurora).
+- **Stats** - dungeon count and selected archetype.
+- **Archetype selector** - click a class to select it; clicking again shows
   a detail panel with the class description and perk.
-- **Quest log** — shows the current quest step, hint text, and progress dots.
+- **Quest log** - shows the current quest step, hint text, and progress dots.
   Click a dot to switch quests. Click the active step to hear the Keeper's guidance.
-- **Controls hint** — WASD/arrow movement and E to interact.
-- **Action buttons** — "Create New Subject" and "Tutorial".
+- **Controls hint** - WASD/arrow movement and E to interact.
+- **Action buttons** - "Create New Subject" and "Tutorial".
 
 On mobile (≤768px), the HUD collapses into a **bottom drawer** with a toggle button.
 
@@ -110,19 +110,19 @@ button because they happen inside dungeons and can't be auto-detected.
 ![Village signpost](./assets/ui/village-signpost.png)
 
 Five multi-directional signposts at key crossroads. Approach one to see
-an info panel with directions (e.g. "↑ North — Keeper's Tower & Library").
+an info panel with directions (e.g. "↑ North - Keeper's Tower & Library").
 The entrance signpost shows a village overview with building descriptions.
 
 ### 2g) NPCs
 
-- **Keeper of Knowledge** — guide NPC near Keeper's Tower. Patrols the
+- **Keeper of Knowledge** - guide NPC near Keeper's Tower. Patrols the
   northern area. Context-aware dialogue based on current quest step.
-- **Wandering Scholar** — patrols the central market square. Shows random
+- **Wandering Scholar** - patrols the central market square. Shows random
   learning quotes when approached.
-- **Thoughtful Traveler** — walks the east path. Learning quotes.
-- **Curious Apprentice** — near the trophy hall. Learning quotes.
-- **Elder Sage** — patrols the northeast quadrant. Learning quotes.
-- **Ink-Stained Scribe** — walks the south fountain area. Learning quotes.
+- **Thoughtful Traveler** - walks the east path. Learning quotes.
+- **Curious Apprentice** - near the trophy hall. Learning quotes.
+- **Elder Sage** - patrols the northeast quadrant. Learning quotes.
+- **Ink-Stained Scribe** - walks the south fountain area. Learning quotes.
 
 ### 2h) Trophy Hall
 
@@ -171,7 +171,7 @@ sprites and tilesets, and for where desktop subject exports are written from.
 
 ## 4) Auto-zoom (room ↔ corridor)
 
-![Player on a corridor between rooms — camera zoomed out](./assets/ui/auto-zoom-corridor.png)
+![Player on a corridor between rooms - camera zoomed out](./assets/ui/auto-zoom-corridor.png)
 
 When the player steps out of a room onto a corridor, the camera smoothly
 tweens to a wider zoom so more of the dungeon is visible at once. Stepping
@@ -242,29 +242,29 @@ Knowledge Dungeon adapts to three distinct viewport tiers.
 
 ### 12a) Desktop game screen (≥ 960 px)
 
-![Desktop game screen — sidebar HUD and minimap intact](./assets/ui/desktop-game-screen.png)
+![Desktop game screen - sidebar HUD and minimap intact](./assets/ui/desktop-game-screen.png)
 
-### 12b) Welcome screen — mobile (≤ 480 px)
+### 12b) Welcome screen - mobile (≤ 480 px)
 
 ![Welcome screen at 390px mobile viewport](./assets/ui/mobile-welcome-screen.png)
 
-### 12c) Player Setup tab — single-column (≤ 600 px)
+### 12c) Player Setup tab - single-column (≤ 600 px)
 
 ![Player Setup tab with single-column grids](./assets/ui/mobile-setup-screen.png)
 
-### 12d) Tablet HUD (≤ 900 px) — compact top rail
+### 12d) Tablet HUD (≤ 900 px) - compact top rail
 
 ![Game HUD at 768px tablet viewport](./assets/ui/tablet-game-hud.png)
 
-### 12e) Mobile game HUD (≤ 480 px) — stripped top rail
+### 12e) Mobile game HUD (≤ 480 px) - stripped top rail
 
 ![Game HUD at 390px mobile viewport](./assets/ui/mobile-game-hud.png)
 
-### 12f) Room panel — mobile (≤ 480 px)
+### 12f) Room panel - mobile (≤ 480 px)
 
 ![Room panel open at 390px mobile viewport](./assets/ui/mobile-room-panel.png)
 
-### 12g) Village HUD — mobile (≤ 768 px)
+### 12g) Village HUD - mobile (≤ 768 px)
 
 The village HUD collapses into a bottom drawer with a toggle button (☰/✕)
 fixed at the top-right corner of the screen. The drawer slides up with the

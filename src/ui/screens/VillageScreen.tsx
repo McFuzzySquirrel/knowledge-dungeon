@@ -220,7 +220,7 @@ export function VillageScreen(): JSX.Element {
             setKeeperDialogue(npc.greeting);
           }
         } else {
-          // Wandering NPC — show random quote
+          // Wandering NPC - show random quote
           const quotes = npc.quotes ?? [];
           const quote = quotes.length > 0 ? quotes[Math.floor(Math.random() * quotes.length)] : npc.greeting;
           setKeeperDialogue(quote);
@@ -262,7 +262,7 @@ export function VillageScreen(): JSX.Element {
     Object.assign(callbacksRef.current, cb);
   }, [subjects, dynamicStructures, selectedClass]);
 
-  // Mount Phaser game once — it reads from callbacksRef
+  // Mount Phaser game once - it reads from callbacksRef
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
     const ref = callbacksRef;
@@ -554,20 +554,20 @@ export function VillageScreen(): JSX.Element {
             <div className="village-subject-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
               <strong>🎮 Controls</strong>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / Arrow keys — Move<br/>
-                <kbd>E</kbd> — Interact with buildings & NPCs<br/>
-                <kbd>M</kbd> — Open dungeon map<br/>
-                <kbd>I</kbd> — Toggle room info panel<br/>
-                <kbd>H</kbd> — Return to village<br/>
-                <kbd>?</kbd> — Help overlay
+                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / Arrow keys - Move<br/>
+                <kbd>E</kbd> - Interact with buildings & NPCs<br/>
+                <kbd>M</kbd> - Open dungeon map<br/>
+                <kbd>I</kbd> - Toggle room info panel<br/>
+                <kbd>H</kbd> - Return to village<br/>
+                <kbd>?</kbd> - Help overlay
               </span>
             </div>
             <div className="village-subject-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
               <strong>📋 Gameplay Loop</strong>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                <strong>Creator</strong> — Build your topic map by adding rooms<br/>
-                <strong>Scribe</strong> — Clear rooms by writing structured notes<br/>
-                <strong>Archaeologist</strong> — Review cleared rooms for badges & XP
+                <strong>Creator</strong> - Build your topic map by adding rooms<br/>
+                <strong>Scribe</strong> - Clear rooms by writing structured notes<br/>
+                <strong>Archaeologist</strong> - Review cleared rooms for badges & XP
               </span>
             </div>
             <div className="village-subject-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
@@ -929,44 +929,44 @@ const SIGNPOST_INFO: Record<string, { icon: string; title: string; lines: string
     icon: '🚪',
     title: 'Village Entrance',
     lines: [
-      '↑ Straight ahead — Fountain & Market Square',
-      '→ East — Guild Hall & Portals',
-      '↖ Northwest — Training Grounds',
+      '↑ Straight ahead - Fountain & Market Square',
+      '→ East - Guild Hall & Portals',
+      '↖ Northwest - Training Grounds',
     ],
   },
   'sign-center': {
     icon: '📍',
     title: 'Central Crossroads',
     lines: [
-      '↑ North — Keeper\'s Tower & Library',
-      '→ East — Guild Hall & East Portals',
-      '↓ South — Fountain, Trophy Hall & South Portals',
-      '← West — Training Grounds & West Portals',
+      '↑ North - Keeper\'s Tower & Library',
+      '→ East - Guild Hall & East Portals',
+      '↓ South - Fountain, Trophy Hall & South Portals',
+      '← West - Training Grounds & West Portals',
     ],
   },
   'sign-library': {
     icon: '📍',
     title: 'North Path Split',
     lines: [
-      '↑ North — Library of Knowledge',
-      '→ East — Keeper\'s Tower',
+      '↑ North - Library of Knowledge',
+      '→ East - Keeper\'s Tower',
     ],
   },
   'sign-south': {
     icon: '📍',
     title: 'South Path Split',
     lines: [
-      '← West — South Portals',
-      '→ East — Trophy Hall',
-      '↓ South — Village Gate (Exit)',
+      '← West - South Portals',
+      '→ East - Trophy Hall',
+      '↓ South - Village Gate (Exit)',
     ],
   },
   'sign-east': {
     icon: '📍',
     title: 'East Path Split',
     lines: [
-      '→ East — Guild Hall',
-      '← West — Central Square & North Portals',
+      '→ East - Guild Hall',
+      '← West - Central Square & North Portals',
     ],
   },
 };
@@ -989,11 +989,11 @@ function SignpostPanel({ structureId, colorTheme }: { structureId: string; color
           enter dungeons, and track your progress.
         </p>
         <div className="village-info-actions" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>🏛 Keeper's Tower — Meet your guide</span>
-          <span>⚒ Guild Hall — Create new subjects</span>
-          <span>🌀 Portals — Enter your dungeons</span>
-          <span>🎓 Training Grounds — Learn the basics</span>
-          <span>🏆 Trophy Hall — View collections</span>
+          <span>🏛 Keeper's Tower - Meet your guide</span>
+          <span>⚒ Guild Hall - Create new subjects</span>
+          <span>🌀 Portals - Enter your dungeons</span>
+          <span>🎓 Training Grounds - Learn the basics</span>
+          <span>🏆 Trophy Hall - View collections</span>
         </div>
       </div>
     );

@@ -108,7 +108,7 @@ describe('generateDungeonMap', () => {
       // Each child placed by BFS should land on exactly one orthogonal step.
       expect(Number.isInteger(dx)).toBe(true);
       expect(Number.isInteger(dy)).toBe(true);
-      // Tree edges from the root never use diagonals — exactly one axis differs.
+      // Tree edges from the root never use diagonals - exactly one axis differs.
       const isOrthogonal =
         (Math.abs(dx) === 1 && dy === 0) || (Math.abs(dy) === 1 && dx === 0);
       expect(isOrthogonal).toBe(true);

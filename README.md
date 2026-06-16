@@ -13,7 +13,7 @@ quality gates. Defeated rooms drop loot, XP, and a generated artifact. When
 every room is cleared, the **Archaeologist** phase unlocks self-check prompts
 and review-streak tracking.
 
-Your journey begins in the **Dungeon Village** — a Phaser-rendered hub world
+Your journey begins in the **Dungeon Village** - a Phaser-rendered hub world
 with buildings, NPCs, signposts, and portals. Create subjects, select your
 archetype, meet the guide NPC, view your collections, and step through any
 portal to enter a dungeon.
@@ -47,17 +47,17 @@ This works especially well for onboarding, architecture reviews, and "what does 
 
 ### Village Hub
 
-![Dungeon Village — hub world with buildings, portals, NPCs, and paths](./docs/assets/ui/village-overview.png)
+![Dungeon Village - hub world with buildings, portals, NPCs, and paths](./docs/assets/ui/village-overview.png)
 
 The **Dungeon Village** is your home base, replacing the direct welcome→dungeon jump:
 
 - **Phaser-rendered top-down world** with stone paths, trees, ponds, flowers, torches, benches, and flying birds.
-- **Dungeon portals** — animated vortex icons, one per subject. Walk up and press E to enter.
-- **Keeper's Tower** — quest board with 10-step onboarding, context-aware NPC dialogue.
-- **Guild Hall** — create new subjects.
-- **Training Grounds** — launch the 3-room tutorial.
-- **Trophy Hall** — view badges, artifacts, journal entries across all subjects.
-- **Library of Knowledge** — in-game help with controls and gameplay reference.
+- **Dungeon portals** - animated vortex icons, one per subject. Walk up and press E to enter.
+- **Keeper's Tower** - quest board with 10-step onboarding, context-aware NPC dialogue.
+- **Guild Hall** - create new subjects.
+- **Training Grounds** - launch the 3-room tutorial.
+- **Trophy Hall** - view badges, artifacts, journal entries across all subjects.
+- **Library of Knowledge** - in-game help with controls and gameplay reference.
 - **5 signposts** at crossroads showing directions.
 - **5 wandering NPCs** with learning quotes.
 - **Compass** pointing toward the nearest portal or keeper.
@@ -95,7 +95,7 @@ Once a subject is loaded, the in-dungeon view keeps the study loop visible in on
   shortcut) so deep mindmaps stay navigable
 - the full **Map** overlay (<kbd>M</kbd>) defaults to a per-floor view that
   greys out unrelated floors and renders the parent entry room as a dashed
-  blue portal — toggle **Show current floor only** off to see the whole
+  blue portal - toggle **Show current floor only** off to see the whole
   topic graph at once
 - in the full map, drag empty space to pan and drag any room node to
   reposition it while its connections remain attached
@@ -166,7 +166,7 @@ npm run package:electron  # local Electron package (no signing)
 
 ### Self-hosting with Podman / Docker
 
-Run the production build in a container — useful for testing on mobile devices
+Run the production build in a container - useful for testing on mobile devices
 or for hosting on a home server so family members can access it on their phones.
 
 ```bash
@@ -208,7 +208,7 @@ The commands below produce a distributable installer in the `release/` folder.
 
 | Target | Command |
 |--------|---------|
-| Current platform only (unpacked, no installer — fast for testing) | `npm run package:electron` |
+| Current platform only (unpacked, no installer - fast for testing) | `npm run package:electron` |
 | macOS `.dmg` + `.zip` | `npm run package:electron:mac` |
 | Windows NSIS installer + `.zip` | `npm run package:electron:win` |
 | Linux `.AppImage` + `.deb` | `npm run package:electron:linux` |
@@ -241,9 +241,9 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 | ------ | -------- | ----- |
 | Move   | `W A S D` / arrows | On-screen D-pad |
 | Interact (open encounter / mark reviewed) | `E` | `Interact` button |
-| Toggle room info panel | `I` | — |
-| Toggle full map | `M` | — |
-| Toggle help | `?` / `Shift+/` | — |
+| Toggle room info panel | `I` | - |
+| Toggle full map | `M` | - |
+| Toggle help | `?` / `Shift+/` | - |
 
 ## UI docs
 
@@ -282,7 +282,7 @@ docs/                    # PRD + progress notes
 - **Web**: subjects fall back to `localStorage`; import/export is supported
   via the persistence facade.
 
-> 🔒 **Privacy**: all data — subjects, notes, progression, and images — is stored
+> 🔒 **Privacy**: all data - subjects, notes, progression, and images - is stored
 > **locally on your device only** (in your browser's `localStorage` for the web
 > version, or in your user-data folder for Electron). Nothing is ever sent to any
 > server. Clearing your browser's site data will permanently remove web subjects, so
@@ -300,4 +300,4 @@ engine and shell** verbatim and swaps its content provider for
 
 ## License
 
-MIT — see [`LICENSE`](./LICENSE).
+MIT - see [`LICENSE`](./LICENSE).

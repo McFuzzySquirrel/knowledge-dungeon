@@ -36,7 +36,7 @@ export const PLAYER_CLASSES: readonly PlayerClassDefinition[] = [
     name: 'Archivist',
     tagline: 'Loves revisiting old material.',
     description:
-      'Optimised for the Archaeologist phase — generates richer self-check prompts.',
+      'Optimised for the Archaeologist phase - generates richer self-check prompts.',
     perk: 'Self-check prompt cap increases from 4 to 6.',
   },
 ] as const;

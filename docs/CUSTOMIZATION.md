@@ -4,7 +4,7 @@ This guide covers two questions that come up often:
 
 1. **How do I add custom images** (logos, room art, sprites) so they show up in
    the React UI or the Phaser dungeon scene?
-2. **Where is the "root"** when I create a new subject — both the *root topic /
+2. **Where is the "root"** when I create a new subject - both the *root topic /
    root room* concept and the on-disk location of saved data?
 
 ---
@@ -19,7 +19,7 @@ places to put image assets:
 | `public/` | The file is a fixed asset that should be copied to the build output verbatim (favicons, large textures, anything you don't need to import). | An absolute URL path, e.g. `/my-image.png` or `/assets/sprites/hero.png`. |
 | `src/` (e.g. `src/assets/`) | You want Vite to hash, bundle, and tree-shake the asset alongside your TypeScript code. | An `import` statement, e.g. `import heroUrl from '@/assets/hero.png';`. |
 
-### Option A — Drop-in static asset via `public/`
+### Option A - Drop-in static asset via `public/`
 
 1. Put your file under `public/`. You can create any subfolders you want:
 
@@ -51,7 +51,7 @@ places to put image assets:
    This works the same in `npm run dev`, the production web build, and the
    Electron build.
 
-### Option B — Bundled asset via `src/`
+### Option B - Bundled asset via `src/`
 
 If you want the image to be hashed for cache-busting and only included when
 imported, drop it under `src/assets/` (create the folder if it doesn't exist)
@@ -111,9 +111,9 @@ There are **two** different "roots" to know about. Don't confuse them.
 
 When you create a new subject from the welcome screen you fill in two fields:
 
-- **Subject name** — the human-readable title of the dungeon
+- **Subject name** - the human-readable title of the dungeon
   (e.g. `Linear Algebra`).
-- **Root topic** — the seed concept that becomes the *root room* of the
+- **Root topic** - the seed concept that becomes the *root room* of the
   dungeon (e.g. `Vector Spaces`).
 
 The root topic is rendered as the first room in the Phaser scene and is the
@@ -122,7 +122,7 @@ spawn point for the player. In the data model it is the room whose
 `createRootDungeon` helper in `src/core/graph/`.
 
 Every additional room you add via the **Topic → Add child topic** form is
-attached to the currently-focused room as a child of that subgraph — there is
+attached to the currently-focused room as a child of that subgraph - there is
 only ever one root, and it's whatever you typed in that "Root topic" field
 when you created the subject.
 
@@ -152,7 +152,7 @@ to the standard location for your platform:
 | Windows  | `%APPDATA%\knowledge-dungeon\` |
 | Linux    | `~/.config/knowledge-dungeon/` |
 
-The directory is created on demand the first time you save a subject — see
+The directory is created on demand the first time you save a subject - see
 `dungeonDataRoot()` and `ensureSubjectRoot()` in `src/electron/main.ts`.
 
 If you're using the desktop build, the welcome screen's **Admin** section can

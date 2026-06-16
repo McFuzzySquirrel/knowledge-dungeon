@@ -113,7 +113,7 @@ function createPrng(seed: string): PRNG {
 }
 
 /**
- * Orthogonal directions only — diagonals were removed when corridors became
+ * Orthogonal directions only - diagonals were removed when corridors became
  * axis-aligned. Every BFS-placed neighbour is therefore exactly one macro
  * cell away in N/S/E/W, so each tree edge becomes a single straight corridor.
  */
@@ -182,7 +182,7 @@ export function generateDungeonMap(
     }
   }
 
-  // Disconnected rooms (no edges) — sprinkle into free cells.
+  // Disconnected rooms (no edges) - sprinkle into free cells.
   for (const summary of dungeon.rooms) {
     if (positions.has(summary.roomId)) continue;
     let radius = 1;

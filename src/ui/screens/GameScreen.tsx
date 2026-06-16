@@ -361,7 +361,7 @@ export function GameScreen(): JSX.Element {
           if (!liveSnapshot) return;
           const liveHierarchy = deriveGraphHierarchy(liveSnapshot.dungeon);
           // For both directions the destination room is the very portal the
-          // player is standing on — we just swap which floor is "active" so
+          // player is standing on - we just swap which floor is "active" so
           // that room's neighbors become visible.
           const destinationFloorId =
             direction === 'up'

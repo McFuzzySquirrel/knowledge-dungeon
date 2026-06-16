@@ -1,5 +1,5 @@
 /**
- * Progression store — XP, rank, badges, inventory. Persists to localStorage
+ * Progression store - XP, rank, badges, inventory. Persists to localStorage
  * mirroring repo-dungeon's progression-store wiring.
  */
 import { create } from 'zustand';
