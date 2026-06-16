@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useSessionStore, QUEST_LABELS, QUEST_ORDER, MANUAL_QUESTS, type QuestStep } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
-import { usePreferencesStore } from '@/store/preferencesStore';
+import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
 import { createVillageGame } from '@/game/createVillageGame';
 import type { VillageSceneEvents } from '@/game/scenes/VillageScene';
 import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
-import { PLAYER_CLASSES } from '@/game/systems/playerClasses';
+import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
 import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 
@@ -283,7 +283,7 @@ export function VillageScreen(): JSX.Element {
     });
     gameRef.current = game;
     game.events.once('ready', () => {
-      sceneRef.current = game.scene.getScene('VillageScene') as VillageSceneHandle;
+      sceneRef.current = game.scene.getScene('VillageScene') as unknown as VillageSceneHandle;
       setVillageReady(true);
     });
     return () => {
@@ -348,9 +348,9 @@ export function VillageScreen(): JSX.Element {
           <div className={`village-hud ui-skin village-hud--mobile${hudOpen ? ' village-hud--open' : ' village-hud--hidden'}`}
             data-theme={colorTheme}>
             <VillageHudContent questStep={questStep} subjects={subjects}
-              selectedClass={selectedClass} setSelectedClass={setSelectedClass}
+              selectedClass={selectedClass}               setSelectedClass={(c) => setSelectedClass(c as PlayerClassId ?? null)}
               setCreateOpen={setCreateOpen} setDataOpen={setDataOpen}
-              colorTheme={colorTheme} setColorTheme={setColorTheme}
+              colorTheme={colorTheme} setColorTheme={(t) => setColorTheme(t as ColorTheme)}
               onQuestClick={(step: string) => {
                 setQuestStep(step as QuestStep);
                 const keeper = VILLAGE_MAP.npcs.find((n) => n.id === 'keeper');
@@ -365,9 +365,9 @@ export function VillageScreen(): JSX.Element {
         <div className="village-hud-wrapper">
           <div className="village-hud ui-skin" data-theme={colorTheme}>
             <VillageHudContent questStep={questStep} subjects={subjects}
-              selectedClass={selectedClass} setSelectedClass={setSelectedClass}
+              selectedClass={selectedClass} setSelectedClass={(c) => setSelectedClass(c as PlayerClassId ?? null)}
               setCreateOpen={setCreateOpen} setDataOpen={setDataOpen}
-              colorTheme={colorTheme} setColorTheme={setColorTheme}
+              colorTheme={colorTheme} setColorTheme={(t) => setColorTheme(t as ColorTheme)}
               onQuestClick={(step: string) => {
                 setQuestStep(step as QuestStep);
                 const keeper = VILLAGE_MAP.npcs.find((n) => n.id === 'keeper');
@@ -820,9 +820,9 @@ function VillageHudContent({
   questStep, subjects, selectedClass, setSelectedClass, setCreateOpen, setDataOpen,
   colorTheme, setColorTheme, onQuestClick,
 }: {
-  questStep: string; subjects: Array<{ id: string; subjectName: string; roomCount: number; clearedRoomCount: number }>;
+  questStep: QuestStep; subjects: Array<{ id: string; subjectName: string; roomCount: number; clearedRoomCount: number }>;
   selectedClass: string | null; setSelectedClass: (cls: string | null) => void;
-  setCreateOpen: (v: boolean) => void; setDataOpen?: (v: boolean) => void;
+  setCreateOpen: React.Dispatch<React.SetStateAction<boolean>>; setDataOpen: React.Dispatch<React.SetStateAction<boolean>>;
   colorTheme: string; setColorTheme: (t: string) => void;
   onQuestClick: (step: string) => void;
 }): JSX.Element {
