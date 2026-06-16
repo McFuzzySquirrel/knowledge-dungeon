@@ -13,6 +13,11 @@ quality gates. Defeated rooms drop loot, XP, and a generated artifact. When
 every room is cleared, the **Archaeologist** phase unlocks self-check prompts
 and review-streak tracking.
 
+Your journey begins in the **Dungeon Village** — a Phaser-rendered hub world
+with buildings, NPCs, signposts, and portals. Create subjects, select your
+archetype, meet the guide NPC, view your collections, and step through any
+portal to enter a dungeon.
+
 Built with a simple goal: make learning feel fun again by turning note-taking,
 revision, and concept mapping into an interactive adventure instead of a static checklist.
 
@@ -39,6 +44,26 @@ This works especially well for onboarding, architecture reviews, and "what does 
 ## Screenshots
 
 ![Knowledge Dungeon UI showcase](./docs/assets/showcase.gif)
+
+### Village Hub
+
+![Dungeon Village — hub world with buildings, portals, NPCs, and paths](./docs/assets/ui/village-overview.png)
+
+The **Dungeon Village** is your home base, replacing the direct welcome→dungeon jump:
+
+- **Phaser-rendered top-down world** with stone paths, trees, ponds, flowers, torches, benches, and flying birds.
+- **Dungeon portals** — animated vortex icons, one per subject. Walk up and press E to enter.
+- **Keeper's Tower** — quest board with 10-step onboarding, context-aware NPC dialogue.
+- **Guild Hall** — create new subjects.
+- **Training Grounds** — launch the 3-room tutorial.
+- **Trophy Hall** — view badges, artifacts, journal entries across all subjects.
+- **Library of Knowledge** — in-game help with controls and gameplay reference.
+- **5 signposts** at crossroads showing directions.
+- **5 wandering NPCs** with learning quotes.
+- **Compass** pointing toward the nearest portal or keeper.
+- **Fixed sidebar HUD** with archetype selector, quest log, and theme picker. Collapsible drawer on mobile.
+
+From the village, press **Home** (H) in any dungeon to return. Portals persist across sessions.
 
 ### Home / subject management
 

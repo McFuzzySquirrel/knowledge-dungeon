@@ -34,6 +34,8 @@ export const QUEST_LABELS: Record<QuestStep, { label: string; hint: string }> = 
 };
 
 export const TELEPORT_COOLDOWN_MS = 2 * 60 * 1000;
+/** Quest steps that happen in the dungeon and require manual confirmation. */
+export const MANUAL_QUESTS = new Set<QuestStep>(['clear-room', 'write-note', 'review-artifact']);
 
 export interface SessionState {
   activeSubjectId: string | null;

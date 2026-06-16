@@ -4,7 +4,7 @@ import { VILLAGE_MAP, type VillageStructure } from '@/data/villageLayout';
 const BASE = import.meta.env.BASE_URL;
 
 const PLAYER_SPEED = 120;
-const NPC_SPEED = 30;
+const NPC_SPEED = 45;
 const INTERACT_RADIUS = 32;
 const STRUCTURE_APPROACH_RADIUS = 48;
 
@@ -28,7 +28,20 @@ const SPRITE_PATHS = {
   trainingGate: `${BASE}assets/sprites/village/training-gate.svg`,
   fountain: `${BASE}assets/sprites/village/fountain.svg`,
   tree: `${BASE}assets/sprites/village/tree.svg`,
+  portalIcon: `${BASE}assets/sprites/village/portal-icon.svg`,
+  bush: `${BASE}assets/sprites/village/bush.svg`,
+  rock: `${BASE}assets/sprites/village/rock.svg`,
   lamp: `${BASE}assets/sprites/village/lamp.svg`,
+  torch: `${BASE}assets/sprites/village/torch.svg`,
+  pond: `${BASE}assets/sprites/village/pond.svg`,
+  bird: `${BASE}assets/sprites/village/bird.svg`,
+  npcScholar: `${BASE}assets/sprites/village/npc-scholar.svg`,
+  npcWanderer: `${BASE}assets/sprites/village/npc-wanderer.svg`,
+  npcSage: `${BASE}assets/sprites/village/npc-sage.svg`,
+  signpost: `${BASE}assets/sprites/village/signpost.svg`,
+  waysign: `${BASE}assets/sprites/village/waysign.svg`,
+  trophyHall: `${BASE}assets/sprites/village/trophy-hall.svg`,
+  library: `${BASE}assets/sprites/village/library.svg`,
   bench: `${BASE}assets/sprites/village/bench.svg`,
   villageGate: `${BASE}assets/sprites/village/village-gate.svg`,
   keeperNpc: `${BASE}assets/sprites/npc-keeper.svg`,
@@ -47,6 +60,19 @@ const TEX = {
   fountain: 'v-fountain',
   tree: 'v-tree',
   lamp: 'v-lamp',
+  torch: 'v-torch',
+  pond: 'v-pond',
+  bird: 'v-bird',
+  npcScholar: 'v-npc-scholar',
+  npcWanderer: 'v-npc-wanderer',
+  npcSage: 'v-npc-sage',
+  signpost: 'v-signpost',
+  waysign: 'v-waysign',
+  portalIcon: 'v-portal-icon',
+  bush: 'v-bush',
+  rock: 'v-rock',
+  trophyHall: 'v-trophy-hall',
+  library: 'v-library',
   bench: 'v-bench',
   villageGate: 'v-gate',
   keeperNpc: 'v-npc-keeper',
@@ -69,8 +95,18 @@ const STRUCTURE_TEXTURE: Record<string, string> = {
   'fountain': TEX.fountain,
   'tree': TEX.tree,
   'lamp': TEX.lamp,
+  'torch': TEX.torch,
+  'signpost': TEX.signpost,
+  'waysign': TEX.waysign,
+  'portal-icon': TEX.portalIcon,
+  'bush': TEX.bush,
+  'rock': TEX.rock,
+  'pond': TEX.pond,
+  'flower': TEX.tree,  // reuse tree texture for flowers
+  'trophy-hall': TEX.trophyHall,
   'bench': TEX.bench,
   'gate': TEX.villageGate,
+  'library': TEX.library,
 };
 
 interface NpcState {
@@ -91,7 +127,6 @@ export class VillageScene extends Phaser.Scene {
   private interactKey: Phaser.Input.Keyboard.Key | null = null;
   private npcStates = new Map<string, NpcState>();
   private groundTiles: Phaser.GameObjects.TileSprite[] = [];
-  private pathTiles: Phaser.GameObjects.Image[] = [];
   private structureSprites: Phaser.GameObjects.Image[] = [];
   private structureZones: Phaser.GameObjects.Zone[] = [];
   private structureLabels: Phaser.GameObjects.Text[] = [];
@@ -102,6 +137,8 @@ export class VillageScene extends Phaser.Scene {
   private currentNpcId: string | null = null;
   private pendingDynamicStructures: VillageStructure[] | null = null;
   private currentPlayerClass: string = 'scholar';
+  /** Last known nearest POI data for React compass overlay. Updated every frame. */
+  lastPoi: { name: string; angle: number; distance: number } = { name: '', angle: 0, distance: Infinity };
 
   constructor() {
     super({ key: 'VillageScene' });
@@ -140,13 +177,26 @@ export class VillageScene extends Phaser.Scene {
 
     loadSvg(TEX.ground, SPRITE_PATHS.ground, 48, 48);
     loadSvg(TEX.path, SPRITE_PATHS.path, 48, 48);
-    loadSvg(TEX.keeperTower, SPRITE_PATHS.keeperTower, 160, 180);
-    loadSvg(TEX.guildHall, SPRITE_PATHS.guildHall, 180, 160);
-    loadSvg(TEX.dungeonPortal, SPRITE_PATHS.dungeonPortal, 96, 120);
-    loadSvg(TEX.trainingGate, SPRITE_PATHS.trainingGate, 120, 120);
-    loadSvg(TEX.fountain, SPRITE_PATHS.fountain, 96, 96);
-    loadSvg(TEX.tree, SPRITE_PATHS.tree, 64, 80);
-    loadSvg(TEX.lamp, SPRITE_PATHS.lamp, 32, 64);
+    loadSvg(TEX.keeperTower, SPRITE_PATHS.keeperTower, 120, 140);
+    loadSvg(TEX.guildHall, SPRITE_PATHS.guildHall, 130, 120);
+    loadSvg(TEX.dungeonPortal, SPRITE_PATHS.dungeonPortal, 80, 100);
+    loadSvg(TEX.trainingGate, SPRITE_PATHS.trainingGate, 96, 96);
+    loadSvg(TEX.fountain, SPRITE_PATHS.fountain, 72, 72);
+    loadSvg(TEX.tree, SPRITE_PATHS.tree, 48, 60);
+    loadSvg(TEX.lamp, SPRITE_PATHS.lamp, 24, 48);
+    loadSvg(TEX.torch, SPRITE_PATHS.torch, 24, 48);
+    loadSvg(TEX.signpost, SPRITE_PATHS.signpost, 72, 90);
+    loadSvg(TEX.waysign, SPRITE_PATHS.waysign, 72, 90);
+    loadSvg(TEX.pond, SPRITE_PATHS.pond, 64, 48);
+    loadSvg(TEX.bird, SPRITE_PATHS.bird, 36, 24);
+    loadSvg(TEX.npcScholar, SPRITE_PATHS.npcScholar, 40, 56);
+    loadSvg(TEX.npcWanderer, SPRITE_PATHS.npcWanderer, 40, 56);
+    loadSvg(TEX.npcSage, SPRITE_PATHS.npcSage, 48, 64);
+    loadSvg(TEX.portalIcon, SPRITE_PATHS.portalIcon, 48, 48);
+    loadSvg(TEX.bush, SPRITE_PATHS.bush, 48, 48);
+    loadSvg(TEX.rock, SPRITE_PATHS.rock, 32, 24);
+    loadSvg(TEX.trophyHall, SPRITE_PATHS.trophyHall, 120, 120);
+    loadSvg(TEX.library, SPRITE_PATHS.library, 120, 140);
     loadSvg(TEX.bench, SPRITE_PATHS.bench, 64, 32);
     loadSvg(TEX.villageGate, SPRITE_PATHS.villageGate, 120, 96);
     loadSvg(TEX.keeperNpc, SPRITE_PATHS.keeperNpc, 48, 48);
@@ -187,12 +237,15 @@ export class VillageScene extends Phaser.Scene {
       ]);
     }
 
+    this.initTouchControls();
+
     // Apply any structures that arrived before create() finished
     if (this.pendingDynamicStructures) {
       this.rebuildDynamicStructures(this.pendingDynamicStructures);
       this.pendingDynamicStructures = null;
     }
 
+    this.createBirds();
     this.callbacks?.onReady();
   }
 
@@ -212,6 +265,10 @@ export class VillageScene extends Phaser.Scene {
     if (up) vy -= 1;
     if (down) vy += 1;
 
+    // Merge touch/pointer drag direction
+    vx += this.touchMoveVx;
+    vy += this.touchMoveVy;
+
     if (vx !== 0 || vy !== 0) {
       const len = Math.hypot(vx, vy) || 1;
       vx = (vx / len) * PLAYER_SPEED;
@@ -228,6 +285,7 @@ export class VillageScene extends Phaser.Scene {
     this.updateNpcMovement(dt);
     this.checkStructureProximity();
     this.checkNpcProximity();
+    this.updatePoiData();
 
     if (this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
       this.handleInteract();
@@ -237,6 +295,7 @@ export class VillageScene extends Phaser.Scene {
   private renderGround(map: typeof VILLAGE_MAP): void {
     const ts = map.tileSize;
 
+    // Ground tiles
     if (this.textures.exists(TEX.ground)) {
       const tilesX = Math.ceil(map.width / 8);
       const tilesY = Math.ceil(map.height / 8);
@@ -252,28 +311,89 @@ export class VillageScene extends Phaser.Scene {
       }
     }
 
-    const pathCoords = [
-      { x: 3, y: 22 }, { x: 4, y: 22 }, { x: 5, y: 22 }, { x: 6, y: 22 },
-      { x: 4, y: 20 }, { x: 4, y: 18 }, { x: 4, y: 16 },
-      { x: 6, y: 14 }, { x: 8, y: 14 },
-      { x: 10, y: 14 }, { x: 12, y: 14 }, { x: 14, y: 14 }, { x: 16, y: 14 },
-      { x: 16, y: 12 }, { x: 16, y: 10 }, { x: 16, y: 8 },
-      { x: 18, y: 14 }, { x: 20, y: 14 }, { x: 22, y: 14 }, { x: 24, y: 14 },
-      { x: 24, y: 16 }, { x: 24, y: 18 },
-      { x: 26, y: 14 },
-      { x: 16, y: 20 }, { x: 16, y: 22 },
-      { x: 16, y: 16 }, { x: 16, y: 18 },
+    // Axis-aligned stone paths — every segment is horizontal or vertical
+    const pathSegments: { x1: number; y1: number; x2: number; y2: number }[] = [
+      // ── Entrance ──────────────────────────────────
+      { x1: 3,  y1: 22, x2: 6,  y2: 22 },  // gate approach
+      { x1: 4,  y1: 22, x2: 4,  y2: 16 },  // up from gate
+      { x1: 4,  y1: 16, x2: 4,  y2: 14 },  // continue north to cross
+
+      // ── East-west spine (y=14) ────────────────────
+      { x1: 4,  y1: 14, x2: 6,  y2: 14 },
+      { x1: 6,  y1: 14, x2: 16, y2: 14 },
+      { x1: 16, y1: 14, x2: 24, y2: 14 },
+      { x1: 24, y1: 14, x2: 26, y2: 14 },
+      { x1: 26, y1: 14, x2: 30, y2: 14 },  // extend to east edge
+
+      // ── North-south spine (x=16) ──────────────────
+      { x1: 16, y1: 14, x2: 16, y2: 8  },  // north to library/keeper split
+      { x1: 16, y1: 8,  x2: 16, y2: 5  },  // continue to keeper
+      { x1: 16, y1: 14, x2: 16, y2: 17 },  // south to fountain
+      { x1: 16, y1: 17, x2: 16, y2: 22 },  // continue to trophy split
+      { x1: 16, y1: 22, x2: 16, y2: 24 },  // continue south
+
+      // ── Library branch ────────────────────────────
+      { x1: 12, y1: 8,  x2: 16, y2: 8  },  // west from north spine
+      { x1: 12, y1: 5,  x2: 12, y2: 8  },  // north to library
+
+      // ── Training gate ─────────────────────────────
+      { x1: 6,  y1: 14, x2: 6,  y2: 8  },  // north from cross
+      { x1: 6,  y1: 8,  x2: 6,  y2: 7  },  // continue to training entrance
+
+      // ── Fountain ──────────────────────────────────
+      { x1: 16, y1: 17, x2: 18, y2: 17 },  // east spur
+
+      // ── Guild hall ────────────────────────────────
+      { x1: 30, y1: 14, x2: 30, y2: 11 },  // south from cross
+
+      // ── Trophy hall ───────────────────────────────
+      { x1: 16, y1: 24, x2: 30, y2: 24 },  // east from south spine
+
+      // ── East connector ────────────────────────────
+      { x1: 24, y1: 14, x2: 24, y2: 18 },  // south from cross
+
+      // ── Portal connections (L-shaped, axis-aligned) ──
+      { x1: 4,  y1: 14, x2: 4,  y2: 4  },  // NW portal: north
+      { x1: 4,  y1: 4,  x2: 3,  y2: 4  },  // NW portal: west
+      { x1: 4,  y1: 16, x2: 7,  y2: 16 },  // W portal: east
+      { x1: 7,  y1: 16, x2: 7,  y2: 17 },  // W portal: north
+      { x1: 16, y1: 22, x2: 12, y2: 22 },  // SW portal: west
+      { x1: 12, y1: 22, x2: 12, y2: 24 },  // SW portal: south
+      { x1: 16, y1: 22, x2: 23, y2: 22 },  // SE portal: east
+      { x1: 23, y1: 22, x2: 23, y2: 23 },  // SE portal: south
+      { x1: 24, y1: 14, x2: 24, y2: 5  },  // NE portal: north
+      { x1: 24, y1: 5,  x2: 25, y2: 5  },  // NE portal: east
+      { x1: 30, y1: 14, x2: 30, y2: 15 },  // E portal: south
     ];
 
-    if (this.textures.exists(TEX.path)) {
-      for (const coord of pathCoords) {
-        const p = this.add.image(
-          coord.x * ts + ts / 2,
-          coord.y * ts + ts / 2,
-          TEX.path,
-        ).setDepth(0.5);
-        this.pathTiles.push(p);
-      }
+    const pathG = this.add.graphics().setDepth(0.5);
+    const pathColor = Phaser.Display.Color.HexStringToColor('#5a4a3a').color;
+    const pathAlpha = 0.6;
+    const pathWidth = ts * 0.5;
+
+    for (const seg of pathSegments) {
+      const px1 = seg.x1 * ts + ts / 2;
+      const py1 = seg.y1 * ts + ts / 2;
+      const px2 = seg.x2 * ts + ts / 2;
+      const py2 = seg.y2 * ts + ts / 2;
+      pathG.lineStyle(pathWidth, pathColor, pathAlpha);
+      pathG.beginPath();
+      pathG.moveTo(px1, py1);
+      pathG.lineTo(px2, py2);
+      pathG.strokePath();
+    }
+
+    // Junctions — circles at every intersection point
+    const junctionColor = Phaser.Display.Color.HexStringToColor('#4a3a2a').color;
+    const junctionCoords = [
+      { x: 4,  y: 14 }, { x: 6,  y: 14 }, { x: 16, y: 14 }, { x: 24, y: 14 },
+      { x: 26, y: 14 }, { x: 30, y: 14 }, { x: 16, y: 8  }, { x: 16, y: 17 },
+      { x: 16, y: 22 }, { x: 16, y: 24 }, { x: 12, y: 8  }, { x: 4,  y: 16 },
+      { x: 4,  y: 22 }, { x: 6,  y: 8  }, { x: 24, y: 18 },
+    ];
+    for (const j of junctionCoords) {
+      pathG.fillStyle(junctionColor, 0.5);
+      pathG.fillCircle(j.x * ts + ts / 2, j.y * ts + ts / 2, ts * 0.28);
     }
   }
 
@@ -287,10 +407,56 @@ export class VillageScene extends Phaser.Scene {
       }
       const cx = (struct.gridX + struct.width / 2) * ts;
       const cy = (struct.gridY + struct.height / 2) * ts;
-      const sprite = this.add.image(cx, cy, texKey).setDepth(2);
+      // Decorative elements (trees, benches, torches, fountain, signpost) sit above player
+      const decorTypes = new Set(['tree', 'bench', 'torch', 'fountain', 'lamp', 'signpost', 'waysign', 'pond', 'flower']);
+      const depth = decorTypes.has(struct.type) ? 11 : 2;
+      const sprite = this.add.image(cx, cy, texKey).setDepth(depth);
       this.structureSprites.push(sprite);
 
-      const isInteractive = struct.type === 'dungeon-portal' || struct.type === 'keeper-tower' || struct.type === 'guild-hall' || struct.type === 'training-gate';
+      // Stone circle under portal icons
+      if (struct.type === 'portal-icon') {
+        const stoneG = this.add.graphics().setDepth(1);
+        stoneG.fillStyle(0x3a3a3a, 0.4);
+        stoneG.fillEllipse(cx, cy + 8, struct.width * ts * 0.7, struct.height * ts * 0.2);
+        stoneG.lineStyle(1, 0x5a5a5a, 0.3);
+        stoneG.strokeEllipse(cx, cy + 8, struct.width * ts * 0.7, struct.height * ts * 0.2);
+        this.structureGraphics.push(stoneG);
+      }
+
+      // Portal icon animation — spinning + pulse
+      if (struct.type === 'portal-icon') {
+        const portal = sprite;
+        this.tweens.add({
+          targets: portal,
+          angle: 360,
+          duration: 6000,
+          repeat: -1,
+          ease: 'Linear',
+        });
+        this.tweens.add({
+          targets: portal,
+          scale: { from: 0.95, to: 1.05 },
+          duration: 1500,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
+
+      // Fountain water animation (Phaser tween replaces SVG CSS)
+      if (struct.type === 'fountain') {
+        this.tweens.add({
+          targets: sprite,
+          scaleY: { from: 1, to: 1.03 },
+          duration: 1800,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
+
+      const interactiveTypes = new Set(['portal-icon', 'keeper-tower', 'guild-hall', 'training-gate', 'signpost', 'waysign', 'trophy-hall', 'library']);
+      const isInteractive = interactiveTypes.has(struct.type);
       if (isInteractive) {
         const zone = this.add.zone(cx, cy, struct.width * ts, struct.height * ts).setInteractive();
         zone.setData('structureId', struct.id);
@@ -298,13 +464,24 @@ export class VillageScene extends Phaser.Scene {
       }
 
       if (struct.label) {
-        const label = this.add.text(cx, cy + struct.height / 2 * ts + 10, struct.label, {
+        // Banner overlay on top of the building
+        const topY = cy - (struct.height / 2) * ts;
+        const isPortalStyle = struct.type === 'portal-icon';
+        const bannerH = isPortalStyle ? 22 : 20;
+        const bannerG = this.add.graphics().setDepth(4.9);
+        bannerG.fillStyle(0x0a0a1a, 0.75);
+        bannerG.fillRoundedRect(cx - (struct.width * ts) / 2 + 4, topY + 4, struct.width * ts - 8, bannerH, 4);
+        bannerG.lineStyle(1, 0xffffff, 0.1);
+        bannerG.strokeRoundedRect(cx - (struct.width * ts) / 2 + 4, topY + 4, struct.width * ts - 8, bannerH, 4);
+        this.structureGraphics.push(bannerG);
+
+        const label = this.add.text(cx, topY + 4 + bannerH / 2, struct.label, {
           fontFamily: 'Inter, system-ui, sans-serif',
-          fontSize: struct.type === 'dungeon-portal' ? '12px' : '11px',
-          color: struct.type === 'dungeon-portal' ? '#7be3ff' : '#dbe6ff',
+          fontSize: isPortalStyle ? '12px' : '11px',
+          color: isPortalStyle ? '#7be3ff' : '#f2e2c4',
           align: 'center',
-          fontStyle: struct.type === 'dungeon-portal' ? 'bold' : 'normal',
-        }).setOrigin(0.5, 0).setDepth(5);
+          fontStyle: isPortalStyle ? 'bold' : 'normal',
+        }).setOrigin(0.5, 0.5).setDepth(5);
         this.structureLabels.push(label);
       }
     }
@@ -319,7 +496,7 @@ export class VillageScene extends Phaser.Scene {
 
     const g = this.add.graphics();
     this.structureGraphics.push(g);
-    const isPortal = struct.type === 'dungeon-portal';
+    const isPortal = struct.type === 'portal-icon';
     const isImportant = struct.type === 'keeper-tower' || struct.type === 'guild-hall' || struct.type === 'training-gate';
 
     g.fillStyle(isPortal ? 0x3a1a6a : isImportant ? 0x3a2a1a : 0x2a3a1a, 0.85);
@@ -328,12 +505,22 @@ export class VillageScene extends Phaser.Scene {
     g.strokeRect(x + 2, y + 2, w - 4, h - 4);
 
     if (struct.label) {
-      const label = this.add.text(x + w / 2, y + h + 6, struct.label, {
+      // Banner on top of the fallback building
+      const bannerH = isPortal ? 22 : 20;
+      const bannerG = this.add.graphics().setDepth(4.9);
+      bannerG.fillStyle(0x0a0a1a, 0.75);
+      bannerG.fillRoundedRect(x + 4, y + 4, w - 8, bannerH, 4);
+      bannerG.lineStyle(1, 0xffffff, 0.1);
+      bannerG.strokeRoundedRect(x + 4, y + 4, w - 8, bannerH, 4);
+      this.structureGraphics.push(bannerG);
+
+      const label = this.add.text(x + w / 2, y + 4 + bannerH / 2, struct.label, {
         fontFamily: 'Inter, system-ui, sans-serif',
-        fontSize: '11px',
-        color: '#dbe6ff',
+        fontSize: isPortal ? '12px' : '11px',
+        color: isPortal ? '#7be3ff' : '#f2e2c4',
         align: 'center',
-      }).setOrigin(0.5, 0).setDepth(5);
+        fontStyle: isPortal ? 'bold' : 'normal',
+      }).setOrigin(0.5, 0.5).setDepth(5);
       this.structureLabels.push(label);
     }
 
@@ -374,12 +561,11 @@ export class VillageScene extends Phaser.Scene {
     this.playerBody.setOffset(8, 8);
     this.playerBody.setCollideWorldBounds(true);
 
-    // Idle breathing animation — subtle scale pulse, doesn't fight movement
+    // Subtle idle sway (rotation) — does not conflict with movement
     this.tweens.add({
       targets: this.player,
-      scaleX: { from: 1, to: 1.008 },
-      scaleY: { from: 1, to: 1.012 },
-      duration: 1400,
+      angle: { from: -0.5, to: 0.5 },
+      duration: 1200,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
@@ -394,13 +580,92 @@ export class VillageScene extends Phaser.Scene {
     }
   }
 
+  /** Populate `lastPoi` each frame so the React compass overlay can read it. */
+  private updatePoiData(): void {
+    if (!this.player) return;
+    const ts = VILLAGE_MAP.tileSize;
+    let nearestName = '';
+    let nearestDistSq = Infinity;
+    let nearestAngle = 0;
+
+    for (const struct of this.allStructures) {
+      if (struct.type !== 'portal-icon' && struct.type !== 'keeper-tower') continue;
+      const cx = (struct.gridX + struct.width / 2) * ts;
+      const cy = (struct.gridY + struct.height / 2) * ts;
+      const dx = cx - this.player.x;
+      const dy = cy - this.player.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearestAngle = Math.atan2(dy, dx);
+        nearestName = struct.type === 'keeper-tower'
+          ? 'Keeper'
+          : (struct as any).subjectName || struct.label || 'Dungeon';
+      }
+    }
+
+    if (nearestName) {
+      this.lastPoi = { name: nearestName, angle: nearestAngle, distance: Math.sqrt(nearestDistSq) };
+    }
+  }
+
+  private createBirds(): void {
+    if (!this.textures.exists(TEX.bird)) return;
+    const ts = VILLAGE_MAP.tileSize;
+    const worldW = VILLAGE_MAP.width * ts;
+    const worldH = VILLAGE_MAP.height * ts;
+
+    // Define 6 birds with start positions and flight destinations (arc paths)
+    // Bird start positions (fraction of world) and destination x-fraction
+    const birdRoutes: { sx: number; sy: number; dx: number }[] = [
+      { sx: 0.1, sy: 0.05, dx: 0.4 },
+      { sx: 0.5, sy: 0.02, dx: 0.7 },
+      { sx: 0.8, sy: 0.10, dx: 0.55 },
+      { sx: 0.3, sy: 0.15, dx: 0.15 },
+      { sx: 0.65, sy: 0.06, dx: 0.9 },
+      { sx: 0.45, sy: 0.12, dx: 0.3 },
+    ];
+
+    for (let bi = 0; bi < birdRoutes.length; bi++) {
+      const r = birdRoutes[bi];
+      const bx = worldW * r.sx;
+      const by = worldH * r.sy;
+      const tx = worldW * r.dx;
+      const ty = by + 20 - Math.random() * 40; // slight y variation at destination
+
+      const bird = this.add.image(bx, by, TEX.bird).setDepth(12).setAlpha(0.85);
+
+      // Sweep horizontally
+      this.tweens.add({
+        targets: bird,
+        x: { from: bx, to: tx },
+        y: { from: by, to: ty },
+        duration: 4000 + Math.random() * 3000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+        delay: bi * 700,
+        hold: 1000,
+      });
+    }
+  }
+
   private renderNpcs(map: typeof VILLAGE_MAP): void {
     const ts = map.tileSize;
+    const npcTexMap: Record<string, string> = {
+      keeper: TEX.keeperNpc,
+      'villager-1': TEX.npcScholar,
+      'villager-2': TEX.npcWanderer,
+      'villager-3': TEX.npcScholar,
+      'villager-4': TEX.npcSage,
+      'villager-5': TEX.npcScholar,
+    };
     for (const npcData of map.npcs) {
-      if (!this.textures.exists(TEX.keeperNpc)) continue;
+      const texKey = npcTexMap[npcData.id] ?? TEX.keeperNpc;
+      if (!this.textures.exists(texKey)) continue;
       const nx = npcData.gridX * ts + ts / 2;
       const ny = npcData.gridY * ts + ts / 2;
-      const sprite = this.add.image(nx, ny, TEX.keeperNpc).setDepth(9);
+      const sprite = this.add.image(nx, ny, texKey).setDepth(9);
       this.tweens.add({
         targets: sprite,
         y: { from: ny, to: ny - 3 },
@@ -416,7 +681,7 @@ export class VillageScene extends Phaser.Scene {
         targetX: nx,
         targetY: ny,
         waiting: true,
-        waitTimer: 3000,
+        waitTimer: Math.random() * 2000,
       };
 
       if (npcData.path && npcData.path.length > 0) {
@@ -455,7 +720,7 @@ export class VillageScene extends Phaser.Scene {
 
       if (dist < 4) {
         state.waiting = true;
-        state.waitTimer = 3000 + Math.random() * 2000;
+        state.waitTimer = 400 + Math.random() * 1200;
         continue;
       }
 
@@ -545,5 +810,105 @@ export class VillageScene extends Phaser.Scene {
     } else if (this.currentNpcId) {
       this.callbacks?.onNpcInteract(this.currentNpcId);
     }
+  }
+
+  /** Programmatic interact, called from the on-screen touch button. */
+  triggerInteract(): void {
+    this.handleInteract();
+  }
+
+  // ── Touch / pointer controls ──────────────────────────────────────────
+  private static readonly TOUCH_DRAG_THRESHOLD = 10;
+  private static readonly TOUCH_TAP_MAX_MS = 300;
+  private static readonly PINCH_ZOOM_MIN = 0.6;
+  private static readonly PINCH_ZOOM_MAX = 2.4;
+  private touchPointerActive = false;
+  private touchPointerStartX = 0;
+  private touchPointerStartY = 0;
+  private touchPointerStartTime = 0;
+  private touchMoveVx = 0;
+  private touchMoveVy = 0;
+  private pinchActive = false;
+  private pinchStartDistance = 0;
+  private pinchStartZoom = 1;
+
+  private initTouchControls(): void {
+    this.input.addPointer(1);
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => { this.handleTouchDown(p); });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => { this.handleTouchMove(p); });
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => { this.handleTouchUp(p); });
+    this.input.on('pointercancel', (p: Phaser.Input.Pointer) => { this.handleTouchUp(p); });
+  }
+
+  private handleTouchDown(pointer: Phaser.Input.Pointer): void {
+    const p1 = this.input.pointer1;
+    const p2 = this.input.pointer2;
+    if (p1?.isDown && p2?.isDown) {
+      const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+      if (dist < 1) return;
+      this.pinchStartDistance = dist;
+      this.pinchStartZoom = this.cameras.main.zoom;
+      this.pinchActive = true;
+      this.touchPointerActive = false;
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+      return;
+    }
+    if (!this.touchPointerActive) {
+      this.touchPointerActive = true;
+      this.touchPointerStartX = pointer.x;
+      this.touchPointerStartY = pointer.y;
+      this.touchPointerStartTime = pointer.time;
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+    }
+  }
+
+  private handleTouchMove(pointer: Phaser.Input.Pointer): void {
+    if (this.pinchActive) {
+      const p1 = this.input.pointer1;
+      const p2 = this.input.pointer2;
+      if (p1.isDown && p2.isDown && this.pinchStartDistance > 0) {
+        const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+        this.cameras.main.setZoom(Phaser.Math.Clamp(
+          this.pinchStartZoom * (dist / this.pinchStartDistance),
+          VillageScene.PINCH_ZOOM_MIN,
+          VillageScene.PINCH_ZOOM_MAX,
+        ));
+      }
+      return;
+    }
+    if (!this.touchPointerActive || !pointer.isDown) return;
+    const dx = pointer.x - this.touchPointerStartX;
+    const dy = pointer.y - this.touchPointerStartY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > VillageScene.TOUCH_DRAG_THRESHOLD) {
+      this.touchMoveVx = dx / dist;
+      this.touchMoveVy = dy / dist;
+    } else {
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+    }
+  }
+
+  private handleTouchUp(_pointer: Phaser.Input.Pointer): void {
+    if (this.pinchActive && (!this.input.pointer1.isDown || !this.input.pointer2.isDown)) {
+      this.pinchActive = false;
+      this.touchPointerActive = false;
+      this.touchMoveVx = 0;
+      this.touchMoveVy = 0;
+      return;
+    }
+    if (!this.touchPointerActive) return;
+    const dx = this.touchPointerStartX !== 0 ? _pointer.x - this.touchPointerStartX : 0;
+    const dy = this.touchPointerStartY !== 0 ? _pointer.y - this.touchPointerStartY : 0;
+    const dist = Math.hypot(dx, dy);
+    const elapsed = _pointer.time - this.touchPointerStartTime;
+    if (dist < VillageScene.TOUCH_DRAG_THRESHOLD && elapsed < VillageScene.TOUCH_TAP_MAX_MS) {
+      this.handleInteract();
+    }
+    this.touchPointerActive = false;
+    this.touchMoveVx = 0;
+    this.touchMoveVy = 0;
   }
 }

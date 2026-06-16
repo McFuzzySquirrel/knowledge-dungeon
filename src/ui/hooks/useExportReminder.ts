@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { isElectronAvailable } from '@/services/electronBridge';
+import { useSessionStore } from '@/store/sessionStore';
 import type { ToastAction } from '@/ui/components/ToastStack';
 
 const REMINDER_INTERVAL_MS = 30 * 60 * 1000;
@@ -36,13 +37,11 @@ export function useExportReminder(
     function showReminder() {
       if (!canNudge()) return;
       markNudged();
-      pushToast('info', 'Your data is stored locally — export a backup to stay safe.', {
-        label: 'Export',
+      pushToast('info', 'Your data is stored locally. Return to the village for import/export tools.', {
+        label: 'Go to Village',
         onClick: () => {
-          const dataTab = document.querySelector('[aria-controls="welcome-panel-data"]');
-          if (dataTab instanceof HTMLElement) {
-            dataTab.click();
-          }
+          const session = useSessionStore.getState();
+          session.setActiveScreen('village');
         },
       });
     }

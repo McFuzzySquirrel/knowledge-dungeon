@@ -162,12 +162,88 @@ useEffect(() => {
 
 ---
 
+## Decision 8: Scene State Sync via sceneRef + villageReady
+
+**Problem:** Dynamic structures (dungeon portals) disappeared when returning from GameScreen to VillageScreen because the Phaser scene's `create()` and React's async data loading had a race condition.
+
+**Chosen:** Use a dedicated `sceneRef` (set in `onReady` callback) plus a `villageReady` boolean state. The sync effect depends on `[villageReady, dynamicStructures, selectedClass]`, ensuring it fires both when the scene becomes ready AND when data arrives later.
+
+```typescript
+game.events.once('ready', () => {
+  sceneRef.current = game.scene.getScene('VillageScene');
+  setVillageReady(true);
+});
+
+useEffect(() => {
+  const scene = sceneRef.current;
+  if (!scene) return;
+  scene.setDynamicStructures(dynamicStructures);
+  scene.setPlayerClass(selectedClass ?? 'scholar');
+}, [villageReady, dynamicStructures, selectedClass]);
+```
+
+**Tradeoffs:**
+- + Eliminates the race between scene initialization and async data loading
+- + Works on re-mount (returning from dungeon) as well as initial mount
+- − Requires the `villageReady` state pillar
+
+---
+
+## Decision 9: Mobile Village Controls (Touch + HUD Drawer)
+
+**Chosen:** Replicate the DungeonScene's touch-control pattern in VillageScene: single-finger drag for movement, tap for interact, two-finger pinch for zoom. The village HUD collapses into a bottom drawer on mobile with a toggle button.
+
+**Implementation:**
+- Touch handlers (`handleTouchDown/Move/Up`) produce `touchMoveVx/Vy` merged into the velocity vector each frame, matching DungeonScene's pattern.
+- Pinch-to-zoom adjusts camera zoom between 0.6x and 2.4x.
+- `isMobile` is reactive via `window.matchMedia('change')` listener.
+- The `village-hud--mobile` class uses fixed positioning + CSS transitions for the drawer slide.
+
+---
+
+## Decision 10: Ambient World Elements (NPCs, Birds, Ponds, Signposts)
+
+**Chosen:** Add decorative and ambient elements to make the village feel alive:
+- **5 wandering NPCs** with patrol paths and learning quotes, rendered with distinct SVG sprites (Scholar, Wanderer, Sage).
+- **6 flying birds** that sweep between waypoints with Phaser tweens.
+- **3 ponds** with animated ripple SVGs.
+- **Flowers** at the entrance for a welcoming feel.
+- **5 directional signposts** at crossroads showing building directions on approach.
+
+All decorative elements use the existing structure rendering pipeline with higher depth (11, above player depth 10) so the player walks behind them.
+
+---
+
+## Decision 11: Mixed-Model Quest Completion
+
+**Chosen:** Steps 1–6 (village-detectable) advance automatically. Steps 7–9 (dungeon-only actions: clear room, write note, review artifact) require manual confirmation via a "Mark Complete" button on the quest board.
+
+**Implementation:**
+- `MANUAL_QUESTS` set in `sessionStore.ts` identifies manual steps.
+- Quest board shows a "✓ Mark Complete" button beneath manual steps.
+- `advanceQuestStep()` is called on button click.
+
+---
+
+## Decision 12: Data Management in the Village
+
+**Chosen:** Add a "🛡 Data" modal to the village HUD with per-subject export and import capabilities, replacing the WelcomeScreen's Data tab for in-game use.
+
+**Implementation:**
+- `setDataOpen` state + modal with `exportSubjectToJson`, `importSubjectFromJson`, and `saveSubjectSnapshot` from the persistence service.
+- Each subject has an Export button (downloads JSON file).
+- File input for importing `.json` backups with automatic reload.
+
+---
+
 ## Consequences
 
 ### Positive
 - The village hub gives the game a persistent sense of place and a natural home for navigation.
 - The quest system provides clear guardrails for new users without being mandatory.
-- Animated sprites and particles make the world feel alive at near-zero runtime cost.
+- Animated sprites, birds, NPCs, and particles make the world feel alive at near-zero runtime cost.
+- Touch controls + pinch-to-zoom make the village fully playable on mobile devices.
+- Scene state sync eliminates the portal-disappearing bug on return from dungeons.
 - All changes work on both web and Electron with no platform-specific code.
 - Clean TypeScript compilation across the entire codebase.
 
@@ -175,18 +251,20 @@ useEffect(() => {
 - The village Phaser instance adds ~2–3 MB to the initial bundle (Phaser itself is the bulk — already loaded for dungeons).
 - The `activeScreen` routing adds a new dimension of state that must be kept consistent across stores.
 - Quest step persistence in localStorage means clearing browser data resets quest progress.
+- 5 wandering NPCs + 6 birds + particle effects add rendering overhead on low-end mobile devices.
 
 ### Mitigations
 - Phaser is already a dependency (loaded for dungeons), so the village does not increase the bundle uniquely.
 - Active screen transitions are linear and well-defined (Welcome → Village → Game), reducing state explosion risk.
 - Quest step is a single localStorage key — easy to reset, easy to debug.
+- NPCs use simple tweens (no per-frame pathfinding); birds use single tweens with `hold` pauses for efficiency.
 
 ---
 
 ## Related Documents
 
 - `progress.md` — Detailed implementation checklist
-- `src/data/villageLayout.ts` — Village map data and NPC definitions
-- `src/store/sessionStore.ts` — Quest step types and advancement logic
-- `src/game/scenes/VillageScene.ts` — Phaser scene implementation
-- `src/ui/screens/VillageScreen.tsx` — React wrapper and quest-aware dialogue
+- `src/data/villageLayout.ts` — Village map data, NPC definitions, signpost info
+- `src/store/sessionStore.ts` — Quest step types, advancement logic, MANUAL_QUESTS
+- `src/game/scenes/VillageScene.ts` — Phaser scene implementation, touch controls, birds
+- `src/ui/screens/VillageScreen.tsx` — React wrapper, quest-aware dialogue, data modal

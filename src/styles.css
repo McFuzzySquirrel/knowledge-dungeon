@@ -1599,7 +1599,7 @@ button.ghost {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 30;
+  z-index: 200;
 }
 
 .toast-stack--inline {
@@ -2786,40 +2786,58 @@ button.danger:hover {
 
 /* ── Village Screen ─────────────────────────────────────────────────────── */
 .village-screen {
-  position: relative;
   width: 100vw;
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
   display: flex;
+  flex-direction: row;
+}
+
+.village-hud-wrapper {
+  flex: 0 0 240px;
+  width: 240px;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  align-self: flex-start;
+  position: sticky;
+  top: 0;
+  z-index: 80;
+}
+
+.village-hud {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 10px;
+  background: radial-gradient(circle at 18% 10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 40%),
+              linear-gradient(180deg, rgba(12, 18, 34, 0.98), rgba(9, 14, 28, 0.98));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-right: 2px solid color-mix(in srgb, var(--control-border) 75%, transparent);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.35),
+              inset 0 1px 0 color-mix(in srgb, var(--accent-soft) 20%, transparent);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.village-game-area {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .village-canvas {
   position: absolute;
   inset: 0;
   z-index: 0;
-}
-
-.village-hud {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: min(280px, calc(100% - 24px));
-  z-index: 10;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  background: rgba(11, 13, 20, 0.88);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
-  pointer-events: auto;
-  max-height: calc(100vh - 24px);
-  max-height: calc(100dvh - 24px);
-  overflow-y: auto;
 }
 
 .village-hud-header {
@@ -2831,16 +2849,22 @@ button.danger:hover {
   padding-bottom: 8px;
 }
 
+.village-hud-header {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .village-hud-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 18px;
+  gap: 6px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--accent);
   font-family: var(--font-mono);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .village-hud-icon {
@@ -2855,10 +2879,11 @@ button.danger:hover {
 
 .village-theme-picker {
   display: flex;
-  gap: 2px;
+  gap: 1px;
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .village-theme-picker button {
@@ -2866,9 +2891,10 @@ button.danger:hover {
   border-radius: 0;
   background: transparent;
   color: var(--text-muted);
-  padding: 4px 8px;
-  font-size: 10px;
+  padding: 3px 6px;
+  font-size: 9px;
   cursor: pointer;
+  line-height: 1;
 }
 
 .village-theme-picker button.active {
@@ -2952,6 +2978,31 @@ button.danger:hover {
 .village-class-tagline {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.village-class-detail {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-cool) 30%, transparent);
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: village-panel-in 200ms ease-out;
+}
+
+.village-class-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.village-class-perk {
+  font-size: 11px;
+  color: var(--accent-soft);
+  line-height: 1.3;
 }
 
 .village-hud-info {
@@ -3046,7 +3097,7 @@ button.danger:hover {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 15;
+  z-index: 100;
   width: min(400px, calc(100% - 48px));
   padding: 16px;
   background: rgba(22, 26, 38, 0.94);
@@ -3137,7 +3188,7 @@ button.danger:hover {
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 15;
+  z-index: 100;
   width: min(360px, calc(100% - 24px));
   padding: 14px;
   background: rgba(22, 26, 38, 0.94);
@@ -3657,6 +3708,115 @@ button:not(:disabled):hover {
   border-radius: 8px;
 }
 
+/* Village compass overlay (React, sits in game area) */
+.village-compass {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.village-compass-ring {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(11, 13, 20, 0.75);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.village-compass-needle {
+  width: 3px;
+  height: 14px;
+  background: linear-gradient(180deg, #ffcf5f 50%, #7be3ff 50%);
+  border-radius: 2px;
+  position: absolute;
+  transition: transform 200ms ease;
+  transform-origin: center center;
+}
+
+.village-compass-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  background: rgba(11, 13, 20, 0.6);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Village HUD — mobile drawer */
+.village-hud-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 90;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: rgba(11, 13, 20, 0.85);
+  backdrop-filter: blur(6px);
+  color: var(--accent);
+  font-size: 18px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+@media (pointer: coarse), (max-width: 768px) {
+  .village-hud-toggle {
+    display: flex;
+  }
+}
+
+/* Hide toggle on desktop (fine pointer + wide viewport) */
+@media (pointer: fine) and (min-width: 769px) {
+  .village-hud-toggle {
+    display: none !important;
+  }
+}
+
+.village-hud--hidden {
+  transform: translateY(100%) !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.village-hud--open {
+  transform: translateY(0) !important;
+  opacity: 1;
+}
+
+.village-hud--mobile {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  width: 100%;
+  max-height: 60dvh;
+  background: rgba(11, 13, 20, 0.96);
+  border-radius: 12px 12px 0 0;
+  border-top: 1px solid var(--border-soft);
+  padding: 12px;
+  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  transition: transform 250ms ease, opacity 200ms ease;
+}
+
 @media (max-width: 768px) {
   .village-hud {
     top: auto;
@@ -3669,6 +3829,7 @@ button:not(:disabled):hover {
     border-bottom: none;
     padding: 12px;
     gap: 8px;
+    transition: transform 250ms ease, opacity 200ms ease;
   }
 
   .village-info-panel {
