@@ -11,3 +11,6 @@ vite.config.d.ts
 .env.local
 .env.*.local
 data/
+
+# Allow source-code data files (but keep runtime data/ excluded)
+!src/data/
