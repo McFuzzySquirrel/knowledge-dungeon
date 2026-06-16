@@ -12,7 +12,7 @@
     "dev:host": "vite --host",
     "dev:full": "node server/index.js & vite --host",
     "start": "node server/index.js",
-    "build": "tsc -b --force && vite build",
+    "build": "tsc --noEmit && vite build",
     "build:web": "npm run build",
     "build:web:profile": "vite build --mode profile",
     "build:electron:web": "tsc -b && vite build --mode electron",
