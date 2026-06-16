@@ -85,6 +85,7 @@ export function NoteEditorModal(): JSX.Element | null {
   const [showImagesPanel, setShowImagesPanel] = useState(false);
   const [hasEditedNote, setHasEditedNote] = useState(false);
   const [externalImageUrl, setExternalImageUrl] = useState('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [isSavingAttachment, setIsSavingAttachment] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isElectron = isElectronAvailable();
@@ -105,6 +106,7 @@ export function NoteEditorModal(): JSX.Element | null {
     setShowImagesPanel(false);
     setHasEditedNote(false);
     setExternalImageUrl('');
+    setShowUrlInput(false);
     setShowImageLibrary(false);
   }, [isOpen, room]);
 
@@ -195,7 +197,7 @@ export function NoteEditorModal(): JSX.Element | null {
         const cleared = Object.values(snapshot!.rooms).filter(
           (r) => r.validationState.finalPass,
         ).length;
-        awardRoomClear({
+        const reward = awardRoomClear({
           qualityBonus: result.qualityBonus,
           totalRooms,
           creatorMappedRooms: totalRooms,
@@ -205,7 +207,22 @@ export function NoteEditorModal(): JSX.Element | null {
         if (result.wordCount >= NOTE_BADGE_WORD_COUNT) {
           awardBadge(SCRIBE_CENTURY_120_BADGE_ID);
         }
-        close();
+        if (reward.xpGained > 0) {
+          pushToast('info', `Room cleared! +${reward.xpGained} XP`);
+        }
+        if (reward.loot) {
+          pushToast('info', `Loot acquired: ${reward.loot.name}!`);
+        }
+        if (reward.unlockedBadges.length > 0) {
+          pushToast('info', `Badge: ${reward.unlockedBadges.join(', ')}`);
+        }
+        if (!reward.loot && result.qualityBonus < 4) {
+          pushToast('info', 'Tip: thorough notes with quality sections yield better loot.');
+        }
+        setTimeout(() => {
+          setSubmitting(false);
+          close();
+        }, 1200);
         return;
       }
       pushToast('info', 'Draft saved. Add required sections/quality checks to submit.');
@@ -281,69 +298,34 @@ export function NoteEditorModal(): JSX.Element | null {
             <span className="note-images-label">Images</span>
             {phase === 'scribe' ? (
               <div className="note-images-actions">
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={isSavingAttachment}
-                  onClick={() => {
-                    setIsSavingAttachment(true);
-                    void addLocalAttachment(room.roomId)
-                      .then((created) => {
-                        if (!created) {
-                          pushToast('info', 'No image selected.');
-                          return;
-                        }
-                        pushToast('info', 'Image attached to room.');
-                      })
-                      .catch((error: unknown) => {
-                        const message =
-                          error instanceof Error ? error.message : 'Failed to attach local image.';
-                        pushToast('error', message);
-                      })
-                      .finally(() => {
-                        setIsSavingAttachment(false);
-                      });
-                  }}
-                >
-                  + Local
-                </button>
-                <input
-                  type="url"
-                  value={externalImageUrl}
-                  onChange={(event) => setExternalImageUrl(event.target.value)}
-                  placeholder="https://example.com/image.png"
-                  aria-label="External image URL"
-                  className="note-images-url-input"
-                />
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
-                  onClick={() => {
-                    const nextUrl = externalImageUrl.trim();
-                    if (nextUrl.length === 0) return;
-                    setIsSavingAttachment(true);
-                    void addExternalAttachment(room.roomId, nextUrl)
-                      .then((created) => {
-                        if (!created) {
-                          pushToast('info', 'No external image was added.');
-                          return;
-                        }
-                        setExternalImageUrl('');
-                        pushToast('info', 'External image attached to room.');
-                      })
-                      .catch((error: unknown) => {
-                        const message =
-                          error instanceof Error ? error.message : 'Failed to attach external image URL.';
-                        pushToast('error', message);
-                      })
-                      .finally(() => {
-                        setIsSavingAttachment(false);
-                      });
-                  }}
-                >
-                  + URL
-                </button>
+                {isElectron ? (
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={isSavingAttachment}
+                    onClick={() => {
+                      setIsSavingAttachment(true);
+                      void addLocalAttachment(room.roomId)
+                        .then((created) => {
+                          if (!created) {
+                            pushToast('info', 'No image selected.');
+                            return;
+                          }
+                          pushToast('info', 'Image attached to room.');
+                        })
+                        .catch((error: unknown) => {
+                          const message =
+                            error instanceof Error ? error.message : 'Failed to attach local image.';
+                          pushToast('error', message);
+                        })
+                        .finally(() => {
+                          setIsSavingAttachment(false);
+                        });
+                    }}
+                  >
+                    + Local
+                  </button>
+                ) : null}
                 {!isElectron ? (
                   <>
                     <input
@@ -388,10 +370,65 @@ export function NoteEditorModal(): JSX.Element | null {
                     </button>
                   </>
                 ) : null}
+                {showUrlInput ? (
+                  <>
+                    <input
+                      type="url"
+                      value={externalImageUrl}
+                      onChange={(event) => setExternalImageUrl(event.target.value)}
+                      placeholder="https://example.com/image.png"
+                      aria-label="External image URL"
+                      className="note-images-url-input"
+                    />
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={isSavingAttachment || externalImageUrl.trim().length === 0}
+                      onClick={() => {
+                        const nextUrl = externalImageUrl.trim();
+                        if (nextUrl.length === 0) return;
+                        setIsSavingAttachment(true);
+                        void addExternalAttachment(room.roomId, nextUrl)
+                          .then((created) => {
+                            if (!created) {
+                              pushToast('info', 'No external image was added.');
+                              return;
+                            }
+                            setExternalImageUrl('');
+                            setShowUrlInput(false);
+                            pushToast('info', 'External image attached to room.');
+                          })
+                          .catch((error: unknown) => {
+                            const message =
+                              error instanceof Error ? error.message : 'Failed to attach external image URL.';
+                            pushToast('error', message);
+                          })
+                          .finally(() => {
+                            setIsSavingAttachment(false);
+                          });
+                      }}
+                    >
+                      + URL
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setShowUrlInput(true)}
+                  >
+                    + URL
+                  </button>
+                )}
               </div>
             ) : (
               <span className="room-help-text">Scribe phase only.</span>
             )}
+            {!isElectron ? (
+              <p className="note-images-hint">
+                Local images: supported on Electron desktop or self-hosted builds. Not available on GitHub Pages.
+              </p>
+            ) : null}
             {room.attachments.length === 0 ? (
               <p className="room-help-text">No room images yet.</p>
             ) : (

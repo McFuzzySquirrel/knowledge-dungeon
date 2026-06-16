@@ -22,6 +22,12 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    server: {
+      proxy: {
+        '/api': 'http://localhost:3000',
+        '/uploads': 'http://localhost:3000',
+      },
+    },
     build: {
       sourcemap: isProfileMode,
       chunkSizeWarningLimit: 1200,

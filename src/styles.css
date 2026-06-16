@@ -2294,6 +2294,15 @@ button.danger:hover {
   height: 28px;
 }
 
+.note-images-hint {
+  width: 100%;
+  margin: 4px 0 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  line-height: 1.3;
+}
+
 .note-images-section .attachment-grid {
   width: 100%;
   margin-top: 4px;
@@ -2579,6 +2588,11 @@ button.danger:hover {
 }
 
 @media (max-width: 768px) {
+  /* NPC dialog must sit above RoomPanel bottom-sheet (z-index 90) on mobile */
+  .npc-dialog {
+    z-index: 91;
+  }
+
   .hud-drawer-panel .hud-rail .hud-stat {
     display: flex;
     flex-direction: row;

@@ -771,6 +771,7 @@ export function GameScreen(): JSX.Element {
             subjectId={snapshot.dungeon.dungeonId}
             focusedRoomId={focusedRoomId}
             rooms={snapshot.rooms}
+            isPanelOpen={isInfoPanelOpen}
           />
 
           {npcDialogRoomId && snapshot.rooms[npcDialogRoomId] ? (
