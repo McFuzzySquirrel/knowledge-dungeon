@@ -6,6 +6,7 @@ interface TutorialOverlayProps {
   subjectId: string;
   focusedRoomId: string | null;
   rooms: Record<string, { topic: string; state: RoomState; validationState: { finalPass: boolean } }>;
+  isPanelOpen?: boolean;
 }
 
 interface TutorialStep {
@@ -46,7 +47,7 @@ function allRoomsCleared(
   return Object.values(rooms).every((r) => r.validationState.finalPass);
 }
 
-export function TutorialOverlay({ subjectId, focusedRoomId, rooms }: TutorialOverlayProps): JSX.Element | null {
+export function TutorialOverlay({ subjectId, focusedRoomId, rooms, isPanelOpen = false }: TutorialOverlayProps): JSX.Element | null {
   const [isMobile] = useState(() => {
     try { return window.matchMedia('(max-width: 600px)').matches; }
     catch { return false; }
@@ -57,15 +58,21 @@ export function TutorialOverlay({ subjectId, focusedRoomId, rooms }: TutorialOve
 
   const completed = allRoomsCleared(rooms);
 
+  const vertical = isPanelOpen && !isMobile
+    ? ({ bottom: 12, top: 'auto' } as const)
+    : ({ top: 12, bottom: 'auto' } as const);
+  const horizontal = isMobile ? { left: 12 } : { right: 12 };
+
   if (completed) {
     return (
       <div
         className="tutorial-overlay"
         style={{
-          position: 'absolute', top: 12, right: 12, zIndex: 95,
+          position: 'absolute', zIndex: 95, ...horizontal, ...vertical,
           background: 'rgba(17, 26, 48, 0.92)',
           border: '1px solid rgba(99, 179, 237, 0.3)', borderRadius: 10,
-          padding: '14px 18px', maxWidth: 280,
+          padding: '14px 18px', maxWidth: 280, maxHeight: isMobile ? '65vh' : 'calc(100% - 24px)',
+          overflowY: 'auto',
           backdropFilter: 'blur(6px)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
           pointerEvents: 'auto',
         }}
@@ -101,7 +108,7 @@ export function TutorialOverlay({ subjectId, focusedRoomId, rooms }: TutorialOve
         onClick={() => setExpanded(true)}
         aria-label={`Tutorial step ${step.step}/3: ${step.title}`}
         style={{
-          position: 'absolute', top: 12, right: 12, zIndex: 95,
+          position: 'absolute', top: 12, left: 12, zIndex: 95,
           background: 'rgba(17, 26, 48, 0.92)',
           border: '1px solid rgba(99, 179, 237, 0.3)', borderRadius: 20,
           padding: '6px 14px',
@@ -122,10 +129,11 @@ export function TutorialOverlay({ subjectId, focusedRoomId, rooms }: TutorialOve
     <div
       className="tutorial-overlay"
       style={{
-        position: 'absolute', top: 12, right: 12, zIndex: 95,
+        position: 'absolute', zIndex: 95, ...horizontal, ...vertical,
         background: 'rgba(17, 26, 48, 0.92)',
         border: '1px solid rgba(99, 179, 237, 0.3)', borderRadius: 10,
-        padding: '14px 18px', maxWidth: 280,
+        padding: '14px 18px', maxWidth: 280, maxHeight: isMobile ? '65vh' : 'calc(100% - 24px)',
+        overflowY: 'auto',
         backdropFilter: 'blur(6px)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
         pointerEvents: 'auto',
       }}

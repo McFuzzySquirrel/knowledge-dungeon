@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
 import { createPortal } from 'react-dom';
 import { hasSeenTooltip, markTooltipSeen } from '@/ui/utils/tooltips';
 
@@ -30,6 +30,39 @@ export function Tooltip({ id, children, onDismiss }: TooltipProps): JSX.Element 
     setCoords({ x: rect.right + 8, y: rect.top + rect.height / 2 });
   }, [visible]);
 
+  const tooltipElRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!coords || !tooltipElRef.current) return;
+
+    const margin = 8;
+    const updatePosition = () => {
+      const tooltip = tooltipElRef.current;
+      if (!tooltip) return;
+
+      const tooltipWidth = tooltip.offsetWidth || 280;
+      const tooltipHeight = tooltip.offsetHeight || 60;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      const maxLeft = Math.max(margin, viewportWidth - tooltipWidth - margin);
+      const clampedLeft = Math.min(Math.max(coords.x, margin), maxLeft);
+
+      const maxTop = Math.max(margin, viewportHeight - tooltipHeight - margin);
+      const clampedTop = Math.min(Math.max(coords.y - tooltipHeight / 2, margin), maxTop);
+
+      tooltip.style.left = `${clampedLeft}px`;
+      tooltip.style.top = `${clampedTop}px`;
+      tooltip.style.transform = 'none';
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [coords]);
+
   if (dismissed || !visible) return null;
 
   function handleDismiss() {
@@ -40,13 +73,14 @@ export function Tooltip({ id, children, onDismiss }: TooltipProps): JSX.Element 
 
   const tooltip = (
     <div
+      ref={tooltipElRef}
       className="feature-tooltip"
       role="status"
       aria-live="polite"
       style={{
         position: 'fixed',
-        left: coords?.x ?? 9999,
-        top: coords?.y ?? 9999,
+        left: coords?.x ?? -9999,
+        top: coords?.y ?? -9999,
         transform: 'translateY(-50%)',
         zIndex: 9999,
         background: '#1a2744',
