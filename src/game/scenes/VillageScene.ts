@@ -600,7 +600,7 @@ export class VillageScene extends Phaser.Scene {
         nearestAngle = Math.atan2(dy, dx);
         nearestName = struct.type === 'keeper-tower'
           ? 'Keeper'
-          : (struct as any).subjectName || struct.label || 'Dungeon';
+          : (struct as VillageStructure & { subjectName?: string }).subjectName || struct.label || 'Dungeon';
       }
     }
 
