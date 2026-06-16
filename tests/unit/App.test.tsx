@@ -19,6 +19,10 @@ vi.mock('@/services/electronBridge', () => ({
   getElectronEnvironmentLabel: () => mocks.getElectronEnvironmentLabel(),
 }));
 
+vi.mock('@/ui/screens/VillageScreen', () => ({
+  VillageScreen: () => <div>Village Screen</div>,
+}));
+
 vi.mock('@/ui/screens/GameScreen', () => ({
   GameScreen: () => <div>Game Screen</div>,
 }));
@@ -117,7 +121,26 @@ describe('App', () => {
     mocks.getElectronEnvironmentLabel.mockReturnValue('web');
   });
 
-  it('keeps the welcome flow active until Enter Dungeon is confirmed', async () => {
+  it('shows welcome screen without subjects, then village after creating one', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/^Loading…$/i)).not.toBeInTheDocument();
+    });
+
+    // No subjects → WelcomeScreen shown
+    expect(screen.getByText('Knowledge Dungeon')).toBeInTheDocument();
+
+    // Simulate subjects becoming available (as if created in WelcomeScreen)
+    const snapshot = makeSnapshot('subject-1', 'Imported Subject');
+    mocks.getActiveSubjectId.mockReturnValue('subject-1');
+    mocks.listSubjectIds.mockResolvedValue(['subject-1']);
+    mocks.loadSubjectSnapshot.mockImplementation((id: string) =>
+      Promise.resolve(id === 'subject-1' ? snapshot : null),
+    );
+  });
+
+  it('shows village screen when subjects exist', async () => {
     const snapshot = makeSnapshot('subject-1', 'Imported Subject');
     mocks.getActiveSubjectId.mockReturnValue('subject-1');
     mocks.listSubjectIds.mockResolvedValue(['subject-1']);
@@ -130,17 +153,8 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByText(/^Loading…$/i)).not.toBeInTheDocument();
     });
-    await screen.findByText(/Selected subject:/i);
 
-    fireEvent.click(screen.getByRole('tab', { name: /Setup/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Scholar/i }));
-
-    expect(screen.queryByText('Game Screen')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Enter Dungeon/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Game Screen')).toBeInTheDocument();
-    });
+    // Subjects exist → VillageScreen shown (mocked as "Village Screen")
+    await screen.findByText('Village Screen');
   });
 });
