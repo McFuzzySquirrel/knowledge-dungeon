@@ -10,7 +10,6 @@ import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/dat
 import { PLAYER_CLASSES } from '@/game/systems/playerClasses';
 import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
-import type { VillageStructure } from '@/data/villageLayout';
 
 interface SubjectSummary {
   id: string;
