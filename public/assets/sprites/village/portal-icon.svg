@@ -1,0 +1,18 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .ring { animation: spin 4s linear infinite; transform-origin: 32px 32px; }
+    .glow { animation: pulse 2s infinite alternate ease-in-out; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { from { opacity: 0.4; transform: scale(0.9); } to { opacity: 0.8; transform: scale(1.05); } }
+  </style>
+  <ellipse cx="32" cy="56" rx="20" ry="5" fill="#00000033"/>
+  <circle cx="32" cy="32" r="22" fill="#1a0a3a" opacity="0.8"/>
+  <circle cx="32" cy="32" r="18" fill="#2a1a5a" opacity="0.6" class="glow"/>
+  <circle cx="32" cy="32" r="10" fill="#3a2a7a" opacity="0.5"/>
+  <circle cx="32" cy="32" r="5" fill="#7be3ff" opacity="0.4"/>
+  <circle cx="32" cy="32" r="2" fill="#c6f6ff"/>
+  <g class="ring">
+    <ellipse cx="32" cy="32" rx="22" ry="8" fill="none" stroke="#7be3ff" stroke-width="1.5" opacity="0.5"/>
+    <ellipse cx="32" cy="32" rx="8" ry="22" fill="none" stroke="#b48cff" stroke-width="1.5" opacity="0.4"/>
+  </g>
+</svg>

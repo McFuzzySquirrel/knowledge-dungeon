@@ -1,0 +1,17 @@
+<svg width="32" height="64" viewBox="0 0 32 64" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .flame1 { animation: flicker1 0.6s infinite alternate ease-in-out; transform-origin: 16px 14px; }
+    .flame2 { animation: flicker2 0.8s infinite alternate ease-in-out; transform-origin: 16px 16px; }
+    .glow { animation: glowPulse 1.5s infinite alternate ease-in-out; }
+    @keyframes flicker1 { from { transform: scaleY(0.9) translateX(-1px); } to { transform: scaleY(1.1) translateX(1px); } }
+    @keyframes flicker2 { from { transform: scaleY(0.85) translateX(1px); } to { transform: scaleY(1.15) translateX(-1px); } }
+    @keyframes glowPulse { from { opacity: 0.2; } to { opacity: 0.5; } }
+  </style>
+  <rect x="13" y="28" width="6" height="32" rx="2" fill="#3a2a1a"/>
+  <rect x="6" y="24" width="20" height="6" rx="2" fill="#5a3a1a"/>
+  <rect x="8" y="10" width="16" height="16" rx="3" fill="#3a2a1a"/>
+  <circle cx="16" cy="18" r="10" fill="#ff7a1a" opacity="0.12" class="glow"/>
+  <path class="flame1" d="M10 16 Q12 6 14 14 Q16 4 18 14 Q22 8 22 16 Z" fill="#f2c879" opacity="0.9"/>
+  <path class="flame2" d="M12 16 Q13 9 15 14 Q17 6 19 14 Q20 11 20 16 Z" fill="#ff9b3a" opacity="0.85"/>
+  <path d="M14 16 Q15 11 16 13 Q17 9 18 15 Q18 16 16 16 Q15 16 14 16 Z" fill="#fff2c2" opacity="0.9"/>
+</svg>

@@ -1,0 +1,13 @@
+<svg width="96" height="120" viewBox="0 0 96 120" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .sign-sway { animation: signSway 3s infinite ease-in-out; transform-origin: 48px 100px; }
+    @keyframes signSway { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+  </style>
+  <ellipse cx="48" cy="112" rx="18" ry="4" fill="rgba(0,0,0,0.2)"/>
+  <rect x="44" y="30" width="8" height="78" rx="3" fill="#5a3a1e"/>
+  <g class="sign-sway">
+    <rect x="12" y="8" width="72" height="26" rx="6" fill="#6b4a2a" stroke="#2b1a0d" stroke-width="2"/>
+    <rect x="14" y="10" width="68" height="22" rx="4" fill="#7a5a3a"/>
+    <text x="48" y="25" text-anchor="middle" font-family="monospace" font-size="9" fill="#f2e2c4" font-weight="bold">WELCOME</text>
+  </g>
+</svg>

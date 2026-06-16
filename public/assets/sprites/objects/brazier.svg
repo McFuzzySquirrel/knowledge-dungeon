@@ -1,10 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-  <!-- Brazier: stone bowl with a warm flame -->
-  <ellipse cx="12" cy="20" rx="7" ry="2" fill="#1c1108" opacity="0.6"/>
-  <path d="M5 18 L7 13 L17 13 L19 18 Z" fill="#5a4028" stroke="#2a1d10" stroke-width="0.8"/>
-  <rect x="6" y="12.5" width="12" height="1.6" rx="0.4" fill="#7a5a32" stroke="#2a1d10" stroke-width="0.6"/>
-  <!-- flames -->
-  <path d="M9 12 Q10 7 12 9 Q14 5 14 11 Q14 12 12 12 Q10 12 9 12 Z" fill="#f2c879"/>
-  <path d="M10 12 Q11 9 12 10 Q13 7 13 11 Q13 12 12 12 Q11 12 10 12 Z" fill="#ff9b3a"/>
-  <path d="M11.2 12 Q11.6 10 12 10.5 Q12.4 9 12.6 11.5 Q12.6 12 12 12 Q11.4 12 11.2 12 Z" fill="#fff2c2"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .flame1 { animation: flicker1 0.8s infinite alternate ease-in-out; transform-origin: 16px 10px; }
+    .flame2 { animation: flicker2 1.2s infinite alternate ease-in-out; transform-origin: 16px 12px; }
+    .flame3 { animation: flicker3 0.6s infinite alternate ease-in-out; transform-origin: 16px 11px; }
+    .glow { animation: glowPulse 1.5s infinite alternate ease-in-out; }
+    @keyframes flicker1 { from { transform: scaleY(0.9) translateX(-1px); } to { transform: scaleY(1.1) translateX(1px); } }
+    @keyframes flicker2 { from { transform: scaleY(0.85) translateX(1px); } to { transform: scaleY(1.15) translateX(-1px); } }
+    @keyframes flicker3 { from { opacity: 0.7; } to { opacity: 1; } }
+    @keyframes glowPulse { from { opacity: 0.3; } to { opacity: 0.6; } }
+  </style>
+  <ellipse cx="16" cy="28" rx="10" ry="3" fill="#1c1108" opacity="0.6"/>
+  <path d="M6 24 L9 16 L23 16 L26 24 Z" fill="#5a4028" stroke="#2a1d10" stroke-width="1"/>
+  <rect x="8" y="15.5" width="16" height="2" rx="0.5" fill="#7a5a32" stroke="#2a1d10" stroke-width="0.6"/>
+  <circle cx="16" cy="18" r="8" fill="#ff7a1a" opacity="0.15" class="glow"/>
+  <path class="flame1" d="M10 16 Q12 8 14 14 Q16 6 18 14 Q22 10 22 16 Z" fill="#f2c879" opacity="0.9"/>
+  <path class="flame2" d="M12 16 Q13 10 15 14 Q17 8 19 14 Q20 12 20 16 Z" fill="#ff9b3a" opacity="0.85"/>
+  <path class="flame3" d="M14 16 Q15 12 16 13 Q17 10 18 15 Q18 16 16 16 Q15 16 14 16 Z" fill="#fff2c2" opacity="0.9"/>
 </svg>

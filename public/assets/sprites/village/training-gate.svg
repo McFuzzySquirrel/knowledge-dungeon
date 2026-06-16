@@ -1,0 +1,11 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="85" width="100" height="28" rx="4" fill="#4a3a2a" stroke="#1a1a1a" stroke-width="2"/>
+  <rect x="6" y="10" width="14" height="78" rx="3" fill="#6b4a2a" stroke="#1a1a1a" stroke-width="2"/>
+  <rect x="100" y="10" width="14" height="78" rx="3" fill="#6b4a2a" stroke="#1a1a1a" stroke-width="2"/>
+  <path d="M13 10 L60 0 L107 10" fill="none" stroke="#6b4a2a" stroke-width="8" stroke-linecap="round"/>
+  <rect x="28" y="30" width="64" height="8" rx="2" fill="#8b6a3a"/>
+  <rect x="28" y="50" width="64" height="8" rx="2" fill="#8b6a3a"/>
+  <rect x="28" y="30" width="8" height="56" fill="#6b4a2a"/>
+  <rect x="84" y="30" width="8" height="56" fill="#6b4a2a"/>
+  <text x="60" y="74" text-anchor="middle" font-family="monospace" font-size="11" fill="#c8a84e" font-weight="bold">TRAINING</text>
+</svg>

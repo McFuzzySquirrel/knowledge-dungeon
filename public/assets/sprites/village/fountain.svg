@@ -1,0 +1,17 @@
+<svg width="96" height="96" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .water { animation: waterFlow 2s infinite alternate ease-in-out; transform-origin: 48px 48px; }
+    @keyframes waterFlow {
+      from { opacity: 0.5; transform: scaleY(0.9); }
+      to { opacity: 0.8; transform: scaleY(1.1); }
+    }
+  </style>
+  <ellipse cx="48" cy="82" rx="40" ry="10" fill="#6b6b6b" stroke="#3a3a3a" stroke-width="2"/>
+  <rect x="18" y="60" width="60" height="24" rx="4" fill="#7a7a7a" stroke="#3a3a3a" stroke-width="2"/>
+  <ellipse cx="48" cy="60" rx="30" ry="6" fill="#4a8a9a" opacity="0.7"/>
+  <rect x="40" y="18" width="16" height="36" rx="4" fill="#8a8a8a" stroke="#3a3a3a" stroke-width="2"/>
+  <ellipse cx="48" cy="18" rx="12" ry="6" fill="#8a8a8a" stroke="#3a3a3a" stroke-width="2"/>
+  <ellipse cx="48" cy="55" rx="24" ry="5" fill="#6ab8c8" opacity="0.5" class="water"/>
+  <path d="M48 18 Q44 30 48 36 Q52 30 48 18" fill="#7be3ff" opacity="0.4"/>
+  <circle cx="48" cy="12" r="3" fill="#7be3ff" opacity="0.6"/>
+</svg>

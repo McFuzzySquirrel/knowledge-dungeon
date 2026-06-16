@@ -1,10 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-  <ellipse cx="12" cy="21" rx="6" ry="2" fill="#00000026"/>
-  <circle cx="12" cy="8" r="5" fill="#f1f1f1" stroke="#242424" stroke-width="1.2"/>
-  <path d="M6 20V13C6 10 18 10 18 13V20" fill="#d4d4d4" stroke="#242424" stroke-width="1.2" stroke-linejoin="round"/>
-  <rect x="16" y="11" width="2" height="8" fill="#bcbcbc" stroke="#242424" stroke-width="1"/>
-  <rect x="14.5" y="11" width="5" height="3" rx="0.5" fill="#e5e5e5" stroke="#242424" stroke-width="1"/>
-  <circle cx="10" cy="8" r="0.9" fill="#242424"/>
-  <circle cx="14" cy="8" r="0.9" fill="#242424"/>
-  <rect x="9" y="13" width="6" height="1.5" rx="0.7" fill="#242424" opacity="0.4"/>
+<svg width="64" height="80" viewBox="0 0 64 80" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .outline { stroke: #242424; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+    .float { animation: npcFloat 2s infinite alternate ease-in-out; transform-origin: 32px 40px; }
+    @keyframes npcFloat { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+  </style>
+  <g class="float">
+    <ellipse cx="32" cy="72" rx="16" ry="5" fill="#00000022"/>
+    <path d="M12 54 L12 28 C12 24 52 24 52 28 L52 54" fill="#6a5a4a" class="outline"/>
+    <circle cx="32" cy="20" r="11" fill="#d4c5a9" class="outline"/>
+    <circle cx="28" cy="18" r="1.5" fill="#333"/>
+    <circle cx="36" cy="18" r="1.5" fill="#333"/>
+    <path d="M26 24 Q32 28 38 24" stroke="#6a4a2a" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <path d="M14 28 L50 28" stroke="#4a3a2a" stroke-width="2"/>
+    <rect x="14" y="34" width="36" height="8" rx="2" fill="#4a3a2a"/>
+    <g transform="translate(22, 42)">
+      <rect x="0" y="0" width="20" height="6" rx="2" fill="#7a6a4a"/>
+      <rect x="2" y="6" width="4" height="10" rx="1" fill="#5a4a3a"/>
+      <rect x="14" y="6" width="4" height="10" rx="1" fill="#5a4a3a"/>
+    </g>
+  </g>
 </svg>

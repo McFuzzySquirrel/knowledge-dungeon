@@ -3,6 +3,7 @@ import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { WelcomeScreen } from '@/ui/screens/WelcomeScreen';
+import { VillageScreen } from '@/ui/screens/VillageScreen';
 import { GameScreen } from '@/ui/screens/GameScreen';
 import {
   getActiveSubjectId,
@@ -14,7 +15,9 @@ export function App(): JSX.Element {
   const loadSubject = useSubjectStore((state) => state.loadSubject);
   const selectedClass = useSessionStore((state) => state.selectedClass);
   const activeSubjectId = useSessionStore((state) => state.activeSubjectId);
+  const activeScreen = useSessionStore((state) => state.activeScreen);
   const setActiveSubjectId = useSessionStore((state) => state.setActiveSubjectId);
+  const setActiveScreen = useSessionStore((state) => state.setActiveScreen);
   const setProgressionActiveSubject = useProgressionStore((state) => state.setActiveSubject);
   const [bootstrapped, setBootstrapped] = useState(false);
 
@@ -29,23 +32,29 @@ export function App(): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     async function hydrate() {
+      const ids = await listSubjectIds();
+      const hasSome = ids.length > 0;
+
       const active = getActiveSubjectId();
-      if (active) {
+      if (active && hasSome) {
         const loaded = await loadSubject(active);
         if (!cancelled && loaded) {
           setActiveSubjectId(null);
           setProgressionActiveSubject(null);
         }
-      } else {
-        await listSubjectIds(); // warm cache
       }
-      if (!cancelled) setBootstrapped(true);
+      if (!cancelled) {
+        if (hasSome) {
+          setActiveScreen('village');
+        }
+        setBootstrapped(true);
+      }
     }
     void hydrate();
     return () => {
       cancelled = true;
     };
-  }, [loadSubject, setActiveSubjectId, setProgressionActiveSubject]);
+  }, [loadSubject, setActiveSubjectId, setProgressionActiveSubject, setActiveScreen]);
 
   if (!bootstrapped) {
     return (
@@ -56,9 +65,13 @@ export function App(): JSX.Element {
     );
   }
 
-  if (!snapshot || !selectedClass || !activeSubjectId) {
-    return <WelcomeScreen />;
+  if (activeScreen === 'village') {
+    return <VillageScreen />;
   }
 
-  return <GameScreen />;
+  if (activeScreen === 'game' && snapshot && selectedClass && activeSubjectId) {
+    return <GameScreen />;
+  }
+
+  return <WelcomeScreen />;
 }
