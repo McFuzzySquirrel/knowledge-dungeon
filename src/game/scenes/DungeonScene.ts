@@ -135,7 +135,7 @@ const PICTURE_FRAME_OFFSET_Y = 0.28;
 // Square collider, tighter than the rendered sprite so movement feels right.
 const PLAYER_COLLIDER_SIZE = 16;
 // Inset (in pixels) used when sampling the player's collider against the
-// walkability grid — keeps the player from snagging on tile seams.
+// walkability grid - keeps the player from snagging on tile seams.
 const PLAYER_WALK_INSET = 1;
 
 export class DungeonScene extends Phaser.Scene {
@@ -186,7 +186,7 @@ export class DungeonScene extends Phaser.Scene {
   private roomOverlayStates = new Map<string, string>();
   private roomNpcs = new Map<string, Phaser.GameObjects.Image>();
   private activeNpcRoomId: string | null = null;
-  /** Per-room floor id, captured when visibility is applied — used to seed
+  /** Per-room floor id, captured when visibility is applied - used to seed
    * decor placement and tileset selection so the layout is stable across
    * redraws on the same floor. */
   private floorSeed = 0;
@@ -903,7 +903,7 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   /**
-   * Create a subtle ambient particle effect — small floating dust motes that
+   * Create a subtle ambient particle effect - small floating dust motes that
    * drift through the dungeon, adding life to the environment.
    */
   private createAmbientParticles(): void {
@@ -982,7 +982,7 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   /**
-   * Switch the visible floor. Safe to call before `create()` — the scene
+   * Switch the visible floor. Safe to call before `create()` - the scene
    * caches the request and applies it once textures/graphics objects exist.
    */
   setFloorVisibility(input: FloorVisibilityInput): void {
@@ -1144,7 +1144,7 @@ export class DungeonScene extends Phaser.Scene {
     const map = this.dungeonMap;
     for (const room of map.rooms) {
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
-      // Don't clutter portal rooms — the stairs sprite should read clearly.
+      // Don't clutter portal rooms - the stairs sprite should read clearly.
       if (
         room.roomId === this.portalUpRoomId ||
         this.portalDownRoomIds.has(room.roomId)
@@ -1154,7 +1154,7 @@ export class DungeonScene extends Phaser.Scene {
       const roomSeed = hashString(`${this.currentFloorId ?? ''}::${room.roomId}`);
       const prng = mulberry32(roomSeed);
       // 2 decor pieces per room, picked from the four corners (top-left,
-      // top-right, bottom-left only — bottom-right reserved for the topic
+      // top-right, bottom-left only - bottom-right reserved for the topic
       // label / artifact loot icon).
       const corners: ReadonlyArray<{ ax: number; ay: number }> = [
         { ax: 0.18, ay: 0.22 },
@@ -1523,7 +1523,7 @@ export class DungeonScene extends Phaser.Scene {
     const p2 = this.input.pointer2;
 
     if (p1?.isDown && p2?.isDown) {
-      // Two fingers are now active — start a pinch-to-zoom gesture.
+      // Two fingers are now active - start a pinch-to-zoom gesture.
       const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
       // Guard against the degenerate case where both touch points are at the same position.
       if (dist < 1) return;
@@ -1537,7 +1537,7 @@ export class DungeonScene extends Phaser.Scene {
       return;
     }
 
-    // Single finger — begin tracking for drag (movement) or tap (interact).
+    // Single finger - begin tracking for drag (movement) or tap (interact).
     if (!this.touchPointerActive) {
       this.touchPointerActive = true;
       this.touchPointerStartX = pointer.x;
@@ -1640,7 +1640,7 @@ function hashString(value: string): number {
   return h >>> 0;
 }
 
-/** Mulberry32 PRNG — small, deterministic, good enough for layout jitter. */
+/** Mulberry32 PRNG - small, deterministic, good enough for layout jitter. */
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return function next(): number {

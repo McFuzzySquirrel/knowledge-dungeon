@@ -59,7 +59,7 @@ try {
   }
 } catch (error) {
   if (error && error.code === 'ENOENT') {
-    console.warn('dist/ directory missing — run "npm run build:web" first.');
+    console.warn('dist/ directory missing - run "npm run build:web" first.');
     process.exit(0);
   }
   throw error;

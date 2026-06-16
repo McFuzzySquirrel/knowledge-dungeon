@@ -6,12 +6,12 @@ A GitHub Copilot skill that analyzes your repository and generates a Knowledge D
 
 Invoke this skill in your Copilot session and it will:
 
-1. **Analyze your repository** — Explore the codebase structure, identify core modules, technologies, and patterns
-2. **Generate a mindmap structure** — Create 30-40 interconnected rooms organized by topic
-3. **Write comprehensive notes** — Author detailed, validation-ready notes for each topic
-4. **Apply a phase-ready profile** — Generate content for Creator, Scribe, or Archaeologist entry
-5. **Create the subject folder** — Output a complete Knowledge Dungeon subject ready to import
-6. **Provide import instructions** — Show you exactly how to load it into Knowledge Dungeon
+1. **Analyze your repository** - Explore the codebase structure, identify core modules, technologies, and patterns
+2. **Generate a mindmap structure** - Create 30-40 interconnected rooms organized by topic
+3. **Write comprehensive notes** - Author detailed, validation-ready notes for each topic
+4. **Apply a phase-ready profile** - Generate content for Creator, Scribe, or Archaeologist entry
+5. **Create the subject folder** - Output a complete Knowledge Dungeon subject ready to import
+6. **Provide import instructions** - Show you exactly how to load it into Knowledge Dungeon
 
 ## How to Use
 
@@ -31,13 +31,13 @@ Or provide context about what you want:
 
 ### Parameters
 
-- `--repo-path` (optional) — Path to analyze (default: current directory `.`)
-- `--depth` (optional) — Content depth: `light`, `balanced`, or `deep` (default: `balanced`)
-- `--name` (optional) — Project name for the mindmap (auto-detected from repo if not provided)
-- `--output` (optional) — Where to write the subject folder (default: `maps/{project-name}-mindmap`)
-- `--entry-phase` (optional) — Generated start profile: `creator`, `scribe`, `archaeologist` (default: `scribe`)
+- `--repo-path` (optional) - Path to analyze (default: current directory `.`)
+- `--depth` (optional) - Content depth: `light`, `balanced`, or `deep` (default: `balanced`)
+- `--name` (optional) - Project name for the mindmap (auto-detected from repo if not provided)
+- `--output` (optional) - Where to write the subject folder (default: `maps/{project-name}-mindmap`)
+- `--entry-phase` (optional) - Generated start profile: `creator`, `scribe`, `archaeologist` (default: `scribe`)
 - `--entry-phase` also accepts `review` as an alias for `archaeologist`.
-- `--review-ready` (optional) — Shortcut for `--entry-phase archaeologist`
+- `--review-ready` (optional) - Shortcut for `--entry-phase archaeologist`
 
 ## What You Get
 
@@ -61,9 +61,9 @@ maps/{project-name}-mindmap/
 
 Use `--entry-phase` to control how playable the generated subject is on first load.
 
-- `creator` — Structure-focused seed for map editing. Rooms are `Created` and ready for authoring.
-- `scribe` — Default. Rooms include complete notes that are ready to study and validate in encounters.
-- `archaeologist` — Review-ready seed. Rooms include finalized artifacts and progression metadata so users can jump straight into Archaeologist mode.
+- `creator` - Structure-focused seed for map editing. Rooms are `Created` and ready for authoring.
+- `scribe` - Default. Rooms include complete notes that are ready to study and validate in encounters.
+- `archaeologist` - Review-ready seed. Rooms include finalized artifacts and progression metadata so users can jump straight into Archaeologist mode.
 
 Phase metadata and room status mapping:
 
@@ -86,12 +86,12 @@ This keeps generated subjects aligned with current Knowledge Dungeon behavior wh
 
 The skill automatically creates rooms across these areas:
 
-- **Architecture & Core Domains** — Key modules, structure, design patterns
-- **Technology Stack** — Languages, frameworks, libraries, tools used
-- **Features & Mechanics** — Main functionality and user-facing systems
-- **Game/App Systems** — How components interact and integrate
-- **Development Workflow** — Build, test, and deployment processes
-- **Data & State Management** — Storage, persistence, state handling
+- **Architecture & Core Domains** - Key modules, structure, design patterns
+- **Technology Stack** - Languages, frameworks, libraries, tools used
+- **Features & Mechanics** - Main functionality and user-facing systems
+- **Game/App Systems** - How components interact and integrate
+- **Development Workflow** - Build, test, and deployment processes
+- **Data & State Management** - Storage, persistence, state handling
 
 ## Importing Into Knowledge Dungeon
 
@@ -111,9 +111,9 @@ Once the skill generates the subject folder:
 
 ## Then Explore
 
-- **Creator Phase** — See the complete structure of your codebase mapped out
-- **Scribe Phase** — Walk through each topic, refine the notes, defeat rooms
-- **Archaeologist Phase** — Review your learning and build retention
+- **Creator Phase** - See the complete structure of your codebase mapped out
+- **Scribe Phase** - Walk through each topic, refine the notes, defeat rooms
+- **Archaeologist Phase** - Review your learning and build retention
 
 If generated with `--entry-phase archaeologist` (or `--review-ready`), you can immediately choose **Archaeologist** from the phase picker and start reviewing artifacts.
 
@@ -145,40 +145,40 @@ Copilot:
 
 ### Adjusting Depth
 
-- **`--depth light`** — Overview-level notes, fewer details, faster generation
-- **`--depth balanced`** — Mix of overview and detail (recommended)
-- **`--depth deep`** — Detailed technical notes with code examples
+- **`--depth light`** - Overview-level notes, fewer details, faster generation
+- **`--depth balanced`** - Mix of overview and detail (recommended)
+- **`--depth deep`** - Detailed technical notes with code examples
 
 ### Choosing a Start Profile
 
-- **`--entry-phase creator`** — Best for teams who want to author/refine the map structure first
-- **`--entry-phase scribe`** — Best for normal study progression from encounters to review
-- **`--entry-phase archaeologist`** — Best for instant recall/review sessions after generation
+- **`--entry-phase creator`** - Best for teams who want to author/refine the map structure first
+- **`--entry-phase scribe`** - Best for normal study progression from encounters to review
+- **`--entry-phase archaeologist`** - Best for instant recall/review sessions after generation
 
 ### Using Your Own Repository
 
 The skill works with:
-- **Local repos** — `--repo-path ./my-project`
-- **GitHub URLs** — Automatically clones and analyzes
-- **Languages** — Auto-detects JavaScript, Python, Go, Rust, Java, C#, etc.
+- **Local repos** - `--repo-path ./my-project`
+- **GitHub URLs** - Automatically clones and analyzes
+- **Languages** - Auto-detects JavaScript, Python, Go, Rust, Java, C#, etc.
 
 ## What Makes These Notes Special
 
 The skill generates notes that:
 
-✅ **Pass Knowledge Dungeon validation** — Structured with required sections
-✅ **Are educational** — Explain concepts, not just code
-✅ **Include design decisions** — Why things were built a certain way
-✅ **Connect topics** — Link to related concepts via edges
-✅ **Match your codebase** — Analysis-driven, not generic templates
+✅ **Pass Knowledge Dungeon validation** - Structured with required sections
+✅ **Are educational** - Explain concepts, not just code
+✅ **Include design decisions** - Why things were built a certain way
+✅ **Connect topics** - Link to related concepts via edges
+✅ **Match your codebase** - Analysis-driven, not generic templates
 
 ## Tips for Best Results
 
-1. **Run in your repo root** — The skill needs access to source files to analyze
-2. **Keep arguments skill-compatible** — Use `--repo-path`, `--depth`, `--name`, `--output`, and phase flags from this guide.
-3. **Review the output** — Check `README.md` in the generated folder for context
-4. **Start with balanced depth** — You can regenerate with `deep` if needed
-5. **Customize after import** — Edit notes in Knowledge Dungeon during Scribe phase
+1. **Run in your repo root** - The skill needs access to source files to analyze
+2. **Keep arguments skill-compatible** - Use `--repo-path`, `--depth`, `--name`, `--output`, and phase flags from this guide.
+3. **Review the output** - Check `README.md` in the generated folder for context
+4. **Start with balanced depth** - You can regenerate with `deep` if needed
+5. **Customize after import** - Edit notes in Knowledge Dungeon during Scribe phase
 
 ## Common Questions
 

@@ -1,5 +1,5 @@
 /**
- * Subject store — owns the current SubjectSnapshot (DungeonMetadata + room
+ * Subject store - owns the current SubjectSnapshot (DungeonMetadata + room
  * metadata indexed by roomId), exposing graph operations and note
  * submission. Persists every mutation through subjectPersistence so the
  * Electron fs bridge (when available) and localStorage stay in sync.

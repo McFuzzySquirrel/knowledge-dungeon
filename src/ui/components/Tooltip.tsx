@@ -24,7 +24,7 @@ export function Tooltip({ id, children, onDismiss }: TooltipProps): JSX.Element 
     if (!visible || !wrapperRef.current) return;
     const parent = wrapperRef.current.parentElement;
     if (!parent) return;
-    // Find the trigger button — it's the previous sibling or the first button child of the parent
+    // Find the trigger button - it's the previous sibling or the first button child of the parent
     const trigger = parent.querySelector('button') ?? parent.previousElementSibling;
     const rect = trigger?.getBoundingClientRect() ?? parent.getBoundingClientRect();
     setCoords({ x: rect.right + 8, y: rect.top + rect.height / 2 });

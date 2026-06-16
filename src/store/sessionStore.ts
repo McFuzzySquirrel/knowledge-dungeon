@@ -1,5 +1,5 @@
 /**
- * Session store — tracks the active subject, the chosen phase, and the
+ * Session store - tracks the active subject, the chosen phase, and the
  * currently selected room (for UI panels). This is the only store the
  * welcome screen needs to mutate.
  */

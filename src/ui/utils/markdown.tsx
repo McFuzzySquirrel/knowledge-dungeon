@@ -21,7 +21,7 @@ const SAFE_PROTOCOL = /^(https?:|mailto:)/i;
 const SAFE_IMAGE_PROTOCOL = /^(https?:|\/)/i;
 const BARE_URL = /\bhttps?:\/\/[^\s<>()\][]+/g;
 const MD_IMAGE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
-// `[label](href)` — non-greedy label, href stops at whitespace or `)`.
+// `[label](href)` - non-greedy label, href stops at whitespace or `)`.
 const MD_LINK = /\[([^\]]+)\]\(([^)\s]+)\)/g;
 const BOLD = /\*\*([^*]+)\*\*/g;
 const ITALIC = /(^|[^*])\*([^*]+)\*/g;

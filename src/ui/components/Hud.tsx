@@ -182,7 +182,7 @@ export function Hud({
             {infoOpen ? 'Info ✕' : focusedRoomTopic ? `Info: ${focusedRoomTopic.slice(0, MAX_TOPIC_DISPLAY_LENGTH)}…` : 'Info (I)'}
           </button>
           <Tooltip id="hud-info">
-            View room details — notes, images, artifact summaries, and self-check prompts.
+            View room details - notes, images, artifact summaries, and self-check prompts.
           </Tooltip>
         </div>
 

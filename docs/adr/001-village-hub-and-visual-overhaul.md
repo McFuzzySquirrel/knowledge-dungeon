@@ -9,11 +9,11 @@
 
 ## Context
 
-The Knowledge Dungeon application launched directly from a tabbed WelcomeScreen into a Phaser-rendered dungeon crawl. There was no intermediate "hub" space, no persistent guide character, and the visual presentation — while functional — lacked the polish expected of a playable game. Users reported three main gaps:
+The Knowledge Dungeon application launched directly from a tabbed WelcomeScreen into a Phaser-rendered dungeon crawl. There was no intermediate "hub" space, no persistent guide character, and the visual presentation - while functional - lacked the polish expected of a playable game. Users reported three main gaps:
 
-1. **No sense of place** — the jump from a form-based welcome page into a dungeon was abrupt.
-2. **No guidance for first-time users** — the tutorial existed but was a separate button, not woven into the experience.
-3. **Flat visuals** — sprites were minimal (24×24 NPCs, basic tilesets), no ambient animation.
+1. **No sense of place** - the jump from a form-based welcome page into a dungeon was abrupt.
+2. **No guidance for first-time users** - the tutorial existed but was a separate button, not woven into the experience.
+3. **Flat visuals** - sprites were minimal (24×24 NPCs, basic tilesets), no ambient animation.
 
 ## Decision
 
@@ -28,7 +28,7 @@ We undertook a five-phase overhaul to address these gaps. The key architectural 
 **Chosen:** Phaser-rendered village scene.
 
 **Rationale:**
-- The dungeon crawl already uses Phaser — adding a village scene reuses the same engine, physics, input handling, and asset pipeline.
+- The dungeon crawl already uses Phaser - adding a village scene reuses the same engine, physics, input handling, and asset pipeline.
 - A Phaser village creates visual continuity: the player walks between the same tile-based world, keeping the mental model consistent.
 - React overlays (HUD, info panels, modals) sit on top of the Phaser canvas, so we get the best of both: a game-engine world + rich React UI.
 - Works identically on web (Vite) and Electron.
@@ -72,7 +72,7 @@ useEffect(() => {
 ```
 
 **Tradeoffs:**
-- + No stale closures — Phaser always reads the latest React state
+- + No stale closures - Phaser always reads the latest React state
 - + Game instance is created/destroyed only once
 - − Slightly more verbose than direct callback passing
 
@@ -84,7 +84,7 @@ useEffect(() => {
 
 **Rationale:**
 - The session store is already the place for transient UI state (active screen, phase, selected class).
-- A separate quest store would add complexity with no benefit — quest state is simple (a single enum value).
+- A separate quest store would add complexity with no benefit - quest state is simple (a single enum value).
 - Persisted to `localStorage` under `kd-quest-step` so progress survives page reloads.
 
 **Implementation:**
@@ -122,10 +122,10 @@ useEffect(() => {
 **Chosen:** All sprite animations use inline SVG `<style>` with CSS `@keyframes`. No external spritesheets or animated GIFs.
 
 **Rationale:**
-- SVGs are already the project's sprite format — no new asset pipeline needed.
+- SVGs are already the project's sprite format - no new asset pipeline needed.
 - CSS animations in SVG work identically in all browsers and Electron.
 - Animations are declarative, resolution-independent, and tiny (bytes vs. kilobytes for GIFs).
-- Phaser's SVG loader rasterizes the SVG once, capturing the animated state at the loaded frame — so idle animations (breathing, floating) work in Phaser, while more complex multi-frame animations could use Phaser tweens on top.
+- Phaser's SVG loader rasterizes the SVG once, capturing the animated state at the loaded frame - so idle animations (breathing, floating) work in Phaser, while more complex multi-frame animations could use Phaser tweens on top.
 
 **Examples:**
 - Player walk: leg/arm rotation keyframes
@@ -139,7 +139,7 @@ useEffect(() => {
 **Chosen:** Keep the existing vector-art direction but add significantly more detail, better proportions, class-specific accessories, and richer color palettes.
 
 **Rationale:**
-- The project already uses SVG vectors throughout — a pixel-art conversion would require a completely new asset set and toolchain.
+- The project already uses SVG vectors throughout - a pixel-art conversion would require a completely new asset set and toolchain.
 - Vector art scales cleanly across device pixel ratios and zoom levels.
 - Matches the "scholarly/ethereal" tone of the Knowledge Dungeon theme better than retro pixel art.
 
@@ -248,7 +248,7 @@ All decorative elements use the existing structure rendering pipeline with highe
 - Clean TypeScript compilation across the entire codebase.
 
 ### Negative
-- The village Phaser instance adds ~2–3 MB to the initial bundle (Phaser itself is the bulk — already loaded for dungeons).
+- The village Phaser instance adds ~2–3 MB to the initial bundle (Phaser itself is the bulk - already loaded for dungeons).
 - The `activeScreen` routing adds a new dimension of state that must be kept consistent across stores.
 - Quest step persistence in localStorage means clearing browser data resets quest progress.
 - 5 wandering NPCs + 6 birds + particle effects add rendering overhead on low-end mobile devices.
@@ -256,15 +256,15 @@ All decorative elements use the existing structure rendering pipeline with highe
 ### Mitigations
 - Phaser is already a dependency (loaded for dungeons), so the village does not increase the bundle uniquely.
 - Active screen transitions are linear and well-defined (Welcome → Village → Game), reducing state explosion risk.
-- Quest step is a single localStorage key — easy to reset, easy to debug.
+- Quest step is a single localStorage key - easy to reset, easy to debug.
 - NPCs use simple tweens (no per-frame pathfinding); birds use single tweens with `hold` pauses for efficiency.
 
 ---
 
 ## Related Documents
 
-- `progress.md` — Detailed implementation checklist
-- `src/data/villageLayout.ts` — Village map data, NPC definitions, signpost info
-- `src/store/sessionStore.ts` — Quest step types, advancement logic, MANUAL_QUESTS
-- `src/game/scenes/VillageScene.ts` — Phaser scene implementation, touch controls, birds
-- `src/ui/screens/VillageScreen.tsx` — React wrapper, quest-aware dialogue, data modal
+- `progress.md` - Detailed implementation checklist
+- `src/data/villageLayout.ts` - Village map data, NPC definitions, signpost info
+- `src/store/sessionStore.ts` - Quest step types, advancement logic, MANUAL_QUESTS
+- `src/game/scenes/VillageScene.ts` - Phaser scene implementation, touch controls, birds
+- `src/ui/screens/VillageScreen.tsx` - React wrapper, quest-aware dialogue, data modal

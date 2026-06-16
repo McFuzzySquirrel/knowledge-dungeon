@@ -10,12 +10,12 @@ A reusable tool to automatically generate Knowledge Dungeon mindmaps documenting
 
 This tool analyzes a GitHub repository and generates a complete Knowledge Dungeon subject (playable mindmap) that documents:
 
-- **Architecture & Core Domains** — Key modules and their responsibilities
-- **Technology Stack** — Languages, frameworks, libraries used
-- **Key Features** — Main functionality and mechanics
-- **Design Patterns** — How the system is organized
-- **Development Workflow** — Build, test, deploy processes
-- **Data & State** — Storage and state management
+- **Architecture & Core Domains** - Key modules and their responsibilities
+- **Technology Stack** - Languages, frameworks, libraries used
+- **Key Features** - Main functionality and mechanics
+- **Design Patterns** - How the system is organized
+- **Development Workflow** - Build, test, deploy processes
+- **Data & State** - Storage and state management
 
 The generated subject is immediately playable: import it into Knowledge Dungeon and explore your own codebase as an interactive learning experience.
 
@@ -625,7 +625,7 @@ Improvements welcome! Areas to enhance:
 
 ## License
 
-MIT — Use freely in your projects.
+MIT - Use freely in your projects.
 
 ---
 

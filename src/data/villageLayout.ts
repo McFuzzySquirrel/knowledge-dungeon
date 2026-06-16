@@ -263,7 +263,7 @@ export const VILLAGE_MAP: VillageMapDef = {
         { x: 16, y: 14 }, { x: 12, y: 14 }, { x: 10, y: 17 },
       ],
       greeting: 'A fresh page awaits your thoughts!',
-      dialogue: ['I have filled many scrolls with notes.', 'The pen is mightier than the sword — and the keyboard mightier still.'],
+      dialogue: ['I have filled many scrolls with notes.', 'The pen is mightier than the sword - and the keyboard mightier still.'],
       quotes: LEARNING_QUOTES,
     },
     {
@@ -278,20 +278,20 @@ export const VILLAGE_MAP: VillageMapDef = {
       ],
       greeting: 'Welcome, seeker! I am the Keeper of Knowledge, guardian of this village.',
       dialogue: [
-        "This village is your sanctuary. Every portal you see leads to a dungeon of knowledge — a subject you've created, waiting to be explored.",
+        "This village is your sanctuary. Every portal you see leads to a dungeon of knowledge - a subject you've created, waiting to be explored.",
         "The path of knowledge has three phases: Create your map, Scribe your notes, and Review your artifacts.",
         "To begin, visit the Guild Hall to create your first subject, or head to the Training Grounds if you'd like a guided introduction.",
         "In the Creator phase, you build rooms and connect ideas. In the Scribe phase, you defeat encounters by writing structured notes. In the Archaeologist phase, you return to strengthen your recall.",
         "The more rooms you clear and review, the more XP you earn. Ranks and badges await those who persevere.",
       ],
       questDialogue: {
-        'intro': ['Ah, a fresh face! Welcome to the Dungeon Village. I am the Keeper of Knowledge. Come closer and I shall guide you.', 'Every great journey begins with a single step. Your first step is to create a subject — a topic you wish to study.', 'Head to the Guild Hall (the building to the east) or press E while near me to learn more.'],
-        'meet-keeper': ['You found me! Well done. Now, let me show you around.', 'See the portals scattered around the village? Each one leads to a dungeon — but you need a subject first.', 'Visit the Guild Hall to create your first subject. It\'s the large building with the lanterns.' ],
-        'create-subject': ['You\'ve created your first subject! Excellent.', 'Now you need to choose a study archetype — your class. Check the panel on the right side of the screen.', 'Each archetype has a unique perk. The Scholar is balanced, the Cartographer excels at mapping, and the Archivist loves revisiting old material.'],
+        'intro': ['Ah, a fresh face! Welcome to the Dungeon Village. I am the Keeper of Knowledge. Come closer and I shall guide you.', 'Every great journey begins with a single step. Your first step is to create a subject - a topic you wish to study.', 'Head to the Guild Hall (the building to the east) or press E while near me to learn more.'],
+        'meet-keeper': ['You found me! Well done. Now, let me show you around.', 'See the portals scattered around the village? Each one leads to a dungeon - but you need a subject first.', 'Visit the Guild Hall to create your first subject. It\'s the large building with the lanterns.' ],
+        'create-subject': ['You\'ve created your first subject! Excellent.', 'Now you need to choose a study archetype - your class. Check the panel on the right side of the screen.', 'Each archetype has a unique perk. The Scholar is balanced, the Cartographer excels at mapping, and the Archivist loves revisiting old material.'],
         'visit-training': ['The Training Grounds await! Step through the gate to begin a guided 3-room tutorial.', 'You\'ll learn how to write notes, attach images, navigate the dungeon, and clear encounters.', 'Follow the on-screen instructions carefully. I\'ll be here when you return.'],
-        'pick-archetype': ['An excellent choice of archetype! Your class will shape how you approach each dungeon.', 'Now, approach one of the dungeon portals and press E to enter your first dungeon.', 'Don\'t be shy — step through and begin your adventure!'],
+        'pick-archetype': ['An excellent choice of archetype! Your class will shape how you approach each dungeon.', 'Now, approach one of the dungeon portals and press E to enter your first dungeon.', 'Don\'t be shy - step through and begin your adventure!'],
         'enter-dungeon': ['You\'ve entered a dungeon! Each room is a topic to master.', 'In Scribe mode, press E in a room to open the encounter editor. Write a structured note with a Summary, Key Points, and a Recall Question.', 'Pass the validation checks to earn an artifact and clear the room.'],
-        'clear-room': ['You cleared a room! Well fought, scholar.', 'Your artifact has been collected. You can view it in your journal.', 'Keep going — clear more rooms to earn XP and unlock badges.'],
+        'clear-room': ['You cleared a room! Well fought, scholar.', 'Your artifact has been collected. You can view it in your journal.', 'Keep going - clear more rooms to earn XP and unlock badges.'],
         'write-note': ['Your notes are the weapons of this dungeon. The sharper they are, the easier your encounters will be.', 'Remember: each note needs a Summary (big picture), Key Points (specifics), and a Recall Question (self-test).', 'You can also attach images to your notes for richer artifacts.'],
         'review-artifact': ['You\'ve entered the Archaeologist phase. Return to cleared rooms and run review passes.', 'Each review pass strengthens your memory and increases your review streak.', 'Complete enough passes and you\'ll earn Archaeologist badges.'],
         'complete': ['You\'ve learned the ways of the Knowledge Dungeon. The rest is up to you.', 'Remember: every subject is a dungeon, every room is a topic, and every note is a step toward mastery.', 'The portals will always be here. I will always be here. Go forth and learn!'],
@@ -302,11 +302,11 @@ export const VILLAGE_MAP: VillageMapDef = {
 
 export function getDungeonPortalSlots(): { gridX: number; gridY: number }[] {
   return [
-    { gridX: 3,  gridY: 3  },   // NW — near training gate
-    { gridX: 7,  gridY: 18 },   // W — south of central path
-    { gridX: 12, gridY: 25 },   // SW — near bottom edge
-    { gridX: 23, gridY: 23 },   // SE — near trophy hall
-    { gridX: 25, gridY: 5  },   // NE — near guild hall
-    { gridX: 30, gridY: 15 },   // E — between guild hall and trophy hall
+    { gridX: 3,  gridY: 3  },   // NW - near training gate
+    { gridX: 7,  gridY: 18 },   // W - south of central path
+    { gridX: 12, gridY: 25 },   // SW - near bottom edge
+    { gridX: 23, gridY: 23 },   // SE - near trophy hall
+    { gridX: 25, gridY: 5  },   // NE - near guild hall
+    { gridX: 30, gridY: 15 },   // E - between guild hall and trophy hall
   ];
 }

@@ -129,14 +129,14 @@ export function deriveGraphHierarchy(dungeon: DungeonMetadata): GraphHierarchy {
  * floor every descendant therefore stays on the same floor, so only the root
  * floor exposes "down" portals (one per top-level subtopic).
  *
- * - `floorRoomIds` — rooms that natively live on this floor.
- * - `portalUpRoomId` — the parent room used to ascend (null on root floor).
- * - `portalDownRoomIds` — direct child rooms that are themselves the entry
+ * - `floorRoomIds` - rooms that natively live on this floor.
+ * - `portalUpRoomId` - the parent room used to ascend (null on root floor).
+ * - `portalDownRoomIds` - direct child rooms that are themselves the entry
  *   to a different floor (only populated on the root floor today, but the
  *   computation is general).
- * - `visibleRoomIds` — union of the three above, the full set the scene /
+ * - `visibleRoomIds` - union of the three above, the full set the scene /
  *   minimap should render for this floor.
- * - `visibleCorridorPredicate` — convenience predicate for filtering edges.
+ * - `visibleCorridorPredicate` - convenience predicate for filtering edges.
  */
 export interface FloorVisibility {
   floorId: string;

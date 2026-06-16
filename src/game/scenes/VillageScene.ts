@@ -311,7 +311,7 @@ export class VillageScene extends Phaser.Scene {
       }
     }
 
-    // Axis-aligned stone paths — every segment is horizontal or vertical
+    // Axis-aligned stone paths - every segment is horizontal or vertical
     const pathSegments: { x1: number; y1: number; x2: number; y2: number }[] = [
       // ── Entrance ──────────────────────────────────
       { x1: 3,  y1: 22, x2: 6,  y2: 22 },  // gate approach
@@ -383,7 +383,7 @@ export class VillageScene extends Phaser.Scene {
       pathG.strokePath();
     }
 
-    // Junctions — circles at every intersection point
+    // Junctions - circles at every intersection point
     const junctionColor = Phaser.Display.Color.HexStringToColor('#4a3a2a').color;
     const junctionCoords = [
       { x: 4,  y: 14 }, { x: 6,  y: 14 }, { x: 16, y: 14 }, { x: 24, y: 14 },
@@ -423,7 +423,7 @@ export class VillageScene extends Phaser.Scene {
         this.structureGraphics.push(stoneG);
       }
 
-      // Portal icon animation — spinning + pulse
+      // Portal icon animation - spinning + pulse
       if (struct.type === 'portal-icon') {
         const portal = sprite;
         this.tweens.add({
@@ -561,7 +561,7 @@ export class VillageScene extends Phaser.Scene {
     this.playerBody.setOffset(8, 8);
     this.playerBody.setCollideWorldBounds(true);
 
-    // Subtle idle sway (rotation) — does not conflict with movement
+    // Subtle idle sway (rotation) - does not conflict with movement
     this.tweens.add({
       targets: this.player,
       angle: { from: -0.5, to: 0.5 },

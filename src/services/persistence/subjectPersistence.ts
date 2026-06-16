@@ -74,7 +74,7 @@ function safeSet(key: string, value: string): void {
       localStorage.setItem(key, value);
     }
   } catch {
-    // storage unavailable — silently ignore
+    // storage unavailable - silently ignore
   }
 }
 
@@ -84,7 +84,7 @@ function safeRemove(key: string): void {
       localStorage.removeItem(key);
     }
   } catch {
-    // storage unavailable — silently ignore
+    // storage unavailable - silently ignore
   }
 }
 

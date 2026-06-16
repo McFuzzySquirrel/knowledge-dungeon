@@ -2569,7 +2569,7 @@ button.danger:hover {
   transform: translateY(0);
 }
 
-/* Strip hud-rail styling inside drawer — drawer provides its own */
+/* Strip hud-rail styling inside drawer - drawer provides its own */
 .hud-drawer-panel .hud-rail {
   flex: none;
   width: auto;
@@ -3753,7 +3753,7 @@ button:not(:disabled):hover {
   border-radius: 4px;
 }
 
-/* Village HUD — mobile drawer */
+/* Village HUD - mobile drawer */
 .village-hud-toggle {
   position: fixed;
   top: 12px;

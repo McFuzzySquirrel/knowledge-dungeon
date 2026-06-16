@@ -37,7 +37,7 @@ maps/{subject-name}-dungeon/
     └── ...
 ```
 
-The subject must be directly importable by Knowledge Dungeon — valid `dungeon.json`, room ids aligned with folders, no missing room note files.
+The subject must be directly importable by Knowledge Dungeon - valid `dungeon.json`, room ids aligned with folders, no missing room note files.
 
 ## dungeon.json Schema
 
@@ -45,12 +45,12 @@ The subject must be directly importable by Knowledge Dungeon — valid `dungeon.
 
 Key requirements:
 
-- Top-level keys: `dungeon` **and** `rooms` — both are required.  
+- Top-level keys: `dungeon` **and** `rooms` - both are required.  
   Missing `rooms` causes **"Invalid subject snapshot format"** on web import.
 - `dungeon.schemaVersion` must be exactly `"1.0.0"`.
 - `dungeon.rooms` is an **array** of `{ roomId, topic, status }` summaries.
 - `rooms` is a **map** of `roomId → RoomMetadata`. Every `roomId` in `dungeon.rooms` must have an entry here.
-- Each `RoomMetadata` entry must include `noteText` (the full plain-text note), `validationState` (all fields present — use the zero-value object shown below), `artifactMarkdown` (null unless archaeologist phase), and `attachments: []`.
+- Each `RoomMetadata` entry must include `noteText` (the full plain-text note), `validationState` (all fields present - use the zero-value object shown below), `artifactMarkdown` (null unless archaeologist phase), and `attachments: []`.
 
 Minimal zero-value `validationState`:
 
@@ -163,7 +163,7 @@ Minimal `dungeon.json` skeleton (replace placeholders):
 Before returning completion:
 
 1. `dungeon.json` parses as valid JSON.
-2. `dungeon.json` top-level keys are exactly `dungeon` and `rooms` — **both present**.
+2. `dungeon.json` top-level keys are exactly `dungeon` and `rooms` - **both present**.
 3. `dungeon.schemaVersion` equals `"1.0.0"`.
 4. Every `roomId` in `dungeon.rooms` (array) has a matching key in the top-level `rooms` map.
 5. Every room in the `rooms` map has a `validationState` object with all required fields.

@@ -2,7 +2,7 @@
   "name": "knowledge-dungeon",
   "private": true,
   "version": "0.1.0",
-  "description": "Knowledge Dungeon — a local-first, mindmap-driven dungeon crawler for studying. Built on the Repo Dungeon engine.",
+  "description": "Knowledge Dungeon - a local-first, mindmap-driven dungeon crawler for studying. Built on the Repo Dungeon engine.",
   "author": "McFuzzySquirrel",
   "license": "MIT",
   "type": "module",

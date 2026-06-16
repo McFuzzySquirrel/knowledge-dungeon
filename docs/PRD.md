@@ -1,4 +1,4 @@
-# Product Requirements — Knowledge Dungeon
+# Product Requirements - Knowledge Dungeon
 
 ## Vision
 
@@ -10,7 +10,7 @@ deterministic quality rubric (Summary / Key Points / Recall Question,
 generated artifact. Once every room is cleared, the **Archaeologist** phase
 unlocks self-check prompts and review-streak tracking.
 
-The game now begins in the **Dungeon Village** — a persistent hub world
+The game now begins in the **Dungeon Village** - a persistent hub world
 where players create subjects, select their archetype, meet the guide NPC,
 view their collection, and enter dungeon portals. The village replaces the
 direct jump from welcome screen to dungeon with an explorable space that
@@ -18,9 +18,9 @@ provides context, guidance, and a sense of place.
 
 ## Three-phase loop
 
-1. **Creator** — author the dungeon by adding topic-rooms and links.
-2. **Scribe** — explore the dungeon and defeat each room by submitting notes.
-3. **Archaeologist** — unlocked when all rooms are cleared; revisit rooms,
+1. **Creator** - author the dungeon by adding topic-rooms and links.
+2. **Scribe** - explore the dungeon and defeat each room by submitting notes.
+3. **Archaeologist** - unlocked when all rooms are cleared; revisit rooms,
    answer self-check prompts, track review streaks.
 
 ## Village Hub
@@ -28,25 +28,25 @@ provides context, guidance, and a sense of place.
 The Dungeon Village is the player's home base and the entry point for all
 gameplay. It features:
 
-- **Dungeon portals** — one per subject, rendered as animated vortex icons
+- **Dungeon portals** - one per subject, rendered as animated vortex icons
   with spinning rings and pulsing glow. Enter by walking up and pressing E.
-- **Keeper's Tower** — home of the Keeper of Knowledge guide NPC. Houses
+- **Keeper's Tower** - home of the Keeper of Knowledge guide NPC. Houses
   the **Quest Board** for tracking onboarding progress.
-- **Guild Hall** — create new subjects by providing a name and root topic.
-- **Training Grounds** — launches the 3-room tutorial dungeon.
-- **Trophy Hall** — view your collection: badges, artifacts, journal entries,
+- **Guild Hall** - create new subjects by providing a name and root topic.
+- **Training Grounds** - launches the 3-room tutorial dungeon.
+- **Trophy Hall** - view your collection: badges, artifacts, journal entries,
   and dungeon count aggregated across all subjects.
-- **Library of Knowledge** — in-game help panel with controls reference,
+- **Library of Knowledge** - in-game help panel with controls reference,
   gameplay loop explanation, and archetype summaries.
-- **Wayfinding signposts** — multi-directional signs at crossroads showing
+- **Wayfinding signposts** - multi-directional signs at crossroads showing
   directions to nearby buildings when approached.
-- **Wandering NPCs** — five villagers with learning quotes who patrol the
+- **Wandering NPCs** - five villagers with learning quotes who patrol the
   paths.
-- **Decorative elements** — trees, bushes, rocks, ponds, flowers, torches,
+- **Decorative elements** - trees, bushes, rocks, ponds, flowers, torches,
   benches, flying birds, and a central fountain.
-- **Compass** — React overlay at top center pointing toward the nearest
+- **Compass** - React overlay at top center pointing toward the nearest
   portal or the Keeper.
-- **Fixed sidebar HUD** — archetype selection with perk detail, clickable
+- **Fixed sidebar HUD** - archetype selection with perk detail, clickable
   quest log, and theme picker. Collapsible drawer on mobile.
 
 ## Quest System
