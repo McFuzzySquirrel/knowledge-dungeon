@@ -58,25 +58,23 @@ The **Dungeon Village** is your home base, replacing the direct welcome→dungeo
 - **Training Grounds** - launch the 3-room tutorial.
 - **Trophy Hall** - view badges, artifacts, journal entries across all subjects.
 - **Library of Knowledge** - in-game help with controls and gameplay reference.
+
+![Village HUD - sidebar with archetype selector, quest log, stats, and theme picker](./docs/assets/ui/village-hud.png)
+
 - **5 signposts** at crossroads showing directions.
+
+![Village signpost - showing directional info at a crossroads](./docs/assets/ui/village-signpost.png)
+
 - **5 wandering NPCs** with learning quotes.
 - **Compass** pointing toward the nearest portal or keeper.
+
+![Village compass - overlay pointing toward the nearest point of interest](./docs/assets/ui/village-compass.png)
+
 - **Fixed sidebar HUD** with archetype selector, quest log, and theme picker. Collapsible drawer on mobile.
 
 From the village, press **Home** (H) in any dungeon to return. Portals persist across sessions.
 
-### Home / subject management
-
-![Welcome screen showing phase selection, class selection, saved subject browsing, and admin section](./docs/assets/ui/welcome-screen.png)
-
-The home screen is where you:
-
-- **start the 3-room tutorial walkthrough** that teaches notes, attachments, and navigation
-- choose the current phase and study archetype
-- create a new subject from a root topic
-- browse previously created subjects by **name** and room count
-- refresh the local subject list before jumping back in
-- access Admin data tools for import/export (desktop includes folder-level helpers)
+On the very first launch (no saved data yet), a one-time welcome screen is shown instead — you can start the tutorial, create your first subject, or import from backup. Once any subject exists, the app boots directly into the village.
 
 ### In-dungeon study view
 
