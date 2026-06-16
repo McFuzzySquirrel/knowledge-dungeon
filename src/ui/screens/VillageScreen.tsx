@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { useSessionStore, QUEST_LABELS, QUEST_ORDER, MANUAL_QUESTS } from '@/store/sessionStore';
+import { useSessionStore, QUEST_LABELS, QUEST_ORDER, MANUAL_QUESTS, type QuestStep } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -10,6 +10,7 @@ import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/dat
 import { PLAYER_CLASSES } from '@/game/systems/playerClasses';
 import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
+import type { VillageStructure } from '@/data/villageLayout';
 
 interface SubjectSummary {
   id: string;
@@ -38,7 +39,7 @@ export function VillageScreen(): JSX.Element {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
-  const sceneRef = useRef<any>(null);
+  const sceneRef = useRef<VillageSceneHandle | null>(null);
 
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [infoPanel, setInfoPanel] = useState<{
@@ -170,7 +171,7 @@ export function VillageScreen(): JSX.Element {
           session.setPhase('scribe');
           session.setSelectedClass(selectedClassRef.current || 'scholar');
           const subjStore = useSubjectStore.getState();
-          subjStore.loadSubject(struct.subjectId).then((loaded) => {
+          void subjStore.loadSubject(struct.subjectId).then((loaded) => {
             if (loaded) {
               session.setActiveSubjectId(loaded.dungeon.dungeonId);
               useProgressionStore.getState().setActiveSubject(loaded.dungeon.dungeonId);
@@ -186,7 +187,7 @@ export function VillageScreen(): JSX.Element {
           const tutorial = createTutorialSubject();
           const session = useSessionStore.getState();
           const subjStore = useSubjectStore.getState();
-          subjStore.importSnapshot(tutorial).then(() => {
+          void subjStore.importSnapshot(tutorial).then(() => {
             session.setPhase('scribe');
             session.setSelectedClass('scholar');
             session.setQuestStep('enter-dungeon');
@@ -283,8 +284,7 @@ export function VillageScreen(): JSX.Element {
     });
     gameRef.current = game;
     game.events.once('ready', () => {
-      const s = game.scene.getScene('VillageScene') as any;
-      sceneRef.current = s;
+      sceneRef.current = game.scene.getScene('VillageScene') as VillageSceneHandle;
       setVillageReady(true);
     });
     return () => {
@@ -298,12 +298,8 @@ export function VillageScreen(): JSX.Element {
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
-    if (scene.setDynamicStructures) {
-      scene.setDynamicStructures(dynamicStructures);
-    }
-    if (scene.setPlayerClass) {
-      scene.setPlayerClass(selectedClass ?? 'scholar');
-    }
+    scene.setDynamicStructures(dynamicStructures);
+    scene.setPlayerClass(selectedClass ?? 'scholar');
   }, [villageReady, dynamicStructures, selectedClass]);
 
   // Show welcome message on village entry
@@ -357,7 +353,7 @@ export function VillageScreen(): JSX.Element {
               setCreateOpen={setCreateOpen} setDataOpen={setDataOpen}
               colorTheme={colorTheme} setColorTheme={setColorTheme}
               onQuestClick={(step: string) => {
-                setQuestStep(step as any);
+                setQuestStep(step as QuestStep);
                 const keeper = VILLAGE_MAP.npcs.find((n) => n.id === 'keeper');
                 if (keeper) {
                   const lines = keeper.questDialogue?.[step];
@@ -374,7 +370,7 @@ export function VillageScreen(): JSX.Element {
               setCreateOpen={setCreateOpen} setDataOpen={setDataOpen}
               colorTheme={colorTheme} setColorTheme={setColorTheme}
               onQuestClick={(step: string) => {
-                setQuestStep(step as any);
+                setQuestStep(step as QuestStep);
                 const keeper = VILLAGE_MAP.npcs.find((n) => n.id === 'keeper');
                 if (keeper) {
                   const lines = keeper.questDialogue?.[step];
@@ -508,7 +504,7 @@ export function VillageScreen(): JSX.Element {
             <button
               type="button"
               className="village-action-btn village-action-btn--tutorial"
-              onClick={handleStartTutorial}
+              onClick={() => { void handleStartTutorial(); }}
             >
               Start Tutorial
             </button>
@@ -600,7 +596,7 @@ export function VillageScreen(): JSX.Element {
               const currentIdx = QUEST_ORDER.indexOf(questStep);
               const done = idx < currentIdx;
               const active = step === questStep;
-              const isManual = MANUAL_QUESTS.has(step as any);
+              const isManual = MANUAL_QUESTS.has(step);
               return (
                 <div key={step} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div
@@ -696,18 +692,20 @@ export function VillageScreen(): JSX.Element {
               {subjects.map((subj) => (
                 <div key={subj.id} className="village-subject-item">
                   <span>{subj.subjectName}</span>
-                  <button type="button" className="village-action-btn" style={{ fontSize: 10, padding: '2px 8px' }}
-                    onClick={async () => {
-                      const snapshot = await loadSubjectSnapshot(subj.id);
-                      if (!snapshot) return;
-                      const json = exportSubjectToJson(snapshot);
-                      const blob = new Blob([json], { type: 'application/json' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `${subj.subjectName.replace(/[^a-z0-9]+/gi, '-')}.json`;
-                      a.click();
-                      URL.revokeObjectURL(url);
+                   <button type="button" className="village-action-btn" style={{ fontSize: 10, padding: '2px 8px' }}
+                    onClick={() => {
+                      void (async () => {
+                        const snapshot = await loadSubjectSnapshot(subj.id);
+                        if (!snapshot) return;
+                        const json = exportSubjectToJson(snapshot);
+                        const blob = new Blob([json], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${subj.subjectName.replace(/[^a-z0-9]+/gi, '-')}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      })();
                     }}>
                     Export
                   </button>
@@ -715,17 +713,19 @@ export function VillageScreen(): JSX.Element {
               ))}
             </div>
             <input type="file" accept=".json" style={{ fontSize: 12 }}
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                try {
-                  const text = await file.text();
-                  const snapshot = importSubjectFromJson(text);
-                  await saveSubjectSnapshot(snapshot.dungeon.dungeonId, snapshot);
-                  window.location.reload();
-                } catch (err) {
-                  alert('Import failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
-                }
+              onChange={(e) => {
+                void (async () => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const text = await file.text();
+                    const snapshot = importSubjectFromJson(text);
+                    await saveSubjectSnapshot(snapshot.dungeon.dungeonId, snapshot);
+                    window.location.reload();
+                  } catch (err) {
+                    alert('Import failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                  }
+                })();
               }} />
             <div className="modal-actions">
               <button type="button" onClick={() => setDataOpen(false)}>Close</button>
@@ -761,7 +761,7 @@ export function VillageScreen(): JSX.Element {
                 <button type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
                 <button
                   type="button"
-                  onClick={handleCreateSubject}
+                  onClick={() => { void handleCreateSubject(); }}
                   disabled={!createName.trim() || !createTopic.trim() || submitting}
                 >
                   {submitting ? 'Creating…' : 'Create'}
@@ -775,8 +775,16 @@ export function VillageScreen(): JSX.Element {
   );
 }
 
+/* VillageScene methods that the React layer calls */
+interface VillageSceneHandle {
+  lastPoi: { name: string; angle: number; distance: number };
+  setDynamicStructures: (structures: VillageStructure[]) => void;
+  setPlayerClass: (cls: string) => void;
+  triggerInteract: () => void;
+}
+
 /* ── React compass overlay reads lastPoi from the Phaser scene ─────────── */
-function CompassOverlay({ sceneRef }: { sceneRef: React.MutableRefObject<any> }): JSX.Element {
+function CompassOverlay({ sceneRef }: { sceneRef: React.MutableRefObject<VillageSceneHandle | null> }): JSX.Element {
   const [poi, setPoi] = useState<{ name: string; angle: number; distance: number } | null>(null);
 
   useEffect(() => {
@@ -784,7 +792,7 @@ function CompassOverlay({ sceneRef }: { sceneRef: React.MutableRefObject<any> })
     const poll = () => {
       const scene = sceneRef.current;
       if (scene?.lastPoi && scene.lastPoi.distance < 1e9) {
-        setPoi({ ...scene.lastPoi });
+        setPoi({ name: scene.lastPoi.name, angle: scene.lastPoi.angle, distance: scene.lastPoi.distance });
       } else {
         setPoi(null);
       }
@@ -813,8 +821,10 @@ function VillageHudContent({
   questStep, subjects, selectedClass, setSelectedClass, setCreateOpen, setDataOpen,
   colorTheme, setColorTheme, onQuestClick,
 }: {
-  questStep: string; subjects: any[]; selectedClass: any; setSelectedClass: any;
-  setCreateOpen: any; setDataOpen?: any; colorTheme: string; setColorTheme: any;
+  questStep: string; subjects: Array<{ id: string; subjectName: string; roomCount: number; clearedRoomCount: number }>;
+  selectedClass: string | null; setSelectedClass: (cls: string | null) => void;
+  setCreateOpen: (v: boolean) => void; setDataOpen?: (v: boolean) => void;
+  colorTheme: string; setColorTheme: (t: string) => void;
   onQuestClick: (step: string) => void;
 }): JSX.Element {
   const QL = QUEST_LABELS as Record<string, { label: string; hint: string }>;
@@ -840,7 +850,7 @@ function VillageHudContent({
         <div className="village-stat">
           <span className="village-stat-label">Archetype</span>
           <strong className="village-stat-value">
-            {selectedClass ? PLAYER_CLASSES.find((c: any) => c.id === selectedClass)?.name ?? 'None' : 'Not set'}
+            {selectedClass ? PLAYER_CLASSES.find((c) => c.id === selectedClass)?.name ?? 'None' : 'Not set'}
           </strong>
         </div>
       </div>
@@ -883,7 +893,7 @@ function VillageHudContent({
         <div className="village-quest-progress">
           {QO.filter((s) => s !== 'intro').map((step) => {
             const idx = QO.indexOf(step);
-            const currentIdx = QO.indexOf(questStep as any);
+            const currentIdx = QO.indexOf(questStep);
             const done = idx <= currentIdx;
             return (
               <span key={step} onClick={() => onQuestClick(step)}
@@ -1010,7 +1020,7 @@ function SignpostPanel({ structureId, colorTheme }: { structureId: string; color
   );
 }
 
-function ThemePicker({ current, onChange }: { current: string; onChange: (t: any) => void }): JSX.Element {
+function ThemePicker({ current, onChange }: { current: string; onChange: (t: string) => void }): JSX.Element {
   const themes = [
     { id: 'dark', label: 'Night' },
     { id: 'colorful', label: 'Arcade' },
