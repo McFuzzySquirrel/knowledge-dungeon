@@ -1,9 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-  <ellipse cx="12" cy="21" rx="6" ry="2" fill="#00000026"/>
-  <circle cx="12" cy="8" r="5" fill="#f1f1f1" stroke="#242424" stroke-width="1.2"/>
-  <path d="M6 20V13C6 10 18 10 18 13V20" fill="#dedede" stroke="#242424" stroke-width="1.2" stroke-linejoin="round"/>
-  <rect x="14.5" y="11" width="4" height="6" rx="1" fill="#cfcfcf" stroke="#242424" stroke-width="1"/>
-  <path d="M15.5 13H17.5M15.5 15H17" stroke="#6c6c6c" stroke-width="0.8" stroke-linecap="round"/>
-  <circle cx="10" cy="8" r="0.9" fill="#242424"/>
-  <circle cx="14" cy="8" r="0.9" fill="#242424"/>
+<svg width="64" height="80" viewBox="0 0 64 80" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .outline { stroke: #242424; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+    .float { animation: npcFloat 2s infinite alternate ease-in-out; transform-origin: 32px 40px; }
+    @keyframes npcFloat { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+  </style>
+  <g class="float">
+    <ellipse cx="32" cy="72" rx="14" ry="4" fill="#00000022"/>
+    <path d="M14 54 L14 30 C14 26 50 26 50 30 L50 54" fill="#6b8ba8" class="outline"/>
+    <circle cx="32" cy="22" r="10" fill="#f1e8d8" class="outline"/>
+    <circle cx="28" cy="20" r="1.5" fill="#333"/>
+    <circle cx="36" cy="20" r="1.5" fill="#333"/>
+    <path d="M28 26 Q32 29 36 26" stroke="#8a6a4a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    <path d="M12 30 L52 30" stroke="#4a6a7a" stroke-width="1.5"/>
+    <rect x="32" y="34" width="12" height="18" rx="2" fill="#4a7a5a"/>
+    <rect x="34" y="36" width="8" height="3" rx="1" fill="#d4c5a9"/>
+    <rect x="34" y="41" width="8" height="3" rx="1" fill="#d4c5a9"/>
+    <rect x="34" y="46" width="6" height="3" rx="1" fill="#d4c5a9"/>
+  </g>
 </svg>

@@ -37,7 +37,6 @@ import { setActiveSubjectId as persistActiveSubjectId } from '@/services/persist
 
 export function GameScreen(): JSX.Element {
   const snapshot = useSubjectStore((s) => s.snapshot);
-  const setSnapshot = useSubjectStore((s) => s.setSnapshot);
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
   const openNoteEditor = useSessionStore((s) => s.openNoteEditor);
   const focusedRoomId = useSessionStore((s) => s.focusedRoomId);
@@ -46,6 +45,7 @@ export function GameScreen(): JSX.Element {
   const isNoteEditorOpen = useSessionStore((s) => s.isNoteEditorOpen);
   const selectedClass = useSessionStore((s) => s.selectedClass);
   const setActiveSubjectId = useSessionStore((s) => s.setActiveSubjectId);
+  const setActiveScreen = useSessionStore((s) => s.setActiveScreen);
   const isMapViewOpen = useSessionStore((s) => s.isMapViewOpen);
   const openMapView = useSessionStore((s) => s.openMapView);
   const closeMapView = useSessionStore((s) => s.closeMapView);
@@ -514,8 +514,6 @@ export function GameScreen(): JSX.Element {
   }, [closeMapView, openMapView, toggleInfoPanel]);
 
   function handleHome() {
-    // Clear the active subject so <App> falls back to <WelcomeScreen>, where
-    // the user can pick an existing subject or create a new one.
     closeMapView();
     setPendingReviewRoomId(null);
     setFocusedRoomId(null);
@@ -523,7 +521,7 @@ export function GameScreen(): JSX.Element {
     persistActiveSubjectId(null);
     cancelTeleportMode();
     setProgressionActiveSubject(null);
-    setSnapshot(null);
+    setActiveScreen('village');
   }
 
   const noteMarkdownByRoomId = useMemo(() => {
@@ -706,7 +704,7 @@ export function GameScreen(): JSX.Element {
   );
 
   return (
-    <div className="game-shell">
+    <div className="game-shell screen-fade-in">
       {isMobile ? (
         <HudDrawer>{hudContent}</HudDrawer>
       ) : (

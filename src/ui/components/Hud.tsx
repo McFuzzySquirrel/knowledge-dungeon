@@ -107,7 +107,7 @@ export function Hud({
       <div className="hud-stat">
         <span>XP / Rank</span>
         <strong>
-          {xpTotal} · {rank}
+          <span className="hud-rank-badge">{rank}</span> · {xpTotal} XP
         </strong>
       </div>
       <div className="hud-stat">
@@ -116,18 +116,13 @@ export function Hud({
         <span className="hud-stat-subtle">
           {reviewRoomsTowardNextPass}/{reviewTotalRooms} toward pass {reviewNextPassTarget}
         </span>
-        <div
-          className="review-progress-bar"
-          role="progressbar"
+        <div className="rpg-stat-bar" role="progressbar"
           aria-label="Review progress toward next pass"
           aria-valuemin={0}
           aria-valuemax={reviewTotalRooms}
-          aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}
-        >
-          <span
-            className="review-progress-bar-fill"
-            style={{ width: `${reviewProgressPercent}%` }}
-          />
+          aria-valuenow={Math.min(reviewRoomsTowardNextPass, reviewTotalRooms)}>
+          <span className="rpg-stat-bar-fill"
+            style={{ width: `${reviewProgressPercent}%` }} />
         </div>
       </div>
       <div className="hud-stat">

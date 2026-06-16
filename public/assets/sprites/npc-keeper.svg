@@ -1,0 +1,64 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .outline { stroke: #1a1a1a; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    #body { transform-origin: 64px 70px; animation: breathe 2.5s infinite ease-in-out; }
+    #staff-glow { animation: glowPulse 2s infinite alternate ease-in-out; }
+    @keyframes breathe {
+      0%, 100% { transform: scaleY(1); }
+      50% { transform: scaleY(1.012); }
+    }
+    @keyframes glowPulse {
+      from { opacity: 0.4; }
+      to { opacity: 0.9; }
+    }
+  </style>
+
+  <ellipse cx="64" cy="118" rx="24" ry="6" fill="#00000022"/>
+
+  <g id="body">
+    <g id="robe">
+      <path d="M44 42 L84 42 L92 100 L36 100 Z" fill="#2a2a5c" class="outline"/>
+      <path d="M50 42 L78 42 L82 62 L46 62 Z" fill="#3a3a7c" class="outline"/>
+      <rect x="42" y="72" width="44" height="3" rx="1" fill="#c8a84e" class="outline"/>
+      <path d="M44 82 L84 82" stroke="#c8a84e" stroke-width="1.5" opacity="0.4"/>
+      <path d="M46 90 L82 90" stroke="#c8a84e" stroke-width="1.5" opacity="0.3"/>
+      <path d="M48 98 L80 98" stroke="#c8a84e" stroke-width="1.5" opacity="0.2"/>
+    </g>
+
+    <g id="arms">
+      <path d="M44 46 L26 58 L22 62" fill="none" stroke="#2a2a5c" stroke-width="10" stroke-linecap="round" class="outline"/>
+      <path d="M84 46 L98 40 L102 36" fill="none" stroke="#2a2a5c" stroke-width="10" stroke-linecap="round" class="outline"/>
+    </g>
+
+    <g id="staff">
+      <rect x="96" y="18" width="6" height="88" rx="3" fill="#6b4226" class="outline"/>
+      <rect x="99" y="98" width="10" height="6" rx="2" fill="#4a2e1a"/>
+      <g transform="translate(99, 16)">
+        <circle cx="0" cy="0" r="10" fill="#7be3ff" opacity="0.3" id="staff-glow"/>
+        <circle cx="0" cy="0" r="6" fill="#c6f6ff" opacity="0.6"/>
+        <circle cx="0" cy="0" r="3" fill="#ffffff"/>
+        <path d="M-8 0 L8 0 M0 -8 L0 8" stroke="#fff" stroke-width="1" opacity="0.5"/>
+      </g>
+    </g>
+  </g>
+
+  <g id="head">
+    <path d="M64 8 C48 8 38 18 38 32 L38 44 C38 50 90 50 90 44 L90 32 C90 18 80 8 64 8 Z" fill="#2a2a5c" class="outline"/>
+    <ellipse cx="64" cy="32" rx="20" ry="18" fill="#dbc5a0" class="outline"/>
+    <circle cx="58" cy="30" r="2.5" fill="#222"/>
+    <circle cx="70" cy="30" r="2.5" fill="#222"/>
+    <path d="M60 38 Q64 42 68 38" fill="none" stroke="#7a5a3a" stroke-width="1.8" stroke-linecap="round"/>
+
+    <g id="beard">
+      <path d="M50 38 Q52 56 60 64 Q64 60 68 64 Q76 56 78 38" fill="#b8b8b8" class="outline" opacity="0.9"/>
+      <path d="M55 44 Q58 50 62 54" stroke="#999" stroke-width="1" fill="none"/>
+      <path d="M73 44 Q70 50 66 54" stroke="#999" stroke-width="1" fill="none"/>
+    </g>
+
+    <g id="hat">
+      <path d="M42 28 L48 10 L60 2 L64 0 L68 2 L80 10 L86 28" fill="#1a1a4a" class="outline"/>
+      <rect x="40" y="26" width="48" height="6" rx="3" fill="#1a1a4a" class="outline"/>
+      <circle cx="64" cy="6" r="4" fill="#c8a84e"/>
+    </g>
+  </g>
+</svg>

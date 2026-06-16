@@ -2783,3 +2783,904 @@ button.danger:hover {
     width: 100%;
   }
 }
+
+/* ── Village Screen ─────────────────────────────────────────────────────── */
+.village-screen {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+}
+
+.village-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.village-hud {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: min(280px, calc(100% - 24px));
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(11, 13, 20, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+
+.village-hud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 8px;
+}
+
+.village-hud-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.village-hud-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.village-hud-subtitle {
+  display: flex;
+  align-items: center;
+}
+
+.village-theme-picker {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.village-theme-picker button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.village-theme-picker button.active {
+  background: var(--accent);
+  color: var(--control-selected-text);
+}
+
+.village-hud-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.village-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: rgba(11, 13, 20, 0.6);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.village-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.village-stat-value {
+  font-size: 16px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.village-hud-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.village-class-grid {
+  display: grid;
+  gap: 4px;
+}
+
+.village-class-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.6);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+  font-size: 12px;
+}
+
+.village-class-btn:hover {
+  border-color: var(--accent);
+}
+
+.village-class-btn--selected {
+  border-color: var(--accent-cool);
+  background: color-mix(in srgb, var(--accent-cool) 20%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-cool) 30%, transparent);
+}
+
+.village-class-btn strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.village-class-tagline {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.village-hud-info {
+  padding: 8px 10px;
+  background: rgba(127, 178, 255, 0.08);
+  border: 1px solid rgba(127, 178, 255, 0.25);
+  border-radius: 8px;
+}
+
+.village-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.village-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin: 0 1px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: rgba(11, 13, 20, 0.6);
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+}
+
+.village-hud-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.village-action-btn {
+  padding: 10px 14px;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.village-action-btn:hover {
+  border-color: var(--accent);
+  background: var(--control-hover-bg);
+}
+
+.village-action-btn--tutorial {
+  border-color: rgba(99, 179, 237, 0.4);
+  background: rgba(99, 179, 237, 0.12);
+  color: var(--accent-soft);
+}
+
+.village-action-btn--tutorial:hover {
+  border-color: var(--accent);
+  background: rgba(99, 179, 237, 0.2);
+}
+
+.village-enter-btn {
+  padding: 12px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, transparent), color-mix(in srgb, var(--accent-cool) 20%, transparent));
+  color: var(--accent-soft);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  letter-spacing: 0.04em;
+  transition: transform 80ms ease, box-shadow 120ms ease;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.village-enter-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.village-enter-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Info panel (floating near buildings) */
+.village-info-panel {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  width: min(400px, calc(100% - 48px));
+  padding: 16px;
+  background: rgba(22, 26, 38, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: village-panel-in 200ms ease-out;
+}
+
+@keyframes village-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.village-info-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.village-info-portal-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.village-info-panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.village-info-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.village-info-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.village-info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.village-info-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.village-subject-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.village-subject-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: rgba(11, 13, 20, 0.4);
+}
+
+/* NPC dialog in village */
+.village-npc-dialog {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 15;
+  width: min(360px, calc(100% - 24px));
+  padding: 14px;
+  background: rgba(22, 26, 38, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--accent-cool);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: village-dialog-in 250ms ease-out;
+}
+
+@keyframes village-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.village-npc-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--accent-cool);
+}
+
+.village-npc-dialog-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.village-npc-dialog-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+.village-npc-dialog-text--typing {
+  animation: typewriter 0.5s steps(40) forwards;
+  white-space: pre-wrap;
+}
+
+@keyframes typewriter {
+  from { max-width: 0; }
+  to { max-width: 100%; }
+}
+
+.village-npc-dialog-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Create modal */
+.village-create-modal {
+  width: min(440px, 92vw);
+}
+
+.village-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.village-create-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Quest log */
+.village-quest-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(154, 247, 229, 0.3);
+  border-radius: 8px;
+  background: rgba(154, 247, 229, 0.06);
+}
+
+.village-quest-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.village-quest-step div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.village-quest-step strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.village-quest-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.village-quest-icon {
+  font-size: 14px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.village-quest-progress {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.village-quest-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.village-quest-dot--done {
+  background: var(--good);
+  border-color: var(--good);
+}
+
+.village-quest-dot--current {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: quest-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes quest-pulse {
+  0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 40%, transparent); }
+  50% { box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent); }
+}
+
+/* ── Animation Overhaul (Phase 4) ───────────────────────────────────────── */
+
+/* Screen fade-in */
+.screen-fade-in {
+  animation: screenFadeIn 400ms ease-out;
+}
+
+@keyframes screenFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal slide-up */
+.modal {
+  animation: modalSlideUp 250ms ease-out;
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Backdrop fade */
+.modal-backdrop {
+  animation: backdropFade 200ms ease-out;
+}
+
+@keyframes backdropFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Panel slide-in (room panel, info panel) */
+.room-panel {
+  animation: panelSlideIn 250ms ease-out;
+}
+
+@keyframes panelSlideIn {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Toast slide-in */
+.toast {
+  animation: toastSlideIn 300ms ease-out;
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Button glow on hover */
+button:not(:disabled):hover {
+  transition: box-shadow 200ms ease, border-color 150ms ease, transform 100ms ease;
+}
+
+.village-enter-btn:not(:disabled) {
+  animation: enterBtnPulse 2s ease-in-out infinite;
+}
+
+@keyframes enterBtnPulse {
+  0%, 100% { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 25%, transparent); }
+  50% { box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 40%, transparent); }
+}
+
+/* Stat value pulse on change */
+.hud-stat-value,
+.village-stat-value {
+  transition: color 300ms ease;
+}
+
+/* NPC dialog typewriter effect */
+.village-npc-dialog-text--typing {
+  display: inline;
+  animation: typewriterReveal 0.3s steps(20) forwards;
+  white-space: pre-wrap;
+}
+
+@keyframes typewriterReveal {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+
+/* Loading spinner */
+.loading-spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Floating XP text */
+.xp-float {
+  position: absolute;
+  pointer-events: none;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  animation: xpFloatUp 1.2s ease-out forwards;
+}
+
+@keyframes xpFloatUp {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-40px) scale(1.2); }
+}
+
+/* Quest step complete animation */
+.village-quest-dot--done {
+  animation: questDonePop 300ms ease-out;
+}
+
+@keyframes questDonePop {
+  0% { transform: scale(0.8); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* Hover lift for cards */
+.phase-card:hover,
+.class-card:hover {
+  transform: translateY(-2px);
+  transition: transform 150ms ease, box-shadow 200ms ease;
+}
+
+/* Room panel tab transition */
+.room-tab-body {
+  animation: tabFadeIn 200ms ease-out;
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+/* ── UI Polish (Phase 5) ────────────────────────────────────────────────── */
+
+/* RPG-style stat bar */
+.rpg-stat-bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: rgba(11, 13, 20, 0.6);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.rpg-stat-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 600ms ease;
+  background: linear-gradient(90deg, var(--accent-cool), var(--accent));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 40%, transparent);
+  animation: statBarShimmer 2s ease-in-out infinite;
+  background-size: 200% 100%;
+}
+
+@keyframes statBarShimmer {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 0%; }
+  100% { background-position: 0% 0%; }
+}
+
+.rpg-stat-bar-fill--good {
+  background: linear-gradient(90deg, var(--good), #62e5a4);
+}
+
+.rpg-stat-bar-fill--warning {
+  background: linear-gradient(90deg, #ffcf5f, #ff9b3a);
+}
+
+.rpg-stat-bar-fill--danger {
+  background: linear-gradient(90deg, #ff7676, #ff3a3a);
+}
+
+/* Ornate panel borders */
+.ornate-panel {
+  position: relative;
+  border: 2px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--bg-panel);
+}
+
+.ornate-panel::before,
+.ornate-panel::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-color: var(--accent);
+  border-style: solid;
+  opacity: 0.3;
+}
+
+.ornate-panel::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+  border-radius: 4px 0 0 0;
+}
+
+.ornate-panel::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+  border-radius: 0 0 4px 0;
+}
+
+/* Ornamental corner accents for modals */
+.modal.ornate-panel::before {
+  top: 6px;
+  left: 6px;
+}
+
+.modal.ornate-panel::after {
+  bottom: 6px;
+  right: 6px;
+}
+
+/* XP float animation in-game */
+.xp-popup {
+  position: absolute;
+  pointer-events: none;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 50%, transparent),
+               0 2px 4px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  animation: xpPopupFloat 1.4s ease-out forwards;
+}
+
+@keyframes xpPopupFloat {
+  0% { opacity: 1; transform: translateY(0) scale(0.8); }
+  30% { opacity: 1; transform: translateY(-10px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-50px) scale(0.9); }
+}
+
+/* Rank badge glow */
+.hud-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent-soft);
+  animation: rankGlow 2.5s ease-in-out infinite;
+}
+
+@keyframes rankGlow {
+  0%, 100% { box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
+  50% { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 40%, transparent); }
+}
+
+/* Screen shake utility */
+.screen-shake {
+  animation: screenShake 0.3s ease-out;
+}
+
+@keyframes screenShake {
+  0%, 100% { transform: translate(0); }
+  10% { transform: translate(-2px, 1px); }
+  20% { transform: translate(2px, -1px); }
+  30% { transform: translate(-1px, 2px); }
+  40% { transform: translate(1px, -2px); }
+  50% { transform: translate(-2px, -1px); }
+  60% { transform: translate(2px, 1px); }
+  70% { transform: translate(-1px, -1px); }
+  80% { transform: translate(1px, 1px); }
+  90% { transform: translate(-1px, 2px); }
+}
+
+/* Progress bar in HUD */
+.hud-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--control-border) 48%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-panel-soft) 82%, #000000 18%);
+}
+
+.hud-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.hud-progress-label strong {
+  color: var(--accent);
+}
+
+/* ── Dungeon HUD consistency with village ───────────────────────────────── */
+
+.hud-rail .hud-stat {
+  border-color: color-mix(in srgb, var(--control-border) 48%, transparent);
+}
+
+.hud-rail .hud-stat strong {
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.hud-rail .hud-subject-label {
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  animation: hudSubjectPulse 3s ease-in-out infinite;
+}
+
+@keyframes hudSubjectPulse {
+  0%, 100% { box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 15%, transparent); }
+  50% { box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent); }
+}
+
+.hud-rail .hud-phase-controls button[aria-pressed='true'] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, transparent), color-mix(in srgb, var(--accent-cool) 20%, transparent));
+  border-color: var(--accent);
+  color: var(--accent-soft);
+}
+
+.hud-rail .hud-action-icon-btn {
+  background: rgba(11, 13, 20, 0.5);
+  border-radius: 8px;
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.hud-rail .hud-action-icon-btn:hover {
+  background: rgba(11, 13, 20, 0.8);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.hud-rail .hud-collection-btn {
+  background: rgba(11, 13, 20, 0.4);
+  border-radius: 8px;
+  transition: background 120ms ease;
+}
+
+.hud-rail .hud-collection-btn:hover {
+  background: rgba(11, 13, 20, 0.7);
+}
+
+.hud-rail .hud-scribe-nudge {
+  border: 1px solid rgba(99, 179, 237, 0.35);
+  background: rgba(99, 179, 237, 0.08);
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .village-hud {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    max-height: 60dvh;
+    border-radius: 12px 12px 0 0;
+    border-bottom: none;
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .village-info-panel {
+    bottom: auto;
+    top: 12px;
+  }
+
+  .village-npc-dialog {
+    top: auto;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 24px);
+  }
+}

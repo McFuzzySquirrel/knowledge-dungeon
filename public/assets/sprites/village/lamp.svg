@@ -1,0 +1,15 @@
+<svg width="32" height="64" viewBox="0 0 32 64" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .lamp-glow { animation: lampFlicker 1.5s infinite alternate ease-in-out; }
+    @keyframes lampFlicker {
+      from { opacity: 0.5; }
+      to { opacity: 0.9; }
+    }
+  </style>
+  <rect x="13" y="30" width="6" height="30" rx="2" fill="#3a3a3a"/>
+  <rect x="6" y="14" width="20" height="18" rx="4" fill="#5a5a5a"/>
+  <rect x="8" y="16" width="16" height="14" rx="3" fill="#ffcf5f" opacity="0.6" class="lamp-glow"/>
+  <rect x="10" y="18" width="12" height="10" rx="2" fill="#ffe08f" opacity="0.8"/>
+  <line x1="16" y1="14" x2="16" y2="10" stroke="#3a3a3a" stroke-width="2"/>
+  <circle cx="16" cy="44" r="2" fill="#7be3ff" opacity="0.3"/>
+</svg>

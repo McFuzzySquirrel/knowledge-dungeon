@@ -169,6 +169,7 @@ export class DungeonScene extends Phaser.Scene {
   private portalHintText: Phaser.GameObjects.Text | null = null;
   private floorTileSprites: Phaser.GameObjects.TileSprite[] = [];
   private corridorTileSprites: Phaser.GameObjects.TileSprite[] = [];
+  private ambientParticles: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private doorSprites: Phaser.GameObjects.Image[] = [];
   /**
    * Walkability mask for the currently-visible floor. Players can only move
@@ -340,6 +341,16 @@ export class DungeonScene extends Phaser.Scene {
     );
     this.playerBody.setCollideWorldBounds(false);
 
+    // Subtle idle breathing animation
+    this.tweens.add({
+      targets: this.player,
+      scale: { from: 1, to: 1.008 },
+      duration: 1400,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
     if (this.input.keyboard) {
       // `enableCapture = false` so Phaser does not call preventDefault on these
       // keys at the window level. Otherwise typing W/A/S/D/E or arrow keys in
@@ -399,6 +410,7 @@ export class DungeonScene extends Phaser.Scene {
     this.refreshArtifactIcons();
     this.refreshImageFrameIcons();
     this.refreshPortalIcons();
+    this.createAmbientParticles();
   }
 
   update(_time: number, delta: number): void {
@@ -629,6 +641,7 @@ export class DungeonScene extends Phaser.Scene {
     this.collectedArtifactRoomIds.add(this.currentRoomId);
     icon.destroy();
     this.artifactIcons.delete(this.currentRoomId);
+    this.cameras.main.shake(200, 0.005);
     this.callbacks?.onArtifactCollected?.(this.currentRoomId);
   }
 
@@ -890,6 +903,45 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   /**
+   * Create a subtle ambient particle effect — small floating dust motes that
+   * drift through the dungeon, adding life to the environment.
+   */
+  private createAmbientParticles(): void {
+    if (!this.dungeonMap || this.ambientParticles) return;
+    const map = this.dungeonMap;
+    const w = (map.bounds.maxX - map.bounds.minX) * map.tileSize;
+    const h = (map.bounds.maxY - map.bounds.minY) * map.tileSize;
+    const cx = (map.bounds.minX + map.bounds.maxX) / 2 * map.tileSize;
+    const cy = (map.bounds.minY + map.bounds.maxY) / 2 * map.tileSize;
+
+    const dotTexture = this.textures.exists('particle-dot')
+      ? 'particle-dot'
+      : this.createParticleDotTexture();
+
+    this.ambientParticles = this.add.particles(cx, cy, dotTexture, {
+      x: { min: -w / 2, max: w / 2 },
+      y: { min: -h / 2, max: h / 2 },
+      speed: { min: 2, max: 6 },
+      angle: { min: 0, max: 360 },
+      scale: { start: 0.6, end: 0 },
+      alpha: { start: 0.3, end: 0 },
+      lifespan: { min: 4000, max: 8000 },
+      frequency: 800,
+      blendMode: Phaser.BlendModes.ADD,
+    });
+    this.ambientParticles.setDepth(0.2);
+  }
+
+  private createParticleDotTexture(): string {
+    const g = this.make.graphics({ x: 0, y: 0 });
+    g.fillStyle(0x7be3ff, 1);
+    g.fillCircle(3, 3, 3);
+    g.generateTexture('particle-dot', 6, 6);
+    g.destroy();
+    return 'particle-dot';
+  }
+
+  /**
    * Update the in-canvas hint that nudges the player to press E when
    * standing inside a portal room. We anchor it to the camera so it stays
    * legible regardless of zoom.
@@ -947,6 +999,12 @@ export class DungeonScene extends Phaser.Scene {
       this.refreshImageFrameIcons();
       this.refreshPortalHint();
     }
+    // Recreate ambient particles for the new floor area
+    if (this.ambientParticles) {
+      this.ambientParticles.destroy();
+      this.ambientParticles = null;
+    }
+    this.createAmbientParticles();
   }
 
   private applyFloorVisibility(input: FloorVisibilityInput): void {

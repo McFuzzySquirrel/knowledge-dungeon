@@ -1,0 +1,8 @@
+<svg width="120" height="96" viewBox="0 0 120 96" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="40" width="10" height="50" rx="2" fill="#5a3a1a"/>
+  <rect x="110" y="40" width="10" height="50" rx="2" fill="#5a3a1a"/>
+  <path d="M5 40 Q60 0 115 40" fill="none" stroke="#5a3a1a" stroke-width="6"/>
+  <path d="M5 40 Q60 0 115 40" fill="none" stroke="#7a5a2a" stroke-width="3"/>
+  <rect x="50" y="55" width="20" height="30" rx="2" fill="#3a2a1a"/>
+  <text x="60" y="42" text-anchor="middle" font-family="monospace" font-size="9" fill="#c8a84e">DUNGEON VILLAGE</text>
+</svg>

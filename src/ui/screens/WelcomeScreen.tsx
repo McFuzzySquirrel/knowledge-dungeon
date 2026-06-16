@@ -86,6 +86,7 @@ export function WelcomeScreen(): JSX.Element {
   const setPhase = useSessionStore((s) => s.setPhase);
   const selectedClass = useSessionStore((s) => s.selectedClass);
   const setSelectedClass = useSessionStore((s) => s.setSelectedClass);
+  const setActiveScreen = useSessionStore((s) => s.setActiveScreen);
 
   const snapshot = useSubjectStore((s) => s.snapshot);
   const initSubject = useSubjectStore((s) => s.initSubject);
@@ -196,6 +197,7 @@ export function WelcomeScreen(): JSX.Element {
     setSelectedExistingSubjectId(TUTORIAL_SUBJECT_ID);
     setActiveTab('setup');
     await loadSubjectFlow(TUTORIAL_SUBJECT_ID);
+    setActiveScreen('game');
   }
 
   async function handleCreate() {
@@ -224,6 +226,7 @@ export function WelcomeScreen(): JSX.Element {
   async function handleEnterSelectedSubject() {
     if (!selectedExistingSubjectId) return;
     await handleLoad(selectedExistingSubjectId);
+    setActiveScreen('village');
   }
 
   async function handleOpenSubjectsFolder() {
