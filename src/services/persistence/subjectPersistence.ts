@@ -260,10 +260,15 @@ export async function addRoomExternalAttachment(
   // Web build fallback: create the attachment locally without server-side mime validation.
   const normalized = url.trim();
   try {
-    const parsed = new URL(normalized);
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-    const pathBase = parsed.pathname.split('/').pop() ?? '';
-    const fileName = pathBase.length > 0 ? pathBase : parsed.hostname;
+    let pathname: string;
+    if (normalized.startsWith('/')) {
+      pathname = normalized;
+    } else {
+      const parsed = new URL(normalized);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+      pathname = parsed.pathname;
+    }
+    const fileName = pathname.split('/').pop() ?? 'image';
     const altText = fileName.replace(/[_-]+/g, ' ').replace(/\.[a-z0-9]+$/i, '').trim();
     const ext = fileName.includes('.') ? `.${fileName.split('.').pop()!.toLowerCase()}` : '';
     const mimeType = MIME_BY_EXT[ext] ?? 'image/jpeg';

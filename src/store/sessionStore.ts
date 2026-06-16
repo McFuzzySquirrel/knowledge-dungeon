@@ -20,6 +20,7 @@ export interface SessionState {
   isMapViewOpen: boolean;
   teleportModeArmed: boolean;
   lastTeleportAt: number | null;
+  mobileHudOpen: boolean;
   setActiveSubjectId: (id: string | null) => void;
   setPhase: (phase: GamePhase) => void;
   setSelectedClass: (id: PlayerClassId | null) => void;
@@ -33,6 +34,7 @@ export interface SessionState {
   armTeleportMode: () => void;
   cancelTeleportMode: () => void;
   markTeleported: (at: number) => void;
+  setMobileHudOpen: (open: boolean) => void;
 }
 
 export const useSessionStore = create<SessionState>((set) => ({
@@ -46,6 +48,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   isMapViewOpen: false,
   teleportModeArmed: false,
   lastTeleportAt: null,
+  mobileHudOpen: false,
   setActiveSubjectId: (activeSubjectId) => set({ activeSubjectId }),
   setPhase: (phase) => set({ phase }),
   setSelectedClass: (selectedClass) => set({ selectedClass }),
@@ -62,4 +65,5 @@ export const useSessionStore = create<SessionState>((set) => ({
   armTeleportMode: () => set({ teleportModeArmed: true, isMapViewOpen: true }),
   cancelTeleportMode: () => set({ teleportModeArmed: false }),
   markTeleported: (lastTeleportAt) => set({ lastTeleportAt, teleportModeArmed: false }),
+  setMobileHudOpen: (mobileHudOpen) => set({ mobileHudOpen }),
 }));

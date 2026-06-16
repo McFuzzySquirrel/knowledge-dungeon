@@ -122,7 +122,8 @@ These three views are available from the room-panel **Collections** shortcuts an
 
 ```bash
 npm install
-npm run dev               # web dev server
+npm run dev               # web dev server (localhost only)
+npm run dev:host          # web dev server (accessible on local network)
 npm run electron          # web build + Electron shell
 ```
 
@@ -133,9 +134,30 @@ npm run lint
 npm run typecheck
 npm run test              # vitest --run
 npm run build:web         # production web bundle
+npm run start             # production server (serves dist/ + image upload API)
 npm run check:bundle-size # bundle-size guard used in CI
 npm run package:electron  # local Electron package (no signing)
 ```
+
+### Self-hosting with Podman / Docker
+
+Run the production build in a container — useful for testing on mobile devices
+or for hosting on a home server so family members can access it on their phones.
+
+```bash
+# Build the container
+podman build -t knowledge-dungeon .
+
+# Run it (data persists across restarts)
+podman run -d -p 3000:3000 -v knowledge-dungeon-data:/data knowledge-dungeon
+
+# Or using podman-compose / docker-compose
+podman-compose up -d
+```
+
+Open `http://<your-host-ip>:3000` in any browser on the local network.
+The production server includes an image upload endpoint so you can attach
+photos from your phone directly into notes.
 
 ## Play in browser
 

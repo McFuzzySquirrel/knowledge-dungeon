@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type ChangeEvent } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -9,6 +9,7 @@ import {
 } from '@/core/validation/notes';
 import type { QualityScoreKey } from '@/core/validation/persistence';
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
+import { isElectronAvailable } from '@/services/electronBridge';
 import { ToastStack } from '@/ui/components/ToastStack';
 import { Markdown } from '@/ui/utils/markdown';
 import {
@@ -17,6 +18,19 @@ import {
   extractNoteSections,
 } from '@/ui/utils/noteSections';
 import { useToasts } from '@/ui/utils/useToasts';
+
+async function uploadFile(file: File): Promise<string | null> {
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    if (!res.ok) return null;
+    const data: { url?: string } = await res.json() as { url?: string };
+    return data.url ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const CRITERION_LABELS: Record<QualityScoreKey, string> = {
   sectionCompleteness: 'Required sections',
@@ -72,6 +86,8 @@ export function NoteEditorModal(): JSX.Element | null {
   const [hasEditedNote, setHasEditedNote] = useState(false);
   const [externalImageUrl, setExternalImageUrl] = useState('');
   const [isSavingAttachment, setIsSavingAttachment] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isElectron = isElectronAvailable();
   const [showImageLibrary, setShowImageLibrary] = useState(false);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const { toasts, pushToast } = useToasts();
@@ -328,6 +344,50 @@ export function NoteEditorModal(): JSX.Element | null {
                 >
                   + URL
                 </button>
+                {!isElectron ? (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                      hidden
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setIsSavingAttachment(true);
+                        uploadFile(file)
+                          .then((url) => {
+                            if (!url) {
+                              pushToast('error', 'Upload failed. Make sure the server is running.');
+                              return;
+                            }
+                            const absoluteUrl = new URL(url, window.location.origin).href;
+                            return addExternalAttachment(room.roomId, absoluteUrl);
+                          })
+                          .then((created) => {
+                            if (!created) {
+                              pushToast('info', 'No image was added.');
+                              return;
+                            }
+                            pushToast('info', 'Image uploaded and attached to room.');
+                          })
+                          .catch(() => pushToast('error', 'Upload failed.'))
+                          .finally(() => {
+                            setIsSavingAttachment(false);
+                            e.target.value = '';
+                          });
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={isSavingAttachment}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      + Upload
+                    </button>
+                  </>
+                ) : null}
               </div>
             ) : (
               <span className="room-help-text">Scribe phase only.</span>

@@ -191,9 +191,11 @@ export function WelcomeScreen(): JSX.Element {
     const subject = createTutorialSubject();
     await importSnapshot(subject);
     setPhase('scribe');
+    setSelectedClass('scholar');
     await refreshExistingSubjects();
     setSelectedExistingSubjectId(TUTORIAL_SUBJECT_ID);
     setActiveTab('setup');
+    await loadSubjectFlow(TUTORIAL_SUBJECT_ID);
   }
 
   async function handleCreate() {

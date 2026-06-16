@@ -182,6 +182,7 @@ export class DungeonScene extends Phaser.Scene {
   private activeWalkableOffsetY = 0;
   private decorIcons: Phaser.GameObjects.Image[] = [];
   private roomOverlayIcons: Phaser.GameObjects.Image[] = [];
+  private roomOverlayStates = new Map<string, string>();
   private roomNpcs = new Map<string, Phaser.GameObjects.Image>();
   private activeNpcRoomId: string | null = null;
   /** Per-room floor id, captured when visibility is applied — used to seed
@@ -564,6 +565,15 @@ export class DungeonScene extends Phaser.Scene {
   setImageRooms(roomIds: readonly string[]): void {
     this.imageRoomIds = new Set(roomIds);
     this.refreshImageFrameIcons();
+  }
+
+  /**
+   * Update room overlay sprites (chests, locked doors) based on current
+   * room validation state, so cleared/unvisited visuals stay in sync.
+   */
+  setRoomOverlayStates(states: Record<string, string>): void {
+    this.roomOverlayStates = new Map(Object.entries(states));
+    this.refreshRoomOverlays();
   }
 
   private refreshImageFrameIcons(): void {
@@ -1119,13 +1129,17 @@ export class DungeonScene extends Phaser.Scene {
       const isPortalEdge =
         room.roomId === this.portalUpRoomId || this.portalDownRoomIds.has(room.roomId);
       if (isPortalEdge) continue;
-      if (room.status === 'EncounterDefeated' || room.status === 'ArtifactCollected') {
+      // Use dynamic room state from React (via setRoomOverlayStates), fall back to map status.
+      const roomState = this.roomOverlayStates.get(room.roomId) ?? room.status;
+      const isCleared = roomState === 'EncounterDefeated' || roomState === 'ArtifactCollected';
+      const isUnvisited = roomState === 'Created';
+      if (isCleared) {
         if (!this.textures.exists(CHEST_OPEN_TEXTURE_KEY)) continue;
         const icon = this.add
           .image(cx, cy - 4, CHEST_OPEN_TEXTURE_KEY)
           .setDepth(2.1);
         this.roomOverlayIcons.push(icon);
-      } else if (room.status === 'Created') {
+      } else if (isUnvisited) {
         if (!this.textures.exists(DOOR_LOCKED_TEXTURE_KEY)) continue;
         const doorX = (room.gridX + room.width) * map.tileSize - 6;
         const doorY = (room.gridY + room.height / 2) * map.tileSize;

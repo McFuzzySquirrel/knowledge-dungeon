@@ -1226,6 +1226,42 @@ textarea {
   user-select: none;
 }
 
+.room-panel--bottomsheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  top: auto;
+  width: auto;
+  max-width: none;
+  z-index: 90;
+  transform: translateY(calc(100% - 82px));
+  transition: transform 0.25s ease;
+  border-radius: 12px 12px 0 0;
+  max-height: 85dvh;
+}
+
+.room-panel--bottomsheet-expanded {
+  transform: translateY(0);
+}
+
+.room-panel-drag-handle--mobile {
+  cursor: pointer;
+  padding: 8px 10px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.room-panel-drag-handle--mobile:active {
+  background: rgba(99, 179, 237, 0.1);
+}
+
+.room-panel-drag-handle-grip {
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+}
+
 .room-panel-drag-handle {
   display: flex;
   align-items: center;
@@ -1926,6 +1962,35 @@ button.danger:hover {
   }
 }
 
+@media (max-width: 600px) {
+  .full-map-sidebar {
+    display: none;
+  }
+
+  .full-map {
+    padding: 10px;
+    gap: 8px;
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .full-map-header h2 {
+    font-size: 16px;
+  }
+
+  .full-map-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .full-map-actions button {
+    min-height: 44px;
+    font-size: 13px;
+    min-width: 44px;
+  }
+}
+
 @media (max-width: 480px) {
   .welcome-screen {
     margin: 8px;
@@ -2390,4 +2455,317 @@ button.danger:hover {
 :root[data-graphics='rpg'] .minimap {
   border: 2px solid var(--control-border);
   background: color-mix(in srgb, var(--bg-panel) 90%, #000000 10%);
+}
+
+/* ── Floating Action Buttons (mobile) ────────────────────────── */
+
+.floating-actions {
+  position: absolute;
+  right: 12px;
+  bottom: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 6;
+}
+
+.floating-action-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: rgba(11, 13, 20, 0.88);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background 0.15s;
+  padding: 4px 2px;
+}
+
+.floating-action-btn:active {
+  background: rgba(99, 179, 237, 0.25);
+  border-color: var(--accent);
+}
+
+.floating-action-icon {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.floating-action-label {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Mobile HUD Drawer ───────────────────────────────────────── */
+
+.hud-drawer-tab {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 85;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(11, 13, 20, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-top: 1px solid var(--border-soft);
+  border-radius: 10px 10px 0 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.hud-drawer-tab-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.hud-drawer-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 84;
+  max-height: 55dvh;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px 12px 0 0;
+  border-bottom: none;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  overflow-y: auto;
+  padding: 12px 14px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.hud-drawer-panel--open {
+  transform: translateY(0);
+}
+
+/* Strip hud-rail styling inside drawer — drawer provides its own */
+.hud-drawer-panel .hud-rail {
+  flex: none;
+  width: auto;
+  height: auto;
+  max-height: none;
+  min-height: auto;
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .hud-drawer-panel .hud-rail .hud-stat {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(11, 13, 20, 0.3);
+    border-radius: 6px;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-stat strong {
+    margin-left: auto;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-stat-subtle {
+    display: none;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-spacer {
+    display: none;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-actions {
+    margin-top: 0;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-subject-label {
+    max-width: none;
+    font-size: 14px;
+    padding-bottom: 6px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .hud-drawer-panel .hud-rail .hud-collections {
+    justify-content: center;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-phase-controls {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-phase-controls button {
+    flex: 1;
+    min-width: 80px;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-action-row {
+    justify-content: center;
+  }
+
+  .hud-drawer-panel .hud-rail .review-progress-bar {
+    display: none;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .hud-drawer-tab {
+    width: 44px;
+    height: 44px;
+    left: auto;
+    right: 10px;
+    bottom: 10px;
+    border-radius: 50%;
+    border: 1px solid var(--border-soft);
+  }
+
+  .hud-drawer-tab-label {
+    display: none;
+  }
+
+  .hud-drawer-panel {
+    max-height: 80dvh;
+  }
+
+  .hud-drawer-panel .hud-rail {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .hud-drawer-panel .hud-rail .hud-subject-label {
+    grid-column: 1 / -1;
+  }
+
+  .room-panel--bottomsheet {
+    width: 50vw;
+    max-width: 400px;
+    left: auto;
+    right: 0;
+    transform: translateY(calc(100% - 82px));
+  }
+
+  .room-panel--bottomsheet-expanded {
+    transform: translateY(0);
+  }
+
+  .floating-actions {
+    right: 8px;
+    bottom: 70px;
+  }
+
+  .floating-action-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .floating-action-icon {
+    font-size: 15px;
+  }
+
+  .floating-action-label {
+    font-size: 8px;
+  }
+
+  .touch-interact-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 20px;
+    bottom: 14px;
+    left: 14px;
+  }
+}
+
+/* ── Note Editor Mobile Improvements ────────────────────────── */
+
+@media (max-width: 768px) {
+  .modal-backdrop:has(.note-editor-modal) {
+    background: transparent;
+    align-items: flex-end;
+  }
+
+  .note-editor-modal {
+    max-height: 85dvh;
+    width: 100%;
+    border-radius: 14px 14px 0 0;
+    padding: 16px;
+    margin-bottom: 0;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .note-editor-modal .note-section-chips {
+    display: flex;
+    flex-direction: column;
+    width: 80px;
+    flex-shrink: 0;
+    gap: 4px;
+    margin: 0;
+  }
+
+  .note-editor-modal .note-section-chips button {
+    padding: 4px 6px;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .note-editor-modal {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .note-editor-modal h2 {
+    width: 100%;
+  }
+
+  .note-editor-modal .note-editor-toolbar {
+    width: 100%;
+    order: -1;
+  }
+
+  .note-editor-modal textarea {
+    flex: 1;
+    min-height: 80px;
+  }
+
+  .note-editor-modal .note-editor-help,
+  .note-editor-modal .note-images-section {
+    width: 100%;
+  }
+
+  .note-editor-modal .validation-list {
+    width: 100%;
+  }
 }
