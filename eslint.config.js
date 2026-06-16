@@ -32,7 +32,7 @@ export default [
       '@typescript-eslint': tsPlugin,
     },
     rules: {
-      ...tsPlugin.configs['recommended-type-checked'].rules,
+      ...tsPlugin.configs['recommended'].rules,
       '@typescript-eslint/no-confusing-void-expression': 'off',
     },
   },
