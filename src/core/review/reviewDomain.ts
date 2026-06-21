@@ -1,4 +1,5 @@
 import type { RoomMetadata } from '@/core/validation/persistence';
+import { DEFAULT_EASE_FACTOR } from './spacedRepetition';
 
 import {
   REVIEWABLE_ROOM_STATES,
@@ -124,12 +125,34 @@ export function summarizeReviewAnalytics(input: {
   const reviewableSet = new Set(input.reviewableRoomIds);
   let reviewSessionCount = 0;
   let reviewedRoomCount = 0;
+  let overdueReviewCount = 0;
+  let totalEaseFactor = 0;
+  let easeFactorCount = 0;
+  let dueTodayCount = 0;
+  const nowIso = new Date().toISOString();
 
   for (const [roomId, room] of Object.entries(input.rooms)) {
     if (!reviewableSet.has(roomId)) continue;
     const count = toNonNegativeInteger(room.reviewPassCount);
     reviewSessionCount += count;
     if (count > 0) reviewedRoomCount += 1;
+
+    // Phase 4a: SM-2 stats
+    if (room.sm2NextReviewDate) {
+      if (room.sm2NextReviewDate <= nowIso) {
+        overdueReviewCount += 1;
+      }
+      // Due today: next review is today or earlier
+      const nextDate = new Date(room.sm2NextReviewDate);
+      const nowDate = new Date(nowIso);
+      if (nextDate.toDateString() === nowDate.toDateString() || nextDate < nowDate) {
+        dueTodayCount += 1;
+      }
+    }
+    if (typeof room.sm2EaseFactor === 'number' && room.sm2EaseFactor > 0) {
+      totalEaseFactor += room.sm2EaseFactor;
+      easeFactorCount += 1;
+    }
   }
 
   const totalReviewableRooms = input.reviewableRoomIds.length;
@@ -143,5 +166,8 @@ export function summarizeReviewAnalytics(input: {
     longestReviewStreak: toNonNegativeInteger(input.longestReviewStreak),
     reviewedRoomCount,
     totalReviewableRooms,
+    overdueReviewCount,
+    averageEaseFactor: easeFactorCount > 0 ? Math.round((totalEaseFactor / easeFactorCount) * 100) / 100 : DEFAULT_EASE_FACTOR,
+    dueTodayCount,
   };
 }

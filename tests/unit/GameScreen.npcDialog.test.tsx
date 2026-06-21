@@ -77,10 +77,14 @@ vi.mock('@/core/graph', () => ({
   }),
 }));
 
-vi.mock('@/core/review', () => ({
-  isReviewableRoom: () => true,
-  summarizeReviewAnalytics: () => ({ fullReviewPasses: 0 }),
-}));
+vi.mock('@/core/review', async () => {
+  const actual = await vi.importActual<typeof import('@/core/review')>('@/core/review');
+  return {
+    ...actual,
+    isReviewableRoom: () => true,
+    summarizeReviewAnalytics: () => ({ fullReviewPasses: 0 }),
+  };
+});
 
 vi.mock('@/core/progression', async () => {
   const actual = await vi.importActual('@/core/progression');

@@ -75,41 +75,6 @@ export interface AwardRoomClearProgressionOutput {
   unlockedBadges: PhaseBadgeId[];
 }
 
-// ── Phase 3c: Loot / Gear types ──────────────────────────────────
-
-export type EquipSlot = 'head' | 'body' | 'accessory' | 'weapon';
-
-export interface EquippableLootItem {
-  id: string;
-  name: string;
-  description: string;
-  rarity: 'common' | 'rare' | 'epic';
-  acquiredAt: string;
-  equipSlot: EquipSlot;
-  qualityBonus?: number;
-  xpMultiplier?: number;
-  xpBonus?: number;
-  streakBonus?: number;
-  equipped: boolean;
-}
-
-// ── Phase 3c: Cross-subject achievement types ────────────────────
-
-export interface CrossSubjectProgress {
-  subjectsMastered: number;
-  totalNotesWritten: number;
-  totalXp: number;
-  totalRoomsCleared: number;
-  totalReviewPasses: number;
-  totalArtifacts: number;
-  totalSubjectsCreated: number;
-  bossesDefeated: number;
-  totalBadges: number;
-}
-
-export interface Achievement {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-}
+// ── Phase 3c types are defined in their canonical modules ──────
+// EquipSlot, EquippableLootItem → ./lootSystem.ts
+// Achievement, CrossSubjectProgress → ./achievements.ts

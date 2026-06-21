@@ -14,10 +14,13 @@ import {
   loadSubjectSnapshot,
   openSubjectsFolder,
   saveSubjectSnapshot,
+  exportSubjectAsTemplate,
+  createSubjectFromTemplate,
 } from '@/services/persistence/subjectPersistence';
 import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
+import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
 
 const PHASES: { id: GamePhase; title: string; description: string }[] = [
   {
@@ -112,7 +115,9 @@ export function WelcomeScreen(): JSX.Element {
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<WelcomeTabId>('subjects');
+  const [selectedBiome, setSelectedBiome] = useState<FloorBiomeId>(FLOOR_BIOME_IDS[0]);
   const webImportInputRef = useRef<HTMLInputElement | null>(null);
+  const templateImportInputRef = useRef<HTMLInputElement | null>(null);
   const env = getElectronEnvironmentLabel();
   const electronAvailable = isElectronAvailable();
   const selectedPhaseLabel = PHASES.find((phaseDef) => phaseDef.id === phase)?.title ?? phase;
@@ -207,6 +212,7 @@ export function WelcomeScreen(): JSX.Element {
       const created = await initSubject({
         subjectName: subjectName.trim(),
         rootTopic: rootTopic.trim(),
+        biome: selectedBiome,
       });
       await refreshExistingSubjects();
       setSelectedExistingSubjectId(created.dungeon.dungeonId);
@@ -357,6 +363,48 @@ export function WelcomeScreen(): JSX.Element {
     }
   }
 
+  async function handleExportSubjectAsTemplate(subjectId: string) {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const subject = await loadSubjectSnapshot(subjectId);
+      if (!subject) {
+        setAdminMessage('Unable to export template: subject data not found.');
+        return;
+      }
+      const filename = `${sanitizeFilePart(subject.dungeon.subjectName)}.template.json`;
+      downloadTextFile(filename, exportSubjectAsTemplate(subject));
+      setAdminMessage(`Exported template for ${subject.dungeon.subjectName} as ${filename}.`);
+    } catch {
+      setAdminMessage('Template export failed.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleImportTemplateFromFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const raw = await readFileAsText(file);
+      const subject = createSubjectFromTemplate(raw);
+      await saveSubjectSnapshot(subject.dungeon.dungeonId, subject);
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(subject.dungeon.dungeonId);
+      setActiveTab('setup');
+      setAdminMessage(`Created ${subject.dungeon.subjectName} from template. Select Enter Dungeon when ready.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Template import failed.';
+      setAdminMessage(`Template import failed: ${message}`);
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
   function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, tab: WelcomeTabId): void {
     const index = WELCOME_TABS.indexOf(tab);
     if (index < 0) return;
@@ -402,6 +450,16 @@ export function WelcomeScreen(): JSX.Element {
             then defeat each room&rsquo;s encounter by writing structured notes. Currently running
             in <strong>{env}</strong> mode.
           </p>
+          {existingSubjects.length > 0 ? (
+            <button
+              type="button"
+              className="ghost"
+              style={{ marginTop: 8 }}
+              onClick={() => setActiveScreen('village')}
+            >
+              Continue to Village
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -611,6 +669,23 @@ export function WelcomeScreen(): JSX.Element {
               value={rootTopic}
               onChange={(e) => setRootTopic(e.target.value)}
             />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <label htmlFor="biome-select" style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                Dungeon theme:
+              </label>
+              <select
+                id="biome-select"
+                value={selectedBiome}
+                onChange={(e) => setSelectedBiome(e.target.value as FloorBiomeId)}
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 6 }}
+              >
+                {FLOOR_BIOME_IDS.map((biome) => (
+                  <option key={biome} value={biome}>
+                    {biome.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="welcome-actions">
               <button
                 type="button"
@@ -771,6 +846,16 @@ export function WelcomeScreen(): JSX.Element {
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    templateImportInputRef.current?.click();
+                  }}
+                  disabled={adminBusy}
+                  aria-disabled={adminBusy}
+                >
+                  Create from template
+                </button>
+                <button
+                  type="button"
                   onClick={() => void handleExportAllSubjectsJson()}
                   disabled={adminBusy || existingSubjects.length === 0}
                   aria-disabled={adminBusy || existingSubjects.length === 0}
@@ -778,15 +863,27 @@ export function WelcomeScreen(): JSX.Element {
                   Export all subjects as JSON
                 </button>
                 {existingSubjects.map((subject) => (
-                  <button
-                    key={`export-json-${subject.id}`}
-                    type="button"
-                    onClick={() => void handleExportSubjectJson(subject.id)}
-                    disabled={adminBusy}
-                    aria-disabled={adminBusy}
-                  >
-                    Export {subject.subjectName} as JSON
-                  </button>
+                  <>
+                    <button
+                      key={`export-json-${subject.id}`}
+                      type="button"
+                      onClick={() => void handleExportSubjectJson(subject.id)}
+                      disabled={adminBusy}
+                      aria-disabled={adminBusy}
+                    >
+                      Export {subject.subjectName} as JSON
+                    </button>
+                    <button
+                      key={`export-template-${subject.id}`}
+                      type="button"
+                      onClick={() => void handleExportSubjectAsTemplate(subject.id)}
+                      disabled={adminBusy}
+                      aria-disabled={adminBusy}
+                      className="ghost"
+                    >
+                      Export {subject.subjectName} as template
+                    </button>
+                  </>
                 ))}
               </div>
               <input
@@ -795,6 +892,13 @@ export function WelcomeScreen(): JSX.Element {
                 accept=".json,application/json"
                 hidden
                 onChange={(event) => void handleImportSubjectJsonFile(event)}
+              />
+              <input
+                ref={templateImportInputRef}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                onChange={(event) => void handleImportTemplateFromFile(event)}
               />
             </>
           )}

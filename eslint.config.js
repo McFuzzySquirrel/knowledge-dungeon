@@ -5,7 +5,7 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 
 export default [
   {
-    ignores: ['dist/**', 'dist-electron/**', 'release/**', 'node_modules/**', 'coverage/**', '.agents/**'],
+    ignores: ['dist/**', 'dist-electron/**', 'release/**', 'node_modules/**', 'coverage/**', '.agents/**', 'scripts/**'],
   },
   {
     ...js.configs.recommended,
@@ -34,6 +34,7 @@ export default [
     rules: {
       ...tsPlugin.configs['recommended'].rules,
       '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
 ];

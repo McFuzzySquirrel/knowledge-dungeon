@@ -44,9 +44,6 @@ export function App(): JSX.Element {
         }
       }
       if (!cancelled) {
-        if (hasSome) {
-          setActiveScreen('village');
-        }
         setBootstrapped(true);
       }
     }

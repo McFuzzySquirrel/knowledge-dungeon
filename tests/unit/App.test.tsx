@@ -129,7 +129,7 @@ describe('App', () => {
     });
 
     // No subjects → WelcomeScreen shown
-    expect(screen.getByText('Knowledge Dungeon')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Knowledge Dungeon' })).toBeInTheDocument();
 
     // Simulate subjects becoming available (as if created in WelcomeScreen)
     const snapshot = makeSnapshot('subject-1', 'Imported Subject');
@@ -140,7 +140,7 @@ describe('App', () => {
     );
   });
 
-  it('shows village screen when subjects exist', async () => {
+  it('shows welcome screen with Continue to Village when subjects exist', async () => {
     const snapshot = makeSnapshot('subject-1', 'Imported Subject');
     mocks.getActiveSubjectId.mockReturnValue('subject-1');
     mocks.listSubjectIds.mockResolvedValue(['subject-1']);
@@ -154,7 +154,7 @@ describe('App', () => {
       expect(screen.queryByText(/^Loading…$/i)).not.toBeInTheDocument();
     });
 
-    // Subjects exist → VillageScreen shown (mocked as "Village Screen")
-    await screen.findByText('Village Screen');
+    // Subjects exist → WelcomeScreen shown with Continue to Village button
+    await screen.findByRole('button', { name: /Continue to Village/i });
   });
 });

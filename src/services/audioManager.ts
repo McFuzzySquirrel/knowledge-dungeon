@@ -45,10 +45,9 @@ class AudioManagerImpl {
     bgmPlaying: false,
   };
 
-  // In a real implementation, these would hold AudioBuffer or Howler instances.
-  // For now, they're typed placeholders so consumer code is future-proof.
-  private bgmCache = new Map<AudioTrack, unknown>();
-  private sfxCache = new Map<SfxKind, unknown>();
+  // Audio cache placeholders — reserved for future audio file integration.
+  // private bgmCache = new Map<AudioTrack, unknown>();
+  // private sfxCache = new Map<SfxKind, unknown>();
   private listeners = new Set<AudioStateChangeListener>();
 
   /** Subscribe to state changes. Returns an unsubscribe function. */

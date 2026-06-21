@@ -11,6 +11,7 @@ import {
   type RankTier,
   type EquippableLootItem,
   type EquipSlot,
+  type CrossSubjectProgress,
   EQUIP_SLOTS,
   computeEquipBonuses,
   rollEquippableLoot,

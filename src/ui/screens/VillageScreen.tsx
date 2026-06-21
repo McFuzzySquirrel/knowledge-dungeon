@@ -8,8 +8,12 @@ import { createVillageGame } from '@/game/createVillageGame';
 import type { VillageSceneEvents } from '@/game/scenes/VillageScene';
 import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
 import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
+import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
 import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
+import { GAME_GUIDE_MARKDOWN } from '@/data/gameGuide';
+import { Markdown } from '@/ui/utils/markdown';
+import { StudyStatsPanel } from '@/ui/components/StudyStatsPanel';
 
 interface SubjectSummary {
   id: string;
@@ -63,10 +67,14 @@ export function VillageScreen(): JSX.Element {
     return () => mq.removeEventListener('change', handler);
   }, []);
   const [createTopic, setCreateTopic] = useState('');
+  const [createBiome, setCreateBiome] = useState<FloorBiomeId>(FLOOR_BIOME_IDS[0]);
   const [submitting, setSubmitting] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [villageReady, setVillageReady] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
+  const [dungeonBiome, setDungeonBiome] = useState<string | null>(null);
+  const [showFullGuide, setShowFullGuide] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const refreshSubjects = useCallback(async () => {
     try {
@@ -90,6 +98,20 @@ export function VillageScreen(): JSX.Element {
   useEffect(() => {
     void refreshSubjects();
   }, [refreshSubjects]);
+
+  // Reset biome when create modal opens
+  useEffect(() => {
+    if (createOpen) setCreateBiome(FLOOR_BIOME_IDS[0]);
+  }, [createOpen]);
+
+  // Load biome when inspecting a dungeon
+  useEffect(() => {
+    if (infoPanel?.type === 'dungeon' && infoPanel.subject) {
+      void loadSubjectSnapshot(infoPanel.subject.id).then((snap) => {
+        if (snap) setDungeonBiome(snap.dungeon.biome ?? FLOOR_BIOME_IDS[0]);
+      });
+    }
+  }, [infoPanel]);
 
   // Advance quest when archetype selected
   useEffect(() => {
@@ -155,11 +177,17 @@ export function VillageScreen(): JSX.Element {
           setInfoPanel({ type: 'trophy', structureId });
         } else if (sType === 'signpost' || sType === 'waysign') {
           setInfoPanel({ type: 'signpost', structureId });
+          if (structureId === 'sign-entrance') {
+            setWelcomeMessage('Welcome to the Dungeon Village! Explore the buildings, meet the Keeper, and step through a portal to begin your studies.');
+          }
         } else if (sType === 'library') {
           setInfoPanel({ type: 'library', structureId });
         }
       },
-      onStructureLeft: () => setInfoPanel(null),
+      onStructureLeft: () => {
+        setInfoPanel(null);
+        setWelcomeMessage(null);
+      },
       onStructureInteract: (structureId) => {
         const struct = [...VILLAGE_MAP.structures, ...dynamicStructuresRef.current]
           .find((s) => s.id === structureId);
@@ -302,13 +330,6 @@ export function VillageScreen(): JSX.Element {
   }, [villageReady, dynamicStructures, selectedClass]);
 
   // Show welcome message on village entry
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setWelcomeMessage('Welcome to the Dungeon Village! Explore the buildings, meet the Keeper, and step through a portal to begin your studies.');
-    }, 600);
-    return () => clearTimeout(timer);
-  }, []);
-
   const handleStartTutorial = async () => {
     const tutorial = createTutorialSubject();
     await importSnapshot(tutorial);
@@ -326,11 +347,13 @@ export function VillageScreen(): JSX.Element {
       await initSubject({
         subjectName: createName.trim(),
         rootTopic: createTopic.trim(),
+        biome: createBiome,
       });
       await refreshSubjects();
       advanceQuestStep();
       setCreateName('');
       setCreateTopic('');
+      setCreateBiome(FLOOR_BIOME_IDS[0]);
       setCreateOpen(false);
     } finally {
       setSubmitting(false);
@@ -358,7 +381,8 @@ export function VillageScreen(): JSX.Element {
                   const lines = keeper.questDialogue?.[step];
                   if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
                 }
-              }} />
+              }}
+              onStatsClick={() => setShowStats(true)} />
           </div>
         </>
       ) : (
@@ -375,7 +399,8 @@ export function VillageScreen(): JSX.Element {
                   const lines = keeper.questDialogue?.[step];
                   if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
                 }
-              }} />
+              }}
+              onStatsClick={() => setShowStats(true)} />
           </div>
         </div>
       )}
@@ -405,6 +430,31 @@ export function VillageScreen(): JSX.Element {
               </p>
             </div>
           </div>
+          {dungeonBiome !== null ? (
+            <div style={{ padding: '0 4px' }}>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Biome</label>
+              <select
+                value={dungeonBiome}
+                onChange={(e) => {
+                  const newBiome = e.target.value;
+                  setDungeonBiome(newBiome);
+                  void loadSubjectSnapshot(infoPanel.subject!.id).then((snap) => {
+                    if (snap) {
+                      snap.dungeon.biome = newBiome;
+                      return saveSubjectSnapshot(snap.dungeon.dungeonId, snap);
+                    }
+                  });
+                }}
+                style={{ width: '100%', padding: '6px 10px', borderRadius: 6, fontSize: 12 }}
+              >
+                {FLOOR_BIOME_IDS.map((biome) => (
+                  <option key={biome} value={biome}>
+                    {biome.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           <div className="village-info-actions">
             <button
               type="button"
@@ -550,7 +600,21 @@ export function VillageScreen(): JSX.Element {
               <p className="village-info-meta">Game guide & help</p>
             </div>
           </div>
-          <div className="village-subject-list" style={{ gap: 6 }}>
+          <div className="village-info-actions" style={{ marginBottom: 8 }}>
+            <button
+              type="button"
+              className="village-action-btn"
+              onClick={() => setShowFullGuide((v) => !v)}
+            >
+              {showFullGuide ? 'Quick Reference' : 'Full Guide'}
+            </button>
+          </div>
+          {showFullGuide ? (
+            <div className="markdown-body" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '0 4px', fontSize: 13 }}>
+              <Markdown source={GAME_GUIDE_MARKDOWN} />
+            </div>
+          ) : (
+            <div className="village-subject-list" style={{ gap: 6 }}>
             <div className="village-subject-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
               <strong>🎮 Controls</strong>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -577,6 +641,7 @@ export function VillageScreen(): JSX.Element {
               </span>
             </div>
           </div>
+          )}
         </div>
       ) : null}
 
@@ -756,6 +821,19 @@ export function VillageScreen(): JSX.Element {
                   onChange={(e) => setCreateTopic(e.target.value)}
                 />
               </label>
+              <label>
+                Dungeon theme
+                <select
+                  value={createBiome}
+                  onChange={(e) => setCreateBiome(e.target.value as FloorBiomeId)}
+                >
+                  {FLOOR_BIOME_IDS.map((biome) => (
+                    <option key={biome} value={biome}>
+                      {biome.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="modal-actions">
                 <button type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
                 <button
@@ -770,6 +848,8 @@ export function VillageScreen(): JSX.Element {
           </div>
         </div>
       ) : null}
+
+      {showStats ? <StudyStatsPanel onClose={() => setShowStats(false)} /> : null}
     </div>
   );
 }
@@ -818,13 +898,14 @@ function CompassOverlay({ sceneRef }: { sceneRef: React.MutableRefObject<Village
 /* ── Reusable HUD content (used in both desktop sidebar & mobile drawer) ── */
 function VillageHudContent({
   questStep, subjects, selectedClass, setSelectedClass, setCreateOpen, setDataOpen,
-  colorTheme, setColorTheme, onQuestClick,
+  colorTheme, setColorTheme, onQuestClick, onStatsClick,
 }: {
   questStep: QuestStep; subjects: Array<{ id: string; subjectName: string; roomCount: number; clearedRoomCount: number }>;
   selectedClass: string | null; setSelectedClass: (cls: string | null) => void;
   setCreateOpen: React.Dispatch<React.SetStateAction<boolean>>; setDataOpen: React.Dispatch<React.SetStateAction<boolean>>;
   colorTheme: string; setColorTheme: (t: string) => void;
   onQuestClick: (step: string) => void;
+  onStatsClick: () => void;
 }): JSX.Element {
   const QL = QUEST_LABELS as Record<string, { label: string; hint: string }>;
   const QO = QUEST_ORDER;
@@ -913,6 +994,9 @@ function VillageHudContent({
       <div className="village-hud-actions">
         <button type="button" className="village-action-btn" onClick={() => setCreateOpen(true)}>
           + Create New
+        </button>
+        <button type="button" className="village-action-btn" onClick={onStatsClick}>
+          📊 Stats
         </button>
         <button type="button" className="village-action-btn" onClick={() => setDataOpen(true)}
           style={{ fontSize: 11, opacity: 0.7 }}>

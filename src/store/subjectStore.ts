@@ -20,6 +20,10 @@ import {
   reparentRoom,
   setRoomStatus,
   propagateRevalidationAfterGraphMutation,
+  setRoomTags,
+  addRoomTag,
+  removeRoomTag,
+  getAllTags,
 } from '@/core/graph';
 import { generateRoomArtifact } from '@/core/artifacts';
 import { evaluateNoteValidation, type NoteValidationOutput } from '@/core/validation/notes';
@@ -32,12 +36,17 @@ import {
   saveSubjectSnapshot,
   setActiveSubjectId,
 } from '@/services/persistence/subjectPersistence';
+import {
+  updateSm2State,
+  clampQualityRating,
+  type QualityRating,
+} from '@/core/review';
 
 export interface SubjectState {
   snapshot: SubjectSnapshot | null;
   lastError: string | null;
   setSnapshot: (snapshot: SubjectSnapshot | null) => void;
-  initSubject: (input: { subjectName: string; rootTopic: string }) => Promise<SubjectSnapshot>;
+  initSubject: (input: { subjectName: string; rootTopic: string; biome?: string }) => Promise<SubjectSnapshot>;
   loadSubject: (subjectId: string) => Promise<SubjectSnapshot | null>;
   addChildRoom: (parentRoomId: string, topic: string) => Promise<void>;
   addChildRooms: (parentRoomId: string, topics: readonly string[]) => Promise<void>;
@@ -49,13 +58,18 @@ export interface SubjectState {
     noteText: string,
     manualConfirmed: boolean,
   ) => Promise<NoteValidationOutput & { artifactMarkdown: string | null }>;
-  recordReviewPass: (roomId: string) => Promise<void>;
+  recordReviewPass: (roomId: string, qualityRating?: number) => Promise<void>;
   addLocalAttachment: (roomId: string) => Promise<RoomAttachment | null>;
   addExternalAttachment: (roomId: string, url: string) => Promise<RoomAttachment | null>;
   removeAttachment: (roomId: string, attachmentId: string) => Promise<void>;
   resolveAttachmentUrl: (roomId: string, attachmentId: string) => Promise<string | null>;
   exportSnapshot: () => SubjectSnapshot | null;
   importSnapshot: (snapshot: SubjectSnapshot) => Promise<void>;
+  /** Phase 4f: Tag operations */
+  setRoomTags: (roomId: string, tags: string[]) => Promise<void>;
+  addRoomTag: (roomId: string, tag: string) => Promise<void>;
+  removeRoomTag: (roomId: string, tag: string) => Promise<void>;
+  getAllTags: () => string[];
 }
 
 function nowIso(): string {
@@ -131,7 +145,7 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
   lastError: null,
   setSnapshot: (snapshot) => set({ snapshot }),
 
-  async initSubject({ subjectName, rootTopic }) {
+  async initSubject({ subjectName, rootTopic, biome }) {
     const dungeonId = generateId('subject');
     const rootRoomId = generateId('room');
     const result = createRootDungeon({
@@ -140,6 +154,7 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
       rootRoomId,
       rootTopic,
       nowIso: nowIso(),
+      biome,
     });
     if (!result.ok) {
       set({ lastError: result.error.message });
@@ -366,15 +381,39 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     return { ...validation, artifactMarkdown: artifact.markdown };
   },
 
-  async recordReviewPass(roomId) {
+  async recordReviewPass(roomId, qualityRating?) {
     const current = get().snapshot;
     if (!current) return;
     const room = current.rooms[roomId];
     if (!room || !room.validationState.finalPass) return;
+
+    // Phase 4a: compute SM-2 state from quality rating
+    const quality: QualityRating = clampQualityRating(qualityRating ?? 3);
+    const previousSm2 = room.sm2QualityResponse != null
+      ? {
+          qualityResponse: clampQualityRating(room.sm2QualityResponse) as QualityRating,
+          easeFactor: room.sm2EaseFactor ?? 2.5,
+          intervalDays: Math.max(1, room.sm2IntervalDays ?? 1),
+          nextReviewDate: room.sm2NextReviewDate ?? nowIso(),
+          consecutiveCorrect: Math.max(0, room.sm2ConsecutiveCorrect ?? 0),
+        }
+      : null;
+    const reviewedAtIso = nowIso();
+    const sm2State = updateSm2State({
+      quality,
+      previousState: previousSm2,
+      reviewedAtIso,
+    });
+
     const updatedRoom: RoomMetadata = {
       ...room,
       reviewPassCount: room.reviewPassCount + 1,
-      updatedAt: nowIso(),
+      updatedAt: reviewedAtIso,
+      sm2QualityResponse: sm2State.qualityResponse,
+      sm2EaseFactor: sm2State.easeFactor,
+      sm2IntervalDays: sm2State.intervalDays,
+      sm2NextReviewDate: sm2State.nextReviewDate,
+      sm2ConsecutiveCorrect: sm2State.consecutiveCorrect,
     };
     const next = withRooms(current, current.dungeon, [updatedRoom]);
     set({ snapshot: next });
@@ -466,5 +505,55 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     const normalized = normalizeSnapshot(snapshot);
     set({ snapshot: normalized });
     await persist(normalized);
+  },
+
+  // Phase 4f: Tag operations
+
+  async setRoomTags(roomId, tags) {
+    const current = get().snapshot;
+    if (!current) return;
+    try {
+      const result = setRoomTags(current, roomId, tags);
+      const next = withRooms(current, result.dungeon, [result.room]);
+      set({ snapshot: next, lastError: null });
+      await persist(next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to set tags.';
+      set({ lastError: message });
+    }
+  },
+
+  async addRoomTag(roomId, tag) {
+    const current = get().snapshot;
+    if (!current) return;
+    try {
+      const result = addRoomTag(current, roomId, tag);
+      const next = withRooms(current, result.dungeon, [result.room]);
+      set({ snapshot: next, lastError: null });
+      await persist(next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to add tag.';
+      set({ lastError: message });
+    }
+  },
+
+  async removeRoomTag(roomId, tag) {
+    const current = get().snapshot;
+    if (!current) return;
+    try {
+      const result = removeRoomTag(current, roomId, tag);
+      const next = withRooms(current, result.dungeon, [result.room]);
+      set({ snapshot: next, lastError: null });
+      await persist(next);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to remove tag.';
+      set({ lastError: message });
+    }
+  },
+
+  getAllTags() {
+    const current = get().snapshot;
+    if (!current) return [];
+    return getAllTags(current);
   },
 }));

@@ -96,9 +96,9 @@ export function RoomNpcDialog({
         ? anchorPosition.x + 24
         : anchorPosition.x - dialogWidth - 24;
 
-      const preferredTopAbove = anchorPosition.y - dialogHeight - 18;
+      const preferredTopAbove = anchorPosition.y - dialogHeight - 8;
       const preferredTop =
-        preferredTopAbove >= margin ? preferredTopAbove : anchorPosition.y + 18;
+        preferredTopAbove >= margin ? preferredTopAbove : anchorPosition.y + 8;
 
       const maxLeft = Math.max(margin, viewportWidth - dialogWidth - margin);
       const maxTop = Math.max(margin, viewportHeight - dialogHeight - margin);

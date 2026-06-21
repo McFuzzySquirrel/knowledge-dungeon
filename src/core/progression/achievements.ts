@@ -131,7 +131,7 @@ export function computeCrossSubjectProgress(input: {
     badges: string[];
     collectedNotes: Array<{ noteId: string }>;
     /** optional extended fields */
-    subjectsMastered?: boolean;
+    subjectsMastered?: number;
     roomsCleared?: number;
     reviewPasses?: number;
     artifacts?: number;

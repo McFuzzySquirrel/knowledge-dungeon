@@ -10,6 +10,7 @@ import { usePreferencesStore } from '@/store/preferencesStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
+import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
 import { Hud } from '@/ui/components/Hud';
 import { HudDrawer } from '@/ui/components/HudDrawer';
 import { FloatingActions } from '@/ui/components/FloatingActions';
@@ -61,6 +62,10 @@ export function GameScreen(): JSX.Element {
   const inventory = useProgressionStore((s) => s.inventory);
   const badges = useProgressionStore((s) => s.badges);
   const collectedNotes = useProgressionStore((s) => s.collectedNotes);
+  const equippedItems = useProgressionStore((s) => s.equippedItems);
+  const equipItem = useProgressionStore((s) => s.equipItem);
+  const unequipItem = useProgressionStore((s) => s.unequipItem);
+  const getEquipBonuses = useProgressionStore((s) => s.getEquipBonuses);
   const setProgressionActiveSubject = useProgressionStore((s) => s.setActiveSubject);
   const colorTheme = usePreferencesStore((s) => s.colorTheme);
   const setColorTheme = usePreferencesStore((s) => s.setColorTheme);
@@ -296,6 +301,9 @@ export function GameScreen(): JSX.Element {
             visibleRoomIds: initialFloor.visibleRoomIds,
             portalUpRoomId: initialFloor.portalUpRoomId,
             portalDownRoomIds: initialFloor.portalDownRoomIds,
+            biomeId: (snapshot?.dungeon.biome && FLOOR_BIOME_IDS.includes(snapshot.dungeon.biome as FloorBiomeId)
+              ? (snapshot.dungeon.biome as FloorBiomeId)
+              : undefined),
           }
         : undefined,
       callbacks: {
@@ -378,6 +386,9 @@ export function GameScreen(): JSX.Element {
             visibleRoomIds: nextVisibility.visibleRoomIds,
             portalUpRoomId: nextVisibility.portalUpRoomId,
             portalDownRoomIds: nextVisibility.portalDownRoomIds,
+            biomeId: (liveSnapshot.dungeon.biome && FLOOR_BIOME_IDS.includes(liveSnapshot.dungeon.biome as FloorBiomeId)
+              ? (liveSnapshot.dungeon.biome as FloorBiomeId)
+              : undefined),
           });
           sceneRef.current?.teleportToRoom(fromRoomId);
         },
@@ -641,6 +652,9 @@ export function GameScreen(): JSX.Element {
       visibleRoomIds: nextVisibility.visibleRoomIds,
       portalUpRoomId: nextVisibility.portalUpRoomId,
       portalDownRoomIds: nextVisibility.portalDownRoomIds,
+      biomeId: (snapshot.dungeon.biome && FLOOR_BIOME_IDS.includes(snapshot.dungeon.biome as FloorBiomeId)
+        ? (snapshot.dungeon.biome as FloorBiomeId)
+        : undefined),
     });
   }
 
@@ -810,6 +824,10 @@ export function GameScreen(): JSX.Element {
               inventory={inventory}
               badges={badges}
               collectedNotes={subjectCollectedNotes}
+              equippedItems={equippedItems}
+              equipBonuses={getEquipBonuses()}
+              onEquip={(id) => { equipItem(id); }}
+              onUnequip={(id) => { unequipItem(id); }}
               noteMarkdownByRoomId={noteMarkdownByRoomId}
               subjectName={snapshot.dungeon.subjectName}
               clearedRoomCount={clearedRoomsCount}

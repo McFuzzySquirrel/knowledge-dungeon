@@ -30,6 +30,8 @@ export interface RootDungeonInitInput {
   rootRoomId: string;
   rootTopic: string;
   nowIso: string;
+  /** Phase 4c: Custom biome override for this subject. */
+  biome?: string;
 }
 
 export interface LinkedRoomDraft {

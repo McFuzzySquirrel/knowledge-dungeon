@@ -9,6 +9,8 @@ import {
 } from '@/core/validation/notes';
 import type { QualityScoreKey } from '@/core/validation/persistence';
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
+import { deriveGraphHierarchy } from '@/core/graph';
+import { isBossFloor } from '@/game/systems/bossRooms';
 import { isElectronAvailable } from '@/services/electronBridge';
 import { ToastStack } from '@/ui/components/ToastStack';
 import { Markdown } from '@/ui/utils/markdown';
@@ -18,6 +20,10 @@ import {
   extractNoteSections,
 } from '@/ui/utils/noteSections';
 import { useToasts } from '@/ui/utils/useToasts';
+import {
+  tokenizeForHighlighting,
+  renderHighlightHtml,
+} from '@/ui/utils/markdownHighlight';
 
 async function uploadFile(file: File): Promise<string | null> {
   const formData = new FormData();
@@ -93,6 +99,52 @@ export function NoteEditorModal(): JSX.Element | null {
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const { toasts, pushToast } = useToasts();
   const noteText = useMemo(() => composeNoteSections(sections), [sections]);
+
+  const [showFormatPanel, setShowFormatPanel] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const highlightOverlayRef = useRef<HTMLDivElement | null>(null);
+
+  const highlightTokens = useMemo(
+    () => tokenizeForHighlighting(sections[activeSection]),
+    [sections, activeSection],
+  );
+  const highlightHtml = useMemo(
+    () => renderHighlightHtml(sections[activeSection], highlightTokens),
+    [sections, activeSection, highlightTokens],
+  );
+
+  /** Sync scroll between textarea and highlight overlay */
+  const syncScroll = useCallback(() => {
+    if (textareaRef.current && highlightOverlayRef.current) {
+      highlightOverlayRef.current.scrollTop = textareaRef.current.scrollTop;
+      highlightOverlayRef.current.scrollLeft = textareaRef.current.scrollLeft;
+    }
+  }, []);
+
+  /** Insert formatting markdown at cursor / around selection */
+  const insertFormatting = useCallback(
+    (before: string, after = '', placeholder = '') => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const text = sections[activeSection];
+      const selected = text.slice(start, end) || placeholder;
+      const newText =
+        text.slice(0, start) + before + selected + after + text.slice(end);
+      setSections((current) => ({ ...current, [activeSection]: newText }));
+      setHasEditedNote(true);
+      const cursor = start + before.length + selected.length + after.length;
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.selectionStart = cursor;
+          textareaRef.current.selectionEnd = cursor;
+          textareaRef.current.focus();
+        }
+      }, 0);
+    },
+    [activeSection, sections],
+  );
 
   useEffect(() => {
     if (!isOpen || !room) return;
@@ -203,6 +255,13 @@ export function NoteEditorModal(): JSX.Element | null {
           creatorMappedRooms: totalRooms,
           scribeClearedRooms: cleared + 1,
           archaeologistFullReviewPasses: 0,
+          isBossEncounter: (() => {
+            const hierarchy = deriveGraphHierarchy(snapshot!.dungeon);
+            const floorIds = hierarchy.floorIds;
+            const roomFloorId = hierarchy.floorIdByRoomId[room.roomId] ?? floorIds[0];
+            const floorNumber = floorIds.indexOf(roomFloorId) + 1;
+            return isBossFloor(floorNumber);
+          })(),
         });
         if (result.wordCount >= NOTE_BADGE_WORD_COUNT) {
           awardBadge(SCRIBE_CENTURY_120_BADGE_ID);
@@ -258,6 +317,13 @@ export function NoteEditorModal(): JSX.Element | null {
           </button>
           <button
             type="button"
+            aria-pressed={showFormatPanel}
+            onClick={() => setShowFormatPanel((value) => !value)}
+          >
+            Format
+          </button>
+          <button
+            type="button"
             aria-pressed={showImagesPanel}
             onClick={() => setShowImagesPanel((value) => !value)}
           >
@@ -290,6 +356,23 @@ export function NoteEditorModal(): JSX.Element | null {
               <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, and{' '}
               <code>-</code> for bullets.
             </p>
+          </div>
+        ) : null}
+        {showFormatPanel ? (
+          <div className="note-format-panel">
+            <span className="note-images-label">Formatting</span>
+            <div className="note-images-actions">
+              <button type="button" className="ghost" onClick={() => insertFormatting('**', '**', 'bold text')}>B</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('*', '*', 'italic text')}><em>I</em></button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('`', '`', 'code')}>`</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('[', '](https://)', 'link text')}>Link</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('![', '](https://)', 'alt')}>Img</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('- ', '')}>-</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('## ', '')}>H2</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('### ', '')}>H3</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('> ', '')}>&gt;</button>
+              <button type="button" className="ghost" onClick={() => insertFormatting('\n---\n', '')}>―</button>
+            </div>
           </div>
         ) : null}
         <ToastStack toasts={toasts} className="toast-stack--inline" />
@@ -543,19 +626,28 @@ export function NoteEditorModal(): JSX.Element | null {
             <label className="note-section-label" htmlFor="note-section-editor">
               {activeSection}
             </label>
-            <textarea
-              id="note-section-editor"
-              rows={14}
-              value={sections[activeSection]}
-              onChange={(e) => {
-                const nextValue = e.target.value;
-                setSections((current) => ({
-                  ...current,
-                  [activeSection]: nextValue,
-                }));
-                setHasEditedNote(true);
-              }}
-            />
+            <div className="md-editor-wrapper">
+              <div
+                ref={highlightOverlayRef}
+                className="md-highlight-overlay"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: highlightHtml }}
+              />
+              <textarea
+                ref={textareaRef}
+                id="note-section-editor"
+                rows={14}
+                value={sections[activeSection]}
+                onChange={(e) => {
+                  setSections((current) => ({
+                    ...current,
+                    [activeSection]: e.target.value,
+                  }));
+                  setHasEditedNote(true);
+                }}
+                onScroll={syncScroll}
+              />
+            </div>
           </>
         )}
 

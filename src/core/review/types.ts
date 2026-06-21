@@ -46,4 +46,8 @@ export interface ReviewAnalyticsSnapshot {
   longestReviewStreak: number;
   reviewedRoomCount: number;
   totalReviewableRooms: number;
+  /** Phase 4a: SM-2 scheduling stats */
+  overdueReviewCount: number;
+  averageEaseFactor: number;
+  dueTodayCount: number;
 }

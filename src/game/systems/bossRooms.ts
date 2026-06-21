@@ -28,7 +28,7 @@ export interface BossEncounter {
  * Milestone floors that trigger boss encounters.
  * Default: every 10th floor.
  */
-const BOSS_MILESTONE_INTERVAL = 10;
+const BOSS_MILESTONE_INTERVAL = 5;
 
 const BOSS_TITLES: ReadonlyArray<{
   title: string;
