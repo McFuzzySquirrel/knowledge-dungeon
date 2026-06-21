@@ -21,6 +21,42 @@ portal to enter a dungeon.
 Built with a simple goal: make learning feel fun again by turning note-taking,
 revision, and concept mapping into an interactive adventure instead of a static checklist.
 
+## Phase 4 Features (new)
+
+### 🧠 Spaced Repetition (SM-2)
+The Archaeologist review phase now uses the SM-2 algorithm for intelligent scheduling. Rate your recall on a 0–5 scale and the game schedules reviews at optimal intervals based on your performance. Track your ease factor, review streaks, overdue counts, and due-today counts.
+
+### 🎨 Markdown Editor Enhancements
+- **Syntax highlighting** — headings, bold, italic, code, links, images, and lists are colorized in real-time as you type
+- **Format toolbar** — click the Format button to insert markdown syntax at the cursor (bold, italic, code, link, image, list, headings, quote, horizontal rule). Selected text is automatically wrapped.
+
+### 🌿 Custom Dungeon Biomes
+Choose from **9 biomes** when creating a subject, or change it anytime from the dungeon portal panel in the village. Each biome has distinct floor textures, wall colors, and corridor hues:
+- Knowledge Dungeon, Mathematics Caverns, Science Labs, History Ruins, Language Library
+- Deep Forest, Frozen Tundra, Crystal Caverns, Sunken Swamp
+
+### 👑 Boss Encounters
+Every **5th floor** houses a boss room. Defeating a boss grants 2x–4x boosted XP, boosted quality bonus, and guaranteed rare+ loot. Five unique boss types cycle as you progress deeper.
+
+### 📊 Study Statistics Dashboard
+Click **📊 Stats** in the village HUD to see your study analytics:
+- Total study time and session count
+- Rooms per session, notes submitted, reviews completed, XP earned
+- Retention trends and daily streaks
+- Per-subject breakdowns
+
+### 🏷 Tag System
+Assign tags to rooms during the Creator phase for cross-topic linking. Tags create connections across rooms and subjects, with navigation to find related content.
+
+### 📦 Subject Templates
+Export a subject as a reusable template (graph structure only, no notes or artifacts). Create new subjects from templates to share topic structures or reuse common layouts.
+
+### ⚔ Loot & Gear
+Defeating rooms with high-quality notes earns equippable loot (weapons, armor, accessories) across three rarity tiers. Equip items for stat bonuses on quality, XP, and streaks.
+
+### 🎯 Cross-Subject Achievements
+12 meta-achievements track your progress across all subjects: subjects mastered, total notes, XP, rooms cleared, reviews, artifacts, bosses defeated, and badges earned.
+
 ## Why Use This
 
 Knowledge Dungeon is useful anywhere mindmaps and notes intersect with real learning.
@@ -72,9 +108,9 @@ The **Dungeon Village** is your home base, replacing the direct welcome→dungeo
 
 - **Fixed sidebar HUD** with archetype selector, quest log, and theme picker. Collapsible drawer on mobile.
 
-From the village, press **Home** (H) in any dungeon to return. Portals persist across sessions.
+From the village, press **H** in any dungeon to return. Portals persist across sessions.
 
-On the very first launch (no saved data yet), a one-time welcome screen is shown instead — you can start the tutorial, create your first subject, or import from backup. Once any subject exists, the app boots directly into the village.
+The **Welcome Screen** always appears on launch — create a subject, load an existing one, or click **Continue to Village** to jump straight to the hub.
 
 ### In-dungeon study view
 
@@ -238,14 +274,16 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 | Action | Keyboard | Touch |
 | ------ | -------- | ----- |
 | Move   | `W A S D` / arrows | On-screen D-pad |
-| Interact (open encounter / mark reviewed) | `E` | `Interact` button |
+| Interact (open encounter / talk to NPC / use portal) | `E` | `Interact` button |
 | Toggle room info panel | `I` | - |
 | Toggle full map | `M` | - |
+| Return to village | `H` | - |
 | Toggle help | `?` / `Shift+/` | - |
 
 ## UI docs
 
 - [UI walkthrough with screenshots](./docs/UI.md)
+- [Game guide (full reference)](./docs/GAME-GUIDE.md)
 - [Customization: adding images, where subjects are saved, and desktop export helpers](./docs/CUSTOMIZATION.md)
 - [Create-repo-mindmap skill usage](./SKILL.md)
 - [Portable Copilot skill (copy/paste template)](./docs/COPILOT_SKILL_CREATE_REPO_MINDMAP.md)
@@ -255,19 +293,27 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 ```
 src/
   core/                  # ported mindmap-dungeon domain
-    graph/               # subject graph CRUD + revalidation
+    graph/               # subject graph CRUD + revalidation + tag domain
     validation/notes/    # deterministic note validation
     validation/persistence/ # shared domain types
-    progression/         # XP/rank/badge engine
+    progression/         # XP/rank/badge engine + loot system + achievements
     artifacts/           # markdown artifact generator
-    review/              # archaeologist phase logic
+    review/              # archaeologist phase logic + SM-2 spaced repetition
   game/                  # Phaser scenes + systems
+    systems/             # boss rooms, procedural textures (biomes), player classes
   store/                 # Zustand stores (session, subject, progression)
-  services/persistence/  # localStorage + Electron bridge
+  services/
+    persistence/         # localStorage + Electron bridge + templates
+    sessionTracker.ts    # study session logging & analytics
+    audioManager.ts      # BGM/SFX infrastructure
   electron/              # main + preload (Electron only)
   ui/                    # React shell: welcome, HUD, room panel, modals
-tests/unit/              # Vitest unit tests
-docs/                    # PRD + progress notes
+    components/          # NoteEditorModal, StudyStatsPanel, TagEditor, RoomNpcDialog
+    screens/             # WelcomeScreen, VillageScreen, GameScreen
+    utils/               # markdown rendering, syntax highlighting, auto-complete
+  data/                  # village layout, tutorial subject, game guide
+tests/unit/              # Vitest unit tests (120 tests, 24 files)
+docs/                    # PRD, progress notes, game guide
 ```
 
 ## Persistence

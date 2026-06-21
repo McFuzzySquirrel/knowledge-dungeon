@@ -13,6 +13,7 @@ import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubject
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 import { GAME_GUIDE_MARKDOWN } from '@/data/gameGuide';
 import { Markdown } from '@/ui/utils/markdown';
+import { StudyStatsPanel } from '@/ui/components/StudyStatsPanel';
 
 interface SubjectSummary {
   id: string;
@@ -73,6 +74,7 @@ export function VillageScreen(): JSX.Element {
   const [dataOpen, setDataOpen] = useState(false);
   const [dungeonBiome, setDungeonBiome] = useState<string | null>(null);
   const [showFullGuide, setShowFullGuide] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const refreshSubjects = useCallback(async () => {
     try {
@@ -379,7 +381,8 @@ export function VillageScreen(): JSX.Element {
                   const lines = keeper.questDialogue?.[step];
                   if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
                 }
-              }} />
+              }}
+              onStatsClick={() => setShowStats(true)} />
           </div>
         </>
       ) : (
@@ -396,7 +399,8 @@ export function VillageScreen(): JSX.Element {
                   const lines = keeper.questDialogue?.[step];
                   if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
                 }
-              }} />
+              }}
+              onStatsClick={() => setShowStats(true)} />
           </div>
         </div>
       )}
@@ -844,6 +848,8 @@ export function VillageScreen(): JSX.Element {
           </div>
         </div>
       ) : null}
+
+      {showStats ? <StudyStatsPanel onClose={() => setShowStats(false)} /> : null}
     </div>
   );
 }
@@ -892,13 +898,14 @@ function CompassOverlay({ sceneRef }: { sceneRef: React.MutableRefObject<Village
 /* ── Reusable HUD content (used in both desktop sidebar & mobile drawer) ── */
 function VillageHudContent({
   questStep, subjects, selectedClass, setSelectedClass, setCreateOpen, setDataOpen,
-  colorTheme, setColorTheme, onQuestClick,
+  colorTheme, setColorTheme, onQuestClick, onStatsClick,
 }: {
   questStep: QuestStep; subjects: Array<{ id: string; subjectName: string; roomCount: number; clearedRoomCount: number }>;
   selectedClass: string | null; setSelectedClass: (cls: string | null) => void;
   setCreateOpen: React.Dispatch<React.SetStateAction<boolean>>; setDataOpen: React.Dispatch<React.SetStateAction<boolean>>;
   colorTheme: string; setColorTheme: (t: string) => void;
   onQuestClick: (step: string) => void;
+  onStatsClick: () => void;
 }): JSX.Element {
   const QL = QUEST_LABELS as Record<string, { label: string; hint: string }>;
   const QO = QUEST_ORDER;
@@ -987,6 +994,9 @@ function VillageHudContent({
       <div className="village-hud-actions">
         <button type="button" className="village-action-btn" onClick={() => setCreateOpen(true)}>
           + Create New
+        </button>
+        <button type="button" className="village-action-btn" onClick={onStatsClick}>
+          📊 Stats
         </button>
         <button type="button" className="village-action-btn" onClick={() => setDataOpen(true)}
           style={{ fontSize: 11, opacity: 0.7 }}>
