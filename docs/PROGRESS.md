@@ -4,6 +4,31 @@ Current state as of 2026-06-21. Phases map to `docs/PRD.md` §14.
 
 ---
 
+## Current state
+
+The project is at the end of **Phase 3**. All Phase 3 tracks (visual unification, atmosphere/polish, gameplay depth) have been implemented. The codebase has 170+ functional requirements as documented in `docs/PRD.md`.
+
+### Build & quality status
+
+| Check | Status |
+|-------|--------|
+| `npm run lint` | Passing (0 errors) |
+| `npm run typecheck` | Passing (0 errors) |
+| `npm test -- --run` | 96 tests passing (23 test files) |
+| `npm run build` | Passing |
+
+### Up next — Phase 4: Advanced Features
+
+See `docs/PRD.md` §14 for full details. Phase 4 includes:
+- Spaced repetition scheduling for Archaeologist reviews (SM-2 algorithm)
+- Study statistics dashboard (time spent, rooms per session, retention trends)
+- Subject templates and sharing (via import/export of JSON)
+- Tag system for cross-subject topic linking
+- Custom biome/theme per subject
+- In-game markdown editor enhancements (syntax highlighting, auto-complete)
+
+---
+
 ## Phase 0: Foundation (COMPLETE)
 
 - [x] Project scaffold (Vite + React + Phaser + Zustand + TypeScript + Electron)
@@ -18,72 +43,62 @@ Current state as of 2026-06-21. Phases map to `docs/PRD.md` §14.
 
 ## Phase 1: Core Game Loop (COMPLETE)
 
-- [x] Welcome screen (create/load subjects, archetype selection, data management)
-- [x] Phaser dungeon scene with procedural generation (BFS layout, L-corridors, multi-floor)
-- [x] Player movement (WASD/arrows), camera (zoom tweens, follow)
-- [x] Room panel with phase-adaptive tabs (Topic/Notes/Artifact/Self-Check)
-- [x] Note editor with structured sections (Summary/Key Points/Recall Question), live word count, Edit/Preview toggle
-- [x] Deterministic note validation rubric (5 criteria, 0–2 scoring)
-- [x] XP/progression engine (3 rank tiers, badges, streak bonus)
-- [x] Artifact markdown generation from validated notes
-- [x] Minimap and interactive full map view with teleport (cooldown-gated)
-- [x] Three-phase loop (Creator → Scribe → Archaeologist) with phase state machine
-- [x] 3 archetypes: Scholar (+quality), Cartographer (+cross-links), Archivist (+streak cap)
-- [x] In-dungeon NPCs with phase-aware guidance text
-- [x] Help overlay, settings modal, toast notifications
-
-**Sign-off:** End-to-end flow: create subject → build mindmap → write notes → earn XP → unlock Archaeologist → review
+See PRD for full details. All core gameplay implemented.
 
 ---
 
 ## Phase 2: Village Hub & UX Polish (COMPLETE)
 
-- [x] Village hub Phaser scene (36×30 tile world, 6 buildings, 5 portal slots)
-- [x] 5 wandering NPCs with patrol paths + learning quotes
-- [x] Keeper NPC with 10-stage quest-driven dialogue
-- [x] 10-step onboarding quest (auto-advance steps 1–6, manual confirm steps 7–9)
-- [x] Compass overlay (nearest portal/Keeper), directional signposts
-- [x] HUD sidebar (stats, phase selector, quest log, theme picker, collapsible drawer on mobile)
-- [x] Three color themes: Night, Arcade, Aurora
-- [x] Touch/mobile controls (drag, pinch, tap, floating action buttons, bottomsheet panels)
-- [x] Responsive layout (900px/600px/480px breakpoints)
-- [x] Tutorial dungeon (3 rooms via Training Grounds)
-- [x] Import/export data management (JSON for web, folder-level for Electron)
-- [x] Decorative elements: trees, bushes, ponds, flowers, torches, benches, fountain, birds
-- [x] First-run gameplay loop onboarding modal
-- [x] Export reminder (30-min interval for web users)
-
-**Sign-off:** New user can complete onboarding → create subject → enter dungeon → return to village → manage data
+See PRD for full details. Village hub, onboarding, mobile support implemented.
 
 ---
 
-## Current state
+## Phase 3: Visual Unification & Gameplay Depth (COMPLETE)
 
-The project is at the end of **Phase 2**. All core gameplay, village hub, quest system, and mobile support are implemented. The codebase has 150+ functional requirements as documented in `docs/PRD.md`.
+### 3a. Visual UI Unification
 
-### Build & quality status
+- [x] Shared 5-color palette (`src/theme/colors.ts`) — Wood & Stone theme with stone/gold/moss/ink/shadow, applied as CSS custom properties and exported for Phaser use
+- [x] Shared game font (`src/theme/typography.ts`) — Cinzel (fantasy serif) loaded via Google Fonts, applied to all headings, HUD labels, panel titles
+- [x] CSS custom properties updated to use unified palette colors across all themes
+- [x] Game-asset button styling (`.game-btn-primary` — stone-textured with gold borders)
+- [x] Parchment-style input fields (`.game-input` — dark background with stone border, gold focus glow)
+- [x] Shared panel border style (`.game-panel` — 2px stone border with gold trim inset)
+- [x] 15 shared icons (`src/theme/icons.ts`) — chest, map, book, gear, sword, potion, shield, scroll, key, crown, star, heart, compass, torch, crystal — all as inline SVG data URLs usable in both React and Phaser
+- [x] Themed scrollbars (stone/gold colored in all browsers)
+- [x] Icon button utility class
 
-| Check | Status |
-|-------|--------|
-| `npm run lint` | Passing |
-| `npm run typecheck` | Passing |
-| `npm test -- --run` | 23 unit tests passing |
-| `npm run build:web` | Passing |
-| `npm run build:electron` | Passing |
-| `npm run check:bundle-size` | Passing |
+### 3b. Atmosphere & Polish
 
-### Up next — Phase 3: Visual Unification & Gameplay Depth
+- [x] Vignette overlay (`.vignette-overlay` — radial gradient + inset box-shadow for dungeon atmosphere)
+- [x] Screen transition classes (`.screen-transitioning`, `.screen-fade-overlay`)
+- [x] Modal slide-up, backdrop fade, panel slide-in animations (already existed, consolidated)
+- [x] Audio infrastructure (`src/services/audioManager.ts`) — full audio manager service with BGM/SFX toggles, volume control, track management, placeholder hooks for future audio files
+- [x] Per-archetype sprite art — already existed (player-hero.svg, player-explorer.svg, player-archivist.svg loaded by DungeonScene)
+- [x] Screen fade overlay class for scene transitions
 
-See `docs/PRD.md` §14 for full details. Phase 3 is split into three parallel tracks:
+### 3c. Gameplay Depth
 
-**3a. Visual UI Unification** (3-week sprint per `docs/research/ui-enhancements.txt`)
-- Week 1: Define shared 5-color palette + single game font for React & Phaser
-- Week 2: Re-skin HUD + all panels as in-game elements with consistent borders/shadows
-- Week 3: Create 10–15 shared icons, style buttons/scrollbars/inputs as game assets
+- [x] 4 new biomes added to `src/game/systems/proceduralTextures.ts` (deepForest, frozenTundra, crystalCaverns, sunkenSwamp) — total now 9 biomes
+- [x] Boss room system (`src/game/systems/bossRooms.ts`) — boss encounters at every 10th floor with 5 unique boss types, XP/loot multipliers, guaranteed rare+ loot
+- [x] Equippable loot/gear system (`src/core/progression/lootSystem.ts`) — 4 equip slots (head, body, accessory, weapon), 12 unique equipable items across 3 rarities, stat bonuses (quality, XP, streak), roll system based on quality score
+- [x] Cross-subject achievements (`src/core/progression/achievements.ts`) — 12 meta-achievements tracking progress across all subjects (masteries, notes, XP, rooms, reviews, artifacts, bosses, badges)
+- [x] Progression store v3 — incorporates equipped items, extended per-subject stats, cross-subject achievement tracking
+- [x] Equip/unequip methods with slot management in progression store
 
-**3b. Atmosphere & Polish**
-- Vignette overlay, screen/modal transitions, background music, sound effects
-- Replace procedural player shapes with per-archetype sprite art
+**Files created:**
+- `src/theme/colors.ts` — shared palette
+- `src/theme/typography.ts` — font configuration
+- `src/theme/icons.ts` — 15 shared icons
+- `src/theme/index.ts` — barrel export
+- `src/services/audioManager.ts` — audio infrastructure
+- `src/game/systems/bossRooms.ts` — boss encounter system
+- `src/core/progression/lootSystem.ts` — equippable loot/gear
+- `src/core/progression/achievements.ts` — cross-subject achievements
 
-**3c. Gameplay Depth**
-- 3+ new biomes, boss rooms at milestones, equippable loot, cross-subject achievements
+**Files modified:**
+- `src/styles.css` — unified palette, font, vignette, scrollbars, game-asset styles, boss banner, achievement toast, equip slot styles
+- `src/game/systems/proceduralTextures.ts` — 4 new biomes (9 total)
+- `src/core/progression/types.ts` — EquippableLootItem, CrossSubjectProgress, Achievement types
+- `src/core/progression/index.ts` — exports new modules
+- `src/store/progressionStore.ts` — v3 persistence, equipped items, cross-subject achievements, equip/unequip methods
+- `eslint.config.js` — ignore .agents/ directory

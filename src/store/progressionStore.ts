@@ -1,12 +1,21 @@
 /**
  * Progression store - XP, rank, badges, inventory. Persists to localStorage
  * mirroring repo-dungeon's progression-store wiring.
+ *
+ * Phase 3c additions: equippable loot/gear system, cross-subject achievements.
  */
 import { create } from 'zustand';
 import {
   assignRankTier,
   awardRoomClearProgression,
   type RankTier,
+  type EquippableLootItem,
+  type EquipSlot,
+  EQUIP_SLOTS,
+  computeEquipBonuses,
+  rollEquippableLoot,
+  computeCrossSubjectProgress,
+  evaluateAchievementUnlocks,
 } from '@/core/progression';
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
 
@@ -35,15 +44,23 @@ interface PersistedSubjectProgression {
   rank: RankTier;
   badges: string[];
   inventory: LootItem[];
+  equippedItems: EquippableLootItem[];
   collectedNotes: CollectedNoteEntry[];
   streakCount: number;
+  /** Phase 3c: subjects mastered count */
+  subjectsMastered: number;
+  roomsCleared: number;
+  reviewPasses: number;
+  artifacts: number;
+  bossesDefeated: number;
 }
 
 const REVIEW_PASS_XP = 6;
 
-interface PersistedProgressionV2 {
-  version: 2;
+interface PersistedProgressionV3 {
+  version: 3;
   bySubject: Record<string, PersistedSubjectProgression>;
+  crossSubjectAchievements: string[];
 }
 
 function cloneDefaultSubjectProgression(): PersistedSubjectProgression {
@@ -52,8 +69,14 @@ function cloneDefaultSubjectProgression(): PersistedSubjectProgression {
     rank: 'Novice',
     badges: [],
     inventory: [],
+    equippedItems: [],
     collectedNotes: [],
     streakCount: 0,
+    subjectsMastered: 0,
+    roomsCleared: 0,
+    reviewPasses: 0,
+    artifacts: 0,
+    bossesDefeated: 0,
   };
 }
 
@@ -104,48 +127,89 @@ function normalizeSubjectProgression(raw: unknown): PersistedSubjectProgression 
       ? record.badges.filter((badge): badge is string => typeof badge === 'string')
       : [],
     inventory: normalizeInventory(record.inventory),
+    equippedItems: normalizeEquippedItems(record.equippedItems),
     collectedNotes: normalizeCollectedNotes(record.collectedNotes),
     streakCount: typeof record.streakCount === 'number' ? Math.max(0, Math.trunc(record.streakCount)) : 0,
+    subjectsMastered: typeof record.subjectsMastered === 'number' ? Math.max(0, Math.trunc(record.subjectsMastered)) : 0,
+    roomsCleared: typeof record.roomsCleared === 'number' ? Math.max(0, Math.trunc(record.roomsCleared)) : 0,
+    reviewPasses: typeof record.reviewPasses === 'number' ? Math.max(0, Math.trunc(record.reviewPasses)) : 0,
+    artifacts: typeof record.artifacts === 'number' ? Math.max(0, Math.trunc(record.artifacts)) : 0,
+    bossesDefeated: typeof record.bossesDefeated === 'number' ? Math.max(0, Math.trunc(record.bossesDefeated)) : 0,
   };
+}
+
+function normalizeEquippedItems(raw: unknown): EquippableLootItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+    .map((entry): EquippableLootItem => ({
+      id: typeof entry.id === 'string' ? entry.id : `gear-${Math.random().toString(36).slice(2, 8)}`,
+      name: typeof entry.name === 'string' ? entry.name : 'Unknown gear',
+      description: typeof entry.description === 'string' ? entry.description : '',
+      rarity: entry.rarity === 'rare' || entry.rarity === 'epic' ? entry.rarity : 'common',
+      acquiredAt: typeof entry.acquiredAt === 'string' ? entry.acquiredAt : new Date(0).toISOString(),
+      equipSlot: isValidEquipSlot(entry.equipSlot) ? entry.equipSlot : 'accessory',
+      qualityBonus: typeof entry.qualityBonus === 'number' ? entry.qualityBonus : undefined,
+      xpMultiplier: typeof entry.xpMultiplier === 'number' ? entry.xpMultiplier : undefined,
+      xpBonus: typeof entry.xpBonus === 'number' ? entry.xpBonus : undefined,
+      streakBonus: typeof entry.streakBonus === 'number' ? entry.streakBonus : undefined,
+      equipped: typeof entry.equipped === 'boolean' ? entry.equipped : false,
+    }));
+}
+
+function isValidEquipSlot(slot: unknown): slot is EquipSlot {
+  if (typeof slot !== 'string') return false;
+  return (EQUIP_SLOTS as readonly string[]).includes(slot);
 }
 
 function notesForSubject(notes: readonly CollectedNoteEntry[], subjectId: string): CollectedNoteEntry[] {
   return notes.filter((note) => note.dungeonId === subjectId);
 }
 
-function loadPersistedBySubject(): Record<string, PersistedSubjectProgression> {
+function loadPersistedBySubject(): { bySubject: Record<string, PersistedSubjectProgression>; crossSubjectAchievements: string[] } {
   try {
-    if (typeof localStorage === 'undefined') return {};
+    if (typeof localStorage === 'undefined') return { bySubject: {}, crossSubjectAchievements: [] };
     const raw = localStorage.getItem(STORAGE_KEYS.progression);
-    if (!raw) return {};
+    if (!raw) return { bySubject: {}, crossSubjectAchievements: [] };
     const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) return {};
+    if (typeof parsed !== 'object' || parsed === null) return { bySubject: {}, crossSubjectAchievements: [] };
     const parsedRecord = parsed as Record<string, unknown>;
 
-    if (parsedRecord.version === 2 && typeof parsedRecord.bySubject === 'object' && parsedRecord.bySubject !== null) {
+    let crossSubjectAchievements: string[] = [];
+    if (parsedRecord.version === 3) {
+      crossSubjectAchievements = Array.isArray(parsedRecord.crossSubjectAchievements)
+        ? parsedRecord.crossSubjectAchievements.filter((a): a is string => typeof a === 'string')
+        : [];
+    }
+
+    if ((parsedRecord.version === 3 || parsedRecord.version === 2) && typeof parsedRecord.bySubject === 'object' && parsedRecord.bySubject !== null) {
       const bySubjectRecord = parsedRecord.bySubject as Record<string, unknown>;
       const normalized: Record<string, PersistedSubjectProgression> = {};
       for (const [subjectId, subjectProgression] of Object.entries(bySubjectRecord)) {
         normalized[subjectId] = normalizeSubjectProgression(subjectProgression);
       }
-      return normalized;
+      return { bySubject: normalized, crossSubjectAchievements };
     }
 
     const legacy = normalizeSubjectProgression(parsedRecord);
     const activeSubjectId = getActiveSubjectId();
     const subjectId = activeSubjectId && activeSubjectId.trim().length > 0 ? activeSubjectId : '__legacy__';
-    return { [subjectId]: legacy };
+    return { bySubject: { [subjectId]: legacy }, crossSubjectAchievements };
   } catch {
-    return {};
+    return { bySubject: {}, crossSubjectAchievements: [] };
   }
 }
 
-function savePersistedBySubject(bySubject: Record<string, PersistedSubjectProgression>): void {
+function savePersistedBySubject(
+  bySubject: Record<string, PersistedSubjectProgression>,
+  crossSubjectAchievements: string[],
+): void {
   try {
     if (typeof localStorage !== 'undefined') {
-      const payload: PersistedProgressionV2 = {
-        version: 2,
+      const payload: PersistedProgressionV3 = {
+        version: 3,
         bySubject,
+        crossSubjectAchievements,
       };
       localStorage.setItem(STORAGE_KEYS.progression, JSON.stringify(payload));
     }
@@ -191,8 +255,17 @@ export interface ProgressionStoreState {
   rank: RankTier;
   badges: string[];
   inventory: LootItem[];
+  equippedItems: EquippableLootItem[];
   collectedNotes: CollectedNoteEntry[];
   streakCount: number;
+  /** Phase 3c: per-subject extended stats exposed at top level */
+  subjectsMastered: number;
+  roomsCleared: number;
+  reviewPasses: number;
+  artifacts: number;
+  bossesDefeated: number;
+  /** Phase 3c: cross-subject achievements */
+  crossSubjectAchievements: string[];
   setActiveSubject: (subjectId: string | null) => void;
   awardBadge: (badgeId: string) => boolean;
   collectArtifactNote: (entry: Omit<CollectedNoteEntry, 'noteId' | 'collectedAt'>) => boolean;
@@ -202,23 +275,40 @@ export interface ProgressionStoreState {
     creatorMappedRooms: number;
     scribeClearedRooms: number;
     archaeologistFullReviewPasses: number;
+    /** Track 3c: is this a boss encounter? */
+    isBossEncounter?: boolean;
+    /** Track 3c: boss loot rarity minimum */
+    bossMinLootRarity?: 'rare' | 'epic';
   }) => {
     xpGained: number;
     newRank: RankTier;
     rankChanged: boolean;
     unlockedBadges: string[];
     loot: LootItem | null;
+    /** Track 3c: newly unlocked cross-subject achievements */
+    unlockedAchievements: string[];
   };
   awardReviewPass: () => {
     xpGained: number;
     newRank: RankTier;
     rankChanged: boolean;
+    unlockedAchievements: string[];
   };
+  /** Track 3c: equip an equippable item */
+  equipItem: (itemId: string) => boolean;
+  /** Track 3c: unequip an item */
+  unequipItem: (itemId: string) => boolean;
+  /** Track 3c: compute bonuses from currently equipped items */
+  getEquipBonuses: () => { qualityBonus: number; xpMultiplier: number; xpBonus: number; streakBonus: number };
+  /** Track 3c: get cross-subject progress */
+  getCrossSubjectProgress: () => CrossSubjectProgress;
+  /** Track 3c: check for new cross-subject achievements */
+  checkCrossSubjectAchievements: () => string[];
   resetStreak: () => void;
   reset: () => void;
 }
 
-const initialBySubject = loadPersistedBySubject();
+const { bySubject: initialBySubject, crossSubjectAchievements: initialCrossSubjectAchs } = loadPersistedBySubject();
 const initialActiveSubject = getActiveSubjectId();
 const initialSubjectId =
   initialActiveSubject && initialActiveSubject.trim().length > 0
@@ -229,6 +319,7 @@ const initialSubjectProgression = getSubjectProgression(initialBySubject, initia
 export const useProgressionStore = create<ProgressionStoreState>((set, get) => ({
   activeSubjectId: initialSubjectId,
   bySubject: initialBySubject,
+  crossSubjectAchievements: initialCrossSubjectAchs,
   ...initialSubjectProgression,
 
   setActiveSubject(subjectId) {
@@ -252,7 +343,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       bySubject,
       ...current,
     });
-    savePersistedBySubject(bySubject);
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
   },
 
   awardBadge(badgeId) {
@@ -269,7 +360,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
-    savePersistedBySubject(bySubject);
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
     return true;
   },
 
@@ -295,10 +386,17 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     const nextSubject: PersistedSubjectProgression = {
       ...current,
       collectedNotes: [nextEntry, ...current.collectedNotes],
+      artifacts: current.artifacts + 1,
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
-    savePersistedBySubject(bySubject);
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    // Check cross-subject achievements
+    const newAchs = get().checkCrossSubjectAchievements();
+    if (newAchs.length > 0) {
+      return true;
+    }
     return true;
   },
 
@@ -308,23 +406,31 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     creatorMappedRooms,
     scribeClearedRooms,
     archaeologistFullReviewPasses,
+    isBossEncounter = false,
+    bossMinLootRarity,
   }) {
     const state = get();
     if (!state.activeSubjectId) {
       return {
         xpGained: 0,
-        newRank: 'Novice',
+        newRank: 'Novice' as RankTier,
         rankChanged: false,
-        unlockedBadges: [],
-        loot: null,
+        unlockedBadges: [] as string[],
+        loot: null as LootItem | null,
+        unlockedAchievements: [] as string[],
       };
     }
     const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
-    const nextStreak = current.streakCount + 1;
+
+    // Compute equip bonuses
+    const equipBonuses = computeEquipBonuses(current.equippedItems ?? []);
+    const effectiveQualityBonus = qualityBonus + equipBonuses.qualityBonus + current.streakCount;
+
+    const nextStreak = current.streakCount + 1 + equipBonuses.streakBonus;
     const result = awardRoomClearProgression({
       currentXpTotal: current.xpTotal,
       existingBadges: current.badges,
-      qualityBonus,
+      qualityBonus: effectiveQualityBonus,
       streakCount: nextStreak,
       badgeProgress: {
         totalRooms,
@@ -341,24 +447,45 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
         rankChanged: false,
         unlockedBadges: [],
         loot: null,
+        unlockedAchievements: [],
       };
     }
 
     const value = result.value;
-    const loot = rollLoot(qualityBonus);
+
+    // Roll for equippable loot (preferred) or legacy loot
+    let loot: LootItem | null = null;
+    if (isBossEncounter || qualityBonus >= 4) {
+      loot = rollEquippableLoot(qualityBonus, bossMinLootRarity);
+    }
+    if (!loot) {
+      loot = rollLoot(qualityBonus);
+    }
+
     const inventory = loot ? [...current.inventory, loot] : current.inventory;
+    const roomsCleared = current.roomsCleared + 1;
+    const bossesDefeated = isBossEncounter ? current.bossesDefeated + 1 : current.bossesDefeated;
 
     const nextSubject: PersistedSubjectProgression = {
       xpTotal: value.xpTotalAfter,
       rank: value.rankAfter,
       badges: value.progressionSnapshot.badges,
       inventory,
+      equippedItems: current.equippedItems ?? [],
       collectedNotes: current.collectedNotes,
       streakCount: nextStreak,
+      subjectsMastered: current.subjectsMastered,
+      roomsCleared,
+      reviewPasses: current.reviewPasses,
+      artifacts: current.artifacts,
+      bossesDefeated,
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
-    savePersistedBySubject(bySubject);
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    // Check cross-subject achievements
+    const unlockedAchievements = get().checkCrossSubjectAchievements();
 
     return {
       xpGained: value.xpBreakdown.totalDelta,
@@ -366,6 +493,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       rankChanged: value.rankBefore !== value.rankAfter,
       unlockedBadges: value.unlockedBadges,
       loot,
+      unlockedAchievements,
     };
   },
 
@@ -374,28 +502,122 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     if (!state.activeSubjectId) {
       return {
         xpGained: 0,
-        newRank: 'Novice',
+        newRank: 'Novice' as RankTier,
         rankChanged: false,
+        unlockedAchievements: [] as string[],
       };
     }
 
     const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
-    const nextXp = current.xpTotal + REVIEW_PASS_XP;
+    const equipBonuses = computeEquipBonuses(current.equippedItems ?? []);
+    const xpEarned = REVIEW_PASS_XP + equipBonuses.xpBonus;
+    const nextXp = current.xpTotal + xpEarned;
     const nextRank = assignRankTier(nextXp);
     const nextSubject: PersistedSubjectProgression = {
       ...current,
       xpTotal: nextXp,
       rank: nextRank,
+      reviewPasses: current.reviewPasses + 1,
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
-    savePersistedBySubject(bySubject);
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    const unlockedAchievements = get().checkCrossSubjectAchievements();
 
     return {
-      xpGained: REVIEW_PASS_XP,
+      xpGained: xpEarned,
       newRank: nextRank,
       rankChanged: nextRank !== current.rank,
+      unlockedAchievements,
     };
+  },
+
+  // ── Phase 3c: Equippable loot methods ──────────────────────
+
+  equipItem(itemId) {
+    const state = get();
+    if (!state.activeSubjectId) return false;
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const item = current.inventory.find((i) => i.id === itemId);
+    if (!item || !('equipSlot' in item)) return false;
+
+    const equippable = item as EquippableLootItem;
+    if (equippable.equipped) return false;
+
+    // Unequip any item in the same slot
+    const updatedEquipped = current.equippedItems
+      ?.filter((e) => e.equipSlot !== equippable.equipSlot) ?? [];
+
+    updatedEquipped.push({ ...equippable, equipped: true });
+
+    // Mark item as equipped in inventory
+    const updatedInventory = current.inventory.map((i) =>
+      i.id === itemId ? { ...i, equipped: true } as EquippableLootItem : i,
+    );
+
+    const nextSubject: PersistedSubjectProgression = {
+      ...current,
+      inventory: updatedInventory,
+      equippedItems: updatedEquipped,
+    };
+    const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
+    set({ bySubject, ...nextSubject });
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+    return true;
+  },
+
+  unequipItem(itemId) {
+    const state = get();
+    if (!state.activeSubjectId) return false;
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const updatedEquipped = current.equippedItems?.filter((e) => e.id !== itemId) ?? [];
+
+    const updatedInventory = current.inventory.map((i) =>
+      i.id === itemId ? { ...i, equipped: false } as EquippableLootItem : i,
+    );
+
+    const nextSubject: PersistedSubjectProgression = {
+      ...current,
+      inventory: updatedInventory,
+      equippedItems: updatedEquipped,
+    };
+    const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
+    set({ bySubject, ...nextSubject });
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+    return true;
+  },
+
+  getEquipBonuses() {
+    const state = get();
+    if (!state.activeSubjectId) return { qualityBonus: 0, xpMultiplier: 1, xpBonus: 0, streakBonus: 0 };
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    return computeEquipBonuses(current.equippedItems ?? []);
+  },
+
+  getCrossSubjectProgress() {
+    const state = get();
+    return computeCrossSubjectProgress({
+      bySubject: state.bySubject,
+      totalSubjectsCreated: Object.keys(state.bySubject).length,
+    });
+  },
+
+  checkCrossSubjectAchievements() {
+    const state = get();
+    const progress = state.getCrossSubjectProgress();
+    const newlyUnlocked = evaluateAchievementUnlocks(progress, state.crossSubjectAchievements);
+
+    if (newlyUnlocked.length > 0) {
+      const updatedAchs = [
+        ...state.crossSubjectAchievements,
+        ...newlyUnlocked.map((a) => a.id),
+      ];
+      set({ crossSubjectAchievements: updatedAchs });
+      savePersistedBySubject(state.bySubject, updatedAchs);
+      return newlyUnlocked.map((a) => a.id);
+    }
+    return [];
   },
 
   resetStreak: () => {
@@ -405,13 +627,13 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     const nextSubject = { ...current, streakCount: 0 };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
-    savePersistedBySubject(bySubject);
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
   },
 
   reset: () => {
     const state = get();
     if (!state.activeSubjectId) {
-      savePersistedBySubject({});
+      savePersistedBySubject({}, state.crossSubjectAchievements);
       set({
         bySubject: {},
         ...cloneDefaultSubjectProgression(),
@@ -424,7 +646,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       [state.activeSubjectId]: cloneDefaultSubjectProgression(),
     };
     const resetSubject = bySubject[state.activeSubjectId] ?? cloneDefaultSubjectProgression();
-    savePersistedBySubject(bySubject);
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
     set({ bySubject, ...resetSubject });
   },
 }));

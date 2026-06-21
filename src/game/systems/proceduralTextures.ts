@@ -6,6 +6,11 @@ export const FLOOR_BIOME_IDS = [
   'scienceLabs',
   'historyRuins',
   'languageLibrary',
+  // Phase 3c new biomes:
+  'deepForest',
+  'frozenTundra',
+  'crystalCaverns',
+  'sunkenSwamp',
 ] as const;
 
 export type FloorBiomeId = (typeof FLOOR_BIOME_IDS)[number];
@@ -67,6 +72,43 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x181f32,
     edgeMin: 58,
     edgeMax: 80,
+  },
+  // ── Phase 3c new biomes ──────────────────────────────────────
+  deepForest: {
+    base: 0x2d3a28,
+    mottles: [0x3e4e36, 0x4a5e3f, 0x1e2a1a],
+    fleck: 0x7a9c6c,
+    grain: 0x5a7a4e,
+    crack: 0x121a0e,
+    edgeMin: 57,
+    edgeMax: 76,
+  },
+  frozenTundra: {
+    base: 0x34404d,
+    mottles: [0x465565, 0x53667a, 0x26323a],
+    fleck: 0xa8d4f0,
+    grain: 0x829bb0,
+    crack: 0x1a242e,
+    edgeMin: 60,
+    edgeMax: 84,
+  },
+  crystalCaverns: {
+    base: 0x2f2d44,
+    mottles: [0x423e5c, 0x514c6e, 0x242136],
+    fleck: 0xb48cff,
+    grain: 0x7b74a8,
+    crack: 0x1a1730,
+    edgeMin: 50,
+    edgeMax: 68,
+  },
+  sunkenSwamp: {
+    base: 0x2e3826,
+    mottles: [0x3b4a2e, 0x445a34, 0x1f2818],
+    fleck: 0x8bbf6a,
+    grain: 0x5e7248,
+    crack: 0x141d0e,
+    edgeMin: 55,
+    edgeMax: 72,
   },
 };
 
