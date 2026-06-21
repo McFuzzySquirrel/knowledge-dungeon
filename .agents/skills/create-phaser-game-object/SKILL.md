@@ -119,7 +119,9 @@ if (roomState.encounterState === 'ArtifactCollected') {
 
 ### Step 7: Add to Procedural Generation (if applicable)
 
-For dungeon decorations, add the object to the decor placement in `DungeonScene.ts`'s `buildDecorForRoom()` function, using the deterministic PRNG:
+For dungeon decorations, add the object to the decor placement in `DungeonScene.ts`'s `buildDecorForRoom()` function, using the deterministic PRNG.
+
+The PRNG seed chain is `roomIndex * 7 + floor` — decor for any given room on a given floor is fully deterministic from this seed. **Do not alter the seed formula** without coordinating with `core-logic-engineer`. Deterministic generation is a hard requirement (NF-02: same topic graph must always produce the same dungeon layout).
 
 ```typescript
 const decorType = seededRandom(roomIndex * 7 + floor);
@@ -127,6 +129,8 @@ if (decorType < 0.3) {
   // Place this object
 }
 ```
+
+Load `assets/code-templates.md` for full TypeScript snippets when implementing all steps.
 
 ---
 

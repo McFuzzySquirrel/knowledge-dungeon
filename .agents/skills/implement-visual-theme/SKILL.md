@@ -14,27 +14,33 @@ Harmonizes the visual identity of the React UI shell and Phaser game canvas by a
 
 ## Process
 
+### Step 0: Create the Shared Colors Module
+
+Before changing any scene or component files, create the single source of truth for all Phaser hex values. This prevents colors from getting scattered across scene files.
+
+Create `src/game/themeColors.ts`:
+
+```typescript
+/** Single source of truth — CSS vars in src/styles.css must match these values. */
+export const THEME_COLORS = {
+  bgDark:       0x1a1025,
+  bgPanel:      0x2a1a3e,
+  accentGold:   0xc9a84c,
+  textPrimary:  0xe8dcc8,
+  accentBlue:   0x4a7fb5,
+} as const;
+```
+
+All Phaser scene files import from this module:
+```typescript
+import { THEME_COLORS } from '../game/themeColors';
+```
+
 ### Step 1: Define the Palette
 
-Choose a cohesive 5-color palette. Example palettes from `docs/research/ui-enhancements.txt`:
+Choose a cohesive 5-color palette. Load `assets/palettes.md` for full palette definitions including Dark Fantasy and Wood & Stone examples with hex-to-0x conversion tables.
 
-```
-Dark Fantasy:
-  --bg-dark:       #1a1025  (deep purple-black, backgrounds)
-  --bg-panel:      #2a1a3e  (dark purple, panels)
-  --accent-gold:   #c9a84c  (muted gold, highlights)
-  --text-primary:  #e8dcc8  (warm off-white, text)
-  --accent-blue:   #4a7fb5  (muted blue, interactive elements)
-
-Wood & Stone:
-  --bg-dark:       #2b2520  (dark brown)
-  --bg-panel:      #3d3228  (medium brown)
-  --accent-gold:   #8b7d3c  (olive gold)
-  --text-primary:  #d4cdc0  (warm grey)
-  --stone-grey:    #6b6560  (stone)
-```
-
-Define these as CSS custom properties on `:root` in `src/styles.css`:
+Define the chosen palette as CSS custom properties on `:root` in `src/styles.css`:
 
 ```css
 :root {
@@ -45,6 +51,8 @@ Define these as CSS custom properties on `:root` in `src/styles.css`:
   --accent-blue: #4a7fb5;
 }
 ```
+
+Mirror these exact values in `src/game/themeColors.ts` (see Step 0).
 
 ### Step 2: Apply in React
 
@@ -68,23 +76,23 @@ Apply to all panels, modals, buttons, text, and backgrounds. Update the three th
 
 ### Step 3: Apply in Phaser
 
-Use the exact same hex codes in Phaser scene code:
+Use the shared theme constants in Phaser scene code:
 
 ```typescript
-// In Phaser scene create()
-const PANEL_BG = 0x2a1a3e;
-const ACCENT_GOLD = 0xc9a84c;
-const TEXT_PRIMARY = '#e8dcc8';
+// In Phaser scene create() — import at top of file
+import { THEME_COLORS } from '../game/themeColors';
 
-this.add.rectangle(x, y, width, height, PANEL_BG)
-  .setStrokeStyle(2, ACCENT_GOLD);
+this.add.rectangle(x, y, width, height, THEME_COLORS.bgPanel)
+  .setStrokeStyle(2, THEME_COLORS.accentGold);
 
 this.add.text(x, y, 'Room Info', {
   fontFamily: '"Press Start 2P", monospace',
   fontSize: '14px',
-  color: TEXT_PRIMARY,
+  color: '#e8dcc8',
 });
 ```
+
+**Note:** Phaser text `color` uses CSS hex strings (not 0xNNN) — keep text color strings in sync with `--text-primary` from `src/styles.css`.
 
 ### Step 4: Choose and Apply a Shared Font
 
@@ -131,8 +139,8 @@ Pick a border style and apply consistently:
 Recreate in Phaser where panels exist:
 
 ```typescript
-const panel = this.add.rectangle(x, y, w, h, PANEL_BG)
-  .setStrokeStyle(2, ACCENT_GOLD);
+const panel = this.add.rectangle(x, y, w, h, THEME_COLORS.bgPanel)
+  .setStrokeStyle(2, THEME_COLORS.accentGold);
 ```
 
 ### Step 6: Integrate Shared Icons
@@ -185,6 +193,7 @@ The theme change should produce:
 - The "Press Start 2P" pixel font is very large at small sizes — use it for headings and labels, not body text; use a readable fallback for note content
 - Theme changes affect ALL components — test the full application after applying
 - The existing three themes (Night, Arcade, Aurora) must all adopt the new unified palette structure, not just the default theme
+- Google Fonts `@import` requires network access on first load — for Electron offline builds, download the font `.woff2` file to `public/assets/fonts/` and reference it via `@font-face` in `src/styles.css` instead of `@import url(...)`. Coordinate with `infrastructure-engineer` for Electron compatibility
 
 ---
 

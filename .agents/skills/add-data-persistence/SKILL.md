@@ -40,9 +40,14 @@ export interface NewEntity {
 
 ### Step 2: Update Defaults
 
-Update the factory/defaults function that creates new instances so the field is initialized:
+Update the factory/defaults functions so the new field is initialized. Default values are set in three locations — update all that apply:
+
+1. **`src/core/validation/persistence/types.ts`** → `createDefaultRoomMetadata()` — per-room defaults
+2. **`src/core/graph/graphDomain.ts`** → `createRootDungeon()` — initial subject creation defaults
+3. **`src/store/subjectStore.ts`** → hydration/reconstruction logic — fallback when loading saved data
 
 ```typescript
+// In createDefaultRoomMetadata():
 export function createDefaultRoomMetadata(): RoomMetadata {
   return {
     // ... existing defaults
@@ -50,8 +55,6 @@ export function createDefaultRoomMetadata(): RoomMetadata {
   };
 }
 ```
-
-Look in the same types file or in the graph domain's factory functions.
 
 ### Step 3: Update the Zustand Store
 
@@ -114,11 +117,16 @@ it('defaults newField for legacy data', () => {
 
 ### Step 6: Update Data Integrity Checks
 
-If the field has validation requirements, add checks to `src/core/validation/persistence/types.ts` or the state machine in `src/core/graph/graphDomain.ts`:
+If the field has validation requirements, add checks in the appropriate location:
+
+- **Per-room validation** → `src/core/graph/graphDomain.ts` → `validateRoom()` function
+- **Subject-wide validation** → `src/services/persistence/subjectPersistence.ts` → `validateSubjectSnapshot()` function
+- **Store-level guard** → `src/store/subjectStore.ts` → setter action before calling `set()`
 
 ```typescript
+// Example: per-room validation in validateRoom()
 if (room.newField !== undefined && room.newField.length > 100) {
-  return { valid: false, error: 'newField exceeds maximum length' };
+  return { valid: false, error: 'newField exceeds maximum length (100 chars)' };
 }
 ```
 
@@ -153,6 +161,7 @@ The persistence change should produce:
 - Legacy data WITHOUT the new field MUST still load without errors — always use `??` default or optional chaining
 - If the new field needs to be indexed or searchable, add it to the subject index in `subjectPersistence.ts`
 - The Electron filesystem backend saves the entire `SubjectSnapshot` as a single JSON file — no special handling needed for new fields
+- If a new field MUST be present (not optional), you need a data migration. Add a version check in `subjectPersistence.ts` that detects the old schema version and applies the migration on load. Never delete old fields — soft-deprecate with `@deprecated` JSDoc tags
 
 ---
 

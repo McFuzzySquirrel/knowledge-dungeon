@@ -156,10 +156,14 @@ describe('ComponentName', () => {
 - Component tests should NOT test the underlying domain logic — mock the store state and test the UI behavior
 - Use `screen.getByRole()` and `screen.getByText()` over `screen.getByTestId()` — prefer accessible queries
 - For time-based features (toast auto-dismiss, cooldown timers), use `vi.useFakeTimers()` and `vi.advanceTimersByTime()`
+- Testing `GameScreen` or `VillageScreen` (components that render a Phaser container `<div>`): mock `createGame` and `createVillageGame` from `src/game/` to return `{ destroy: vi.fn() }` (a dummy Phaser instance). Test that the container `<div>` is present and the React children it wraps render correctly — do not test Phaser canvas internals
+- Direct `useXxxStore.setState()` calls in tests trigger React re-renders — wrap them in `act()` from `@testing-library/react` to flush state updates before making assertions. Example: `await act(() => useSessionStore.setState({ phase: 'archaeologist' }))`
 
 ---
 
 ## Reference
+
+Load `assets/test-template.tsx` for a complete, annotated example test file with real store states, real selectors, and real assertions.
 
 See [docs/PRD.md](../../../docs/PRD.md):
 - **Section 15** - Testing strategy and key test scenarios
