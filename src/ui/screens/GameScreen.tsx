@@ -10,6 +10,7 @@ import { usePreferencesStore } from '@/store/preferencesStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
+import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
 import { Hud } from '@/ui/components/Hud';
 import { HudDrawer } from '@/ui/components/HudDrawer';
 import { FloatingActions } from '@/ui/components/FloatingActions';
@@ -296,6 +297,9 @@ export function GameScreen(): JSX.Element {
             visibleRoomIds: initialFloor.visibleRoomIds,
             portalUpRoomId: initialFloor.portalUpRoomId,
             portalDownRoomIds: initialFloor.portalDownRoomIds,
+            biomeId: (snapshot?.dungeon.biome && FLOOR_BIOME_IDS.includes(snapshot.dungeon.biome as FloorBiomeId)
+              ? (snapshot.dungeon.biome as FloorBiomeId)
+              : undefined),
           }
         : undefined,
       callbacks: {
@@ -378,6 +382,9 @@ export function GameScreen(): JSX.Element {
             visibleRoomIds: nextVisibility.visibleRoomIds,
             portalUpRoomId: nextVisibility.portalUpRoomId,
             portalDownRoomIds: nextVisibility.portalDownRoomIds,
+            biomeId: (liveSnapshot.dungeon.biome && FLOOR_BIOME_IDS.includes(liveSnapshot.dungeon.biome as FloorBiomeId)
+              ? (liveSnapshot.dungeon.biome as FloorBiomeId)
+              : undefined),
           });
           sceneRef.current?.teleportToRoom(fromRoomId);
         },
@@ -641,6 +648,9 @@ export function GameScreen(): JSX.Element {
       visibleRoomIds: nextVisibility.visibleRoomIds,
       portalUpRoomId: nextVisibility.portalUpRoomId,
       portalDownRoomIds: nextVisibility.portalDownRoomIds,
+      biomeId: (snapshot.dungeon.biome && FLOOR_BIOME_IDS.includes(snapshot.dungeon.biome as FloorBiomeId)
+        ? (snapshot.dungeon.biome as FloorBiomeId)
+        : undefined),
     });
   }
 

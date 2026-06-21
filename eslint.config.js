@@ -34,6 +34,7 @@ export default [
     rules: {
       ...tsPlugin.configs['recommended'].rules,
       '@typescript-eslint/no-confusing-void-expression': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
 ];

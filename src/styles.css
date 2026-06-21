@@ -4184,3 +4184,331 @@ textarea.game-input:focus {
   width: 18px;
   height: 18px;
 }
+
+/* ── Phase 4b: Markdown editor syntax highlighting ─────────────── */
+
+.md-editor-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.md-highlight-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+  color: transparent;
+  z-index: 1;
+}
+
+.md-highlight-overlay .md-hl-heading {
+  color: var(--kd-gold);
+  font-weight: 700;
+}
+
+.md-highlight-overlay .md-hl-bold {
+  color: var(--accent-cool);
+  font-weight: 700;
+}
+
+.md-highlight-overlay .md-hl-italic {
+  color: var(--accent-soft);
+  font-style: italic;
+}
+
+.md-highlight-overlay .md-hl-code {
+  color: #f0a060;
+  background: rgba(200, 180, 140, 0.08);
+  border-radius: 3px;
+}
+
+.md-highlight-overlay .md-hl-link {
+  color: #8ab6e8;
+  text-decoration: underline;
+}
+
+.md-highlight-overlay .md-hl-image {
+  color: #b48cff;
+}
+
+.md-highlight-overlay .md-hl-list {
+  color: var(--kd-gold);
+  font-weight: 600;
+}
+
+/* The textarea (real input) sits above with transparent bg */
+.md-editor-wrapper textarea {
+  position: relative;
+  z-index: 2;
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  caret-color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Phase 4b: Auto-complete suggestions dropdown ──────────────── */
+
+.md-autocomplete {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  background: var(--bg-panel);
+  border: 2px solid var(--border-soft);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.md-autocomplete-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.md-autocomplete-item:last-child {
+  border-bottom: none;
+}
+
+.md-autocomplete-item:hover,
+.md-autocomplete-item--active {
+  background: rgba(212, 168, 87, 0.12);
+}
+
+.md-autocomplete-label {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.md-autocomplete-desc {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 12px;
+}
+
+/* ── Phase 4e: Study Statistics Dashboard ─────────────────────── */
+
+.study-stats-panel {
+  max-width: 600px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.stats-header h2 {
+  margin: 0;
+  font-family: var(--font-game);
+}
+
+.stats-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stats-card {
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stats-card-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stats-card-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stats-section {
+  margin-bottom: 18px;
+}
+
+.stats-section h3 {
+  font-family: var(--font-game);
+  font-size: 14px;
+  margin: 0 0 10px;
+  color: var(--text-title);
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+}
+
+.stats-row:last-child {
+  border-bottom: none;
+}
+
+.stats-badges {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.stats-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stats-session-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+}
+
+.stats-session-row span {
+  flex: 1;
+}
+
+.stats-session-row span:last-child {
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+/* ── Phase 4f: Tag system ─────────────────────────────────────── */
+
+.tag-editor {
+  margin-top: 12px;
+}
+
+.tag-editor-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  background: rgba(212, 168, 87, 0.12);
+  border: 1px solid rgba(212, 168, 87, 0.25);
+  border-radius: 14px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.tag-chip-remove {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.7;
+}
+
+.tag-chip-remove:hover {
+  opacity: 1;
+}
+
+.tag-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.tag-input {
+  flex: 1;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.tag-add-btn {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+}
+
+/* Tag navigation (cross-reference links) */
+.tag-navigation {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+.tag-navigation-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.tag-navigation-rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag-nav-room-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(212, 168, 87, 0.08);
+  border: 1px solid rgba(212, 168, 87, 0.2);
+  border-radius: 6px;
+}
+
+.tag-nav-extra-tags {
+  font-size: 10px;
+  color: var(--text-muted);
+}

@@ -14,6 +14,7 @@ import type { PlayerClassId } from '@/game/systems/playerClasses';
 import {
   ensureBiomeFloorTexture,
   resolveFloorBiome,
+  getBiomePalette,
   type FloorBiomeId,
 } from '@/game/systems/proceduralTextures';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
@@ -49,6 +50,13 @@ export interface FloorVisibilityInput {
   portalUpRoomId: string | null;
   portalDownRoomIds: ReadonlySet<string> | readonly string[];
   biomeId?: FloorBiomeId;
+}
+
+function lightenHex(color: number, amount: number): number {
+  const r = Math.min(255, ((color >> 16) & 0xff) + amount);
+  const g = Math.min(255, ((color >> 8) & 0xff) + amount);
+  const b = Math.min(255, (color & 0xff) + amount);
+  return (r << 16) | (g << 8) | b;
 }
 
 const PLAYER_SPEED = 160;
@@ -191,6 +199,8 @@ export class DungeonScene extends Phaser.Scene {
    * redraws on the same floor. */
   private floorSeed = 0;
   private floorBiomeOverride: FloorBiomeId | null = null;
+  private biomeWallTint = 0x3a3228;
+  private biomeCorridorColor = 0xb8a87a;
 
   // ── Touch / pointer input state ──────────────────────────────────────────
   /** True while a single-finger drag/tap gesture is in progress. */
@@ -864,7 +874,7 @@ export class DungeonScene extends Phaser.Scene {
 
     const camera = this.cameras.main;
     const screenX = (npc.x - camera.worldView.x) * camera.zoom;
-    const screenY = (npc.y - camera.worldView.y) * camera.zoom;
+    const screenY = (npc.y - npc.displayHeight / 2 - camera.worldView.y) * camera.zoom;
     const canvasRect = this.game.canvas?.getBoundingClientRect();
 
     return {
@@ -1012,7 +1022,11 @@ export class DungeonScene extends Phaser.Scene {
     this.visibleRoomIds = new Set(input.visibleRoomIds);
     this.portalUpRoomId = input.portalUpRoomId;
     this.portalDownRoomIds = new Set(input.portalDownRoomIds);
-    this.floorBiomeOverride = input.biomeId ?? null;
+    if (input.biomeId !== undefined) this.floorBiomeOverride = input.biomeId;
+    const biome = resolveFloorBiome(hashString(input.floorId), this.floorBiomeOverride ?? undefined);
+    const pal = getBiomePalette(biome);
+    this.biomeWallTint = pal.wallTint;
+    this.biomeCorridorColor = pal.corridorColor;
     this.floorSeed = hashString(input.floorId);
     this.rebuildActiveWalkable();
   }
@@ -1234,12 +1248,13 @@ export class DungeonScene extends Phaser.Scene {
       const isPortalDown = this.portalDownRoomIds.has(room.roomId);
       const isPortal = isPortalUp || isPortalDown;
 
-      // Room shells stay in cool slate/indigo tones to avoid warm browns.
-      const fill = isPortal ? 0x1f2a3a : room.isRoot ? 0x1c2c4f : 0x16233d;
+      // Room shells use biome-dependent wall tint
+      const fill = this.biomeWallTint;
       g.fillStyle(fill, 1);
       g.fillRect(x, y, w, h);
-      // Inner floor tile band to suggest a tiled chamber.
-      g.fillStyle(isPortal ? 0x2a3a5c : 0x22355e, 0.65);
+      // Inner floor tile band to suggest a tiled chamber
+      const innerFill = lightenHex(fill, 24);
+      g.fillStyle(isPortal ? innerFill : fill, isPortal ? 1 : 0.65);
       g.fillRect(x + 4, y + 4, w - 8, h - 8);
       this.drawRoomWallsWithDoors(
         g,
@@ -1361,8 +1376,8 @@ export class DungeonScene extends Phaser.Scene {
     this.corridorTileSprites = [];
     for (const door of this.doorSprites) door.destroy();
     this.doorSprites = [];
-    const baseColor = 0x4f679f;
-    const portalColor = 0x7fb2ff;
+    const baseColor = this.biomeCorridorColor;
+    const portalColor = lightenHex(baseColor, 40);
     const corridorTextureKey = ensureBiomeFloorTexture(
       this,
       resolveFloorBiome(this.floorSeed, this.floorBiomeOverride ?? undefined),

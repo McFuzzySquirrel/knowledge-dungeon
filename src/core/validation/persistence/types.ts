@@ -3,7 +3,7 @@
  * artifacts, and review modules. Ported verbatim from mindmap-dungeon.
  */
 
-export const CURRENT_SCHEMA_VERSION = '1.0.0';
+export const CURRENT_SCHEMA_VERSION = '1.1.0';
 
 export const PHASE_STATES = [
   'SubjectCreated',
@@ -87,6 +87,14 @@ export interface RoomMetadata {
   validationState: ValidationState;
   reviewPassCount: number;
   attachments: RoomAttachment[];
+  /** Phase 4a: SM-2 spaced repetition fields. */
+  sm2QualityResponse?: number;
+  sm2EaseFactor?: number;
+  sm2IntervalDays?: number;
+  sm2NextReviewDate?: string;
+  sm2ConsecutiveCorrect?: number;
+  /** Phase 4f: tags assigned to this room. */
+  tags?: string[];
 }
 
 export interface DungeonRoomSummary {
@@ -120,6 +128,10 @@ export interface DungeonMetadata {
   rooms: DungeonRoomSummary[];
   edges: DungeonEdge[];
   progression: ProgressionSnapshot;
+  /** Phase 4c: Custom biome for this subject. */
+  biome?: string;
+  /** Phase 4f: Cross-subject tag index (tag → roomIds). */
+  tagIndex?: Record<string, string[]>;
 }
 
 export interface SubjectSnapshot {

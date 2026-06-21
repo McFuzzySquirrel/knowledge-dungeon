@@ -23,6 +23,8 @@ interface FloorBiomePalette {
   crack: number;
   edgeMin: number;
   edgeMax: number;
+  wallTint: number;
+  corridorColor: number;
 }
 
 const TILE_SIZE = 64;
@@ -36,6 +38,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x181818,
     edgeMin: 48,
     edgeMax: 58,
+    wallTint: 0x3a3228,
+    corridorColor: 0xb8a87a,
   },
   mathematicsCaverns: {
     base: 0x2d364a,
@@ -45,6 +49,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x161d2a,
     edgeMin: 52,
     edgeMax: 66,
+    wallTint: 0x2a3348,
+    corridorColor: 0x5e8eb8,
   },
   scienceLabs: {
     base: 0x30373d,
@@ -54,6 +60,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x171c1f,
     edgeMin: 50,
     edgeMax: 64,
+    wallTint: 0x2e3a32,
+    corridorColor: 0x6ea878,
   },
   historyRuins: {
     base: 0x2f3850,
@@ -63,6 +71,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x1b2231,
     edgeMin: 62,
     edgeMax: 82,
+    wallTint: 0x3a3a2a,
+    corridorColor: 0x8a9eb8,
   },
   languageLibrary: {
     base: 0x2a3452,
@@ -72,6 +82,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x181f32,
     edgeMin: 58,
     edgeMax: 80,
+    wallTint: 0x2a2844,
+    corridorColor: 0x9e8abf,
   },
   // ── Phase 3c new biomes ──────────────────────────────────────
   deepForest: {
@@ -82,6 +94,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x121a0e,
     edgeMin: 57,
     edgeMax: 76,
+    wallTint: 0x263a1e,
+    corridorColor: 0x5a8a3e,
   },
   frozenTundra: {
     base: 0x34404d,
@@ -91,6 +105,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x1a242e,
     edgeMin: 60,
     edgeMax: 84,
+    wallTint: 0x2a3e50,
+    corridorColor: 0x70b8d8,
   },
   crystalCaverns: {
     base: 0x2f2d44,
@@ -100,6 +116,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x1a1730,
     edgeMin: 50,
     edgeMax: 68,
+    wallTint: 0x2c2844,
+    corridorColor: 0x9e78d0,
   },
   sunkenSwamp: {
     base: 0x2e3826,
@@ -109,6 +127,8 @@ const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
     crack: 0x141d0e,
     edgeMin: 55,
     edgeMax: 72,
+    wallTint: 0x22341a,
+    corridorColor: 0x6a9e40,
   },
 };
 
@@ -139,6 +159,11 @@ export function resolveFloorBiome(seed: number, override?: FloorBiomeId): FloorB
   if (override) return override;
   const normalizedSeed = Number.isFinite(seed) ? Math.abs(Math.trunc(seed)) : 0;
   return FLOOR_BIOME_IDS[normalizedSeed % FLOOR_BIOME_IDS.length];
+}
+
+export function getBiomePalette(biome: FloorBiomeId): { wallTint: number; corridorColor: number } {
+  const p = FLOOR_BIOME_PALETTES[biome];
+  return { wallTint: p.wallTint, corridorColor: p.corridorColor };
 }
 
 export function floorBiomeTextureKey(biome: FloorBiomeId): string {

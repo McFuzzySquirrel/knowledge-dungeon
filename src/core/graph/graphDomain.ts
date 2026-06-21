@@ -109,7 +109,7 @@ export function createRootDungeon(
   if (!topicResult.ok) return topicResult;
 
   const dungeon: DungeonMetadata = {
-    schemaVersion: '1.0.0',
+    schemaVersion: '1.1.0',
     dungeonId: input.dungeonId,
     subjectName: input.subjectName.trim(),
     createdAt: input.nowIso,
@@ -119,6 +119,8 @@ export function createRootDungeon(
     rooms: [{ roomId: input.rootRoomId, topic: topicResult.value, status: 'Created' }],
     edges: [],
     progression: { xpTotal: 0, rank: 'Novice', badges: [] },
+    biome: input.biome,
+    tagIndex: {},
   };
 
   return { ok: true, value: dungeon };
