@@ -322,7 +322,7 @@ describe('GameScreen NPC dialog callbacks', () => {
     act(() => {
       screen.getByRole('button', { name: /Close room panel/i }).click();
     });
-    expect(useProgressionStore.getState().xpTotal).toBe(6);
+    expect(useProgressionStore.getState().xpTotal).toBe(12);
   });
 
   it('only shows reviewed markers in archaeologist phase', async () => {
