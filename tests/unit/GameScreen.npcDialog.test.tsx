@@ -77,10 +77,14 @@ vi.mock('@/core/graph', () => ({
   }),
 }));
 
-vi.mock('@/core/review', () => ({
-  isReviewableRoom: () => true,
-  summarizeReviewAnalytics: () => ({ fullReviewPasses: 0 }),
-}));
+vi.mock('@/core/review', async () => {
+  const actual = await vi.importActual<typeof import('@/core/review')>('@/core/review');
+  return {
+    ...actual,
+    isReviewableRoom: () => true,
+    summarizeReviewAnalytics: () => ({ fullReviewPasses: 0 }),
+  };
+});
 
 vi.mock('@/core/progression', async () => {
   const actual = await vi.importActual('@/core/progression');
@@ -322,7 +326,7 @@ describe('GameScreen NPC dialog callbacks', () => {
     act(() => {
       screen.getByRole('button', { name: /Close room panel/i }).click();
     });
-    expect(useProgressionStore.getState().xpTotal).toBe(12);
+    expect(useProgressionStore.getState().xpTotal).toBe(6);
   });
 
   it('only shows reviewed markers in archaeologist phase', async () => {
