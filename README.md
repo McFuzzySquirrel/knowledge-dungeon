@@ -81,6 +81,12 @@ This works especially well for onboarding, architecture reviews, and "what does 
 
 ![Knowledge Dungeon UI showcase](./docs/assets/showcase.gif)
 
+### Welcome & Onboarding
+
+| Welcome Screen | Continue to Village | Data & Templates |
+|---|---|---|
+| ![Welcome screen with biome selector, create form, and tutorial card](./docs/assets/ui/welcome-screen.png) | ![Welcome screen showing Continue to Village button when subjects exist](./docs/assets/ui/welcome-continue-to-village.png) | ![Data tab with template export/import and subject management](./docs/assets/ui/welcome-data-tab.png) |
+
 ### Village Hub
 
 ![Dungeon Village - hub world with buildings, portals, NPCs, and paths](./docs/assets/ui/village-overview.png)
