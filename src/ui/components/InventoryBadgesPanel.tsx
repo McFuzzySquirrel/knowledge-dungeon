@@ -3,6 +3,8 @@ import {
   SCRIBE_CENTURY_120_BADGE_ID,
   SCRIBE_CENTURY_120_BADGE_LABEL,
 } from '@/core/progression';
+import type { EquippableLootItem } from '@/core/progression';
+import { EQUIP_SLOTS, EQUIP_SLOT_LABELS, type EquipSlot } from '@/core/progression';
 import type { CollectedNoteEntry, LootItem } from '@/store/progressionStore';
 import {
   exportCollectionSnapshot,
@@ -15,6 +17,10 @@ interface InventoryBadgesPanelProps {
   inventory: readonly LootItem[];
   badges: readonly string[];
   collectedNotes: readonly CollectedNoteEntry[];
+  equippedItems: readonly EquippableLootItem[];
+  equipBonuses: { qualityBonus: number; xpMultiplier: number; xpBonus: number; streakBonus: number };
+  onEquip: (itemId: string) => void;
+  onUnequip: (itemId: string) => void;
   subjectName: string;
   clearedRoomCount: number;
   totalRoomCount: number;
@@ -60,6 +66,15 @@ const RARITY_HINT: Record<LootItem['rarity'], string> = {
   rare: 'Utility: stronger navigation or recall support.',
   epic: 'Utility: highest-tier synthesis support item.',
 };
+
+function slotIcon(slot: EquipSlot): string {
+  switch (slot) {
+    case 'head': return '🪖';
+    case 'body': return '🛡️';
+    case 'accessory': return '💍';
+    case 'weapon': return '⚔️';
+  }
+}
 
 function badgeLabel(badgeId: string): string {
   return BADGE_LABELS[badgeId] ?? badgeId;
@@ -136,6 +151,10 @@ export function InventoryBadgesPanel({
   inventory,
   badges,
   collectedNotes,
+  equippedItems,
+  equipBonuses,
+  onEquip,
+  onUnequip,
   subjectName,
   clearedRoomCount,
   totalRoomCount,
@@ -337,34 +356,88 @@ export function InventoryBadgesPanel({
             </div>
           </section>
         ) : view === 'inventory' ? (
-          inventory.length === 0 ? (
+          <>
+            {/* Equipment slots */}
+            <section className="equip-slots-section" style={{ marginBottom: 12 }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: 13 }}>Equipment</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                {EQUIP_SLOTS.map((slot) => {
+                  const item = equippedItems.find((e) => e.equipSlot === slot);
+                  return (
+                    <div
+                      key={slot}
+                      className={`equip-slot${item ? ' equip-slot--filled' : ''}`}
+                      title={item ? `${item.name} — ${item.description}` : `Empty ${EQUIP_SLOT_LABELS[slot]} slot`}
+                    >
+                      <span style={{ fontSize: 14 }}>{slotIcon(slot)}</span>
+                      <span style={{ fontSize: 11, flex: 1 }}>{item ? item.name : EQUIP_SLOT_LABELS[slot]}</span>
+                      {item ? (
+                        <button
+                          type="button"
+                          className="ghost"
+                          style={{ fontSize: 10, padding: '1px 4px' }}
+                          onClick={() => onUnequip(item.id)}
+                        >
+                          ✕
+                        </button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+              {(equipBonuses.qualityBonus > 0 || equipBonuses.xpMultiplier > 1) ? (
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  +{equipBonuses.qualityBonus} quality &middot; {equipBonuses.xpMultiplier}x XP &middot; +{equipBonuses.xpBonus} flat &middot; +{equipBonuses.streakBonus} streak
+                </p>
+              ) : null}
+            </section>
+
+            {inventory.length === 0 ? (
             <p className="room-help-text">
               No loot yet. Defeat encounters during the Scribe phase to earn artifacts.
             </p>
           ) : (
             <ul className="inventory-grid">
-              {inventory.map((item) => (
+              {inventory.map((item) => {
+                const isEquippable = 'equipSlot' in item && (item as EquippableLootItem).equipSlot !== undefined;
+                const isEquipped = isEquippable && equippedItems.some((e) => e.id === (item as EquippableLootItem).id);
+                return (
                 <li
                   key={item.id}
                   className="inventory-card"
                   style={{ borderColor: RARITY_COLOR[item.rarity] }}
                 >
                   <div className="inventory-card-icon" aria-hidden="true">
-                    📜
+                    {isEquippable ? slotIcon((item as EquippableLootItem).equipSlot) : '📜'}
                   </div>
                   <div>
-                    <div className="inventory-card-title">{item.name}</div>
+                    <div className="inventory-card-title">
+                      {item.name}
+                      {isEquipped ? <span className="loot-equipped-badge" style={{ marginLeft: 6 }}>Equipped</span> : null}
+                    </div>
                     <div className="inventory-card-rarity" style={{ color: RARITY_COLOR[item.rarity] }}>
-                      {item.rarity}
+                      {item.rarity}{isEquippable ? ` · ${EQUIP_SLOT_LABELS[(item as EquippableLootItem).equipSlot]}` : ''}
                     </div>
                     <p className="inventory-card-desc">{item.description}</p>
                     <p className="inventory-card-desc">{RARITY_HINT[item.rarity]}</p>
                     <p className="room-help-text">Acquired: {formatTimestamp(item.acquiredAt)}</p>
+                    {isEquippable ? (
+                      <button
+                        type="button"
+                        className="ghost"
+                        style={{ marginTop: 4, fontSize: 11 }}
+                        onClick={() => isEquipped ? onUnequip(item.id) : onEquip(item.id)}
+                      >
+                        {isEquipped ? 'Unequip' : 'Equip'}
+                      </button>
+                    ) : null}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
-          )
+          )}
+          </>
         ) : view === 'badges' ? (
           badges.length === 0 ? (
           <p className="room-help-text">

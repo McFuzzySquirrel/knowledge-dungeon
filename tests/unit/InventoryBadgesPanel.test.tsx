@@ -4,6 +4,13 @@ import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
 import { InventoryBadgesPanel } from '@/ui/components/InventoryBadgesPanel';
 
 describe('InventoryBadgesPanel', () => {
+  const baseProps = {
+    equippedItems: [] as const,
+    equipBonuses: { qualityBonus: 0, xpMultiplier: 1, xpBonus: 0, streakBonus: 0 },
+    onEquip: () => undefined,
+    onUnequip: () => undefined,
+  };
+
   it('renders empty inventory placeholder when no items are present', () => {
     render(
       <InventoryBadgesPanel
@@ -11,6 +18,7 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={[]}
         collectedNotes={[]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -30,6 +38,7 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={['First Steps']}
         collectedNotes={[]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -50,6 +59,7 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={[SCRIBE_CENTURY_120_BADGE_ID]}
         collectedNotes={[]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -69,6 +79,7 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={['ArchaeologistReviewPass7']}
         collectedNotes={[]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -91,6 +102,7 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={['ArchaeologistPhaseComplete']}
         collectedNotes={[]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -114,6 +126,7 @@ describe('InventoryBadgesPanel', () => {
         inventory={[]}
         badges={['CreatorPhaseComplete']}
         collectedNotes={[]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -152,6 +165,7 @@ describe('InventoryBadgesPanel', () => {
             collectedAt: '2026-01-01T00:00:00.000Z',
           },
         ]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -184,6 +198,7 @@ describe('InventoryBadgesPanel', () => {
             collectedAt: '2026-01-01T00:00:00.000Z',
           },
         ]}
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -219,6 +234,7 @@ describe('InventoryBadgesPanel', () => {
           },
         ]}
         autoOpenNoteId="dungeon:room-2"
+        {...baseProps}
         subjectName="Algorithms"
         clearedRoomCount={0}
         totalRoomCount={1}
@@ -258,6 +274,7 @@ describe('InventoryBadgesPanel', () => {
             ? 'https://example.com/matrix.png'
             : null
         }
+        {...baseProps}
         subjectName="Linear Algebra"
         clearedRoomCount={0}
         totalRoomCount={1}

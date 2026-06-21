@@ -62,6 +62,10 @@ export function GameScreen(): JSX.Element {
   const inventory = useProgressionStore((s) => s.inventory);
   const badges = useProgressionStore((s) => s.badges);
   const collectedNotes = useProgressionStore((s) => s.collectedNotes);
+  const equippedItems = useProgressionStore((s) => s.equippedItems);
+  const equipItem = useProgressionStore((s) => s.equipItem);
+  const unequipItem = useProgressionStore((s) => s.unequipItem);
+  const getEquipBonuses = useProgressionStore((s) => s.getEquipBonuses);
   const setProgressionActiveSubject = useProgressionStore((s) => s.setActiveSubject);
   const colorTheme = usePreferencesStore((s) => s.colorTheme);
   const setColorTheme = usePreferencesStore((s) => s.setColorTheme);
@@ -820,6 +824,10 @@ export function GameScreen(): JSX.Element {
               inventory={inventory}
               badges={badges}
               collectedNotes={subjectCollectedNotes}
+              equippedItems={equippedItems}
+              equipBonuses={getEquipBonuses()}
+              onEquip={(id) => { equipItem(id); }}
+              onUnequip={(id) => { unequipItem(id); }}
               noteMarkdownByRoomId={noteMarkdownByRoomId}
               subjectName={snapshot.dungeon.subjectName}
               clearedRoomCount={clearedRoomsCount}
