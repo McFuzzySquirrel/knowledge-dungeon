@@ -146,6 +146,10 @@
     "importContains": "Contiene {{count}} sprites",
     "importConfirm": "Importar",
     "animation": "Animación",
-    "animationNote": "Las animaciones CSS funcionan en la vista previa. Las animaciones en el juego usan Phaser tweens (próximamente)."
+    "animationNote": "Las animaciones CSS funcionan en la vista previa. Las animaciones en el juego usan Phaser tweens (próximamente).",
+    "codeEditor": "Código",
+    "wysiwygEditor": "Dibujar",
+    "wysiwygLoading": "Cargando editor visual...",
+    "wysiwygError": "El editor visual no pudo cargarse. Usa el editor de código en su lugar."
   }
 }

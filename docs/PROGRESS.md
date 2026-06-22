@@ -416,3 +416,15 @@ Feature PRD: `docs/features/make-it-yours.md`
 - [x] Press E near workshop or click "Open Editor" to launch the Make It Yours editor modal
 - [x] Also accessible from Settings → "Make It Yours" tab (village ⚙ button + dungeon HUD settings)
 - [x] CSS: `.make-it-yours-modal` at 800px wide for comfortable split-pane layout
+
+### WYSIWYG SVG Editor Integration
+
+- [x] Installed `svgedit` npm package (v7.4.1) — provides the SVGEdit WYSIWYG editor as an embeddable class
+- [x] Copied svgedit dist files to `public/editor/svg-edit/` for CSS and resource loading
+- [x] Created `src/ui/components/SvgEditWysiwyg.tsx` — React wrapper with lazy `import('svgedit')`, async init, SVG load/save hooks, change listener binding, proper cleanup
+- [x] Added **Code / Draw** toggle buttons to `SpriteEditor.tsx` — switch between textarea+preview and the WYSIWYG canvas
+- [x] SVG sync: switching modes preserves the current SVG content; WYSIWYG changes propagate to the text area for saving
+- [x] CSS for mode toggle buttons, WYSIWYG container, loading overlay
+- [x] i18n: `codeEditor`, `wysiwygEditor`, `wysiwygLoading`, `wysiwygError` keys in both locales
+- [x] Excluded `public/editor/` from ESLint (4851 lint errors in svgedit dist files)
+- [x] Added `public/editor/svg-edit/` to `.gitignore` (generated from node_modules)

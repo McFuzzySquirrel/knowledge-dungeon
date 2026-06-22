@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import { SvgEditWysiwyg } from '@/ui/components/SvgEditWysiwyg';
 
 export type AnimationPreset = 'none' | 'pulse' | 'spin' | 'float' | 'bounce';
 
@@ -23,12 +24,6 @@ export function saveAnimationConfig(spritePath: string, config: SpriteAnimationC
   } catch { /* ignore */ }
 }
 
-export function deleteAnimationConfig(spritePath: string): void {
-  try {
-    localStorage.removeItem(`${ANIM_STORAGE_PREFIX}${spritePath}`);
-  } catch { /* ignore */ }
-}
-
 const ANIMATION_LABELS: Record<AnimationPreset, string> = {
   none: 'No animation',
   pulse: 'Pulse (scale)',
@@ -37,11 +32,12 @@ const ANIMATION_LABELS: Record<AnimationPreset, string> = {
   bounce: 'Bounce',
 };
 
+type ViewMode = 'code' | 'wysiwyg';
+
 function sanitizeSvg(svgContent: string): string {
   return svgContent.replace(/<script[\s\S]*?<\/script>/gi, '');
 }
 
-/** Extract viewBox dimensions from an SVG string, or return defaults. */
 function parseViewBox(svgContent: string): { w: number; h: number } | null {
   const m = svgContent.match(/viewBox\s*=\s*"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"/i);
   if (m) return { w: parseInt(m[3], 10), h: parseInt(m[4], 10) };
@@ -80,6 +76,8 @@ export function SpriteEditor({
   const [text, setText] = useState('');
   const [sanitizedSvg, setSanitizedSvg] = useState('');
   const [animType, setAnimType] = useState<AnimationPreset>('none');
+  const [viewMode, setViewMode] = useState<ViewMode>('code');
+  const wysiwygSvgRef = useRef<string>('');
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -111,7 +109,16 @@ export function SpriteEditor({
   const handleChange = useCallback(
     (value: string) => {
       setText(value);
+      wysiwygSvgRef.current = value;
       onChange(value);
+    },
+    [onChange],
+  );
+
+  const handleWysiwygChange = useCallback(
+    (svgContent: string) => {
+      wysiwygSvgRef.current = svgContent;
+      onChange(svgContent);
     },
     [onChange],
   );
@@ -125,6 +132,17 @@ export function SpriteEditor({
     },
     [spritePath],
   );
+
+  const switchToCode = useCallback(() => {
+    const latest = wysiwygSvgRef.current || text;
+    setText(latest);
+    setSanitizedSvg(sanitizeSvg(latest));
+    setViewMode('code');
+  }, [text]);
+
+  const switchToWysiwyg = useCallback(() => {
+    setViewMode('wysiwyg');
+  }, []);
 
   if (!spritePath) {
     return (
@@ -156,35 +174,61 @@ export function SpriteEditor({
         </span>
       </div>
 
-      <div className="sprite-editor-body">
-        {/* Inline SVG preview — CSS animations execute here */}
-        <div
-          className="sprite-editor-preview"
-          ref={previewRef}
+      {/* Editor mode toggle */}
+      <div className="sprite-editor-mode-toggle">
+        <button
+          type="button"
+          className={`sprite-mode-btn${viewMode === 'code' ? ' active' : ''}`}
+          onClick={switchToCode}
+          aria-pressed={viewMode === 'code'}
         >
-          {sanitizedSvg ? (
-            <div
-              dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
-              style={{
-                width: viewBox.w * previewScale,
-                height: viewBox.h * previewScale,
-                overflow: 'hidden',
-              }}
-            />
-          ) : (
-            <div className="sprite-editor-preview-placeholder">SVG</div>
-          )}
-        </div>
-
-        <textarea
-          className="sprite-editor-textarea game-input"
-          value={text}
-          onChange={(e) => handleChange(e.target.value)}
-          spellCheck={false}
-          aria-label={t('makeItYours.editorLabel', 'SVG Editor')}
-          rows={12}
-        />
+          {t('makeItYours.codeEditor', 'Code')}
+        </button>
+        <button
+          type="button"
+          className={`sprite-mode-btn${viewMode === 'wysiwyg' ? ' active' : ''}`}
+          onClick={switchToWysiwyg}
+          aria-pressed={viewMode === 'wysiwyg'}
+        >
+          {t('makeItYours.wysiwygEditor', 'Draw')}
+        </button>
       </div>
+
+      {viewMode === 'code' ? (
+        <div className="sprite-editor-body">
+          <div className="sprite-editor-preview" ref={previewRef}>
+            {sanitizedSvg ? (
+              <div
+                dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
+                style={{
+                  width: viewBox.w * previewScale,
+                  height: viewBox.h * previewScale,
+                  overflow: 'hidden',
+                }}
+              />
+            ) : (
+              <div className="sprite-editor-preview-placeholder">SVG</div>
+            )}
+          </div>
+          <textarea
+            className="sprite-editor-textarea game-input"
+            value={text}
+            onChange={(e) => handleChange(e.target.value)}
+            spellCheck={false}
+            aria-label={t('makeItYours.editorLabel', 'SVG Editor')}
+            rows={12}
+          />
+        </div>
+      ) : (
+        <div className="sprite-editor-wysiwyg">
+          <SvgEditWysiwyg
+            initialSvg={text}
+            onChange={handleWysiwygChange}
+            editorWidth={Math.max(400, Math.min(800, window.innerWidth - 320))}
+            editorHeight={Math.max(350, Math.min(550, window.innerHeight * 0.5))}
+          />
+        </div>
+      )}
 
       {/* Animation preset selector */}
       <div className="sprite-editor-anim">

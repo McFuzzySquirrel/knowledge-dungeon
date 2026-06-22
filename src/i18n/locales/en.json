@@ -146,6 +146,10 @@
     "importContains": "Contains {{count}} sprites",
     "importConfirm": "Import",
     "animation": "Animation",
-    "animationNote": "CSS animations work in the preview. In-game animations use Phaser tweens (coming soon)."
+    "animationNote": "CSS animations work in the preview. In-game animations use Phaser tweens (coming soon).",
+    "codeEditor": "Code",
+    "wysiwygEditor": "Draw",
+    "wysiwygLoading": "Loading WYSIWYG editor...",
+    "wysiwygError": "WYSIWYG editor failed to load. Use the Code editor instead."
   }
 }
