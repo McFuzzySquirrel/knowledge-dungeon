@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { Dirent } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -518,7 +519,7 @@ function registerKnowledgeBridgeHandlers(): void {
     while (queue.length > 0) {
       const subdir = queue.pop()!;
       const fullDir = path.join(assetsRoot, subdir);
-      let entries: fs.Dirent[];
+      let entries: Dirent[];
       try {
         entries = await fs.readdir(fullDir, { withFileTypes: true });
       } catch {
