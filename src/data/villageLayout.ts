@@ -27,7 +27,7 @@ const LEARNING_QUOTES = [
 
 export interface VillageStructure {
   id: string;
-  type: 'portal-icon' | 'keeper-tower' | 'guild-hall' | 'training-gate' | 'fountain' | 'tree' | 'torch' | 'gate' | 'bench' | 'signpost' | 'waysign' | 'trophy-hall' | 'bush' | 'rock' | 'library' | 'pond' | 'flower';
+  type: 'portal-icon' | 'keeper-tower' | 'guild-hall' | 'training-gate' | 'fountain' | 'tree' | 'torch' | 'gate' | 'bench' | 'signpost' | 'waysign' | 'trophy-hall' | 'bush' | 'rock' | 'library' | 'pond' | 'flower' | 'workshop';
   label: string;
   gridX: number;
   gridY: number;
@@ -134,6 +134,13 @@ export const VILLAGE_MAP: VillageMapDef = {
       type: 'trophy-hall',
       label: 'Trophy Hall',
       gridX: 30, gridY: 24,
+      width: 3, height: 3,
+    },
+    {
+      id: 'artisan-workshop',
+      type: 'workshop',
+      label: 'Artisan Workshop',
+      gridX: 26, gridY: 3,
       width: 3, height: 3,
     },
 

@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { VILLAGE_MAP, type VillageStructure } from '@/data/villageLayout';
-
-const BASE = import.meta.env.BASE_URL;
+import { resolveSpriteUrl } from '@/services/customSprites';
 
 const PLAYER_SPEED = 120;
 const NPC_SPEED = 45;
@@ -20,34 +19,34 @@ export interface VillageSceneEvents {
 }
 
 const SPRITE_PATHS = {
-  ground: `${BASE}assets/sprites/village/ground-tile.svg`,
-  path: `${BASE}assets/sprites/village/path-tile.svg`,
-  keeperTower: `${BASE}assets/sprites/village/keeper-tower.svg`,
-  guildHall: `${BASE}assets/sprites/village/guild-hall.svg`,
-  dungeonPortal: `${BASE}assets/sprites/village/dungeon-portal.svg`,
-  trainingGate: `${BASE}assets/sprites/village/training-gate.svg`,
-  fountain: `${BASE}assets/sprites/village/fountain.svg`,
-  tree: `${BASE}assets/sprites/village/tree.svg`,
-  portalIcon: `${BASE}assets/sprites/village/portal-icon.svg`,
-  bush: `${BASE}assets/sprites/village/bush.svg`,
-  rock: `${BASE}assets/sprites/village/rock.svg`,
-  lamp: `${BASE}assets/sprites/village/lamp.svg`,
-  torch: `${BASE}assets/sprites/village/torch.svg`,
-  pond: `${BASE}assets/sprites/village/pond.svg`,
-  bird: `${BASE}assets/sprites/village/bird.svg`,
-  npcScholar: `${BASE}assets/sprites/village/npc-scholar.svg`,
-  npcWanderer: `${BASE}assets/sprites/village/npc-wanderer.svg`,
-  npcSage: `${BASE}assets/sprites/village/npc-sage.svg`,
-  signpost: `${BASE}assets/sprites/village/signpost.svg`,
-  waysign: `${BASE}assets/sprites/village/waysign.svg`,
-  trophyHall: `${BASE}assets/sprites/village/trophy-hall.svg`,
-  library: `${BASE}assets/sprites/village/library.svg`,
-  bench: `${BASE}assets/sprites/village/bench.svg`,
-  villageGate: `${BASE}assets/sprites/village/village-gate.svg`,
-  keeperNpc: `${BASE}assets/sprites/npc-keeper.svg`,
-  playerHero: `${BASE}assets/sprites/player-hero.svg`,
-  playerExplorer: `${BASE}assets/sprites/player-explorer.svg`,
-  playerArchivist: `${BASE}assets/sprites/player-archivist.svg`,
+  ground: 'sprites/village/ground-tile.svg',
+  path: 'sprites/village/path-tile.svg',
+  keeperTower: 'sprites/village/keeper-tower.svg',
+  guildHall: 'sprites/village/guild-hall.svg',
+  dungeonPortal: 'sprites/village/dungeon-portal.svg',
+  trainingGate: 'sprites/village/training-gate.svg',
+  fountain: 'sprites/village/fountain.svg',
+  tree: 'sprites/village/tree.svg',
+  portalIcon: 'sprites/village/portal-icon.svg',
+  bush: 'sprites/village/bush.svg',
+  rock: 'sprites/village/rock.svg',
+  lamp: 'sprites/village/lamp.svg',
+  torch: 'sprites/village/torch.svg',
+  pond: 'sprites/village/pond.svg',
+  bird: 'sprites/village/bird.svg',
+  npcScholar: 'sprites/village/npc-scholar.svg',
+  npcWanderer: 'sprites/village/npc-wanderer.svg',
+  npcSage: 'sprites/village/npc-sage.svg',
+  signpost: 'sprites/village/signpost.svg',
+  waysign: 'sprites/village/waysign.svg',
+  trophyHall: 'sprites/village/trophy-hall.svg',
+  library: 'sprites/village/library.svg',
+  bench: 'sprites/village/bench.svg',
+  villageGate: 'sprites/village/village-gate.svg',
+  keeperNpc: 'sprites/npc-keeper.svg',
+  playerHero: 'sprites/player-hero.svg',
+  playerExplorer: 'sprites/player-explorer.svg',
+  playerArchivist: 'sprites/player-archivist.svg',
 } as const;
 
 const TEX = {
@@ -102,11 +101,12 @@ const STRUCTURE_TEXTURE: Record<string, string> = {
   'bush': TEX.bush,
   'rock': TEX.rock,
   'pond': TEX.pond,
-  'flower': TEX.tree,  // reuse tree texture for flowers
+  'flower': TEX.tree,
   'trophy-hall': TEX.trophyHall,
   'bench': TEX.bench,
   'gate': TEX.villageGate,
   'library': TEX.library,
+  'workshop': TEX.trophyHall,  // reuse trophy-hall texture
 };
 
 interface NpcState {
@@ -175,8 +175,8 @@ export class VillageScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const loadSvg = (key: string, path: string, w: number, h: number) => {
-      this.load.svg(key, path, { width: w, height: h });
+    const loadSvg = (key: string, spritePath: string, w: number, h: number) => {
+      this.load.svg(key, resolveSpriteUrl(spritePath), { width: w, height: h });
     };
 
     loadSvg(TEX.ground, SPRITE_PATHS.ground, 48, 48);
@@ -459,7 +459,7 @@ export class VillageScene extends Phaser.Scene {
         });
       }
 
-      const interactiveTypes = new Set(['portal-icon', 'keeper-tower', 'guild-hall', 'training-gate', 'signpost', 'waysign', 'trophy-hall', 'library']);
+      const interactiveTypes = new Set(['portal-icon', 'keeper-tower', 'guild-hall', 'training-gate', 'signpost', 'waysign', 'trophy-hall', 'library', 'workshop']);
       const isInteractive = interactiveTypes.has(struct.type);
       if (isInteractive) {
         const zone = this.add.zone(cx, cy, struct.width * ts, struct.height * ts).setInteractive();

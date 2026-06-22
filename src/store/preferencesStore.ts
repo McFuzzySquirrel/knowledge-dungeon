@@ -12,6 +12,7 @@ export type ColorTheme = 'dark' | 'colorful' | 'aurora';
 interface PersistedPreferences {
   graphicsMode?: GraphicsMode;
   colorTheme?: ColorTheme | 'light' | 'sepia';
+  activeSpritePack?: string | null;
 }
 
 const PREFERENCES_STORAGE_KEY = 'knowledge-dungeon:session:preferences';
@@ -66,23 +67,32 @@ function resolveInitialColorTheme(): ColorTheme {
 export interface PreferencesState {
   graphicsMode: GraphicsMode;
   colorTheme: ColorTheme;
+  activeSpritePack: string | null;
   setGraphicsMode: (mode: GraphicsMode) => void;
   setColorTheme: (theme: ColorTheme) => void;
+  setActiveSpritePack: (packName: string | null) => void;
 }
 
 export const usePreferencesStore = create<PreferencesState>((set) => ({
   graphicsMode: resolveInitialGraphicsMode(),
   colorTheme: resolveInitialColorTheme(),
+  activeSpritePack: readPersisted()?.activeSpritePack ?? null,
   setGraphicsMode: (graphicsMode) => {
     set((state) => {
-      writePersisted({ graphicsMode, colorTheme: state.colorTheme });
+      writePersisted({ graphicsMode, colorTheme: state.colorTheme, activeSpritePack: state.activeSpritePack });
       return { graphicsMode };
     });
   },
   setColorTheme: (colorTheme) => {
     set((state) => {
-      writePersisted({ graphicsMode: state.graphicsMode, colorTheme });
+      writePersisted({ graphicsMode: state.graphicsMode, colorTheme, activeSpritePack: state.activeSpritePack });
       return { colorTheme };
+    });
+  },
+  setActiveSpritePack: (activeSpritePack) => {
+    set((state) => {
+      writePersisted({ graphicsMode: state.graphicsMode, colorTheme: state.colorTheme, activeSpritePack });
+      return { activeSpritePack };
     });
   },
 }));

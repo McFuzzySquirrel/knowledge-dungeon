@@ -14,3 +14,4 @@ data/
 
 # Allow source-code data files (but keep runtime data/ excluded)
 !src/data/
+public/assets/sprite-manifest.json

@@ -51,6 +51,7 @@ export interface SessionState {
   lastTeleportAt: number | null;
   mobileHudOpen: boolean;
   questStep: QuestStep;
+  sceneRestartCounter: number;
   setActiveSubjectId: (id: string | null) => void;
   setActiveScreen: (screen: AppScreen) => void;
   setPhase: (phase: GamePhase) => void;
@@ -68,6 +69,7 @@ export interface SessionState {
   setMobileHudOpen: (open: boolean) => void;
   setQuestStep: (step: QuestStep) => void;
   advanceQuestStep: () => void;
+  requestSceneRestart: () => void;
 }
 
 export const QUEST_ORDER: QuestStep[] = [
@@ -105,6 +107,7 @@ export const useSessionStore = create<SessionState>((set) => ({
   lastTeleportAt: null,
   mobileHudOpen: false,
   questStep: initialQuestStep,
+  sceneRestartCounter: 0,
   setActiveSubjectId: (activeSubjectId) => set({ activeSubjectId }),
   setActiveScreen: (activeScreen) => set({ activeScreen }),
   setPhase: (phase) => set({ phase }),
@@ -136,4 +139,6 @@ export const useSessionStore = create<SessionState>((set) => ({
       set({ questStep: next });
     }
   },
+  requestSceneRestart: () =>
+    set((state) => ({ sceneRestartCounter: state.sceneRestartCounter + 1 })),
 }));
