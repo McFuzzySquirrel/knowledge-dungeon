@@ -7,6 +7,7 @@ import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
+import { useShortcutStore } from '@/store/shortcutStore';
 import { createGame } from '@/game/createGame';
 import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
 import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
@@ -35,6 +36,7 @@ import {
   markGameplayLoopOnboardingSeen,
 } from '@/ui/utils/onboarding';
 import { setActiveSubjectId as persistActiveSubjectId } from '@/services/persistence/subjectPersistence';
+import { getStorageThreshold } from '@/services/errorRecovery';
 
 export function GameScreen(): JSX.Element {
   const snapshot = useSubjectStore((s) => s.snapshot);
@@ -502,9 +504,60 @@ export function GameScreen(): JSX.Element {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // Ignore the help shortcut while typing in any text-input/textarea/
-      // contenteditable so users can actually type a `?` character.
+      // Ignore shortcuts while typing in any text-input/textarea/
+      // contenteditable so users can still type normally.
       if (isEditableElement(e.target)) return;
+
+      // Phase 5: Use configurable shortcuts from the shortcut store
+      const shortcutState = useShortcutStore.getState().shortcuts;
+
+      // Help shortcut (index 0)
+      const helpShortcut = shortcutState[0];
+      if (helpShortcut) {
+        const helpKey = helpShortcut.key.toLowerCase();
+        const eKey = e.key.toLowerCase();
+        const ctrlOk = helpShortcut.ctrlKey ? (e.ctrlKey || e.metaKey) : !(e.ctrlKey || e.metaKey);
+        const shiftOk = helpShortcut.shiftKey ? e.shiftKey : !e.shiftKey;
+        if (eKey === helpKey && ctrlOk && shiftOk) {
+          e.preventDefault();
+          setHelpOpen((open) => !open);
+          return;
+        }
+      }
+
+      // Map shortcut (index 1)
+      const mapShortcut = shortcutState[1];
+      if (mapShortcut) {
+        const mapKey = mapShortcut.key.toLowerCase();
+        const eKey = e.key.toLowerCase();
+        const ctrlOk = mapShortcut.ctrlKey ? (e.ctrlKey || e.metaKey) : !(e.ctrlKey || e.metaKey);
+        const shiftOk = mapShortcut.shiftKey ? e.shiftKey : !e.shiftKey;
+        if (eKey === mapKey && ctrlOk && shiftOk) {
+          e.preventDefault();
+          if (useSessionStore.getState().isMapViewOpen) {
+            closeMapView();
+          } else {
+            openMapView();
+          }
+          return;
+        }
+      }
+
+      // Info panel shortcut (index 2)
+      const infoShortcut = shortcutState[2];
+      if (infoShortcut) {
+        const infoKey = infoShortcut.key.toLowerCase();
+        const eKey = e.key.toLowerCase();
+        const ctrlOk = infoShortcut.ctrlKey ? (e.ctrlKey || e.metaKey) : !(e.ctrlKey || e.metaKey);
+        const shiftOk = infoShortcut.shiftKey ? e.shiftKey : !e.shiftKey;
+        if (eKey === infoKey && ctrlOk && shiftOk) {
+          e.preventDefault();
+          toggleInfoPanel();
+          return;
+        }
+      }
+
+      // Legacy fallback: keep old shortcuts working for backward compat
       if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
         setHelpOpen((open) => !open);
@@ -523,6 +576,16 @@ export function GameScreen(): JSX.Element {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [closeMapView, openMapView, toggleInfoPanel]);
+
+  // Phase 5: Storage quota warning
+  useEffect(() => {
+    const threshold = getStorageThreshold();
+    if (threshold === 'critical') {
+      pushToast('error', 'Storage quota critically low. Please export your data and free up space.');
+    } else if (threshold === 'warn') {
+      pushToast('info', 'Storage space is running low. Consider exporting your data for backup.');
+    }
+  }, [pushToast, snapshot]);
 
   function handleHome() {
     closeMapView();

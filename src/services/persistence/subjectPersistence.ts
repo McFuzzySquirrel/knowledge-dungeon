@@ -13,6 +13,11 @@ import {
   type RoomAttachment,
   type SubjectSnapshot,
 } from '@/core/validation/persistence';
+import {
+  backupSubjectData,
+  safeLocalStorageSet,
+  quarantineCorruptData,
+} from '@/services/errorRecovery';
 
 const STORAGE_PREFIX = 'knowledge-dungeon:v1';
 
@@ -108,8 +113,11 @@ export async function loadSubjectSnapshot(subjectId: string): Promise<SubjectSna
   const raw = safeGet(STORAGE_KEYS.subject(subjectId));
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as SubjectSnapshot;
+    const parsed = JSON.parse(raw) as SubjectSnapshot;
+    return parsed;
   } catch {
+    // Phase 5: Data is corrupt — quarantine it for recovery and return null
+    quarantineCorruptData(subjectId);
     return null;
   }
 }
@@ -117,17 +125,29 @@ export async function loadSubjectSnapshot(subjectId: string): Promise<SubjectSna
 export async function saveSubjectSnapshot(
   subjectId: string,
   snapshot: SubjectSnapshot,
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
+  const json = JSON.stringify(snapshot);
+
+  // Phase 5: Create backup before overwriting
+  const existingKey = STORAGE_KEYS.subject(subjectId);
+  const existing = safeGet(existingKey);
+  if (existing) {
+    backupSubjectData(subjectId, existing);
+  }
+
   if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.writeSubject) {
     try {
       await window.electronKnowledgeBridge.writeSubject(subjectId, snapshot);
-      // also mirror to localStorage as a cache
     } catch {
       // fall through to localStorage
     }
   }
-  safeSet(STORAGE_KEYS.subject(subjectId), JSON.stringify(snapshot));
-  appendSubjectIndex(subjectId);
+
+  const result = safeLocalStorageSet(existingKey, json);
+  if (result.success) {
+    appendSubjectIndex(subjectId);
+  }
+  return result;
 }
 
 export async function listSubjectIds(): Promise<string[]> {

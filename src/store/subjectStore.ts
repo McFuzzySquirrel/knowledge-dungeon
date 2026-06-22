@@ -82,9 +82,12 @@ function generateId(prefix: string): string {
   return `${prefix}-${time}-${random}`;
 }
 
-function persist(snapshot: SubjectSnapshot): Promise<void> {
+async function persist(snapshot: SubjectSnapshot): Promise<void> {
   setActiveSubjectId(snapshot.dungeon.dungeonId);
-  return saveSubjectSnapshot(snapshot.dungeon.dungeonId, snapshot);
+  const result = await saveSubjectSnapshot(snapshot.dungeon.dungeonId, snapshot);
+  if (!result.success) {
+    throw new Error(result.error ?? 'Failed to save subject data.');
+  }
 }
 
 function withRooms(

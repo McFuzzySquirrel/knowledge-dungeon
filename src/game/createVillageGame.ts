@@ -7,6 +7,8 @@ export interface CreateVillageGameOptions {
   callbacks: VillageSceneEvents;
   dynamicStructures?: VillageStructure[];
   playerClass?: string;
+  spawnGridX?: number | null;
+  spawnGridY?: number | null;
 }
 
 export function createVillageGame(options: CreateVillageGameOptions): Phaser.Game {
@@ -31,6 +33,8 @@ export function createVillageGame(options: CreateVillageGameOptions): Phaser.Gam
     callbacks: options.callbacks,
     dynamicStructures: options.dynamicStructures,
     playerClass: options.playerClass,
+    spawnGridX: options.spawnGridX,
+    spawnGridY: options.spawnGridY,
   });
 
   return game;

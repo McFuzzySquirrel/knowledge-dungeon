@@ -231,6 +231,7 @@ export function WelcomeScreen(): JSX.Element {
 
   async function handleEnterSelectedSubject() {
     if (!selectedExistingSubjectId) return;
+    localStorage.removeItem('kd-village-spawn');
     await handleLoad(selectedExistingSubjectId);
     setActiveScreen('village');
   }
@@ -350,7 +351,10 @@ export function WelcomeScreen(): JSX.Element {
     try {
       const raw = await readFileAsText(file);
       const imported = importSubjectFromJson(raw);
-      await saveSubjectSnapshot(imported.dungeon.dungeonId, imported);
+      const saveResult = await saveSubjectSnapshot(imported.dungeon.dungeonId, imported);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error ?? 'Failed to persist imported data.');
+      }
       await refreshExistingSubjects();
       setSelectedExistingSubjectId(imported.dungeon.dungeonId);
       setActiveTab('setup');
@@ -392,7 +396,10 @@ export function WelcomeScreen(): JSX.Element {
     try {
       const raw = await readFileAsText(file);
       const subject = createSubjectFromTemplate(raw);
-      await saveSubjectSnapshot(subject.dungeon.dungeonId, subject);
+      const saveResult = await saveSubjectSnapshot(subject.dungeon.dungeonId, subject);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error ?? 'Failed to persist template data.');
+      }
       await refreshExistingSubjects();
       setSelectedExistingSubjectId(subject.dungeon.dungeonId);
       setActiveTab('setup');
@@ -455,7 +462,7 @@ export function WelcomeScreen(): JSX.Element {
               type="button"
               className="ghost"
               style={{ marginTop: 8 }}
-              onClick={() => setActiveScreen('village')}
+              onClick={() => { localStorage.removeItem('kd-village-spawn'); setActiveScreen('village'); }}
             >
               Continue to Village
             </button>

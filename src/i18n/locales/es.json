@@ -1,0 +1,114 @@
+{
+  "common": {
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "loading": "Cargando…",
+    "back": "Volver",
+    "home": "Inicio",
+    "settings": "Configuración",
+    "help": "Ayuda",
+    "export": "Exportar",
+    "import": "Importar",
+    "create": "Crear",
+    "edit": "Editar",
+    "remove": "Eliminar",
+    "done": "Hecho"
+  },
+  "welcome": {
+    "title": "Knowledge Dungeon",
+    "subtitle": "Un juego de mazmorras local basado en mapas mentales para estudiar",
+    "continueToVillage": "Continuar a la Aldea",
+    "tabs": {
+      "subjects": "Materias",
+      "setup": "Configurar",
+      "guide": "Guía",
+      "data": "Datos"
+    }
+  },
+  "village": {
+    "title": "Aldea de la Mazmorra",
+    "welcome": "Bienvenido a la Aldea de la Mazmorra",
+    "createSubject": "Crear Nueva Materia",
+    "enterDungeon": "Entrar a la Mazmorra",
+    "trainingGrounds": "Campo de Entrenamiento",
+    "trophyHall": "Sala de Trofeos",
+    "library": "Biblioteca del Conocimiento",
+    "guildHall": "Sala del Gremio"
+  },
+  "game": {
+    "phase": "Fase",
+    "phases": {
+      "creator": "Creador",
+      "scribe": "Escriba",
+      "archaeologist": "Arqueólogo"
+    },
+    "rooms": "Salas",
+    "cleared": "Superadas",
+    "xp": "PX",
+    "rank": "Rango",
+    "badges": "Insignias",
+    "notes": "Notas",
+    "artifact": "Artefacto",
+    "review": "Repasar",
+    "map": "Mapa",
+    "teleport": "Teletransporte",
+    "teleportArmed": "Teletransporte Activado",
+    "teleportCooldown": "Enfriamiento",
+    "helpOverlay": "Cómo jugar",
+    "settingsModal": "Configuración",
+    "noteEditor": "Editor de Notas",
+    "inventory": "Inventario",
+    "journal": "Diario",
+    "noSubject": "Sin materia cargada"
+  },
+  "settings": {
+    "title": "Configuración",
+    "theme": "Tema de Interfaz",
+    "themeDescription": "Elige el tema visual para menús y paneles.",
+    "language": "Idioma",
+    "languageDescription": "Elige tu idioma preferido.",
+    "shortcuts": "Atajos de Teclado",
+    "shortcutsDescription": "Personaliza los atajos de teclado.",
+    "resetDefaults": "Restablecer Valores",
+    "themes": {
+      "night": "Noche",
+      "arcade": "Arcade",
+      "aurora": "Aurora"
+    }
+  },
+  "shortcuts": {
+    "toggleHelp": "Alternar Ayuda",
+    "toggleMap": "Alternar Mapa",
+    "toggleInfoPanel": "Alternar Panel de Info"
+  },
+  "errors": {
+    "loadFailed": "Error al cargar los datos de la materia.",
+    "saveFailed": "Error al guardar los datos de la materia.",
+    "corruptData": "Los datos de la materia parecen estar dañados.",
+    "corruptDataDescription": "Los datos guardados para esta materia no se pudieron leer. Puedes intentar recuperarlos o restablecerlos.",
+    "tryRecover": "Intentar Recuperar",
+    "resetData": "Restablecer Datos",
+    "storageQuota": "Almacenamiento lleno. Por favor exporta tus datos y libera espacio.",
+    "importFailed": "Error al importar los datos. El archivo puede tener un formato no compatible.",
+    "recoveryNote": "Algunos datos se han recuperado de una copia de seguridad."
+  },
+  "phases": {
+    "creator": "Creador",
+    "creatorDesc": "Construye tu mapa mental añadiendo salas de temas y enlazando conceptos.",
+    "scribe": "Escriba",
+    "scribeDesc": "Explora tu mazmorra y derrota encuentros escribiendo notas estructuradas.",
+    "archaeologist": "Arqueólogo",
+    "archaeologistDesc": "Repasa las salas superadas con preguntas de autoevaluación para reforzar el aprendizaje."
+  },
+  "archetypes": {
+    "scholar": "Erudito",
+    "scholarDesc": "+2 de bonificación de calidad en validación de notas",
+    "cartographer": "Cartógrafo",
+    "cartographerDesc": "+1 de capacidad de enlaces cruzados por sala",
+    "archivist": "Archivista",
+    "archivistDesc": "+3 de racha máxima de repaso"
+  }
+}

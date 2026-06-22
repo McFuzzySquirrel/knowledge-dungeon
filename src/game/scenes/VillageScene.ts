@@ -122,6 +122,8 @@ export class VillageScene extends Phaser.Scene {
   private callbacks: VillageSceneEvents | null = null;
   private player: Phaser.GameObjects.Image | null = null;
   private playerBody: Phaser.Physics.Arcade.Body | null = null;
+  private customSpawnGridX: number | null = null;
+  private customSpawnGridY: number | null = null;
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys | null = null;
   private wasdKeys: Record<string, Phaser.Input.Keyboard.Key> = {};
   private interactKey: Phaser.Input.Keyboard.Key | null = null;
@@ -144,7 +146,7 @@ export class VillageScene extends Phaser.Scene {
     super({ key: 'VillageScene' });
   }
 
-  init(data: { callbacks: VillageSceneEvents; dynamicStructures?: VillageStructure[]; playerClass?: string }): void {
+  init(data: { callbacks: VillageSceneEvents; dynamicStructures?: VillageStructure[]; playerClass?: string; spawnGridX?: number | null; spawnGridY?: number | null }): void {
     this.callbacks = data.callbacks;
     if (data.playerClass) {
       this.currentPlayerClass = data.playerClass;
@@ -152,6 +154,8 @@ export class VillageScene extends Phaser.Scene {
     if (data.dynamicStructures && data.dynamicStructures.length > 0) {
       this.allStructures = [...VILLAGE_MAP.structures, ...data.dynamicStructures];
     }
+    this.customSpawnGridX = data.spawnGridX != null ? data.spawnGridX : null;
+    this.customSpawnGridY = data.spawnGridY != null ? data.spawnGridY : null;
   }
 
   /** Update dynamic structures after initial render (e.g. when subjects change). */
@@ -200,9 +204,9 @@ export class VillageScene extends Phaser.Scene {
     loadSvg(TEX.bench, SPRITE_PATHS.bench, 64, 32);
     loadSvg(TEX.villageGate, SPRITE_PATHS.villageGate, 120, 96);
     loadSvg(TEX.keeperNpc, SPRITE_PATHS.keeperNpc, 48, 48);
-    loadSvg(TEX.playerHero, SPRITE_PATHS.playerHero, 32, 32);
-    loadSvg(TEX.playerExplorer, SPRITE_PATHS.playerExplorer, 32, 32);
-    loadSvg(TEX.playerArchivist, SPRITE_PATHS.playerArchivist, 32, 32);
+    loadSvg(TEX.playerHero, SPRITE_PATHS.playerHero, 40, 40);
+    loadSvg(TEX.playerExplorer, SPRITE_PATHS.playerExplorer, 40, 40);
+    loadSvg(TEX.playerArchivist, SPRITE_PATHS.playerArchivist, 40, 40);
   }
 
   create(): void {
@@ -549,16 +553,18 @@ export class VillageScene extends Phaser.Scene {
 
   private spawnPlayer(map: typeof VILLAGE_MAP): void {
     const ts = map.tileSize;
-    const sx = map.playerStart.x * ts + ts / 2;
-    const sy = map.playerStart.y * ts + ts / 2;
+    const gridX = this.customSpawnGridX ?? map.playerStart.x;
+    const gridY = this.customSpawnGridY ?? map.playerStart.y;
+    const sx = gridX * ts + ts / 2;
+    const sy = gridY * ts + ts / 2;
 
     const playerTex = PLAYER_TEX_BY_CLASS[this.currentPlayerClass] ?? TEX.playerHero;
     if (!this.textures.exists(playerTex)) return;
     this.player = this.add.image(sx, sy, playerTex).setDepth(10);
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
-    this.playerBody.setSize(16, 16);
-    this.playerBody.setOffset(8, 8);
+    this.playerBody.setSize(20, 20);
+    this.playerBody.setOffset(10, 10);
     this.playerBody.setCollideWorldBounds(true);
 
     // Subtle idle sway (rotation) - does not conflict with movement
@@ -806,6 +812,12 @@ export class VillageScene extends Phaser.Scene {
 
   private handleInteract(): void {
     if (this.currentStructureId) {
+      const struct = this.allStructures.find((s) => s.id === this.currentStructureId);
+      if (struct?.type === 'portal-icon' && struct.subjectId) {
+        try {
+          localStorage.setItem('kd-village-spawn', JSON.stringify({ gridX: struct.gridX, gridY: struct.gridY }));
+        } catch { /* ignore */ }
+      }
       this.callbacks?.onStructureInteract(this.currentStructureId);
     } else if (this.currentNpcId) {
       this.callbacks?.onNpcInteract(this.currentNpcId);

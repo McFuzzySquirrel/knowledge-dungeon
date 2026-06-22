@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useSessionStore, QUEST_LABELS, QUEST_ORDER, MANUAL_QUESTS, type QuestStep } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
@@ -52,6 +52,11 @@ export function VillageScreen(): JSX.Element {
   } | null>(null);
   const [keeperDialogue, setKeeperDialogue] = useState<string | null>(null);
   const [, setKeeperDialogueIndex] = useState(0);
+  const [activeNpcId, setActiveNpcId] = useState<string | null>(null);
+  const [activeNpcLabel, setActiveNpcLabel] = useState<string | null>(null);
+  const [npcDialogPos, setNpcDialogPos] = useState<{ x: number; y: number } | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const [anchoredStyle, setAnchoredStyle] = useState<React.CSSProperties | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
   const [hudOpen, setHudOpen] = useState(true);
@@ -69,6 +74,15 @@ export function VillageScreen(): JSX.Element {
   const [createTopic, setCreateTopic] = useState('');
   const [createBiome, setCreateBiome] = useState<FloorBiomeId>(FLOOR_BIOME_IDS[0]);
   const [submitting, setSubmitting] = useState(false);
+  const NPC_ICONS: Record<string, string> = {
+    keeper: '🧙',
+    'villager-1': '📚',
+    'villager-2': '🧭',
+    'villager-3': '❓',
+    'villager-4': '🦉',
+    'villager-5': '📜',
+  };
+
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [villageReady, setVillageReady] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
@@ -184,9 +198,11 @@ export function VillageScreen(): JSX.Element {
           setInfoPanel({ type: 'library', structureId });
         }
       },
-      onStructureLeft: () => {
+      onStructureLeft: (structureId) => {
         setInfoPanel(null);
-        setWelcomeMessage(null);
+        if (structureId === 'sign-entrance') {
+          setWelcomeMessage(null);
+        }
       },
       onStructureInteract: (structureId) => {
         const struct = [...VILLAGE_MAP.structures, ...dynamicStructuresRef.current]
@@ -236,6 +252,8 @@ export function VillageScreen(): JSX.Element {
       onNpcApproached: (npcId) => {
         const npc = VILLAGE_MAP.npcs.find((n) => n.id === npcId);
         if (!npc) return;
+        setActiveNpcId(npcId);
+        setActiveNpcLabel(npc.label);
         if (npcId === 'keeper') {
           const session = useSessionStore.getState();
           if (session.questStep === 'intro' || session.questStep === 'meet-keeper') {
@@ -255,7 +273,7 @@ export function VillageScreen(): JSX.Element {
         }
         setKeeperDialogueIndex(0);
       },
-      onNpcLeft: () => { setKeeperDialogue(null); setKeeperDialogueIndex(0); },
+      onNpcLeft: () => { setKeeperDialogue(null); setKeeperDialogueIndex(0); setActiveNpcId(null); setActiveNpcLabel(null); },
       onNpcInteract: (npcId) => {
         const npc = VILLAGE_MAP.npcs.find((n) => n.id === npcId);
         if (!npc) return;
@@ -284,7 +302,9 @@ export function VillageScreen(): JSX.Element {
           });
         }
       },
-      onNpcDialogPosition: () => {},
+      onNpcDialogPosition: (pos) => {
+        setNpcDialogPos({ x: pos.clientX, y: pos.clientY });
+      },
       onReady: () => {},
     };
     Object.assign(callbacksRef.current, cb);
@@ -294,6 +314,17 @@ export function VillageScreen(): JSX.Element {
   useEffect(() => {
     if (!containerRef.current || gameRef.current) return;
     const ref = callbacksRef;
+    let spawnGridX: number | null = null;
+    let spawnGridY: number | null = null;
+    try {
+      const raw = localStorage.getItem('kd-village-spawn');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        spawnGridX = parsed.gridX;
+        spawnGridY = parsed.gridY;
+        localStorage.removeItem('kd-village-spawn');
+      }
+    } catch { /* ignore */ }
     const game = createVillageGame({
       parent: containerRef.current,
       callbacks: {
@@ -308,6 +339,8 @@ export function VillageScreen(): JSX.Element {
       },
       dynamicStructures: dynamicStructures.length > 0 ? dynamicStructures : undefined,
       playerClass: selectedClass ?? 'scholar',
+      spawnGridX,
+      spawnGridY,
     });
     gameRef.current = game;
     game.events.once('ready', () => {
@@ -360,7 +393,53 @@ export function VillageScreen(): JSX.Element {
     }
   };
 
+  useLayoutEffect(() => {
+    if (!npcDialogPos) {
+      setAnchoredStyle(null);
+      return;
+    }
+
+    const margin = 12;
+    const updatePosition = () => {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      const dialogWidth = dialog.offsetWidth || 360;
+      const dialogHeight = dialog.offsetHeight || 140;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const preferRight = npcDialogPos.x + dialogWidth + 24 <= vw - margin;
+      const preferredLeft = preferRight
+        ? npcDialogPos.x + 24
+        : npcDialogPos.x - dialogWidth - 24;
+
+      const preferredTopAbove = npcDialogPos.y - dialogHeight - 8;
+      const preferredTop =
+        preferredTopAbove >= margin ? preferredTopAbove : npcDialogPos.y + 8;
+
+      const maxLeft = Math.max(margin, vw - dialogWidth - margin);
+      const maxTop = Math.max(margin, vh - dialogHeight - margin);
+
+      const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
+      const top = Math.min(Math.max(preferredTop, margin), maxTop);
+
+      setAnchoredStyle({ left: `${left}px`, top: `${top}px` });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
+  }, [npcDialogPos]);
+
+  useLayoutEffect(() => {
+    if (!keeperDialogue) {
+      setNpcDialogPos(null);
+    }
+  }, [keeperDialogue]);
+
   return (
+    <>
     <div className="village-screen ui-skin screen-fade-in" data-theme={colorTheme}>
       {isMobile ? (
         <>
@@ -711,35 +790,13 @@ export function VillageScreen(): JSX.Element {
       ) : null}
 
       {keeperDialogue ? (
-        <div className="village-npc-dialog ui-skin" data-theme={colorTheme}>
+        <div className={`village-npc-dialog ui-skin${npcDialogPos ? ' village-npc-dialog--anchored' : ''}`} data-theme={colorTheme} ref={dialogRef} style={npcDialogPos ? anchoredStyle ?? undefined : undefined}>
           <div className="village-npc-dialog-header">
-            <span className="village-npc-dialog-icon">🧙</span>
-            <strong>Keeper of Knowledge</strong>
+            <span className="village-npc-dialog-icon">{activeNpcId ? (NPC_ICONS[activeNpcId] ?? '🧙') : '🧙'}</span>
+            <strong>{activeNpcLabel ?? 'Villager'}</strong>
           </div>
           <p className="village-npc-dialog-text village-npc-dialog-text--typing" key={keeperDialogue}>{keeperDialogue}</p>
           <p className="village-npc-dialog-hint">Press E to continue</p>
-        </div>
-      ) : null}
-
-      {welcomeMessage ? (
-        <div className="modal-backdrop" onClick={() => setWelcomeMessage(null)}
-          style={{ zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="village-info-panel ui-skin screen-fade-in" data-theme={colorTheme}
-            style={{ maxWidth: 420, position: 'relative', zIndex: 301 }}>
-            <div className="village-info-panel-header">
-              <span className="village-info-portal-icon">🏘</span>
-              <div>
-                <h3>Welcome to the Dungeon Village</h3>
-                <p className="village-info-meta">Your knowledge adventure begins here</p>
-              </div>
-            </div>
-            <p className="village-info-desc">{welcomeMessage}</p>
-            <div className="village-info-actions" style={{ marginTop: 8 }}>
-              <button type="button" className="village-action-btn" onClick={() => setWelcomeMessage(null)}>
-                Begin your journey
-              </button>
-            </div>
-          </div>
         </div>
       ) : null}
 
@@ -851,6 +908,29 @@ export function VillageScreen(): JSX.Element {
 
       {showStats ? <StudyStatsPanel onClose={() => setShowStats(false)} /> : null}
     </div>
+
+    {welcomeMessage ? (
+      <div className="modal-backdrop" onClick={() => setWelcomeMessage(null)}
+        style={{ zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="village-info-panel ui-skin screen-fade-in" data-theme={colorTheme}
+          style={{ maxWidth: 420, position: 'relative', zIndex: 301, left: 'auto', transform: 'none' }}>
+          <div className="village-info-panel-header">
+            <span className="village-info-portal-icon">🏘</span>
+            <div>
+              <h3>Welcome to the Dungeon Village</h3>
+              <p className="village-info-meta">Your knowledge adventure begins here</p>
+            </div>
+          </div>
+          <p className="village-info-desc">{welcomeMessage}</p>
+          <div className="village-info-actions" style={{ marginTop: 8 }}>
+            <button type="button" className="village-action-btn" onClick={() => setWelcomeMessage(null)}>
+              Begin your journey
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
 

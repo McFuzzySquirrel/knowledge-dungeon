@@ -21,7 +21,37 @@ portal to enter a dungeon.
 Built with a simple goal: make learning feel fun again by turning note-taking,
 revision, and concept mapping into an interactive adventure instead of a static checklist.
 
-## Phase 4 Features (new)
+## Phase 5 Features (new)
+
+### ⚡ Performance Optimization
+Large subjects (100+ rooms) now benefit from a spatial grid for O(1) room lookups instead of linear scanning. Includes FPS monitoring and localStorage usage tracking.
+
+### ♿ Accessibility
+- **Skip-to-content link** — keyboard users can bypass navigation
+- **ARIA roles** — `alert`, `status`, `tablist`, `tabpanel`, `dialog` with `aria-modal` across all modals and panels
+- **Full keyboard navigation** — tab through settings, modals, and HUD controls
+
+### ⌨ Customizable Keyboard Shortcuts
+Configure key bindings for Help, Map, and Info Panel from the Settings modal. Uses a key-capture editor with "Reset Defaults" support.
+
+### 🛡 Error Recovery
+- **Corrupt data detection** — damaged subjects are quarantined instead of crashing
+- **Automatic backups** — timestamped backups created before every save
+- **Storage quota monitoring** — warns when localStorage is near capacity
+- **Safe parsing** — never-throws JSON parsing for file imports
+
+### 🌐 Localization
+Full i18n support via i18next with English and Spanish (Español) locales. Language selector in Settings modal.
+
+### 🏘 Village UX Improvements
+- **NPC dialog anchoring** — dialogs now follow NPC positions on screen instead of appearing top-left
+- **Unique NPC names** — wandering villagers display their actual names (Wandering Scholar, Elder Sage, etc.)
+- **Larger player sprite** — village player character is now 40×40 (up from 32×32)
+- **Welcome dialog** — appears near the village entrance signpost, auto-hides when walking away
+
+---
+
+## Phase 4 Features
 
 ### 🧠 Spaced Repetition (SM-2)
 The Archaeologist review phase now uses the SM-2 algorithm for intelligent scheduling. Rate your recall on a 0–5 scale and the game schedules reviews at optimal intervals based on your performance. Track your ease factor, review streaks, overdue counts, and due-today counts.
@@ -318,7 +348,7 @@ src/
     screens/             # WelcomeScreen, VillageScreen, GameScreen
     utils/               # markdown rendering, syntax highlighting, auto-complete
   data/                  # village layout, tutorial subject, game guide
-tests/unit/              # Vitest unit tests (120 tests, 24 files)
+tests/unit/              # Vitest unit tests (168 tests, 27 files)
 docs/                    # PRD, progress notes, game guide
 ```
 

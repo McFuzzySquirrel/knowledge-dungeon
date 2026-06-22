@@ -202,6 +202,13 @@ export class DungeonScene extends Phaser.Scene {
   private biomeWallTint = 0x3a3228;
   private biomeCorridorColor = 0xb8a87a;
 
+  // Phase 5: Performance — spatial grid for O(1) room lookup in large dungeons
+  private spatialGrid: Map<string, DungeonRoom> = new Map();
+  private spatialGridCellSize = 0;
+  private spatialGridOriginX = 0;
+  private spatialGridOriginY = 0;
+  private useSpatialLookup = false;
+
   // ── Touch / pointer input state ──────────────────────────────────────────
   /** True while a single-finger drag/tap gesture is in progress. */
   private touchPointerActive = false;
@@ -313,6 +320,9 @@ export class DungeonScene extends Phaser.Scene {
     const map = this.dungeonMap;
 
     this.cameras.main.setBackgroundColor(0x0f1930);
+
+    // Phase 5: Build spatial grid for performance
+    this.rebuildSpatialGrid();
 
     // Ensure the walkability mask is built even when no floor visibility has
     // been applied (eg. single-floor dungeons that never call setFloorVisibility).
@@ -1029,6 +1039,8 @@ export class DungeonScene extends Phaser.Scene {
     this.biomeCorridorColor = pal.corridorColor;
     this.floorSeed = hashString(input.floorId);
     this.rebuildActiveWalkable();
+    // Phase 5: Rebuild spatial grid when floor visibility changes
+    this.rebuildSpatialGrid();
   }
 
   /**
@@ -1486,7 +1498,72 @@ export class DungeonScene extends Phaser.Scene {
     };
   }
 
+  /** Phase 5: Build spatial grid for O(1) room lookup on large dungeons. */
+  private rebuildSpatialGrid(): void {
+    this.spatialGrid.clear();
+    if (!this.dungeonMap) return;
+
+    const map = this.dungeonMap;
+    // Cell size: one macro-room block (~240px for a standard room + spacing)
+    const cellSize = 10 * map.tileSize;
+    // Only use spatial lookup for dungeons with 50+ rooms
+    this.useSpatialLookup = map.rooms.length >= 50;
+    if (!this.useSpatialLookup) return;
+
+    this.spatialGridCellSize = cellSize;
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+
+    for (const room of map.rooms) {
+      if (room.gridX < minX) minX = room.gridX;
+      if (room.gridY < minY) minY = room.gridY;
+    }
+
+    this.spatialGridOriginX = isFinite(minX) ? minX * map.tileSize : 0;
+    this.spatialGridOriginY = isFinite(minY) ? minY * map.tileSize : 0;
+
+    for (const room of map.rooms) {
+      const left = room.gridX * map.tileSize;
+      const top = room.gridY * map.tileSize;
+      const right = left + room.width * map.tileSize;
+      const bottom = top + room.height * map.tileSize;
+
+      // Insert room into every cell it overlaps
+      const cellLeft = Math.floor((left - this.spatialGridOriginX) / cellSize);
+      const cellRight = Math.floor((right - this.spatialGridOriginX) / cellSize);
+      const cellTop = Math.floor((top - this.spatialGridOriginY) / cellSize);
+      const cellBottom = Math.floor((bottom - this.spatialGridOriginY) / cellSize);
+
+      for (let cy = cellTop; cy <= cellBottom; cy += 1) {
+        for (let cx = cellLeft; cx <= cellRight; cx += 1) {
+          const key = `${cx},${cy}`;
+          if (!this.spatialGrid.has(key)) {
+            this.spatialGrid.set(key, room);
+          }
+        }
+      }
+    }
+  }
+
   private findRoomAtWorld(x: number, y: number, map: DungeonMap): DungeonRoom | null {
+    // Phase 5: Use spatial grid for O(1) lookup on large dungeons
+    if (this.useSpatialLookup && this.spatialGridCellSize > 0) {
+      const cx = Math.floor((x - this.spatialGridOriginX) / this.spatialGridCellSize);
+      const cy = Math.floor((y - this.spatialGridOriginY) / this.spatialGridCellSize);
+      const candidate = this.spatialGrid.get(`${cx},${cy}`);
+      if (candidate) {
+        // Verify the point is actually inside this room
+        const left = candidate.gridX * map.tileSize;
+        const top = candidate.gridY * map.tileSize;
+        const right = left + candidate.width * map.tileSize;
+        const bottom = top + candidate.height * map.tileSize;
+        if (x >= left && x <= right && y >= top && y <= bottom) {
+          return candidate;
+        }
+      }
+      // Fall through to linear scan for edge cases (spatial miss)
+    }
+
     for (const room of map.rooms) {
       if (this.visibleRoomIds && !this.visibleRoomIds.has(room.roomId)) continue;
       const left = room.gridX * map.tileSize;

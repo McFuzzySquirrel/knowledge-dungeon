@@ -34,7 +34,7 @@ vi.mock('@/services/persistence/subjectPersistence', async () => {
     getActiveSubjectId: () => mocks.getActiveSubjectId(),
     listSubjectIds: () => mocks.listSubjectIds(),
     loadSubjectSnapshot: (id: string) => mocks.loadSubjectSnapshot(id),
-    saveSubjectSnapshot: vi.fn(() => Promise.resolve(undefined)),
+    saveSubjectSnapshot: vi.fn(() => Promise.resolve({ success: true })),
     setActiveSubjectId: vi.fn(),
   };
 });

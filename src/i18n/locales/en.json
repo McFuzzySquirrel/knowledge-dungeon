@@ -1,0 +1,114 @@
+{
+  "common": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "loading": "Loading…",
+    "back": "Back",
+    "home": "Home",
+    "settings": "Settings",
+    "help": "Help",
+    "export": "Export",
+    "import": "Import",
+    "create": "Create",
+    "edit": "Edit",
+    "remove": "Remove",
+    "done": "Done"
+  },
+  "welcome": {
+    "title": "Knowledge Dungeon",
+    "subtitle": "A local-first, mindmap-driven dungeon crawler for studying",
+    "continueToVillage": "Continue to Village",
+    "tabs": {
+      "subjects": "Subjects",
+      "setup": "Setup",
+      "guide": "Guide",
+      "data": "Data"
+    }
+  },
+  "village": {
+    "title": "Dungeon Village",
+    "welcome": "Welcome to Dungeon Village",
+    "createSubject": "Create New Subject",
+    "enterDungeon": "Enter Dungeon",
+    "trainingGrounds": "Training Grounds",
+    "trophyHall": "Trophy Hall",
+    "library": "Library of Knowledge",
+    "guildHall": "Guild Hall"
+  },
+  "game": {
+    "phase": "Phase",
+    "phases": {
+      "creator": "Creator",
+      "scribe": "Scribe",
+      "archaeologist": "Archaeologist"
+    },
+    "rooms": "Rooms",
+    "cleared": "Cleared",
+    "xp": "XP",
+    "rank": "Rank",
+    "badges": "Badges",
+    "notes": "Notes",
+    "artifact": "Artifact",
+    "review": "Review",
+    "map": "Map",
+    "teleport": "Teleport",
+    "teleportArmed": "Teleport Armed",
+    "teleportCooldown": "Cooldown",
+    "helpOverlay": "How to play",
+    "settingsModal": "Settings",
+    "noteEditor": "Note Editor",
+    "inventory": "Inventory",
+    "journal": "Journal",
+    "noSubject": "No subject loaded"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "UI Theme",
+    "themeDescription": "Choose the visual theme for menus and other UI panels.",
+    "language": "Language",
+    "languageDescription": "Choose your preferred language.",
+    "shortcuts": "Keyboard Shortcuts",
+    "shortcutsDescription": "Customize keyboard shortcuts for common actions.",
+    "resetDefaults": "Reset Defaults",
+    "themes": {
+      "night": "Night",
+      "arcade": "Arcade",
+      "aurora": "Aurora"
+    }
+  },
+  "shortcuts": {
+    "toggleHelp": "Toggle Help",
+    "toggleMap": "Toggle Map",
+    "toggleInfoPanel": "Toggle Info Panel"
+  },
+  "errors": {
+    "loadFailed": "Failed to load subject data.",
+    "saveFailed": "Failed to save subject data.",
+    "corruptData": "The subject data appears to be corrupt.",
+    "corruptDataDescription": "The saved data for this subject could not be read. You can try to recover it or reset it.",
+    "tryRecover": "Try Recovery",
+    "resetData": "Reset Data",
+    "storageQuota": "Storage quota exceeded. Please export your data and free up space.",
+    "importFailed": "Failed to import subject data. The file may be in an unsupported format.",
+    "recoveryNote": "Some data may have been recovered from a backup."
+  },
+  "phases": {
+    "creator": "Creator",
+    "creatorDesc": "Build your mindmap by adding topic rooms and linking concepts.",
+    "scribe": "Scribe",
+    "scribeDesc": "Explore your dungeon and defeat encounters by writing structured notes.",
+    "archaeologist": "Archaeologist",
+    "archaeologistDesc": "Review cleared rooms with self-check prompts to reinforce learning."
+  },
+  "archetypes": {
+    "scholar": "Scholar",
+    "scholarDesc": "+2 quality bonus on note validation",
+    "cartographer": "Cartographer",
+    "cartographerDesc": "+1 cross-link capacity per room",
+    "archivist": "Archivist",
+    "archivistDesc": "+3 max review streak cap"
+  }
+}
