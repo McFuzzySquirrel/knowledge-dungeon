@@ -3,6 +3,8 @@ import { fetchSpriteManifest, groupByCategory, type CategoryGroup, type Manifest
 import { listCustomSpritePaths } from '@/services/customSprites';
 import { useTranslation } from 'react-i18next';
 
+const BASE = import.meta.env.BASE_URL;
+
 interface SpriteBrowserProps {
   selectedPath: string | null;
   onSelect: (sprite: ManifestSprite) => void;
@@ -68,7 +70,7 @@ export function SpriteBrowser({ selectedPath, onSelect }: SpriteBrowserProps): J
                 >
                   <span className="sprite-thumb">
                     <img
-                      src={`/assets/${sprite.path}`}
+                      src={`${BASE}assets/${sprite.path}`}
                       alt={sprite.name}
                       width={sprite.width}
                       height={sprite.height}
