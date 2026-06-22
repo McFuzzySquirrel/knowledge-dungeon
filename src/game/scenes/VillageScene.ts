@@ -43,6 +43,7 @@ const SPRITE_PATHS = {
   library: 'sprites/village/library.svg',
   bench: 'sprites/village/bench.svg',
   villageGate: 'sprites/village/village-gate.svg',
+  workshop: 'sprites/village/workshop.svg',
   keeperNpc: 'sprites/npc-keeper.svg',
   playerHero: 'sprites/player-hero.svg',
   playerExplorer: 'sprites/player-explorer.svg',
@@ -74,6 +75,7 @@ const TEX = {
   library: 'v-library',
   bench: 'v-bench',
   villageGate: 'v-gate',
+  workshop: 'v-workshop',
   keeperNpc: 'v-npc-keeper',
   playerHero: 'v-player-hero',
   playerExplorer: 'v-player-explorer',
@@ -106,7 +108,7 @@ const STRUCTURE_TEXTURE: Record<string, string> = {
   'bench': TEX.bench,
   'gate': TEX.villageGate,
   'library': TEX.library,
-  'workshop': TEX.trophyHall,  // reuse trophy-hall texture
+  'workshop': TEX.workshop,
 };
 
 interface NpcState {
@@ -200,6 +202,7 @@ export class VillageScene extends Phaser.Scene {
     loadSvg(TEX.bush, SPRITE_PATHS.bush, 48, 48);
     loadSvg(TEX.rock, SPRITE_PATHS.rock, 32, 24);
     loadSvg(TEX.trophyHall, SPRITE_PATHS.trophyHall, 120, 120);
+    loadSvg(TEX.workshop, SPRITE_PATHS.workshop, 120, 120);
     loadSvg(TEX.library, SPRITE_PATHS.library, 120, 140);
     loadSvg(TEX.bench, SPRITE_PATHS.bench, 64, 32);
     loadSvg(TEX.villageGate, SPRITE_PATHS.villageGate, 120, 96);

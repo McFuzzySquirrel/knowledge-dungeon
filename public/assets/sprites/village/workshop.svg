@@ -1,0 +1,19 @@
+<svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+  <rect x="15" y="50" width="130" height="100" rx="6" fill="#4a3a2a" stroke="#1a1a1a" stroke-width="3"/>
+  <path d="M15 50 L80 10 L145 50" fill="#5a4a2a" stroke="#1a1a1a" stroke-width="3"/>
+  <circle cx="80" cy="30" r="8" fill="#ffcf5f" opacity="0.5"/>
+  <circle cx="80" cy="30" r="4" fill="#ffcf5f"/>
+  <!-- Hammer -->
+  <rect x="72" y="75" width="16" height="40" rx="3" fill="#8b6f47" stroke="#1a1a1a" stroke-width="2"/>
+  <rect x="62" y="65" width="38" height="14" rx="4" fill="#6b5b4a" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- Paint palette -->
+  <ellipse cx="120" cy="95" rx="24" ry="18" fill="#8b6f47" stroke="#1a1a1a" stroke-width="2"/>
+  <circle cx="110" cy="88" r="5" fill="#e84a4a"/>
+  <circle cx="126" cy="85" r="5" fill="#4a8be8"/>
+  <circle cx="118" cy="102" r="5" fill="#4ae84a"/>
+  <circle cx="132" cy="99" r="5" fill="#e8cf4a"/>
+  <!-- Anvil -->
+  <rect x="25" y="110" width="40" height="20" rx="3" fill="#5a5a5a" stroke="#1a1a1a" stroke-width="2"/>
+  <rect x="20" y="105" width="50" height="8" rx="2" fill="#6e6e6e" stroke="#1a1a1a" stroke-width="2"/>
+  <rect x="35" y="95" width="20" height="12" rx="2" fill="#7e7e7e" stroke="#1a1a1a" stroke-width="2"/>
+</svg>
