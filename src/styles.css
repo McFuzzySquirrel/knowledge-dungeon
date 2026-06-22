@@ -533,6 +533,153 @@ textarea {
   color: var(--accent);
 }
 
+/* Welcome two-column layout */
+.welcome-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 24px;
+  align-items: start;
+}
+
+.welcome-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.welcome-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 20px;
+}
+
+/* --- Checklist --- */
+.welcome-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--control-border) 55%, transparent);
+  border-radius: 10px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-panel-soft) 90%, #000000 10%),
+    color-mix(in srgb, var(--bg-panel-soft) 75%, #000000 25%)
+  );
+}
+
+.welcome-checklist h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: var(--text-title);
+}
+
+.welcome-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.55);
+  opacity: 0.45;
+  transition: opacity 200ms ease;
+}
+
+.welcome-checklist-item--done {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel-soft));
+}
+
+.welcome-checklist-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-muted);
+  border-radius: 50%;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-panel-soft);
+}
+
+.welcome-checklist-item--done .welcome-checklist-icon {
+  color: var(--good);
+  border-color: var(--good);
+}
+
+.welcome-checklist-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.welcome-checklist-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.welcome-checklist-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.welcome-checklist-item--done .welcome-checklist-value {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.welcome-checklist-status {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-soft);
+}
+
+.welcome-checklist-status--done {
+  color: var(--good);
+  border-color: var(--good);
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+}
+
+/* --- Checklist hint + Enter Dungeon --- */
+.welcome-checklist-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.welcome-checklist-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.welcome-checklist-hint--ready {
+  color: var(--good);
+  font-weight: 600;
+}
+
+.welcome-checklist-actions > button {
+  width: 100%;
+}
+
 .phase-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1953,6 +2100,17 @@ button.danger:hover {
     max-height: 92dvh;
   }
 
+}
+
+@media (max-width: 900px) {
+  .welcome-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-sidebar {
+    position: static;
+    order: -1;
+  }
 }
 
 @media (max-width: 600px) {

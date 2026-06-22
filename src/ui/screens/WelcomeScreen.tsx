@@ -457,114 +457,72 @@ export function WelcomeScreen(): JSX.Element {
             then defeat each room&rsquo;s encounter by writing structured notes. Currently running
             in <strong>{env}</strong> mode.
           </p>
-          {existingSubjects.length > 0 ? (
-            <button
-              type="button"
-              className="ghost"
-              style={{ marginTop: 8 }}
-              onClick={() => { localStorage.removeItem('kd-village-spawn'); setActiveScreen('village'); }}
-            >
-              Continue to Village
-            </button>
-          ) : null}
         </div>
       </header>
 
-      <section className="welcome-theme-picker" aria-label="Visual theme">
-        <h2>Visual theme</h2>
-        <div className="welcome-tabs" role="tablist" aria-label="Theme choices">
-          {(Object.keys(THEME_LABELS) as ColorTheme[]).map((theme) => (
-            <button
-              key={theme}
-              type="button"
-              role="tab"
-              aria-selected={colorTheme === theme}
-              onClick={() => setColorTheme(theme)}
-            >
-              {THEME_LABELS[theme]}
-            </button>
-          ))}
-        </div>
-      </section>
+      <div className="welcome-layout">
+        <div className="welcome-main">
+          <section className="welcome-theme-picker" aria-label="Visual theme">
+            <h2>Visual theme</h2>
+            <div className="welcome-tabs" role="tablist" aria-label="Theme choices">
+              {(Object.keys(THEME_LABELS) as ColorTheme[]).map((theme) => (
+                <button
+                  key={theme}
+                  type="button"
+                  role="tab"
+                  aria-selected={colorTheme === theme}
+                  onClick={() => setColorTheme(theme)}
+                >
+                  {THEME_LABELS[theme]}
+                </button>
+              ))}
+            </div>
+          </section>
 
-      <section className="welcome-main-tabs" aria-label="Welcome sections">
-        <div className="welcome-tabs" role="tablist" aria-label="Welcome screen sections">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'subjects'}
-            aria-controls="welcome-panel-subjects"
-            onKeyDown={(event) => handleTabKeyDown(event, 'subjects')}
-            onClick={() => setActiveTab('subjects')}
-          >
-            Create / Load
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'setup'}
-            aria-controls="welcome-panel-setup"
-            onKeyDown={(event) => handleTabKeyDown(event, 'setup')}
-            onClick={() => setActiveTab('setup')}
-          >
-            Player Setup
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'guide'}
-            aria-controls="welcome-panel-guide"
-            onKeyDown={(event) => handleTabKeyDown(event, 'guide')}
-            onClick={() => setActiveTab('guide')}
-          >
-            Guide
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'data'}
-            aria-controls="welcome-panel-data"
-            onKeyDown={(event) => handleTabKeyDown(event, 'data')}
-            onClick={() => setActiveTab('data')}
-          >
-            Data
-          </button>
-        </div>
-      </section>
-
-      <section className="welcome-selection-summary" aria-label="Current selections">
-        <h2>Current selections</h2>
-        <p
-          className={canEnterDungeon ? 'welcome-ready-indicator welcome-ready-indicator--ready' : 'welcome-ready-indicator'}
-          role="status"
-          aria-live="polite"
-        >
-          {canEnterDungeon
-            ? 'Ready to Enter Dungeon'
-            : selectedExistingSubjectId
-              ? 'Select an Archetype to Enter Dungeon'
-              : 'Create or select a subject to Enter Dungeon'}
-        </p>
-        <div className="welcome-selection-grid">
-          <div className="welcome-selection-card">
-            <span className="welcome-selection-label">Subject</span>
-            <strong>{selectedSubjectLabel}</strong>
-          </div>
-          <div className="welcome-selection-card">
-            <span className="welcome-selection-label">Phase</span>
-            <strong>{selectedPhaseLabel}</strong>
-          </div>
-          <div className="welcome-selection-card">
-            <span className="welcome-selection-label">Archetype</span>
-            <strong>{selectedClassLabel}</strong>
-          </div>
-        </div>
-        <div className="welcome-actions" style={{ marginTop: 12 }}>
-          <button type="button" className={canEnterDungeon ? 'welcome-enter-dungeon--ready' : undefined} onClick={() => void handleEnterSelectedSubject()} disabled={!canEnterDungeon}>
-            Enter Dungeon
-          </button>
-        </div>
-      </section>
+          <section className="welcome-main-tabs" aria-label="Welcome sections">
+            <div className="welcome-tabs" role="tablist" aria-label="Welcome screen sections">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'subjects'}
+                aria-controls="welcome-panel-subjects"
+                onKeyDown={(event) => handleTabKeyDown(event, 'subjects')}
+                onClick={() => setActiveTab('subjects')}
+              >
+                Create / Load
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'setup'}
+                aria-controls="welcome-panel-setup"
+                onKeyDown={(event) => handleTabKeyDown(event, 'setup')}
+                onClick={() => setActiveTab('setup')}
+              >
+                Player Setup
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'guide'}
+                aria-controls="welcome-panel-guide"
+                onKeyDown={(event) => handleTabKeyDown(event, 'guide')}
+                onClick={() => setActiveTab('guide')}
+              >
+                Guide
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'data'}
+                aria-controls="welcome-panel-data"
+                onKeyDown={(event) => handleTabKeyDown(event, 'data')}
+                onClick={() => setActiveTab('data')}
+              >
+                Data
+              </button>
+            </div>
+          </section>
 
       <section
         id="welcome-panel-setup"
@@ -922,5 +880,71 @@ export function WelcomeScreen(): JSX.Element {
         </section>
       </section>
     </div>
+
+      <aside className="welcome-sidebar" aria-label="Setup checklist">
+        <div className="welcome-checklist" role="status" aria-live="polite">
+          <h2>Ready to Start?</h2>
+
+          <div className={`welcome-checklist-item${selectedExistingSubjectId ? ' welcome-checklist-item--done' : ''}`}>
+            <span className="welcome-checklist-icon" aria-hidden="true">{selectedExistingSubjectId ? '✓' : '○'}</span>
+            <div className="welcome-checklist-body">
+              <span className="welcome-checklist-label">Subject</span>
+              <span className="welcome-checklist-value">{selectedSubjectLabel}</span>
+            </div>
+            <span className={`welcome-checklist-status${selectedExistingSubjectId ? ' welcome-checklist-status--done' : ''}`}>
+              {selectedExistingSubjectId ? 'Done' : 'Required'}
+            </span>
+          </div>
+
+          <div className="welcome-checklist-item welcome-checklist-item--done">
+            <span className="welcome-checklist-icon" aria-hidden="true">✓</span>
+            <div className="welcome-checklist-body">
+              <span className="welcome-checklist-label">Phase</span>
+              <span className="welcome-checklist-value">{selectedPhaseLabel}</span>
+            </div>
+            <span className="welcome-checklist-status welcome-checklist-status--done">Done</span>
+          </div>
+
+          <div className={`welcome-checklist-item${selectedClass ? ' welcome-checklist-item--done' : ''}`}>
+            <span className="welcome-checklist-icon" aria-hidden="true">{selectedClass ? '✓' : '○'}</span>
+            <div className="welcome-checklist-body">
+              <span className="welcome-checklist-label">Archetype</span>
+              <span className="welcome-checklist-value">{selectedClassLabel}</span>
+            </div>
+            <span className={`welcome-checklist-status${selectedClass ? ' welcome-checklist-status--done' : ''}`}>
+              {selectedClass ? 'Done' : 'Required'}
+            </span>
+          </div>
+        </div>
+
+        <div className="welcome-checklist-actions">
+          {!selectedExistingSubjectId ? (
+            <p className="welcome-checklist-hint">Select a subject to continue</p>
+          ) : !selectedClass ? (
+            <p className="welcome-checklist-hint">Pick an Archetype to continue</p>
+          ) : (
+            <p className="welcome-checklist-hint welcome-checklist-hint--ready">Ready to Enter Dungeon</p>
+          )}
+          <button
+            type="button"
+            className={canEnterDungeon ? 'welcome-enter-dungeon--ready' : undefined}
+            onClick={() => void handleEnterSelectedSubject()}
+            disabled={!canEnterDungeon}
+          >
+            Enter Dungeon
+          </button>
+          {existingSubjects.length > 0 ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => { localStorage.removeItem('kd-village-spawn'); setActiveScreen('village'); }}
+            >
+              Continue to Village
+            </button>
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  </div>
   );
 }
