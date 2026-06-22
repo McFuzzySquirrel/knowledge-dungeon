@@ -4,6 +4,7 @@ import { useShortcutStore, type ShortcutBinding } from '@/store/shortcutStore';
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '@/i18n';
 import i18n from '@/i18n';
 import { useTranslation } from 'react-i18next';
+import { MakeItYoursTab } from '@/ui/components/MakeItYoursTab';
 
 interface SettingsModalProps {
   currentTheme: ColorTheme;
@@ -30,7 +31,7 @@ const THEME_OPTIONS: { id: ColorTheme; title: string; description: string }[] = 
 ];
 
 /** Tab definition for the settings modal. */
-type SettingsTab = 'theme' | 'language' | 'shortcuts';
+type SettingsTab = 'theme' | 'language' | 'shortcuts' | 'make-it-yours';
 
 interface TabDef {
   id: SettingsTab;
@@ -41,6 +42,7 @@ const SETTINGS_TABS: TabDef[] = [
   { id: 'theme', label: 'Theme' },
   { id: 'language', label: 'Language' },
   { id: 'shortcuts', label: 'Shortcuts' },
+  { id: 'make-it-yours', label: 'Make It Yours' },
 ];
 
 export function SettingsModal({ currentTheme, onThemeChange, onClose }: SettingsModalProps): JSX.Element {
@@ -191,7 +193,10 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
             <div className="shortcut-list" role="list" aria-label="Keyboard shortcuts">
               {shortcuts.map((shortcut, index) => renderShortcutRow(shortcut, index))}
             </div>
-            <div className="onboarding-actions">
+        {/* Make It Yours Tab — sprite customization */}
+        {activeTab === 'make-it-yours' && <MakeItYoursTab />}
+
+        <div className="onboarding-actions">
               <button
                 type="button"
                 className="ghost"

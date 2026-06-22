@@ -49,7 +49,7 @@ describe('preferencesStore', () => {
     expect(usePreferencesStore.getState().graphicsMode).toBe('rpg');
     const raw = window.localStorage.getItem(__testing.PREFERENCES_STORAGE_KEY);
     expect(raw).not.toBeNull();
-    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg', colorTheme: 'dark' });
+    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg', colorTheme: 'dark', activeSpritePack: null });
   });
 
   it('persists changes via setColorTheme', async () => {
@@ -58,6 +58,6 @@ describe('preferencesStore', () => {
     expect(usePreferencesStore.getState().colorTheme).toBe('aurora');
     const raw = window.localStorage.getItem(__testing.PREFERENCES_STORAGE_KEY);
     expect(raw).not.toBeNull();
-    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg', colorTheme: 'aurora' });
+    expect(JSON.parse(raw ?? '{}')).toEqual({ graphicsMode: 'rpg', colorTheme: 'aurora', activeSpritePack: null });
   });
 });

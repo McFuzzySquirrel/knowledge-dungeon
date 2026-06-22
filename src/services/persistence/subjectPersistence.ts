@@ -61,6 +61,11 @@ declare global {
         roomId: string,
         attachmentId: string,
       ) => Promise<string | null>;
+      saveCustomSprite?: (spritePath: string, svgContent: string) => Promise<void>;
+      resetCustomSprite?: (spritePath: string) => Promise<void>;
+      getSpriteManifest?: () => Promise<unknown>;
+      exportSpritePack?: (packJson: string) => Promise<string | null>;
+      importSpritePack?: () => Promise<unknown | null>;
     };
   }
 }

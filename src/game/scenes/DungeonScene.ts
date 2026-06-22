@@ -18,6 +18,7 @@ import {
   type FloorBiomeId,
 } from '@/game/systems/proceduralTextures';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
+import { resolveSpriteUrl } from '@/services/customSprites';
 
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
@@ -74,31 +75,35 @@ const ZOOM_TWEEN_MS = 320;
  * to the Vite base URL, which is `./` in Electron and `/` in the web build.
  * Fall back to `player.svg` when no class is selected.
  */
-const BASE = import.meta.env.BASE_URL;
+/**
+ * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
+ * and are resolved through `resolveSpriteUrl()` which checks for user
+ * customizations before falling back to the bundled asset.
+ */
 const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
-  scholar: `${BASE}assets/sprites/player-hero.svg`,
-  cartographer: `${BASE}assets/sprites/player-explorer.svg`,
-  archivist: `${BASE}assets/sprites/player-archivist.svg`,
+  scholar: 'sprites/player-hero.svg',
+  cartographer: 'sprites/player-explorer.svg',
+  archivist: 'sprites/player-archivist.svg',
 };
-const PLAYER_SPRITE_FALLBACK = `${BASE}assets/sprites/player.svg`;
-const SIGNPOST_SPRITE = `${BASE}assets/sprites/signpost.svg`;
-const NPC_GUIDE_SPRITE = `${BASE}assets/sprites/npc-scribe.svg`;
-const ARTIFACT_LOOT_SPRITE = `${BASE}assets/sprites/objects/artifact-loot.svg`;
-const DOOR_SPRITE = `${BASE}assets/sprites/objects/door.svg`;
-const STAIRS_UP_SPRITE = `${BASE}assets/sprites/objects/stairs-up.svg`;
-const STAIRS_DOWN_SPRITE = `${BASE}assets/sprites/objects/stairs-down.svg`;
-const PICTURE_FRAME_SPRITE = `${BASE}assets/sprites/objects/picture-frame.svg`;
-const CHEST_OPEN_SPRITE = `${BASE}assets/sprites/objects/chest-open.svg`;
-const CHEST_CLOSED_SPRITE = `${BASE}assets/sprites/objects/chest-closed.svg`;
-const DOOR_LOCKED_SPRITE = `${BASE}assets/sprites/objects/door-locked.svg`;
-const ICON_BOOK_SPRITE = `${BASE}assets/sprites/icon-book.svg`;
-const ICON_GEAR_SPRITE = `${BASE}assets/sprites/icon-gear.svg`;
-const ICON_QUESTION_SPRITE = `${BASE}assets/sprites/icon-question.svg`;
+const PLAYER_SPRITE_FALLBACK = 'sprites/player.svg';
+const SIGNPOST_SPRITE = 'sprites/signpost.svg';
+const NPC_GUIDE_SPRITE = 'sprites/npc-scribe.svg';
+const ARTIFACT_LOOT_SPRITE = 'sprites/objects/artifact-loot.svg';
+const DOOR_SPRITE = 'sprites/objects/door.svg';
+const STAIRS_UP_SPRITE = 'sprites/objects/stairs-up.svg';
+const STAIRS_DOWN_SPRITE = 'sprites/objects/stairs-down.svg';
+const PICTURE_FRAME_SPRITE = 'sprites/objects/picture-frame.svg';
+const CHEST_OPEN_SPRITE = 'sprites/objects/chest-open.svg';
+const CHEST_CLOSED_SPRITE = 'sprites/objects/chest-closed.svg';
+const DOOR_LOCKED_SPRITE = 'sprites/objects/door-locked.svg';
+const ICON_BOOK_SPRITE = 'sprites/icon-book.svg';
+const ICON_GEAR_SPRITE = 'sprites/icon-gear.svg';
+const ICON_QUESTION_SPRITE = 'sprites/icon-question.svg';
 
 const DECOR_SPRITES = {
-  bookshelf: `${BASE}assets/sprites/objects/bookshelf.svg`,
-  brazier: `${BASE}assets/sprites/objects/brazier.svg`,
-  scrollPile: `${BASE}assets/sprites/objects/scroll-pile.svg`,
+  bookshelf: 'sprites/objects/bookshelf.svg',
+  brazier: 'sprites/objects/brazier.svg',
+  scrollPile: 'sprites/objects/scroll-pile.svg',
 } as const;
 type DecorKey = keyof typeof DECOR_SPRITES;
 const DECOR_TEXTURE_KEYS: Record<DecorKey, string> = {
@@ -249,66 +254,67 @@ export class DungeonScene extends Phaser.Scene {
     const playerSprite = this.playerClass
       ? PLAYER_SPRITE_BY_CLASS[this.playerClass]
       : PLAYER_SPRITE_FALLBACK;
-    // Phaser auto-detects SVG when the URL ends in `.svg`. Use `svg` loader
-    // explicitly so the rasterised size matches our target render dimensions.
-    this.load.svg(PLAYER_TEXTURE_KEY, playerSprite, {
+    // Sprite URLs are resolved through resolveSpriteUrl() which checks for
+    // user customizations (localStorage/Electron) before falling back to the
+    // bundled asset in public/assets/.
+    this.load.svg(PLAYER_TEXTURE_KEY, resolveSpriteUrl(playerSprite), {
       width: PLAYER_SPRITE_SIZE,
       height: PLAYER_SPRITE_SIZE,
     });
-    this.load.svg(SIGNPOST_TEXTURE_KEY, SIGNPOST_SPRITE, {
+    this.load.svg(SIGNPOST_TEXTURE_KEY, resolveSpriteUrl(SIGNPOST_SPRITE), {
       width: SIGNPOST_SPRITE_SIZE,
       height: SIGNPOST_SPRITE_SIZE,
     });
-    this.load.svg(NPC_GUIDE_TEXTURE_KEY, NPC_GUIDE_SPRITE, {
+    this.load.svg(NPC_GUIDE_TEXTURE_KEY, resolveSpriteUrl(NPC_GUIDE_SPRITE), {
       width: NPC_GUIDE_SPRITE_SIZE,
       height: NPC_GUIDE_SPRITE_SIZE,
     });
-    this.load.svg(DOOR_TEXTURE_KEY, DOOR_SPRITE, {
+    this.load.svg(DOOR_TEXTURE_KEY, resolveSpriteUrl(DOOR_SPRITE), {
       width: DOOR_SPRITE_SIZE,
       height: DOOR_SPRITE_SIZE,
     });
-    this.load.svg(ARTIFACT_LOOT_TEXTURE_KEY, ARTIFACT_LOOT_SPRITE, {
+    this.load.svg(ARTIFACT_LOOT_TEXTURE_KEY, resolveSpriteUrl(ARTIFACT_LOOT_SPRITE), {
       width: ARTIFACT_LOOT_SPRITE_SIZE,
       height: ARTIFACT_LOOT_SPRITE_SIZE,
     });
-    this.load.svg(STAIRS_UP_TEXTURE_KEY, STAIRS_UP_SPRITE, {
+    this.load.svg(STAIRS_UP_TEXTURE_KEY, resolveSpriteUrl(STAIRS_UP_SPRITE), {
       width: PORTAL_SPRITE_SIZE,
       height: PORTAL_SPRITE_SIZE,
     });
-    this.load.svg(STAIRS_DOWN_TEXTURE_KEY, STAIRS_DOWN_SPRITE, {
+    this.load.svg(STAIRS_DOWN_TEXTURE_KEY, resolveSpriteUrl(STAIRS_DOWN_SPRITE), {
       width: PORTAL_SPRITE_SIZE,
       height: PORTAL_SPRITE_SIZE,
     });
-    this.load.svg(PICTURE_FRAME_TEXTURE_KEY, PICTURE_FRAME_SPRITE, {
+    this.load.svg(PICTURE_FRAME_TEXTURE_KEY, resolveSpriteUrl(PICTURE_FRAME_SPRITE), {
       width: PICTURE_FRAME_SPRITE_SIZE,
       height: PICTURE_FRAME_SPRITE_SIZE,
     });
-    this.load.svg(DOOR_LOCKED_TEXTURE_KEY, DOOR_LOCKED_SPRITE, {
+    this.load.svg(DOOR_LOCKED_TEXTURE_KEY, resolveSpriteUrl(DOOR_LOCKED_SPRITE), {
       width: DOOR_LOCKED_SPRITE_SIZE,
       height: DOOR_LOCKED_SPRITE_SIZE,
     });
-    this.load.svg(CHEST_OPEN_TEXTURE_KEY, CHEST_OPEN_SPRITE, {
+    this.load.svg(CHEST_OPEN_TEXTURE_KEY, resolveSpriteUrl(CHEST_OPEN_SPRITE), {
       width: CHEST_SPRITE_SIZE,
       height: CHEST_SPRITE_SIZE,
     });
-    this.load.svg(CHEST_CLOSED_TEXTURE_KEY, CHEST_CLOSED_SPRITE, {
+    this.load.svg(CHEST_CLOSED_TEXTURE_KEY, resolveSpriteUrl(CHEST_CLOSED_SPRITE), {
       width: CHEST_SPRITE_SIZE,
       height: CHEST_SPRITE_SIZE,
     });
-    this.load.svg(ICON_BOOK_TEXTURE_KEY, ICON_BOOK_SPRITE, {
+    this.load.svg(ICON_BOOK_TEXTURE_KEY, resolveSpriteUrl(ICON_BOOK_SPRITE), {
       width: ROOM_ICON_SIZE,
       height: ROOM_ICON_SIZE,
     });
-    this.load.svg(ICON_GEAR_TEXTURE_KEY, ICON_GEAR_SPRITE, {
+    this.load.svg(ICON_GEAR_TEXTURE_KEY, resolveSpriteUrl(ICON_GEAR_SPRITE), {
       width: ROOM_ICON_SIZE,
       height: ROOM_ICON_SIZE,
     });
-    this.load.svg(ICON_QUESTION_TEXTURE_KEY, ICON_QUESTION_SPRITE, {
+    this.load.svg(ICON_QUESTION_TEXTURE_KEY, resolveSpriteUrl(ICON_QUESTION_SPRITE), {
       width: ROOM_ICON_SIZE,
       height: ROOM_ICON_SIZE,
     });
     for (const key of DECOR_KEYS) {
-      this.load.svg(DECOR_TEXTURE_KEYS[key], DECOR_SPRITES[key], {
+      this.load.svg(DECOR_TEXTURE_KEYS[key], resolveSpriteUrl(DECOR_SPRITES[key]), {
         width: DECOR_SPRITE_SIZE,
         height: DECOR_SPRITE_SIZE,
       });

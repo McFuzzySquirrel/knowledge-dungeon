@@ -463,6 +463,132 @@ function registerKnowledgeBridgeHandlers(): void {
       return resolveRoomAttachmentUrl(subjectId, roomId, attachmentId);
     },
   );
+
+  // ---- Custom sprite handlers ----
+
+  const customSpritesRoot = () => path.join(app.getPath('userData'), 'custom-sprites');
+
+  ipcMain.handle(
+    'knowledge:save-custom-sprite',
+    async (_event, spritePath: string, svgContent: string) => {
+      const safePath = path.normalize(spritePath).replace(/^(\.\.[\/\\])+/, '');
+      const userDataFile = path.join(customSpritesRoot(), safePath);
+      await fs.mkdir(path.dirname(userDataFile), { recursive: true });
+      await fs.writeFile(userDataFile, svgContent, 'utf8');
+
+      // Also try to copy to public/assets/ for Vite dev server to serve
+      const publicAssetsRoot = isDev
+        ? path.resolve(__dirname, '..', '..', 'public', 'assets')
+        : path.resolve(__dirname, '..', 'dist', 'assets');
+      const publicFile = path.join(publicAssetsRoot, safePath);
+      try {
+        await fs.mkdir(path.dirname(publicFile), { recursive: true });
+        await fs.writeFile(publicFile, svgContent, 'utf8');
+      } catch {
+        // Non-fatal — public/dist may be read-only in production builds.
+        // The userData copy is the authoritative one.
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'knowledge:reset-custom-sprite',
+    async (_event, spritePath: string) => {
+      const safePath = path.normalize(spritePath).replace(/^(\.\.[\/\\])+/, '');
+      const userDataFile = path.join(customSpritesRoot(), safePath);
+      await fs.rm(userDataFile, { force: true });
+
+      // Also try to remove from public/assets/
+      const publicAssetsRoot = isDev
+        ? path.resolve(__dirname, '..', '..', 'public', 'assets')
+        : path.resolve(__dirname, '..', 'dist', 'assets');
+      const publicFile = path.join(publicAssetsRoot, safePath);
+      await fs.rm(publicFile, { force: true });
+    },
+  );
+
+  ipcMain.handle('knowledge:get-sprite-manifest', async () => {
+    const assetsRoot = isDev
+      ? path.resolve(__dirname, '..', '..', 'public', 'assets')
+      : path.resolve(__dirname, '..', 'dist', 'assets');
+
+    const sprites: { path: string; name: string; category: string; width: number; height: number }[] = [];
+    const queue = [''];
+
+    while (queue.length > 0) {
+      const subdir = queue.pop()!;
+      const fullDir = path.join(assetsRoot, subdir);
+      let entries: fs.Dirent[];
+      try {
+        entries = await fs.readdir(fullDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const relPath = subdir ? `${subdir}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) {
+          queue.push(relPath);
+        } else if (entry.name.endsWith('.svg')) {
+          const content = await fs.readFile(path.join(fullDir, entry.name), 'utf-8');
+          let width = 64;
+          let height = 64;
+          const wm = content.match(/<svg[^>]*\swidth\s*=\s*"(\d+)"/i);
+          const hm = content.match(/<svg[^>]*\sheight\s*=\s*"(\d+)"/i);
+          if (wm && hm) {
+            width = parseInt(wm[1], 10);
+            height = parseInt(hm[1], 10);
+          } else {
+            const vm = content.match(/<svg[^>]*\sviewBox\s*=\s*"\d+\s+\d+\s+(\d+)\s+(\d+)"/i);
+            if (vm) {
+              width = parseInt(vm[1], 10);
+              height = parseInt(vm[2], 10);
+            }
+          }
+          const name = path.basename(entry.name, '.svg');
+          const category = subdir
+            ? subdir.charAt(0).toUpperCase() + subdir.slice(1)
+            : 'Sprites';
+          sprites.push({ path: relPath.replace(/\\/g, '/'), name, category, width, height });
+        }
+      }
+    }
+
+    sprites.sort((a, b) => a.path.localeCompare(b.path));
+    return {
+      generatedAt: new Date().toISOString(),
+      totalSprites: sprites.length,
+      sprites,
+    };
+  });
+
+  ipcMain.handle(
+    'knowledge:export-sprite-pack',
+    async (_event, packJson: string) => {
+      const result = await dialog.showSaveDialog({
+        title: 'Export Sprite Pack',
+        defaultPath: 'my-sprite-pack.kdpack',
+        filters: [{ name: 'Knowledge Dungeon Pack', extensions: ['kdpack'] }],
+      });
+      if (result.canceled || !result.filePath) return null;
+      await fs.writeFile(result.filePath, packJson, 'utf8');
+      return result.filePath;
+    },
+  );
+
+  ipcMain.handle('knowledge:import-sprite-pack', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Import Sprite Pack',
+      filters: [{ name: 'Knowledge Dungeon Pack', extensions: ['kdpack'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const raw = await fs.readFile(result.filePaths[0], 'utf8');
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error('Invalid sprite pack file — not valid JSON');
+    }
+  });
 }
 
 async function createMainWindow(): Promise<void> {

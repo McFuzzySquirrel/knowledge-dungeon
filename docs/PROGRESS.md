@@ -6,7 +6,7 @@ Current state as of 2026-06-22. Phases map to `docs/PRD.md` §14.
 
 ## Current state
 
-The project is at the end of **Phase 5**. All Phase 5 quality, performance, accessibility, error recovery, and localization features are implemented.
+All main PRD phases (0–5) are **complete**. The "Make It Yours" sprite customization feature (Phases F1–F3) is also complete.
 
 ### Build & quality status
 
@@ -17,7 +17,7 @@ The project is at the end of **Phase 5**. All Phase 5 quality, performance, acce
 | `npm test -- --run` | 168 tests passing (27 test files) |
 | `npm run build` | Passing |
 
-### Up next — Phase 6: Future Considerations
+### Up next
 
 See `docs/PRD.md` §19 for future considerations including cloud sync, AI assistance, Tauri shell, native mobile apps, and multiplayer.
 
@@ -321,3 +321,98 @@ After initial Phase 4 implementation, the following issues were fixed during pla
 - `src/ui/screens/WelcomeScreen.tsx` — spawn clear on village entry, welcome flow
 - `src/store/sessionStore.ts` — removed unused spawn state fields
 - `src/styles.css` — dialog positioning fix, anchored class
+
+---
+
+## Feature: "Make It Yours" — SVG Sprite Customization
+
+Feature PRD: `docs/features/make-it-yours.md`
+
+### Phase F1: Foundation (COMPLETE)
+
+- [x] `scripts/generate-sprite-manifest.mjs` — scans `public/assets/` for SVG files, extracts dimensions, outputs `sprite-manifest.json` (62 sprites indexed)
+- [x] `src/services/spriteManifest.ts` — type definitions, fetch/validate manifest, category grouping
+- [x] `src/services/customSprites.ts` — `resolveSpriteUrl()` URL resolution layer, localStorage persistence for overrides, pack CRUD, Electron bridge helpers
+- [x] `activeSpritePack` field added to `src/store/preferencesStore.ts` with persistence
+- [x] `sceneRestartCounter` + `requestSceneRestart()` action added to `src/store/sessionStore.ts`
+- [x] 5 new Electron IPC handlers in `src/electron/main.ts`: `knowledge:save-custom-sprite`, `knowledge:reset-custom-sprite`, `knowledge:get-sprite-manifest`, `knowledge:export-sprite-pack`, `knowledge:import-sprite-pack`
+- [x] 5 new channels exposed in `src/electron/preload.ts`
+- [x] `GET /api/sprite-manifest` Express endpoint + startup manifest generation in `server/index.js`
+- [x] Vite `spriteManifestPlugin()` in `vite.config.ts` — auto-regenerates manifest on SVG file changes in dev
+- [x] `"manifest"` npm script added to `package.json`
+- [x] Sprite URL references migrated in `DungeonScene.ts` (16 sprites) and `VillageScene.ts` (28 sprites) to use `resolveSpriteUrl()`
+- [x] Scene restart wiring in `GameScreen.tsx` and `VillageScreen.tsx` — watches `sceneRestartCounter`, restarts Phaser scene, revokes old blob URLs
+- [x] Global `Window` type extended in `subjectPersistence.ts` with new bridge methods
+
+**Files created:**
+- `scripts/generate-sprite-manifest.mjs`
+- `src/services/spriteManifest.ts`
+- `src/services/customSprites.ts`
+- `public/assets/sprite-manifest.json` (generated)
+
+**Files modified:**
+- `src/store/preferencesStore.ts` — `activeSpritePack` field
+- `src/store/sessionStore.ts` — `sceneRestartCounter`, `requestSceneRestart()`
+- `src/game/scenes/DungeonScene.ts` — `resolveSpriteUrl()` in preload
+- `src/game/scenes/VillageScene.ts` — `resolveSpriteUrl()` in preload
+- `src/ui/screens/GameScreen.tsx` — scene restart effect
+- `src/ui/screens/VillageScreen.tsx` — scene restart effect
+- `src/electron/main.ts` — 5 new IPC handlers
+- `src/electron/preload.ts` — 5 new channel exposures
+- `src/services/persistence/subjectPersistence.ts` — Window type extension
+- `server/index.js` — manifest endpoint + generation
+- `vite.config.ts` — `spriteManifestPlugin()`
+- `package.json` — `"manifest"` script
+- `.gitignore` — `sprite-manifest.json`
+- `tests/unit/preferencesStore.test.ts` — updated expected shape
+
+### Phase F2: Editor Integration (COMPLETE)
+
+- [x] `src/ui/components/SpriteBrowser.tsx` — category-grouped sprite list with thumbnails and modified badges, fetches manifest
+- [x] `src/ui/components/SpriteEditor.tsx` — textarea SVG editor with base64 live preview panel, save/reset buttons, dirty state tracking
+- [x] `src/ui/components/MakeItYoursTab.tsx` — composes browser + editor, manages save/reset/reset-all/apply-changes flows, loads sprite content from bundled assets, shows customization stats
+- [x] `src/ui/components/SettingsModal.tsx` — added "Make It Yours" tab (`SettingsTab` type extended, `SETTINGS_TABS` array, tab panel)
+- [x] CSS added for all Make It Yours components (browser, editor, layout, mobile responsive)
+- [x] i18n keys added: `makeItYours.*` in `en.json` and `es.json` (title, description, save, reset, applyChanges, etc.)
+
+**Files created:**
+- `src/ui/components/SpriteBrowser.tsx`
+- `src/ui/components/SpriteEditor.tsx`
+- `src/ui/components/MakeItYoursTab.tsx`
+
+**Files modified:**
+- `src/ui/components/SettingsModal.tsx` — new tab
+- `src/styles.css` — Make It Yours CSS (200+ lines)
+- `src/i18n/locales/en.json` — `makeItYours` section
+- `src/i18n/locales/es.json` — `makeItYours` section
+
+### Phase F3: Collections & Sharing (COMPLETE)
+
+- [x] `src/ui/components/CollectionSwitcher.tsx` — dropdown to switch between saved packs, save/export/import/delete controls, inline save dialog, import preview with confirmation
+- [x] Pack save: prompts for name + optional description, builds `CustomSpritePack` from current overrides, writes to localStorage
+- [x] Pack export: serializes pack as `.kdpack` JSON file, browser download via `<a download>` blob URL
+- [x] Pack import: `<input type="file">` → FileReader → parse JSON → validate → preview sprites count → confirm → apply
+- [x] Pack switching: activate/deactivate packs, auto-applies all pack overrides, refreshes editor on switch
+- [x] Original backup: on first edit of any sprite, original bundled SVG saved to `localStorage` under `knowledge-dungeon:custom-sprites:originals:`
+- [x] i18n: 18 new keys in `en.json` and `es.json` for collection/pack/import/export strings in both locales
+
+**Files created:**
+- `src/ui/components/CollectionSwitcher.tsx`
+
+**Files modified:**
+- `src/ui/components/MakeItYoursTab.tsx` — integrated CollectionSwitcher, backup mechanism, pack-changed handler
+- `src/styles.css` — Collection Switcher CSS (120+ lines)
+- `src/i18n/locales/en.json` — 18 new makeItYours keys
+- `src/i18n/locales/es.json` — 18 new makeItYours keys
+
+### Village Integration: Artisan Workshop Building
+
+- [x] Added `workshop` structure type to `VillageStructure.type` union
+- [x] Added `artisan-workshop` structure at grid (26,3) near Guild Hall — 3×3 building
+- [x] Added `workshop` texture mapping in `VillageScene.ts` (reuses trophy-hall texture)
+- [x] Added `workshop` to interactive types set in `VillageScene.ts`
+- [x] Created `src/ui/components/MakeItYoursModal.tsx` — standalone modal wrapping MakeItYoursTab with backdrop and close button
+- [x] Workshop info panel appears when player approaches (🎨 icon, "Artisan Workshop", "Open Editor" button)
+- [x] Press E near workshop or click "Open Editor" to launch the Make It Yours editor modal
+- [x] Also accessible from Settings → "Make It Yours" tab (village ⚙ button + dungeon HUD settings)
+- [x] CSS: `.make-it-yours-modal` at 800px wide for comfortable split-pane layout

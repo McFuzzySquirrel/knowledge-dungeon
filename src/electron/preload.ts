@@ -32,6 +32,16 @@ const electronKnowledgeBridge = {
       roomId,
       attachmentId,
     ) as Promise<string | null>,
+  saveCustomSprite: (spritePath: string, svgContent: string) =>
+    ipcRenderer.invoke('knowledge:save-custom-sprite', spritePath, svgContent) as Promise<void>,
+  resetCustomSprite: (spritePath: string) =>
+    ipcRenderer.invoke('knowledge:reset-custom-sprite', spritePath) as Promise<void>,
+  getSpriteManifest: () =>
+    ipcRenderer.invoke('knowledge:get-sprite-manifest') as Promise<unknown>,
+  exportSpritePack: (packJson: string) =>
+    ipcRenderer.invoke('knowledge:export-sprite-pack', packJson) as Promise<string | null>,
+  importSpritePack: () =>
+    ipcRenderer.invoke('knowledge:import-sprite-pack') as Promise<unknown | null>,
 };
 
 contextBridge.exposeInMainWorld('electronKnowledgeBridge', electronKnowledgeBridge);

@@ -48,6 +48,20 @@ Full i18n support via i18next with English and Spanish (Español) locales. Langu
 - **Unique NPC names** — wandering villagers display their actual names (Wandering Scholar, Elder Sage, etc.)
 - **Larger player sprite** — village player character is now 40×40 (up from 32×32)
 - **Welcome dialog** — appears near the village entrance signpost, auto-hides when walking away
+- **Artisan Workshop** — a dedicated building near the Guild Hall where you can customize game sprites (see below)
+
+### 🎨 Make It Yours — Sprite Customization
+
+A built-in SVG editor that lets you personalize the entire game's look and feel.
+
+- **Browse 60+ sprites** grouped by category with thumbnail previews
+- **Live SVG editor** — edit SVG code with inline animated preview (CSS keyframes render in real-time)
+- **Animation presets** — assign Pulse, Spin, Float, or Bounce animations per sprite
+- **Save collections** — bundle your customizations into named packs
+- **Export/Import** — share packs as portable `.kdpack` files
+- **Original backup** — first edit automatically saves the original; Reset restores it
+- **Apply Changes** — restarts the game scene to load your custom sprites in-game
+- Access from **Settings → Make It Yours** or walk up to the 🎨 **Artisan Workshop** building in the village
 
 ---
 
@@ -127,6 +141,7 @@ The **Dungeon Village** is your home base, replacing the direct welcome→dungeo
 - **Guild Hall** - create new subjects.
 - **Training Grounds** - launch the 3-room tutorial.
 - **Trophy Hall** - view badges, artifacts, journal entries across all subjects.
+- **Artisan Workshop** - customize game sprites with the built-in SVG editor.
 - **Library of Knowledge** - in-game help with controls and gameplay reference.
 
 ![Village HUD - sidebar with archetype selector, quest log, stats, and theme picker](./docs/assets/ui/village-hud.png)
@@ -319,6 +334,7 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 - [UI walkthrough with screenshots](./docs/UI.md)
 - [Game guide (full reference)](./docs/GAME-GUIDE.md)
 - [Customization: adding images, where subjects are saved, and desktop export helpers](./docs/CUSTOMIZATION.md)
+- [Make It Yours — sprite customization feature PRD](./docs/features/make-it-yours.md)
 - [Create-repo-mindmap skill usage](./SKILL.md)
 - [Portable Copilot skill (copy/paste template)](./docs/COPILOT_SKILL_CREATE_REPO_MINDMAP.md)
 
@@ -338,11 +354,14 @@ src/
   store/                 # Zustand stores (session, subject, progression)
   services/
     persistence/         # localStorage + Electron bridge + templates
+    customSprites.ts     # sprite URL resolution + pack management
+    spriteManifest.ts    # dynamic SVG asset discovery
     sessionTracker.ts    # study session logging & analytics
     audioManager.ts      # BGM/SFX infrastructure
   electron/              # main + preload (Electron only)
   ui/                    # React shell: welcome, HUD, room panel, modals
-    components/          # NoteEditorModal, StudyStatsPanel, TagEditor, RoomNpcDialog
+    components/          # NoteEditorModal, StudyStatsPanel, TagEditor, RoomNpcDialog,
+                          # SpriteBrowser, SpriteEditor, MakeItYoursTab, CollectionSwitcher
     screens/             # WelcomeScreen, VillageScreen, GameScreen
     utils/               # markdown rendering, syntax highlighting, auto-complete
   data/                  # village layout, tutorial subject, game guide

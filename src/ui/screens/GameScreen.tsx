@@ -71,6 +71,7 @@ export function GameScreen(): JSX.Element {
   const setProgressionActiveSubject = useProgressionStore((s) => s.setActiveSubject);
   const colorTheme = usePreferencesStore((s) => s.colorTheme);
   const setColorTheme = usePreferencesStore((s) => s.setColorTheme);
+  const sceneRestartCounter = useSessionStore((s) => s.sceneRestartCounter);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -419,6 +420,19 @@ export function GameScreen(): JSX.Element {
     selectedClass,
     setFocusedRoomId,
   ]);
+
+  // Restart the dungeon scene when the user saves custom sprites and clicks "Apply Changes"
+  useEffect(() => {
+    if (sceneRestartCounter === 0) return;
+    if (!gameRef.current) return;
+    // Revoke old blob URLs before restarting so Phaser reloads fresh SVGs
+    import('@/services/customSprites').then(({ revokeAllBlobUrls }) => revokeAllBlobUrls());
+    gameRef.current.scene.restart('DungeonScene');
+    // Re-acquire scene reference on next ready
+    gameRef.current.events.once('ready', () => {
+      sceneRef.current = gameRef.current!.scene.getScene('DungeonScene') as DungeonScene;
+    });
+  }, [sceneRestartCounter]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;

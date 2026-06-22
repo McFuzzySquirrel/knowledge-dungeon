@@ -1692,7 +1692,8 @@ button.ghost {
 }
 
 .settings-modal {
-  width: min(540px, 100%);
+  width: min(720px, 95%);
+  max-width: 95vw;
 }
 
 .settings-theme-grid {
@@ -4839,4 +4840,422 @@ textarea.game-input:focus {
   padding: 4px 8px;
   text-align: center;
   outline: none;
+}
+
+/* ── Make It Yours — Sprite Customization ───────────────────────────────── */
+
+.make-it-yours-layout {
+  display: flex;
+  gap: 16px;
+  min-height: 400px;
+  max-height: 60vh;
+}
+
+.make-it-yours-browser {
+  flex: 0 0 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+}
+
+.make-it-yours-editor {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.make-it-yours-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.make-it-yours-stats {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.make-it-yours-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Sprite Browser ─────────────────────────────────────────────────────── */
+
+.sprite-browser-loading,
+.sprite-browser-error,
+.sprite-browser-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.sprite-browser-error {
+  color: var(--danger);
+}
+
+.sprite-category {
+  border-bottom: 1px solid var(--border);
+}
+
+.sprite-category-header {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-dark);
+}
+
+.sprite-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.sprite-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 0.15s;
+}
+
+.sprite-item:hover {
+  background: var(--stone);
+}
+
+.sprite-item.active {
+  background: var(--stone);
+  color: var(--gold);
+}
+
+.sprite-item[aria-selected='true'] {
+  background: var(--stone);
+  border-left: 3px solid var(--gold);
+  padding-left: 7px;
+}
+
+.sprite-thumb {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-deep);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sprite-thumb img {
+  object-fit: contain;
+}
+
+.sprite-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sprite-modified-badge {
+  flex-shrink: 0;
+  color: var(--gold);
+  font-weight: bold;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* ── Sprite Editor ──────────────────────────────────────────────────────── */
+
+.sprite-editor-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.sprite-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.sprite-editor-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.sprite-editor-dims {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sprite-dirty-badge {
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sprite-editor-error {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: rgba(196, 74, 74, 0.15);
+  color: var(--danger);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.sprite-editor-body {
+  display: flex;
+  gap: 12px;
+}
+
+.sprite-editor-preview {
+  flex-shrink: 0;
+  width: 200px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    repeating-conic-gradient(var(--bg-deep) 0% 25%, var(--bg-dark) 0% 50%) 50% / 20px 20px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sprite-editor-preview-placeholder {
+  color: var(--text-muted);
+  font-size: 24px;
+  font-weight: bold;
+  opacity: 0.3;
+}
+
+.sprite-editor-textarea {
+  flex: 1;
+  min-height: 200px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.sprite-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Animation preset controls */
+.sprite-editor-anim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.sprite-editor-anim-label {
+  color: var(--accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.sprite-editor-anim select {
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.sprite-editor-anim-note {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 11px;
+}
+
+/* Inline SVG preview — ensures the SVG fills the preview container */
+.sprite-editor-preview svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Mobile: stack browser above editor */
+@media (max-width: 768px) {
+  .make-it-yours-layout {
+    flex-direction: column;
+    max-height: none;
+  }
+  .make-it-yours-browser {
+    flex: none;
+    max-height: 200px;
+  }
+  .sprite-editor-body {
+    flex-direction: column;
+  }
+  .sprite-editor-preview {
+    width: 100%;
+    height: 150px;
+  }
+}
+
+/* ── Collection Switcher ───────────────────────────────────────────────── */
+
+.collection-switcher {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.collection-switcher-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.collection-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.collection-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.collection-select {
+  min-width: 140px;
+  font-size: 13px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.collection-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+.collection-pack-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.collection-pack-name {
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.collection-pack-desc {
+  font-style: italic;
+}
+
+.collection-pack-count {
+  color: var(--text-muted);
+}
+
+/* Save dialog */
+.collection-save-dialog {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.collection-save-dialog .game-input {
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.collection-save-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.collection-save-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Import preview */
+.collection-import-preview {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--bg-deep);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+}
+
+.collection-import-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
+.collection-import-info {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.collection-import-sprites {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.collection-import-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* ── Make It Yours Modal ───────────────────────────────────────────────── */
+
+.make-it-yours-modal {
+  width: min(800px, 95vw);
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
 }

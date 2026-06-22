@@ -14,6 +14,8 @@ import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubje
 import { GAME_GUIDE_MARKDOWN } from '@/data/gameGuide';
 import { Markdown } from '@/ui/utils/markdown';
 import { StudyStatsPanel } from '@/ui/components/StudyStatsPanel';
+import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
+import { SettingsModal } from '@/ui/components/SettingsModal';
 
 interface SubjectSummary {
   id: string;
@@ -34,6 +36,7 @@ export function VillageScreen(): JSX.Element {
   const loadSubjectFlow = useLoadSubjectFlow();
   const colorTheme = usePreferencesStore((s) => s.colorTheme);
   const setColorTheme = usePreferencesStore((s) => s.setColorTheme);
+  const sceneRestartCounter = useSessionStore((s) => s.sceneRestartCounter);
   const initSubject = useSubjectStore((s) => s.initSubject);
   const bySubject = useProgressionStore((s) => s.bySubject);
   const totalBadges = Object.values(bySubject).reduce((sum, s) => sum + s.badges.length, 0);
@@ -46,7 +49,7 @@ export function VillageScreen(): JSX.Element {
 
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [infoPanel, setInfoPanel] = useState<{
-    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library';
+    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop';
     structureId: string;
     subject?: SubjectSummary;
   } | null>(null);
@@ -89,6 +92,8 @@ export function VillageScreen(): JSX.Element {
   const [dungeonBiome, setDungeonBiome] = useState<string | null>(null);
   const [showFullGuide, setShowFullGuide] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [makeItYoursOpen, setMakeItYoursOpen] = useState(false);
 
   const refreshSubjects = useCallback(async () => {
     try {
@@ -196,6 +201,8 @@ export function VillageScreen(): JSX.Element {
           }
         } else if (sType === 'library') {
           setInfoPanel({ type: 'library', structureId });
+        } else if (sType === 'workshop') {
+          setInfoPanel({ type: 'workshop', structureId });
         }
       },
       onStructureLeft: (structureId) => {
@@ -247,6 +254,8 @@ export function VillageScreen(): JSX.Element {
           setInfoPanel({ type: 'signpost', structureId });
         } else if (sType === 'library') {
           setInfoPanel({ type: 'library', structureId });
+        } else if (sType === 'workshop') {
+          setMakeItYoursOpen(true);
         }
       },
       onNpcApproached: (npcId) => {
@@ -353,6 +362,14 @@ export function VillageScreen(): JSX.Element {
       sceneRef.current = null;
     };
   }, []);
+
+  // Restart the village scene when the user saves custom sprites and clicks "Apply Changes"
+  useEffect(() => {
+    if (sceneRestartCounter === 0) return;
+    if (!gameRef.current) return;
+    import('@/services/customSprites').then(({ revokeAllBlobUrls }) => revokeAllBlobUrls());
+    gameRef.current.scene.restart('VillageScene');
+  }, [sceneRestartCounter]);
 
   // Sync scene state whenever the scene is ready OR the data changes
   useEffect(() => {
@@ -461,7 +478,8 @@ export function VillageScreen(): JSX.Element {
                   if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
                 }
               }}
-              onStatsClick={() => setShowStats(true)} />
+              onStatsClick={() => setShowStats(true)}
+              onSettingsClick={() => setSettingsOpen(true)} />
           </div>
         </>
       ) : (
@@ -479,7 +497,8 @@ export function VillageScreen(): JSX.Element {
                   if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
                 }
               }}
-              onStatsClick={() => setShowStats(true)} />
+              onStatsClick={() => setShowStats(true)}
+              onSettingsClick={() => setSettingsOpen(true)} />
           </div>
         </div>
       )}
@@ -724,6 +743,27 @@ export function VillageScreen(): JSX.Element {
         </div>
       ) : null}
 
+      {infoPanel?.type === 'workshop' ? (
+        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
+          <div className="village-info-panel-header">
+            <span className="village-info-portal-icon">🎨</span>
+            <div>
+              <h3>Artisan Workshop</h3>
+              <p className="village-info-meta">Customize game sprites</p>
+            </div>
+          </div>
+          <p className="village-info-desc">
+            Personalize the look and feel of your dungeon adventure. Edit character
+            sprites, icons, decorations, and more.
+          </p>
+          <div className="village-info-actions">
+            <button type="button" className="village-enter-btn" onClick={() => setMakeItYoursOpen(true)}>
+              Open Editor
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {infoPanel?.type === 'quest-board' ? (
         <div className="village-info-panel ui-skin" data-theme={colorTheme}>
           <div className="village-info-panel-header">
@@ -907,6 +947,18 @@ export function VillageScreen(): JSX.Element {
       ) : null}
 
       {showStats ? <StudyStatsPanel onClose={() => setShowStats(false)} /> : null}
+
+      {settingsOpen ? (
+        <SettingsModal
+          currentTheme={colorTheme}
+          onThemeChange={(t) => setColorTheme(t as ColorTheme)}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
+
+      {makeItYoursOpen ? (
+        <MakeItYoursModal onClose={() => setMakeItYoursOpen(false)} />
+      ) : null}
     </div>
 
     {welcomeMessage ? (
@@ -978,7 +1030,7 @@ function CompassOverlay({ sceneRef }: { sceneRef: React.MutableRefObject<Village
 /* ── Reusable HUD content (used in both desktop sidebar & mobile drawer) ── */
 function VillageHudContent({
   questStep, subjects, selectedClass, setSelectedClass, setCreateOpen, setDataOpen,
-  colorTheme, setColorTheme, onQuestClick, onStatsClick,
+  colorTheme, setColorTheme, onQuestClick, onStatsClick, onSettingsClick,
 }: {
   questStep: QuestStep; subjects: Array<{ id: string; subjectName: string; roomCount: number; clearedRoomCount: number }>;
   selectedClass: string | null; setSelectedClass: (cls: string | null) => void;
@@ -986,6 +1038,7 @@ function VillageHudContent({
   colorTheme: string; setColorTheme: (t: string) => void;
   onQuestClick: (step: string) => void;
   onStatsClick: () => void;
+  onSettingsClick: () => void;
 }): JSX.Element {
   const QL = QUEST_LABELS as Record<string, { label: string; hint: string }>;
   const QO = QUEST_ORDER;
@@ -1081,6 +1134,10 @@ function VillageHudContent({
         <button type="button" className="village-action-btn" onClick={() => setDataOpen(true)}
           style={{ fontSize: 11, opacity: 0.7 }}>
           🛡 Data
+        </button>
+        <button type="button" className="village-action-btn" onClick={onSettingsClick}
+          style={{ fontSize: 11, opacity: 0.7 }}>
+          ⚙ Settings
         </button>
       </div>
     </>
