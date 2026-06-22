@@ -109,8 +109,6 @@ This works especially well for onboarding, architecture reviews, and "what does 
 
 ## Screenshots
 
-![Knowledge Dungeon UI showcase](./docs/assets/showcase.gif)
-
 ### Welcome & Onboarding
 
 | Welcome Screen | Continue to Village | Data & Templates |
