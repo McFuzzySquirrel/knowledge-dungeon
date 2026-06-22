@@ -12,6 +12,8 @@ import { CollectionSwitcher } from '@/ui/components/CollectionSwitcher';
 import { useSessionStore } from '@/store/sessionStore';
 import { useTranslation } from 'react-i18next';
 
+const BASE = import.meta.env.BASE_URL;
+
 const BACKUP_PREFIX = 'knowledge-dungeon:custom-sprites:originals:';
 
 function backupOriginal(spritePath: string, svgContent: string): void {
@@ -65,7 +67,7 @@ export function MakeItYoursTab(): JSX.Element {
 
     if (!originalCache[sprite.path]) {
       try {
-        const response = await fetch(`/assets/${sprite.path}`);
+        const response = await fetch(`${BASE}assets/${sprite.path}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const svg = await response.text();
         setOriginalCache((prev) => ({ ...prev, [sprite.path]: svg }));

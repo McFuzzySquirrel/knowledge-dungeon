@@ -20,7 +20,8 @@ export interface SpriteManifest {
   sprites: ManifestSprite[];
 }
 
-const MANIFEST_URL = '/assets/sprite-manifest.json';
+const BASE = import.meta.env.BASE_URL;
+const MANIFEST_URL = `${BASE}assets/sprite-manifest.json`;
 
 function isManifest(obj: unknown): obj is SpriteManifest {
   if (!obj || typeof obj !== 'object') return false;
