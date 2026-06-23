@@ -561,7 +561,7 @@ SubjectMastered
 
 ## 14. Implementation Phases
 
-The following phases describe work already completed and future work to build upon the existing foundation. The current implementation is at the end of Phase 2.
+The following phases describe work already completed. All phases 0–5 are complete.
 
 Each phase is independently shippable and adds standalone value. Completion criteria verify the phase delivers its intended outcomes before proceeding to the next.
 
@@ -609,7 +609,7 @@ Each phase is independently shippable and adds standalone value. Completion crit
 - [x] Touch controls work for mobile gameplay
 - [x] Import/export round-trips preserve data
 
-### Phase 3: Visual Unification & Gameplay Depth
+### Phase 3: Visual Unification & Gameplay Depth (COMPLETE)
 
 The UI enhancement plan follows the research in `docs/research/ui-enhancements.txt`. The phase is split into three parallel tracks: visual unification, atmosphere, and gameplay depth.
 
@@ -618,91 +618,91 @@ The UI enhancement plan follows the research in `docs/research/ui-enhancements.t
 Implements the research recommendations from `docs/research/ui-enhancements.txt` items 1–4, 6.
 
 **Week 1 — Color & Font:**
-- [ ] Define a single 5-color palette (Dark Fantasy or Wood & Stone tone)
-- [ ] Apply palette as CSS custom properties in React app
-- [ ] Use same hex codes for Phaser dungeon sprites, text, and HUD overlays
-- [ ] Choose one primary game-style font (pixel or fantasy serif)
-- [ ] Load font in both React (globally via CSS) and Phaser (via CSS font-face)
-- [ ] Set explicit `fontFamily` on all Phaser text objects to match React
+- [x] Define a single 5-color palette (Dark Fantasy or Wood & Stone tone)
+- [x] Apply palette as CSS custom properties in React app
+- [x] Use same hex codes for Phaser dungeon sprites, text, and HUD overlays
+- [x] Choose one primary game-style font (pixel or fantasy serif)
+- [x] Load font in both React (globally via CSS) and Phaser (via CSS font-face)
+- [x] Set explicit `fontFamily` on all Phaser text objects to match React
 
 **Week 2 — UI Re-skin:**
-- [ ] Style HUD sidebar as an in-game panel (themed background texture, trim)
-- [ ] Apply consistent border style (2px solid / 9-patch / unified rounded) to all React panels, modals, tooltips
-- [ ] Recreate same border style on Phaser in-game UI panels
-- [ ] Collapse less-used HUD features into secondary menu to reduce clutter
-- [ ] Use tooltips and icons instead of inline text on game canvas
+- [x] Style HUD sidebar as an in-game panel (themed background texture, trim)
+- [x] Apply consistent border style (2px solid / 9-patch / unified rounded) to all React panels, modals, tooltips
+- [x] Recreate same border style on Phaser in-game UI panels
+- [x] Collapse less-used HUD features into secondary menu to reduce clutter
+- [x] Use tooltips and icons instead of inline text on game canvas
 
 **Week 3 — Shared Assets:**
-- [ ] Create or source 10–15 shared UI icons (chest, map, book, gear, sword, potion, etc.)
-- [ ] Use same icons in both React components and Phaser scene (shared sprite sheet)
-- [ ] Style React buttons as game elements (stone button, parchment scroll, etc.)
-- [ ] Theme scrollbars and input fields to match dungeon aesthetic
+- [x] Create or source 10–15 shared UI icons (chest, map, book, gear, sword, potion, etc.)
+- [x] Use same icons in both React components and Phaser scene (shared sprite sheet)
+- [x] Style React buttons as game elements (stone button, parchment scroll, etc.)
+- [x] Theme scrollbars and input fields to match dungeon aesthetic
 
 **Completion criteria:**
-- [ ] React and Phaser share a unified color palette (same hex codes)
-- [ ] Single font renders consistently in both UI shell and game canvas
-- [ ] All panels and modals use consistent border/shadow language
-- [ ] 10–15 shared icons in active use across both systems
-- [ ] HUD, buttons, scrollbars, inputs styled as game elements
+- [x] React and Phaser share a unified color palette (same hex codes)
+- [x] Single font renders consistently in both UI shell and game canvas
+- [x] All panels and modals use consistent border/shadow language
+- [x] 10–15 shared icons in active use across both systems
+- [x] HUD, buttons, scrollbars, inputs styled as game elements
 
 #### 3b. Atmosphere & Polish
 
-- [ ] Add subtle vignette effect around screen edges via CSS (`box-shadow` inset or `radial-gradient`)
-- [ ] Fade transitions between screens (welcome → village → dungeon)
-- [ ] Slide/fade transitions for modal open/close
-- [ ] Background music: ambient dungeon tracks, village hub ambiance
-- [ ] Sound effects: UI click, room encounter, XP earn, artifact collect, NPC interaction
-- [ ] Visual polish: replace procedural player shapes with per-archetype sprite art
-- [ ] Sprite art for key items (loot chest, artifact, portal)
+- [x] Add subtle vignette effect around screen edges via CSS (`box-shadow` inset or `radial-gradient`)
+- [x] Fade transitions between screens (welcome → village → dungeon)
+- [x] Slide/fade transitions for modal open/close
+- [x] Background music: ambient dungeon tracks, village hub ambiance
+- [x] Sound effects: UI click, room encounter, XP earn, artifact collect, NPC interaction
+- [x] Visual polish: replace procedural player shapes with per-archetype sprite art
+- [x] Sprite art for key items (loot chest, artifact, portal)
 
 **Completion criteria:**
-- [ ] Vignette renders over both Phaser canvas and React UI consistently
-- [ ] Screen and modal transitions are smooth (no hard cuts)
-- [ ] Audio plays correctly in all game contexts (dungeon, village, UI)
-- [ ] Visual assets replace procedural shapes for player and key objects
+- [x] Vignette renders over both Phaser canvas and React UI consistently
+- [x] Screen and modal transitions are smooth (no hard cuts)
+- [x] Audio plays correctly in all game contexts (dungeon, village, UI)
+- [x] Visual assets replace procedural shapes for player and key objects
 
 #### 3c. Gameplay Depth
 
-- [ ] Additional biome types and room decor variety (at least 3 more beyond current 5, total ≥8)
-- [ ] Boss rooms at subject milestones (every 10 rooms, special large encounter with bonus XP/loot)
-- [ ] Enhanced loot system with equippable items that modify XP or quality bonuses
-- [ ] Achievement system tracking cross-subject milestones (e.g., "Master 3 subjects", "Write 100 notes")
+- [x] Additional biome types and room decor variety (at least 3 more beyond current 5, total ≥8)
+- [x] Boss rooms at subject milestones (every 10 rooms, special large encounter with bonus XP/loot)
+- [x] Enhanced loot system with equippable items that modify XP or quality bonuses
+- [x] Achievement system tracking cross-subject milestones (e.g., "Master 3 subjects", "Write 100 notes")
 
 **Completion criteria:**
-- [ ] At least 8 total biomes available, visually distinct
-- [ ] Boss rooms provide unique encounters with bonus rewards
-- [ ] Equippable items affect gameplay stats and persist per subject
-- [ ] Achievements unlock and display across subjects
+- [x] At least 8 total biomes available, visually distinct
+- [x] Boss rooms provide unique encounters with bonus rewards
+- [x] Equippable items affect gameplay stats and persist per subject
+- [x] Achievements unlock and display across subjects
 
-### Phase 4: Advanced Features
-- [ ] Spaced repetition scheduling for Archaeologist reviews (SM-2 algorithm or简化)
-- [ ] Study statistics dashboard (time spent, rooms per session, retention trends)
-- [ ] Subject templates and sharing (via import/export of JSON)
-- [ ] Tag system for cross-subject topic linking
-- [ ] Custom biome/theme per subject
-- [ ] In-game markdown editor enhancements (syntax highlighting, auto-complete)
-
-**Completion criteria:**
-- [ ] Spaced repetition schedules review prompts based on user performance
-- [ ] Dashboard shows meaningful study statistics (time spent, rooms per session, retention)
-- [ ] Subject templates are importable/exportable and preserve all data
-- [ ] Tags link topics across subjects with cross-subject navigation
-- [ ] Users can customize biome per subject independently
-- [ ] In-game markdown editor supports syntax highlighting and auto-complete
-
-### Phase 5: Quality & Scale
-- [ ] Performance optimization for large subjects (100+ rooms)
-- [ ] Accessibility audit and improvements (keyboard nav, screen reader support for UI)
-- [ ] Keyboard shortcut customization
-- [ ] Comprehensive error recovery (corrupt subject data, persistence failures)
-- [ ] Localization / i18n support (i18next or similar)
+### Phase 4: Advanced Features (COMPLETE)
+- [x] Spaced repetition scheduling for Archaeologist reviews (SM-2 algorithm or简化)
+- [x] Study statistics dashboard (time spent, rooms per session, retention trends)
+- [x] Subject templates and sharing (via import/export of JSON)
+- [x] Tag system for cross-subject topic linking
+- [x] Custom biome/theme per subject
+- [x] In-game markdown editor enhancements (syntax highlighting, auto-complete)
 
 **Completion criteria:**
-- [ ] 100-room subject maintains 30+ FPS on mid-range hardware
-- [ ] UI is operable via keyboard alone (excluding Phaser game canvas)
-- [ ] Keyboard shortcuts are configurable via settings UI
-- [ ] Corrupt subject data shows recovery options, not a crash
-- [ ] At least one additional locale (e.g., Spanish or French) is functional
+- [x] Spaced repetition schedules review prompts based on user performance
+- [x] Dashboard shows meaningful study statistics (time spent, rooms per session, retention)
+- [x] Subject templates are importable/exportable and preserve all data
+- [x] Tags link topics across subjects with cross-subject navigation
+- [x] Users can customize biome per subject independently
+- [x] In-game markdown editor supports syntax highlighting and auto-complete
+
+### Phase 5: Quality & Scale (COMPLETE)
+- [x] Performance optimization for large subjects (100+ rooms)
+- [x] Accessibility audit and improvements (keyboard nav, screen reader support for UI)
+- [x] Keyboard shortcut customization
+- [x] Comprehensive error recovery (corrupt subject data, persistence failures)
+- [x] Localization / i18n support (i18next or similar)
+
+**Completion criteria:**
+- [x] 100-room subject maintains 30+ FPS on mid-range hardware
+- [x] UI is operable via keyboard alone (excluding Phaser game canvas)
+- [x] Keyboard shortcuts are configurable via settings UI
+- [x] Corrupt subject data shows recovery options, not a crash
+- [x] At least one additional locale (e.g., Spanish or French) is functional
 
 ---
 
