@@ -112,7 +112,7 @@ export function MakeItYoursTab(): JSX.Element {
         const msg = errNode.textContent?.split('\n')[0]?.trim() || 'XML parse error';
         return t('makeItYours.errorXmlParse', 'XML parse error: {{msg}}', { msg });
       }
-    } catch (e) {
+    } catch {
       return t('makeItYours.errorXmlException', 'Failed to parse SVG as XML.');
     }
     return null;
