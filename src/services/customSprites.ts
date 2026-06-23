@@ -7,9 +7,11 @@
  * the correct sprite URL (custom override or bundled fallback).
  */
 import { isElectronAvailable } from '@/services/electronBridge';
+import type { SpriteAnimationConfig } from '@/ui/components/SpriteEditor';
 
 const STORAGE_PREFIX = 'knowledge-dungeon';
 const OVERRIDE_KEY_PREFIX = `${STORAGE_PREFIX}:custom-sprites:override:`;
+const ANIM_KEY_PREFIX = `${STORAGE_PREFIX}:custom-sprites:anim:`;
 const PACKS_KEY = `${STORAGE_PREFIX}:custom-sprites:packs`;
 
 export interface CustomSpritePack {
@@ -80,6 +82,8 @@ export function getCustomSpriteContent(spritePath: string): string | null {
  */
 export function saveCustomSpriteContent(spritePath: string, svgContent: string): void {
   if (!hasLocalStorage()) return;
+  const trimmed = svgContent.trim();
+  if (!trimmed.startsWith('<svg') && !trimmed.startsWith('<?xml')) return;
   safeSet(overrideKey(spritePath), svgContent);
 }
 
@@ -117,6 +121,67 @@ export function resetAllCustomSprites(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Per-sprite animation config storage
+// ---------------------------------------------------------------------------
+
+function animKey(spritePath: string): string {
+  return `${ANIM_KEY_PREFIX}${spritePath}`;
+}
+
+/**
+ * Get the stored animation config for a sprite, or a default 'none' config.
+ */
+export function getAnimationConfig(spritePath: string): SpriteAnimationConfig {
+  if (!hasLocalStorage()) return { type: 'none' };
+  try {
+    const raw = localStorage.getItem(animKey(spritePath));
+    if (raw) return JSON.parse(raw) as SpriteAnimationConfig;
+  } catch { /* ignore */ }
+  return { type: 'none' };
+}
+
+/**
+ * Store an animation config for a sprite.
+ */
+export function saveAnimationConfig(spritePath: string, config: SpriteAnimationConfig): void {
+  if (!hasLocalStorage()) return;
+  safeSet(animKey(spritePath), JSON.stringify(config));
+}
+
+/**
+ * Remove the animation config for a sprite.
+ */
+export function deleteAnimationConfig(spritePath: string): void {
+  if (!hasLocalStorage()) return;
+  safeRemove(animKey(spritePath));
+}
+
+/**
+ * List all sprite paths that have animation configs.
+ */
+export function listAnimationSpritePaths(): string[] {
+  if (!hasLocalStorage()) return [];
+  const results: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(ANIM_KEY_PREFIX)) {
+      results.push(key.slice(ANIM_KEY_PREFIX.length));
+    }
+  }
+  return results;
+}
+
+/**
+ * Reset all animation configs to default (none).
+ */
+export function resetAllAnimationConfigs(): void {
+  const paths = listAnimationSpritePaths();
+  for (const path of paths) {
+    safeRemove(animKey(path));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Sprite URL resolution
 // ---------------------------------------------------------------------------
 
@@ -136,11 +201,22 @@ export function resolveSpriteUrl(spritePath: string): string {
   if (hasLocalStorage()) {
     const custom = safeGet(overrideKey(spritePath));
     if (custom) {
-      const blob = new Blob([custom], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      // Track for later cleanup
-      blobUrls.add(url);
-      return url;
+      const trimmed = custom.trim();
+      // Validate SVG content: must start like SVG and parse as valid XML
+      if (trimmed.startsWith('<svg') || trimmed.startsWith('<?xml')) {
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(trimmed, 'image/svg+xml');
+          if (doc.querySelector('parsererror')) throw new Error('parse error');
+          const blob = new Blob([custom], { type: 'image/svg+xml' });
+          const url = URL.createObjectURL(blob);
+          blobUrls.add(url);
+          return url;
+        } catch {
+          // Malformed XML — clear the override silently
+        }
+      }
+      safeRemove(overrideKey(spritePath));
     }
   }
 
@@ -359,4 +435,68 @@ export async function importSpritePackElectron(): Promise<unknown | null> {
     throw new Error('importSpritePack not available');
   }
   return bridge.importSpritePack();
+}
+
+// ---------------------------------------------------------------------------
+// Phaser tween application from animation presets
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a sprite animation preset as Phaser tweens on the given game object.
+ * Call this after creating a sprite in a Phaser scene. If the config has
+ * type 'none' or no config is found, no tweens are added.
+ *
+ * @param scene     The Phaser scene to add tweens to.
+ * @param sprite    The Image or GameObject to animate.
+ * @param config    The animation config from {@link getAnimationConfig}.
+ * @param baseY     Optional base Y position for 'float' preset (defaults to sprite.y).
+ */
+export function applySpriteAnimation(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  scene: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sprite: any,
+  config: SpriteAnimationConfig,
+  baseY?: number,
+): void {
+  if (config.type === 'none') return;
+  const speed = config.speed ?? 1;
+
+  const addTween = (cfg: Record<string, unknown>) => scene.tweens.add(cfg);
+
+  switch (config.type) {
+    case 'pulse':
+      addTween({ targets: sprite, scale: { from: 0.95, to: 1.05 }, duration: 1500 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'spin':
+      addTween({ targets: sprite, angle: 360, duration: 6000 / speed, repeat: -1, ease: 'Linear' });
+      break;
+    case 'float':
+      addTween({ targets: sprite, y: { from: baseY ?? sprite.y, to: (baseY ?? sprite.y) - 3 }, duration: 1500 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'bounce':
+      addTween({ targets: sprite, scaleY: { from: 1, to: 0.9 }, duration: 400 / speed, yoyo: true, repeat: -1, ease: 'Bounce.easeOut' });
+      break;
+    case 'flicker':
+      addTween({ targets: sprite, alpha: { from: 0.5, to: 1 }, duration: 600 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'wobble':
+      addTween({ targets: sprite, angle: { from: -5, to: 5 }, duration: 800 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'swing':
+      addTween({ targets: sprite, angle: { from: -10, to: 10 }, duration: 2000 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'drift':
+      addTween({ targets: sprite, x: { from: sprite.x - 2, to: sprite.x + 2 }, duration: 2000 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'shimmer':
+      addTween({ targets: sprite, scaleX: { from: 0.9, to: 1.1 }, duration: 1000 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'breathe':
+      addTween({ targets: sprite, scale: { from: 1, to: 1.02 }, duration: 3000 / speed, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      break;
+    case 'blink':
+      addTween({ targets: sprite, alpha: { from: 1, to: 0.1 }, duration: 400 / speed, yoyo: true, repeat: -1, ease: 'Linear' });
+      break;
+  }
 }

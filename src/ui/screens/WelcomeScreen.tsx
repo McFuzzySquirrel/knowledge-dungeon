@@ -828,9 +828,9 @@ export function WelcomeScreen(): JSX.Element {
                   Export all subjects as JSON
                 </button>
                 {existingSubjects.map((subject) => (
-                  <>
+                  <div key={`export-group-${subject.id}`} style={{ display: 'contents' }}>
                     <button
-                      key={`export-json-${subject.id}`}
+                      key={`export-json-btn-${subject.id}`}
                       type="button"
                       onClick={() => void handleExportSubjectJson(subject.id)}
                       disabled={adminBusy}
@@ -848,7 +848,7 @@ export function WelcomeScreen(): JSX.Element {
                     >
                       Export {subject.subjectName} as template
                     </button>
-                  </>
+                  </div>
                 ))}
               </div>
               <input

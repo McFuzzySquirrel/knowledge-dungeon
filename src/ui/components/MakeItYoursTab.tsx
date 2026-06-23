@@ -37,6 +37,7 @@ export function MakeItYoursTab(): JSX.Element {
   const [isDirty, setIsDirty] = useState(false);
   const [modifiedPaths, setModifiedPaths] = useState<Set<string>>(new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [packVersion, setPackVersion] = useState(0);
 
   const refreshModifiedPaths = useCallback(() => {
@@ -85,15 +86,47 @@ export function MakeItYoursTab(): JSX.Element {
   const handleEditorChange = useCallback((svgContent: string) => {
     setDirtySvg(svgContent);
     setIsDirty(true);
+    setSaveError(null);
   }, []);
+
+  const validateSvg = useCallback((svg: string): string | null => {
+    const trimmed = svg.trim();
+    if (!trimmed) return t('makeItYours.errorEmpty', 'SVG content is empty.');
+    if (!trimmed.startsWith('<svg') && !trimmed.startsWith('<?xml')) {
+      return t('makeItYours.errorNotSvg', 'Content must start with <svg or <?xml.');
+    }
+    if (!trimmed.includes('</svg>')) {
+      return t('makeItYours.errorNoClose', 'Missing </svg> closing tag.');
+    }
+    // Check for 8-digit hex colors which Phaser may reject
+    if (/#[0-9a-fA-F]{8}\b/.test(trimmed)) {
+      return t('makeItYours.error8digitHex',
+        '8-digit hex color found (e.g. #00000022). Use rgba() or fill-opacity instead.');
+    }
+    // Parse as XML
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(trimmed, 'image/svg+xml');
+      const errNode = doc.querySelector('parsererror');
+      if (errNode) {
+        const msg = errNode.textContent?.split('\n')[0]?.trim() || 'XML parse error';
+        return t('makeItYours.errorXmlParse', 'XML parse error: {{msg}}', { msg });
+      }
+    } catch {
+      return t('makeItYours.errorXmlException', 'Failed to parse SVG as XML.');
+    }
+    return null;
+  }, [t]);
 
   const handleSave = useCallback(() => {
     if (!selectedSprite || !dirtySvg) return;
 
-    const trimmed = dirtySvg.trim();
-    if (!trimmed.startsWith('<svg') && !trimmed.startsWith('<?xml')) {
+    const error = validateSvg(dirtySvg);
+    if (error) {
+      setSaveError(error);
       return;
     }
+    setSaveError(null);
 
     // Backup original before first override
     const originalFromCache = originalCache[selectedSprite.path];
@@ -104,7 +137,7 @@ export function MakeItYoursTab(): JSX.Element {
     saveCustomSpriteContent(selectedSprite.path, dirtySvg);
     setIsDirty(false);
     refreshModifiedPaths();
-  }, [selectedSprite, dirtySvg, originalCache, refreshModifiedPaths]);
+  }, [selectedSprite, dirtySvg, originalCache, refreshModifiedPaths, validateSvg]);
 
   const handleReset = useCallback(() => {
     if (!selectedSprite) return;
@@ -158,6 +191,9 @@ export function MakeItYoursTab(): JSX.Element {
       {loadError && (
         <div className="sprite-editor-error">{loadError}</div>
       )}
+      {saveError && (
+        <div className="sprite-editor-error sprite-editor-error--save">{saveError}</div>
+      )}
 
       <div className="make-it-yours-layout">
         <div className="make-it-yours-browser">
@@ -174,6 +210,7 @@ export function MakeItYoursTab(): JSX.Element {
             onChange={handleEditorChange}
             onSave={handleSave}
             onReset={handleReset}
+            onAnimationChange={() => setIsDirty(true)}
             isDirty={isDirty}
             isModified={selectedPath !== null && modifiedPaths.has(selectedPath)}
             width={selectedSprite?.width ?? 64}
@@ -184,7 +221,7 @@ export function MakeItYoursTab(): JSX.Element {
 
       <div className="make-it-yours-footer">
         <div className="make-it-yours-stats">
-          {t('makeItYours.modifiedCount', { count: modifiedPaths.size }, `{{count}} sprites customized`)}
+          {t('makeItYours.modifiedCount', `${modifiedPaths.size} sprites customized`)}
         </div>
         <div className="make-it-yours-footer-actions">
           <button

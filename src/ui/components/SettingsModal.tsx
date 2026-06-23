@@ -4,7 +4,7 @@ import { useShortcutStore, type ShortcutBinding } from '@/store/shortcutStore';
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '@/i18n';
 import i18n from '@/i18n';
 import { useTranslation } from 'react-i18next';
-import { MakeItYoursTab } from '@/ui/components/MakeItYoursTab';
+import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
 
 interface SettingsModalProps {
   currentTheme: ColorTheme;
@@ -31,7 +31,7 @@ const THEME_OPTIONS: { id: ColorTheme; title: string; description: string }[] = 
 ];
 
 /** Tab definition for the settings modal. */
-type SettingsTab = 'theme' | 'language' | 'shortcuts' | 'make-it-yours';
+type SettingsTab = 'theme' | 'language' | 'shortcuts';
 
 interface TabDef {
   id: SettingsTab;
@@ -42,7 +42,6 @@ const SETTINGS_TABS: TabDef[] = [
   { id: 'theme', label: 'Theme' },
   { id: 'language', label: 'Language' },
   { id: 'shortcuts', label: 'Shortcuts' },
-  { id: 'make-it-yours', label: 'Make It Yours' },
 ];
 
 export function SettingsModal({ currentTheme, onThemeChange, onClose }: SettingsModalProps): JSX.Element {
@@ -52,6 +51,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
   const resetShortcuts = useShortcutStore((s) => s.resetShortcuts);
   const [activeTab, setActiveTab] = useState<SettingsTab>('theme');
   const [editingShortcutIndex, setEditingShortcutIndex] = useState<number | null>(null);
+  const [makeItYoursOpen, setMakeItYoursOpen] = useState(false);
   const currentLang = (i18n.language?.split('-')[0] ?? 'en') as SupportedLocale;
 
   function handleLanguageChange(lang: SupportedLocale): void {
@@ -111,14 +111,15 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
-      <div
-        className="modal settings-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('settings.title', 'Settings')}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <>
+      <div className="modal-backdrop" onClick={onClose} role="presentation">
+        <div
+          className="modal settings-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t('settings.title', 'Settings')}
+          onClick={(event) => event.stopPropagation()}
+        >
         <h2>{t('settings.title', 'Settings')}</h2>
 
         {/* Phase 5: Tab navigation in settings */}
@@ -193,10 +194,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
             <div className="shortcut-list" role="list" aria-label="Keyboard shortcuts">
               {shortcuts.map((shortcut, index) => renderShortcutRow(shortcut, index))}
             </div>
-        {/* Make It Yours Tab — sprite customization */}
-        {activeTab === 'make-it-yours' && <MakeItYoursTab />}
-
-        <div className="onboarding-actions">
+            <div className="onboarding-actions">
               <button
                 type="button"
                 className="ghost"
@@ -210,11 +208,18 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
         )}
 
         <div className="onboarding-actions">
+          <button type="button" className="ghost" onClick={() => setMakeItYoursOpen(true)}>
+            {t('settings.makeItYours', 'Make It Yours')}
+          </button>
           <button type="button" className="ghost" onClick={onClose}>
             {t('common.close', 'Close')}
           </button>
         </div>
       </div>
-    </div>
+      </div>
+      {makeItYoursOpen && (
+        <MakeItYoursModal onClose={() => setMakeItYoursOpen(false)} />
+      )}
+    </>
   );
 }

@@ -18,7 +18,7 @@ import {
   type FloorBiomeId,
 } from '@/game/systems/proceduralTextures';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
-import { resolveSpriteUrl } from '@/services/customSprites';
+import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 
 export interface DungeonSceneEvents {
   onRoomEntered: (roomId: string) => void;
@@ -367,15 +367,23 @@ export class DungeonScene extends Phaser.Scene {
     );
     this.playerBody.setCollideWorldBounds(false);
 
-    // Subtle idle breathing animation
-    this.tweens.add({
-      targets: this.player,
-      scale: { from: 1, to: 1.008 },
-      duration: 1400,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
+    // Player idle animation (custom or default breathing)
+    const playerPath = this.playerClass
+      ? (PLAYER_SPRITE_BY_CLASS[this.playerClass] ?? PLAYER_SPRITE_FALLBACK)
+      : PLAYER_SPRITE_FALLBACK;
+    const config = getAnimationConfig(playerPath);
+    if (config.type !== 'none') {
+      applySpriteAnimation(this, this.player, config);
+    } else {
+      this.tweens.add({
+        targets: this.player,
+        scale: { from: 1, to: 1.008 },
+        duration: 1400,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
 
     if (this.input.keyboard) {
       // `enableCapture = false` so Phaser does not call preventDefault on these
@@ -718,14 +726,20 @@ export class DungeonScene extends Phaser.Scene {
         repeat: -1,
         ease: 'Sine.easeInOut',
       });
-      this.tweens.add({
-        targets: icon,
-        scale: { from: 0.94, to: 1.06 },
-        duration: 1100,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
+      // Loot icon animation (custom or default pulse)
+      const lootConfig = getAnimationConfig(ARTIFACT_LOOT_SPRITE);
+      if (lootConfig.type !== 'none') {
+        applySpriteAnimation(this, icon, lootConfig);
+      } else {
+        this.tweens.add({
+          targets: icon,
+          scale: { from: 0.94, to: 1.06 },
+          duration: 1100,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
       this.artifactIcons.set(room.roomId, container);
     }
   }
@@ -782,14 +796,21 @@ export class DungeonScene extends Phaser.Scene {
       if (this.roomNpcs.has(room.roomId)) continue;
       const { x: npcX, y: npcY } = this.resolveNpcPosition(room, this.dungeonMap);
       const npc = this.add.image(npcX, npcY, NPC_GUIDE_TEXTURE_KEY).setDepth(5);
-      this.tweens.add({
-        targets: npc,
-        y: { from: npcY, to: npcY - 3 },
-        duration: 1400,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
+
+      // NPC guide idle animation (custom or default bob)
+      const npcConfig = getAnimationConfig(NPC_GUIDE_SPRITE);
+      if (npcConfig.type !== 'none') {
+        applySpriteAnimation(this, npc, npcConfig, npcY);
+      } else {
+        this.tweens.add({
+          targets: npc,
+          y: { from: npcY, to: npcY - 3 },
+          duration: 1400,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      }
       this.roomNpcs.set(room.roomId, npc);
     }
 

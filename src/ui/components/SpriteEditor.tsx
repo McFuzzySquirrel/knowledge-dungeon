@@ -1,32 +1,15 @@
 import { useState, useEffect, useCallback, useRef, type JSX } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  getAnimationConfig,
+  saveAnimationConfig,
+} from '@/services/customSprites';
 
-export type AnimationPreset = 'none' | 'pulse' | 'spin' | 'float' | 'bounce';
+export type AnimationPreset = 'none' | 'pulse' | 'spin' | 'float' | 'bounce' | 'flicker' | 'wobble' | 'swing' | 'drift' | 'shimmer' | 'breathe' | 'blink';
 
 export interface SpriteAnimationConfig {
   type: AnimationPreset;
-}
-
-const ANIM_STORAGE_PREFIX = 'knowledge-dungeon:custom-sprites:anim:';
-
-export function getAnimationConfig(spritePath: string): SpriteAnimationConfig {
-  try {
-    const raw = localStorage.getItem(`${ANIM_STORAGE_PREFIX}${spritePath}`);
-    if (raw) return JSON.parse(raw) as SpriteAnimationConfig;
-  } catch { /* ignore */ }
-  return { type: 'none' };
-}
-
-export function saveAnimationConfig(spritePath: string, config: SpriteAnimationConfig): void {
-  try {
-    localStorage.setItem(`${ANIM_STORAGE_PREFIX}${spritePath}`, JSON.stringify(config));
-  } catch { /* ignore */ }
-}
-
-export function deleteAnimationConfig(spritePath: string): void {
-  try {
-    localStorage.removeItem(`${ANIM_STORAGE_PREFIX}${spritePath}`);
-  } catch { /* ignore */ }
+  speed?: number;
 }
 
 const ANIMATION_LABELS: Record<AnimationPreset, string> = {
@@ -35,6 +18,13 @@ const ANIMATION_LABELS: Record<AnimationPreset, string> = {
   spin: 'Spin (rotate)',
   float: 'Float (bob)',
   bounce: 'Bounce',
+  flicker: 'Flicker (alpha)',
+  wobble: 'Wobble (tilt)',
+  swing: 'Swing (pendulum)',
+  drift: 'Drift (sway)',
+  shimmer: 'Shimmer (stretch)',
+  breathe: 'Breathe (idle)',
+  blink: 'Blink (flash)',
 };
 
 function sanitizeSvg(svgContent: string): string {
@@ -51,6 +41,11 @@ function parseViewBox(svgContent: string): { w: number; h: number } | null {
   return null;
 }
 
+const ANIM_BASE_DURATION: Record<AnimationPreset, number> = {
+  none: 0, pulse: 1.5, spin: 6, float: 1.5, bounce: 0.4,
+  flicker: 0.6, wobble: 0.8, swing: 2, drift: 2, shimmer: 1, breathe: 3, blink: 3,
+};
+
 interface SpriteEditorProps {
   spritePath: string | null;
   originalSvg: string | null;
@@ -58,6 +53,7 @@ interface SpriteEditorProps {
   onChange: (svgContent: string) => void;
   onSave: () => void;
   onReset: () => void;
+  onAnimationChange?: () => void;
   isDirty: boolean;
   isModified: boolean;
   width: number;
@@ -71,6 +67,7 @@ export function SpriteEditor({
   onChange,
   onSave,
   onReset,
+  onAnimationChange,
   isDirty,
   isModified,
   width,
@@ -80,6 +77,7 @@ export function SpriteEditor({
   const [text, setText] = useState('');
   const [sanitizedSvg, setSanitizedSvg] = useState('');
   const [animType, setAnimType] = useState<AnimationPreset>('none');
+  const [animSpeed, setAnimSpeed] = useState(1);
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -94,9 +92,12 @@ export function SpriteEditor({
 
   useEffect(() => {
     if (spritePath) {
-      setAnimType(getAnimationConfig(spritePath).type);
+      const cfg = getAnimationConfig(spritePath);
+      setAnimType(cfg.type);
+      setAnimSpeed(cfg.speed ?? 1);
     } else {
       setAnimType('none');
+      setAnimSpeed(1);
     }
   }, [spritePath]);
 
@@ -117,13 +118,16 @@ export function SpriteEditor({
   );
 
   const handleAnimChange = useCallback(
-    (type: AnimationPreset) => {
+    (type: AnimationPreset, speed?: number) => {
       setAnimType(type);
+      const s = speed ?? animSpeed;
+      if (s !== animSpeed) setAnimSpeed(s);
       if (spritePath) {
-        saveAnimationConfig(spritePath, { type });
+        saveAnimationConfig(spritePath, { type, speed: s });
       }
+      onAnimationChange?.();
     },
-    [spritePath],
+    [spritePath, animSpeed, onAnimationChange],
   );
 
   if (!spritePath) {
@@ -164,11 +168,15 @@ export function SpriteEditor({
         >
           {sanitizedSvg ? (
             <div
+              className={`sprite-editor-preview-inner${animType !== 'none' ? ` anim-${animType}` : ''}`}
               dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
               style={{
                 width: viewBox.w * previewScale,
                 height: viewBox.h * previewScale,
                 overflow: 'hidden',
+                animationDuration: animType !== 'none' && animSpeed
+                  ? `${ANIM_BASE_DURATION[animType] / animSpeed}s`
+                  : undefined,
               }}
             />
           ) : (
@@ -201,8 +209,30 @@ export function SpriteEditor({
             <option key={key} value={key}>{ANIMATION_LABELS[key]}</option>
           ))}
         </select>
+        {animType !== 'none' && (
+          <div className="sprite-editor-speed">
+            <label className="sprite-editor-speed-label">
+              {t('makeItYours.speed', 'Speed')}
+            </label>
+            <input
+              type="range"
+              className="sprite-editor-speed-slider"
+              min={0.1}
+              max={3}
+              step={0.1}
+              value={animSpeed}
+              onChange={(e) => {
+                const s = Number(e.target.value);
+                setAnimSpeed(s);
+                if (spritePath) saveAnimationConfig(spritePath, { type: animType, speed: s });
+                onAnimationChange?.();
+              }}
+            />
+            <span className="sprite-editor-speed-value">{animSpeed}x</span>
+          </div>
+        )}
         <span className="sprite-editor-anim-note">
-          {t('makeItYours.animationNote', 'CSS animations work in the preview. In-game animations use Phaser tweens (coming soon).')}
+          {t('makeItYours.animationNote', 'Animation shown in preview. Pick a preset to see it in action.')}
         </span>
       </div>
 
