@@ -27,7 +27,7 @@
 
 **Dependencies:**
 - Phase 2 complete (Village Hub with building interaction pattern, NPC system, portal slots)
-- Phase 3c (Gameplay Depth — boss rooms, enhanced loot) not required; fishing is independent of boss/loot changes
+- Phase 3c complete (Gameplay Depth — achievement system, equippable items, boss rooms available for optional integration)
 - No other features depend on this one
 
 ---
@@ -38,9 +38,9 @@
 - [x] Phase 0: Foundation
 - [x] Phase 1: Core Game Loop
 - [x] Phase 2: Village Hub & UX Polish
-- [ ] Phase 3: Visual Unification & Gameplay Depth (in progress)
-- [ ] Phase 4: Advanced Features
-- [ ] Phase 5: Quality & Scale
+- [x] Phase 3: Visual Unification & Gameplay Depth
+- [x] Phase 4: Advanced Features
+- [x] Phase 5: Quality & Scale
 
 **Relevant Existing Components:**
 
