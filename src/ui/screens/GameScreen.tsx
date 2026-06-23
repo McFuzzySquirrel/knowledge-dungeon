@@ -427,7 +427,8 @@ export function GameScreen(): JSX.Element {
     if (!gameRef.current) return;
     // Revoke old blob URLs before restarting so Phaser reloads fresh SVGs
     import('@/services/customSprites').then(({ revokeAllBlobUrls }) => revokeAllBlobUrls());
-    gameRef.current.scene.restart('DungeonScene');
+    const scene = gameRef.current.scene.getScene('DungeonScene');
+    if (scene) scene.scene.restart();
     // Re-acquire scene reference on next ready
     gameRef.current.events.once('ready', () => {
       sceneRef.current = gameRef.current!.scene.getScene('DungeonScene') as DungeonScene;

@@ -253,8 +253,7 @@ export function CollectionSwitcher({ modifiedCount, onPackChanged }: CollectionS
             )}
           </div>
           <div className="collection-import-sprites">
-            {t('makeItYours.importContains', { count: Object.keys(importPreview.sprites).length },
-              `Contains {{count}} sprites`)}
+            {t('makeItYours.importContains', `Contains ${Object.keys(importPreview.sprites).length} sprites`)}
           </div>
           <div className="collection-import-actions">
             <button type="button" className="game-btn-primary" onClick={handleImportConfirm}>

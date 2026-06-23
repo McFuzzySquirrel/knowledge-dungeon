@@ -14,6 +14,7 @@ import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubje
 import { GAME_GUIDE_MARKDOWN } from '@/data/gameGuide';
 import { Markdown } from '@/ui/utils/markdown';
 import { StudyStatsPanel } from '@/ui/components/StudyStatsPanel';
+import { computeSessionStats } from '@/services/sessionTracker';
 import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
 import { SettingsModal } from '@/ui/components/SettingsModal';
 
@@ -39,9 +40,12 @@ export function VillageScreen(): JSX.Element {
   const sceneRestartCounter = useSessionStore((s) => s.sceneRestartCounter);
   const initSubject = useSubjectStore((s) => s.initSubject);
   const bySubject = useProgressionStore((s) => s.bySubject);
+  const xpTotal = useProgressionStore((s) => s.xpTotal);
+  const rank = useProgressionStore((s) => s.rank);
   const totalBadges = Object.values(bySubject).reduce((sum, s) => sum + s.badges.length, 0);
   const totalInventory = Object.values(bySubject).reduce((sum, s) => sum + s.inventory.length, 0);
   const totalNotes = Object.values(bySubject).reduce((sum, s) => sum + s.collectedNotes.length, 0);
+  const sessionStats = useMemo(() => computeSessionStats(), []);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -49,7 +53,7 @@ export function VillageScreen(): JSX.Element {
 
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [infoPanel, setInfoPanel] = useState<{
-    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop';
+    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop' | 'fountain';
     structureId: string;
     subject?: SubjectSummary;
   } | null>(null);
@@ -203,6 +207,8 @@ export function VillageScreen(): JSX.Element {
           setInfoPanel({ type: 'library', structureId });
         } else if (sType === 'workshop') {
           setInfoPanel({ type: 'workshop', structureId });
+        } else if (sType === 'fountain') {
+          setInfoPanel({ type: 'fountain', structureId });
         }
       },
       onStructureLeft: (structureId) => {
@@ -256,6 +262,8 @@ export function VillageScreen(): JSX.Element {
           setInfoPanel({ type: 'library', structureId });
         } else if (sType === 'workshop') {
           setMakeItYoursOpen(true);
+        } else if (sType === 'fountain') {
+          setShowStats(true);
         }
       },
       onNpcApproached: (npcId) => {
@@ -314,7 +322,12 @@ export function VillageScreen(): JSX.Element {
       onNpcDialogPosition: (pos) => {
         setNpcDialogPos({ x: pos.clientX, y: pos.clientY });
       },
-      onReady: () => {},
+      onReady: () => {
+        if (gameRef.current) {
+          sceneRef.current = gameRef.current.scene.getScene('VillageScene') as unknown as VillageSceneHandle;
+          setVillageReady(true);
+        }
+      },
     };
     Object.assign(callbacksRef.current, cb);
   }, [subjects, dynamicStructures, selectedClass]);
@@ -367,8 +380,10 @@ export function VillageScreen(): JSX.Element {
   useEffect(() => {
     if (sceneRestartCounter === 0) return;
     if (!gameRef.current) return;
+    setVillageReady(false);
     import('@/services/customSprites').then(({ revokeAllBlobUrls }) => revokeAllBlobUrls());
-    gameRef.current.scene.restart('VillageScene');
+    const scene = gameRef.current.scene.getScene('VillageScene');
+    if (scene) scene.scene.restart();
   }, [sceneRestartCounter]);
 
   // Sync scene state whenever the scene is ready OR the data changes
@@ -761,6 +776,55 @@ export function VillageScreen(): JSX.Element {
               Open Editor
             </button>
           </div>
+        </div>
+      ) : null}
+
+      {infoPanel?.type === 'fountain' ? (
+        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
+          <div className="village-info-panel-header">
+            <span className="village-info-portal-icon">⛲</span>
+            <div>
+              <h3>Central Fountain</h3>
+              <p className="village-info-meta">Your study statistics</p>
+            </div>
+          </div>
+          <div className="village-subject-list" style={{ gap: 6 }}>
+            <div className="village-subject-item">
+              <span>📊 Total sessions</span>
+              <strong>{sessionStats.totalSessions}</strong>
+            </div>
+            <div className="village-subject-item">
+              <span>⏱ Study time</span>
+              <strong>{sessionStats.totalMinutesStudied < 60
+                ? `${sessionStats.totalMinutesStudied}m`
+                : `${Math.floor(sessionStats.totalMinutesStudied / 60)}h ${sessionStats.totalMinutesStudied % 60}m`}</strong>
+            </div>
+            <div className="village-subject-item">
+              <span>📝 Notes submitted</span>
+              <strong>{sessionStats.totalNotesSubmitted}</strong>
+            </div>
+            <div className="village-subject-item">
+              <span>🔄 Reviews completed</span>
+              <strong>{sessionStats.totalReviewsCompleted}</strong>
+            </div>
+            <div className="village-subject-item">
+              <span>⭐ Rank</span>
+              <strong>{rank}</strong>
+            </div>
+            <div className="village-subject-item">
+              <span>✨ Total XP</span>
+              <strong>{xpTotal}</strong>
+            </div>
+            {sessionStats.recentStreak > 1 && (
+              <div className="village-subject-item">
+                <span>🔥 Daily streak</span>
+                <strong>{sessionStats.recentStreak} days</strong>
+              </div>
+            )}
+          </div>
+          <p className="village-info-desc">
+            Press <kbd>E</kbd> to view detailed statistics.
+          </p>
         </div>
       ) : null}
 

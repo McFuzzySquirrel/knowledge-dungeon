@@ -1,14 +1,31 @@
 <svg width="180" height="160" viewBox="0 0 180 160" xmlns="http://www.w3.org/2000/svg">
-  <rect x="15" y="60" width="150" height="90" rx="6" fill="#3a2a1a" stroke="#1a1a1a" stroke-width="3"/>
-  <rect x="15" y="60" width="150" height="18" rx="3" fill="#4a3a2a" stroke="#1a1a1a" stroke-width="2"/>
-  <path d="M15 60 L90 5 L165 60" fill="#5a4a2a" stroke="#1a1a1a" stroke-width="3"/>
-  <rect x="72" y="80" width="36" height="50" rx="3" fill="#2a1a0a"/>
-  <rect x="78" y="90" width="24" height="30" rx="2" fill="#c8a84e"/>
-  <circle cx="90" cy="105" r="3" fill="#1a1a1a"/>
-  <rect x="35" y="90" width="22" height="36" rx="2" fill="#6b4226" stroke="#1a1a1a" stroke-width="2"/>
-  <rect x="123" y="90" width="22" height="36" rx="2" fill="#6b4226" stroke="#1a1a1a" stroke-width="2"/>
-  <circle cx="90" cy="26" r="6" fill="#ffcf5f"/>
-  <rect x="86" y="28" width="8" height="18" fill="#5a4a2a"/>
-  <rect x="30" y="60" width="4" height="14" fill="#c8a84e"/>
-  <rect x="146" y="60" width="4" height="14" fill="#c8a84e"/>
+  <ellipse cx="92" cy="140" rx="55" ry="10" fill="rgba(0,0,0,0.13)"/>
+  <polygon points="120,55 140,65 140,125 120,115" fill="#9d835e" stroke="#3b2918" stroke-width="2"/>
+  <rect x="40" y="55" width="80" height="70" rx="3" fill="#d9c19a" stroke="#3b2918" stroke-width="2"/>
+  <rect x="40" y="118" width="80" height="7" fill="#7a7369"/>
+  <polygon points="90,22 140,45 140,65 120,55" fill="#4b2c16" stroke="#2b170c" stroke-width="2"/>
+  <polygon points="28,55 90,22 132,55" fill="#7b4a24" stroke="#2b170c" stroke-width="3"/>
+  <line x1="40" y1="48" x2="90" y2="22" stroke="#633816" stroke-width="2"/>
+  <line x1="55" y1="55" x2="90" y2="35" stroke="#633816" stroke-width="2"/>
+  <line x1="118" y1="48" x2="90" y2="22" stroke="#633816" stroke-width="2"/>
+  <rect x="108" y="30" width="10" height="18" fill="#735244" stroke="#2b170c" stroke-width="2"/>
+  <rect x="72" y="82" width="18" height="36" rx="2" fill="#7a4a25" stroke="#3b2918" stroke-width="2"/>
+  <circle cx="85" cy="101" r="2" fill="#f0d47a"/>
+  <rect x="50" y="80" width="16" height="16" fill="#ffd770" stroke="#5b3b18" stroke-width="2"/>
+  <line x1="58" y1="80" x2="58" y2="96" stroke="#5b3b18" stroke-width="2"/>
+  <line x1="50" y1="88" x2="66" y2="88" stroke="#5b3b18" stroke-width="2"/>
+  <rect x="96" y="80" width="16" height="16" fill="#ffd770" stroke="#5b3b18" stroke-width="2"/>
+  <line x1="104" y1="80" x2="104" y2="96" stroke="#5b3b18" stroke-width="2"/>
+  <line x1="96" y1="88" x2="112" y2="88" stroke="#5b3b18" stroke-width="2"/>
+  <rect x="49" y="97" width="18" height="4" fill="#6a3f1f"/>
+  <circle cx="53" cy="96" r="1.5" fill="#ff5f5f"/>
+  <circle cx="58" cy="95" r="1.5" fill="#ffcf4f"/>
+  <circle cx="63" cy="96" r="1.5" fill="#ff5f5f"/>
+  <rect x="95" y="97" width="18" height="4" fill="#6a3f1f"/>
+  <circle cx="99" cy="96" r="1.5" fill="#ff5f5f"/>
+  <circle cx="104" cy="95" r="1.5" fill="#ffcf4f"/>
+  <circle cx="109" cy="96" r="1.5" fill="#ff5f5f"/>
+  <circle cx="90" cy="38" r="4" fill="#ffd770"/>
+  <rect x="70" y="121" width="24" height="4" fill="#8a8175"/>
+  <rect x="67" y="125" width="30" height="4" fill="#7a7369"/>
 </svg>

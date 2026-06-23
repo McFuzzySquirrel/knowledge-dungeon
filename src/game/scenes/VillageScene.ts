@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { VILLAGE_MAP, type VillageStructure } from '@/data/villageLayout';
-import { resolveSpriteUrl } from '@/services/customSprites';
+import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 
 const PLAYER_SPEED = 120;
 const NPC_SPEED = 45;
@@ -82,10 +82,22 @@ const TEX = {
   playerArchivist: 'v-player-archivist',
 } as const;
 
+const TEX_TO_PATH: Record<string, string> = {};
+for (const [k, tex] of Object.entries(TEX)) {
+  const key = k as keyof typeof SPRITE_PATHS;
+  if (key in SPRITE_PATHS) TEX_TO_PATH[tex] = SPRITE_PATHS[key];
+}
+
 const PLAYER_TEX_BY_CLASS: Record<string, string> = {
   scholar: TEX.playerHero,
   cartographer: TEX.playerExplorer,
   archivist: TEX.playerArchivist,
+};
+
+const PLAYER_PATH_BY_CLASS: Record<string, string> = {
+  scholar: SPRITE_PATHS.playerHero,
+  cartographer: SPRITE_PATHS.playerExplorer,
+  archivist: SPRITE_PATHS.playerArchivist,
 };
 
 const STRUCTURE_TEXTURE: Record<string, string> = {
@@ -245,6 +257,7 @@ export class VillageScene extends Phaser.Scene {
     }
 
     this.initTouchControls();
+    this.initWheelZoom();
 
     // Apply any structures that arrived before create() finished
     if (this.pendingDynamicStructures) {
@@ -414,9 +427,15 @@ export class VillageScene extends Phaser.Scene {
       }
       const cx = (struct.gridX + struct.width / 2) * ts;
       const cy = (struct.gridY + struct.height / 2) * ts;
-      // Decorative elements (trees, benches, torches, fountain, signpost) sit above player
-      const decorTypes = new Set(['tree', 'bench', 'torch', 'fountain', 'lamp', 'signpost', 'waysign', 'pond', 'flower']);
-      const depth = decorTypes.has(struct.type) ? 11 : 2;
+      // Depth ordering: buildings at depth 2 (below player), ground-level
+      // decorations at depth (player walks in front), tall foreground objects at
+      // depth 11 (player walks behind).
+      const foregroundTypes = new Set(['tree', 'bush', 'torch', 'lamp', 'signpost', 'waysign']);
+      const groundDecorTypes = new Set(['fountain', 'pond', 'bench', 'flower']);
+      let depth: number;
+      if (foregroundTypes.has(struct.type)) depth = 11;
+      else if (groundDecorTypes.has(struct.type)) depth = 9;
+      else depth = 2;
       const sprite = this.add.image(cx, cy, texKey).setDepth(depth);
       this.structureSprites.push(sprite);
 
@@ -430,39 +449,29 @@ export class VillageScene extends Phaser.Scene {
         this.structureGraphics.push(stoneG);
       }
 
-      // Portal icon animation - spinning + pulse
-      if (struct.type === 'portal-icon') {
-        const portal = sprite;
-        this.tweens.add({
-          targets: portal,
-          angle: 360,
-          duration: 6000,
-          repeat: -1,
-          ease: 'Linear',
-        });
-        this.tweens.add({
-          targets: portal,
-          scale: { from: 0.95, to: 1.05 },
-          duration: 1500,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut',
-        });
+      // Apply sprite animation: custom config takes priority; fall back to type defaults
+      const spritePath = TEX_TO_PATH[texKey];
+      if (spritePath) {
+        const anim = getAnimationConfig(spritePath);
+        if (anim.type !== 'none') {
+          applySpriteAnimation(this, sprite, anim);
+        } else if (struct.type === 'portal-icon') {
+          this.tweens.add({
+            targets: sprite, angle: 360, duration: 6000, repeat: -1, ease: 'Linear',
+          });
+          this.tweens.add({
+            targets: sprite, scale: { from: 0.95, to: 1.05 }, duration: 1500,
+            yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          });
+        } else if (struct.type === 'fountain') {
+          this.tweens.add({
+            targets: sprite, scaleY: { from: 1, to: 1.03 }, duration: 1800,
+            yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          });
+        }
       }
 
-      // Fountain water animation (Phaser tween replaces SVG CSS)
-      if (struct.type === 'fountain') {
-        this.tweens.add({
-          targets: sprite,
-          scaleY: { from: 1, to: 1.03 },
-          duration: 1800,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut',
-        });
-      }
-
-      const interactiveTypes = new Set(['portal-icon', 'keeper-tower', 'guild-hall', 'training-gate', 'signpost', 'waysign', 'trophy-hall', 'library', 'workshop']);
+      const interactiveTypes = new Set(['portal-icon', 'keeper-tower', 'guild-hall', 'training-gate', 'signpost', 'waysign', 'trophy-hall', 'library', 'workshop', 'fountain']);
       const isInteractive = interactiveTypes.has(struct.type);
       if (isInteractive) {
         const zone = this.add.zone(cx, cy, struct.width * ts, struct.height * ts).setInteractive();
@@ -501,7 +510,13 @@ export class VillageScene extends Phaser.Scene {
     const w = struct.width * ts;
     const h = struct.height * ts;
 
-    const g = this.add.graphics();
+    const foregroundTypes = new Set(['tree', 'bush', 'torch', 'lamp', 'signpost', 'waysign']);
+    const groundDecorTypes = new Set(['fountain', 'pond', 'bench', 'flower']);
+    let depth = 2;
+    if (foregroundTypes.has(struct.type)) depth = 11;
+    else if (groundDecorTypes.has(struct.type)) depth = 9;
+
+    const g = this.add.graphics().setDepth(depth);
     this.structureGraphics.push(g);
     const isPortal = struct.type === 'portal-icon';
     const isImportant = struct.type === 'keeper-tower' || struct.type === 'guild-hall' || struct.type === 'training-gate';
@@ -570,15 +585,21 @@ export class VillageScene extends Phaser.Scene {
     this.playerBody.setOffset(10, 10);
     this.playerBody.setCollideWorldBounds(true);
 
-    // Subtle idle sway (rotation) - does not conflict with movement
-    this.tweens.add({
-      targets: this.player,
-      angle: { from: -0.5, to: 0.5 },
-      duration: 1200,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut',
-    });
+    // Player idle animation (custom or default sway)
+    const playerPath = PLAYER_PATH_BY_CLASS[this.currentPlayerClass] ?? SPRITE_PATHS.playerHero;
+    const config = getAnimationConfig(playerPath);
+    if (config.type !== 'none') {
+      applySpriteAnimation(this, this.player, config);
+    } else {
+      this.tweens.add({
+        targets: this.player,
+        angle: { from: -0.5, to: 0.5 },
+        duration: 1200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
   }
 
   private updatePlayerSprite(): void {
@@ -675,14 +696,24 @@ export class VillageScene extends Phaser.Scene {
       const nx = npcData.gridX * ts + ts / 2;
       const ny = npcData.gridY * ts + ts / 2;
       const sprite = this.add.image(nx, ny, texKey).setDepth(9);
-      this.tweens.add({
-        targets: sprite,
-        y: { from: ny, to: ny - 3 },
-        duration: 1500,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
+
+      // NPC idle animation (custom or default bob)
+      const npcPath = TEX_TO_PATH[texKey];
+      if (npcPath) {
+        const config = getAnimationConfig(npcPath);
+        if (config.type !== 'none') {
+          applySpriteAnimation(this, sprite, config, ny);
+        } else {
+          this.tweens.add({
+            targets: sprite,
+            y: { from: ny, to: ny - 3 },
+            duration: 1500,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut',
+          });
+        }
+      }
 
       const state: NpcState = {
         sprite,
@@ -837,6 +868,7 @@ export class VillageScene extends Phaser.Scene {
   private static readonly TOUCH_TAP_MAX_MS = 300;
   private static readonly PINCH_ZOOM_MIN = 0.6;
   private static readonly PINCH_ZOOM_MAX = 2.4;
+  private static readonly WHEEL_ZOOM_STEP = 0.1;
   private touchPointerActive = false;
   private touchPointerStartX = 0;
   private touchPointerStartY = 0;
@@ -853,6 +885,25 @@ export class VillageScene extends Phaser.Scene {
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => { this.handleTouchMove(p); });
     this.input.on('pointerup', (p: Phaser.Input.Pointer) => { this.handleTouchUp(p); });
     this.input.on('pointercancel', (p: Phaser.Input.Pointer) => { this.handleTouchUp(p); });
+  }
+
+  private initWheelZoom(): void {
+    this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _go: Phaser.GameObjects.GameObject[], _dx: number, _dy: number) => {
+      const delta = _dy > 0 ? -VillageScene.WHEEL_ZOOM_STEP : VillageScene.WHEEL_ZOOM_STEP;
+      const cam = this.cameras.main;
+      const newZoom = Phaser.Math.Clamp(
+        cam.zoom + delta,
+        VillageScene.PINCH_ZOOM_MIN,
+        VillageScene.PINCH_ZOOM_MAX,
+      );
+      this.tweens.killTweensOf(cam);
+      this.tweens.add({
+        targets: cam,
+        zoom: newZoom,
+        duration: 120,
+        ease: 'Sine.easeOut',
+      });
+    });
   }
 
   private handleTouchDown(pointer: Phaser.Input.Pointer): void {
