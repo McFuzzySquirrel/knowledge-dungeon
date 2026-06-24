@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 32" width="64" height="32">
+  <defs>
+    <pattern id="wave" x="0" y="0" width="32" height="16" patternUnits="userSpaceOnUse">
+      <rect width="32" height="16" fill="#2a4a6a"/>
+      <path d="M0,8 Q8,3 16,8 Q24,13 32,8 Q40,3 48,8" fill="none" stroke="#3a6a9a" stroke-width="1.5" opacity="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="64" height="32" fill="url(#wave)"/>
+  <path d="M0,0 Q8,4 16,0 Q24,-4 32,0 Q40,4 48,0 Q56,-4 64,0" fill="#3a5a7a" opacity="0.4"/>
+</svg>

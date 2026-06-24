@@ -146,6 +146,7 @@ export function createProgressionSnapshot(input: {
     xpTotal: Math.max(0, Math.trunc(input.xpTotal)),
     rank: input.rank,
     badges: [...input.badges],
+    fishCollection: [],
   };
 }
 

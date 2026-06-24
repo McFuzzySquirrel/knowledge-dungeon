@@ -27,7 +27,7 @@ const LEARNING_QUOTES = [
 
 export interface VillageStructure {
   id: string;
-  type: 'portal-icon' | 'keeper-tower' | 'guild-hall' | 'training-gate' | 'fountain' | 'tree' | 'torch' | 'gate' | 'bench' | 'signpost' | 'waysign' | 'trophy-hall' | 'bush' | 'rock' | 'library' | 'pond' | 'flower' | 'workshop';
+  type: 'portal-icon' | 'keeper-tower' | 'guild-hall' | 'training-gate' | 'fountain' | 'tree' | 'torch' | 'gate' | 'bench' | 'signpost' | 'waysign' | 'trophy-hall' | 'bush' | 'rock' | 'library' | 'pond' | 'flower' | 'workshop' | 'fishing-pond' | 'fish-stand';
   label: string;
   gridX: number;
   gridY: number;
@@ -210,6 +210,38 @@ export const VILLAGE_MAP: VillageMapDef = {
     // ── Benches ──────────────────────────────────────
     { id: 'bench-1', type: 'bench', label: '', gridX: 12, gridY: 20, width: 2, height: 1 },
     { id: 'bench-2', type: 'bench', label: '', gridX: 22, gridY: 14, width: 2, height: 1 },
+
+    // ── Fisher's Rest: Fishing Ponds ────────────────
+    {
+      id: 'pond-fish-nw',
+      type: 'fishing-pond',
+      label: 'Fishing Pond',
+      gridX: 2, gridY: 5,
+      width: 2, height: 2,
+    },
+    {
+      id: 'pond-fish-sw',
+      type: 'fishing-pond',
+      label: 'Fishing Pond',
+      gridX: 10, gridY: 23,
+      width: 2, height: 2,
+    },
+    {
+      id: 'pond-fish-e',
+      type: 'fishing-pond',
+      label: 'Fishing Pond',
+      gridX: 32, gridY: 13,
+      width: 2, height: 2,
+    },
+
+    // ── Fisher's Rest: Fish Stand ───────────────────
+    {
+      id: 'fish-stand',
+      type: 'fish-stand',
+      label: 'Fish Stand',
+      gridX: 19, gridY: 0,
+      width: 3, height: 2,
+    },
   ],
   npcs: [
     {
@@ -316,4 +348,73 @@ export function getDungeonPortalSlots(): { gridX: number; gridY: number }[] {
     { gridX: 25, gridY: 5  },   // NE - near guild hall
     { gridX: 30, gridY: 15 },   // E - between guild hall and trophy hall
   ];
+}
+
+/**
+ * Fisher's Rest: Map each fishing pond id to its nearest dungeon portal slot.
+ *
+ * Uses Euclidean grid distance from the pond's center to each portal slot.
+ * Returns the portal slot coordinates (gridX, gridY) for the nearest portal.
+ */
+export function getFishingPondPortalMap(): Record<string, { gridX: number; gridY: number }> {
+  const portals = getDungeonPortalSlots();
+
+  const fishingPonds = VILLAGE_MAP.structures.filter(
+    (s) => s.type === 'fishing-pond',
+  );
+
+  const map: Record<string, { gridX: number; gridY: number }> = {};
+
+  for (const pond of fishingPonds) {
+    const pondCx = pond.gridX + pond.width / 2;
+    const pondCy = pond.gridY + pond.height / 2;
+
+    let nearest = portals[0];
+    let nearestDistSq = Infinity;
+
+    for (const portal of portals) {
+      const dx = portal.gridX - pondCx;
+      const dy = portal.gridY - pondCy;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < nearestDistSq) {
+        nearestDistSq = distSq;
+        nearest = portal;
+      }
+    }
+
+    map[pond.id] = { gridX: nearest.gridX, gridY: nearest.gridY };
+  }
+
+  return map;
+}
+
+/**
+ * Get the nearest fishing pond to a given portal slot position.
+ * Returns the pond id, or null if none found.
+ */
+export function getNearestFishingPondToPortal(
+  portalX: number,
+  portalY: number,
+): string | null {
+  const fishingPonds = VILLAGE_MAP.structures.filter(
+    (s) => s.type === 'fishing-pond',
+  );
+
+  let nearestId: string | null = null;
+  let nearestDistSq = Infinity;
+
+  for (const pond of fishingPonds) {
+    const pondCx = pond.gridX + pond.width / 2;
+    const pondCy = pond.gridY + pond.height / 2;
+    const dx = portalX - pondCx;
+    const dy = portalY - pondCy;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq < nearestDistSq) {
+      nearestDistSq = distSq;
+      nearestId = pond.id;
+    }
+  }
+
+  return nearestId;
 }

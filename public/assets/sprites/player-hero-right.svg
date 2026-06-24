@@ -1,0 +1,37 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .outline { stroke: #1a1a1a; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    #leg { transform-origin: 72px 92px; animation: walk 0.5s infinite alternate ease-in-out; }
+    #arm { transform-origin: 72px 60px; animation: swing 0.5s infinite alternate ease-in-out; }
+    #body { transform-origin: 72px 60px; animation: bounce 0.5s infinite alternate ease-in-out; }
+    @keyframes walk { from { transform: translateX(3px) rotate(6deg); } to { transform: translateX(-3px) rotate(-6deg); } }
+    @keyframes swing { from { transform: rotate(-10deg); } to { transform: rotate(10deg); } }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+  </style>
+  <ellipse cx="72" cy="112" rx="18" ry="7" fill="#00000033"/>
+  <g id="body">
+    <g id="leg">
+      <rect x="66" y="78" width="14" height="24" rx="3" fill="#5c4033" class="outline"/>
+      <rect x="64" y="100" width="18" height="8" rx="2" fill="#2f2f2f" class="outline"/>
+    </g>
+    <g id="torso">
+      <path d="M64 48 L82 48 L84 82 L66 82 Z" fill="#2e6b5c" class="outline"/>
+      <rect x="64" y="68" width="22" height="7" rx="2" fill="#7b4a1e" class="outline"/>
+    </g>
+    <g id="arm">
+      <rect x="82" y="46" width="12" height="28" rx="4" fill="#2e6b5c" class="outline"/>
+      <g id="weapon">
+        <rect x="98" y="28" width="3" height="40" rx="1" fill="#bfc7ce" class="outline"/>
+        <rect x="94" y="66" width="11" height="5" rx="1" fill="#8b6b2e" class="outline"/>
+        <rect x="97" y="70" width="5" height="9" rx="2" fill="#5c4033" class="outline"/>
+      </g>
+    </g>
+    <g id="head">
+      <path d="M68 16 L68 50 C68 58 82 58 82 50 L82 36 C82 22 74 16 68 16 Z" fill="#1f3d35" class="outline"/>
+      <circle cx="76" cy="36" r="14" fill="#d9b08c" class="outline"/>
+      <circle cx="82" cy="36" r="2" fill="#111"/>
+      <path d="M74 42 Q76 44 78 42" stroke="#5a2d2d" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <path d="M72 26 C70 22 66 20 64 20" stroke="#1f3d35" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

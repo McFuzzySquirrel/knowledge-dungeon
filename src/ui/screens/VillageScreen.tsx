@@ -6,7 +6,7 @@ import { useProgressionStore } from '@/store/progressionStore';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
 import { createVillageGame } from '@/game/createVillageGame';
 import type { VillageSceneEvents } from '@/game/scenes/VillageScene';
-import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
+import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots, getFishingPondPortalMap } from '@/data/villageLayout';
 import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
 import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
 import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
@@ -17,6 +17,11 @@ import { StudyStatsPanel } from '@/ui/components/StudyStatsPanel';
 import { computeSessionStats } from '@/services/sessionTracker';
 import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
 import { SettingsModal } from '@/ui/components/SettingsModal';
+import { FishingRecallModal } from '@/ui/components/FishingRecallModal';
+import { pullRecallQuestion, getClearedRooms } from '@/game/systems/fishingMechanics';
+import type { SelfCheckPrompt } from '@/core/review/types';
+import type { FishRarity } from '@/game/systems/fishingTypes';
+import { FishStandPanel } from '@/ui/components/FishStandPanel';
 
 interface SubjectSummary {
   id: string;
@@ -53,7 +58,7 @@ export function VillageScreen(): JSX.Element {
 
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [infoPanel, setInfoPanel] = useState<{
-    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop' | 'fountain';
+    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop' | 'fountain' | 'fishing-pond' | 'fish-stand';
     structureId: string;
     subject?: SubjectSummary;
   } | null>(null);
@@ -98,6 +103,133 @@ export function VillageScreen(): JSX.Element {
   const [showStats, setShowStats] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [makeItYoursOpen, setMakeItYoursOpen] = useState(false);
+  const [showFishStand, setShowFishStand] = useState(false);
+  const [fishCaughtData, setFishCaughtData] = useState<{
+    fishName: string; rarity: string; catalogId: string; description: string;
+  } | null>(null);
+  const [showRecallModal, setShowRecallModal] = useState(false);
+  const [recallQuestionData, setRecallQuestionData] = useState<{
+    prompt: SelfCheckPrompt; roomId: string;
+  } | null>(null);
+
+  const FISHING_HINT_KEY = 'knowledge-dungeon:ui:fishing-hint:v1';
+  const [fishingHintVisible, setFishingHintVisible] = useState(() => {
+    try { return window.localStorage.getItem(FISHING_HINT_KEY) !== '1'; }
+    catch { return false; }
+  });
+
+  // Track previous info panel type to detect when the fishing pond panel closes
+  const prevInfoPanelTypeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!infoPanel && prevInfoPanelTypeRef.current === 'fishing-pond' && fishingHintVisible) {
+      try { window.localStorage.setItem(FISHING_HINT_KEY, '1'); } catch { /* ignore */ }
+      setFishingHintVisible(false);
+    }
+    prevInfoPanelTypeRef.current = infoPanel?.type ?? null;
+  }, [infoPanel, fishingHintVisible]);
+
+  const handleStartFishing = useCallback((pondId: string) => {
+    const game = gameRef.current;
+    if (!game) return;
+    setInfoPanel(null);
+    setFishCaughtData(null);
+    setShowRecallModal(false);
+    setRecallQuestionData(null);
+
+    // Compute hasClearedRooms for the nearest dungeon portal
+    const pondPortalMap = getFishingPondPortalMap();
+    const nearestPortal = pondPortalMap[pondId];
+    let hasClearedRooms = true; // default: allow fishing
+
+    if (nearestPortal) {
+      const slots = getDungeonPortalSlots();
+      const slotIndex = slots.findIndex(
+        (s) => s.gridX === nearestPortal.gridX && s.gridY === nearestPortal.gridY,
+      );
+      if (slotIndex >= 0) {
+        const currentSubjects = subjectsRef.current;
+        if (slotIndex < currentSubjects.length) {
+          hasClearedRooms = currentSubjects[slotIndex].clearedRoomCount > 0;
+        }
+      }
+    }
+
+    game.scene.getScene('VillageScene')?.scene.sleep();
+    game.scene.start('FishingScene', {
+      callbacks: {
+        onFishCaught: (data: { fishName: string; rarity: string; catalogId: string; description: string }) => {
+          setFishCaughtData(data);
+        },
+        onReturnToVillage: () => {
+          setTimeout(() => {
+            const g = gameRef.current;
+            if (g) {
+              g.scene.stop('FishingScene');
+              g.scene.getScene('VillageScene')?.scene.wake();
+            }
+          }, 0);
+        },
+        onReady: () => {},
+      },
+      playerClass: selectedClass ?? 'scholar',
+      hasClearedRooms,
+    });
+  }, [selectedClass]);
+
+  const addFishToCollection = useProgressionStore((s) => s.addFish);
+
+  const handleKeepFish = useCallback((data: typeof fishCaughtData) => {
+    if (!data) return;
+    // Find a subject to associate the fish with — prefer the most recently active one
+    const subjectIds = Object.keys(useProgressionStore.getState().bySubject);
+    const subjectId = subjectIds.length > 0 ? subjectIds[subjectIds.length - 1] : 'village';
+    const subjectName = useSubjectStore.getState().snapshot?.dungeon.subjectName || subjectId;
+    const rarity = data.rarity as FishRarity;
+    addFishToCollection({
+      name: data.fishName,
+      rarity,
+      subjectId,
+      subjectName,
+    });
+    // Award XP for correctly answering the recall question
+    const progression = useProgressionStore.getState();
+    const xpResult = progression.awardFishingXp(rarity);
+    console.log(`[Fishing] XP gained: ${xpResult.xpGained} (${rarity}), rank: ${xpResult.newRank}${xpResult.rankChanged ? ' ⬆' : ''}`);
+    // Check for newly earned fishing badges
+    const newBadges = progression.checkFishingBadges();
+    if (newBadges.length > 0) {
+      console.log(`[Fishing] New badges earned: ${newBadges.join(', ')}`);
+    }
+    setFishCaughtData(null);
+    setShowRecallModal(false);
+    setRecallQuestionData(null);
+  }, [addFishToCollection]);
+
+  const handleKeepFishClicked = useCallback(async (_data: NonNullable<typeof fishCaughtData>) => {
+    // Compute the recall question from the active subject's dungeon data
+    const activeSubjectId = useProgressionStore.getState().activeSubjectId;
+    if (activeSubjectId) {
+      try {
+        const snapshot = await loadSubjectSnapshot(activeSubjectId);
+        if (snapshot) {
+          const clearedRooms = getClearedRooms(snapshot.rooms);
+          const question = pullRecallQuestion({
+            clearedRooms,
+            dungeonRooms: snapshot.dungeon.rooms,
+            subjectName: snapshot.dungeon.subjectName,
+          });
+          setRecallQuestionData(question);
+        } else {
+          setRecallQuestionData(null);
+        }
+      } catch {
+        setRecallQuestionData(null);
+      }
+    } else {
+      setRecallQuestionData(null);
+    }
+    setShowRecallModal(true);
+  }, []);
 
   const refreshSubjects = useCallback(async () => {
     try {
@@ -209,6 +341,10 @@ export function VillageScreen(): JSX.Element {
           setInfoPanel({ type: 'workshop', structureId });
         } else if (sType === 'fountain') {
           setInfoPanel({ type: 'fountain', structureId });
+        } else if (sType === 'fishing-pond') {
+          setInfoPanel({ type: 'fishing-pond', structureId });
+        } else if (sType === 'fish-stand') {
+          setInfoPanel({ type: 'fish-stand', structureId });
         }
       },
       onStructureLeft: (structureId) => {
@@ -264,6 +400,10 @@ export function VillageScreen(): JSX.Element {
           setMakeItYoursOpen(true);
         } else if (sType === 'fountain') {
           setShowStats(true);
+        } else if (sType === 'fishing-pond') {
+          handleStartFishing(structureId);
+        } else if (sType === 'fish-stand') {
+          setInfoPanel({ type: 'fish-stand', structureId });
         }
       },
       onNpcApproached: (npcId) => {
@@ -889,6 +1029,61 @@ export function VillageScreen(): JSX.Element {
         </div>
       ) : null}
 
+      {infoPanel?.type === 'fishing-pond' ? (
+        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
+          <div className="village-info-panel-header">
+            <span className="village-info-portal-icon">🎣</span>
+            <div>
+              <h3>Fishing Pond</h3>
+              <p className="village-info-meta">Cast a line and reel in some knowledge</p>
+            </div>
+          </div>
+          <p className="village-info-desc">
+            Take a break from studying and try your luck at the fishing pond.
+            Catch fish, test your recall, and build your collection.
+          </p>
+          {fishingHintVisible ? (
+            <div className="fishing-tutorial-hint">
+              💡 Cast a line, catch fish, and test your recall! Press E to start fishing.
+            </div>
+          ) : null}
+          <div className="village-info-actions">
+            <button
+              type="button"
+              className="village-enter-btn"
+              onClick={() => handleStartFishing(infoPanel.structureId)}
+            >
+              Cast Line
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {infoPanel?.type === 'fish-stand' ? (
+        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
+          <div className="village-info-panel-header">
+            <span className="village-info-portal-icon">🐟</span>
+            <div>
+              <h3>Fish Stand</h3>
+              <p className="village-info-meta">View your fish collection</p>
+            </div>
+          </div>
+          <p className="village-info-desc">
+            All the fish you have caught across every subject are displayed here.
+            Visit a fishing pond to start your collection!
+          </p>
+          <div className="village-info-actions">
+            <button
+              type="button"
+              className="village-enter-btn"
+              onClick={() => { setInfoPanel(null); setShowFishStand(true); }}
+            >
+              View Collection
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {infoPanel?.type === 'signpost' ? (
         <SignpostPanel structureId={infoPanel.structureId} colorTheme={colorTheme} />
       ) : null}
@@ -1022,6 +1217,65 @@ export function VillageScreen(): JSX.Element {
 
       {makeItYoursOpen ? (
         <MakeItYoursModal onClose={() => setMakeItYoursOpen(false)} />
+      ) : null}
+
+      {showFishStand ? (
+        <FishStandPanel onClose={() => setShowFishStand(false)} />
+      ) : null}
+
+      {fishCaughtData ? (
+        <div className="modal-backdrop" style={{ zIndex: 350, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="village-info-panel ui-skin screen-slide-up" data-theme={colorTheme}
+            style={{ maxWidth: 420, width: '90%' }}>
+            <div className="village-info-panel-header">
+              <span className="village-info-portal-icon">🎣</span>
+              <div>
+                <h3>{fishCaughtData.fishName}</h3>
+                <p className="village-info-meta">{fishCaughtData.rarity.charAt(0).toUpperCase() + fishCaughtData.rarity.slice(1)} Fish</p>
+              </div>
+              <span className="fish-rarity-badge" data-rarity={fishCaughtData.rarity}>
+                {fishCaughtData.rarity.toUpperCase()}
+              </span>
+            </div>
+            <p className="village-info-desc">{fishCaughtData.description}</p>
+            <div className="village-info-actions">
+              <button type="button" className="village-enter-btn"
+                onClick={() => { void handleKeepFishClicked(fishCaughtData); }}
+              >
+                Keep Fish
+              </button>
+              <button type="button" className="village-action-btn"
+                onClick={() => setFishCaughtData(null)}
+              >
+                Release
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showRecallModal && fishCaughtData ? (
+        <FishingRecallModal
+          fishName={fishCaughtData.fishName}
+          rarity={fishCaughtData.rarity as 'common' | 'rare' | 'epic'}
+          catalogId={fishCaughtData.catalogId}
+          description={fishCaughtData.description}
+          recallQuestion={recallQuestionData}
+          onSelfEvaluate={(result) => {
+            if (result === 'correct') {
+              handleKeepFish(fishCaughtData);
+            } else {
+              setFishCaughtData(null);
+              setShowRecallModal(false);
+              setRecallQuestionData(null);
+            }
+          }}
+          onCancel={() => {
+            setFishCaughtData(null);
+            setShowRecallModal(false);
+            setRecallQuestionData(null);
+          }}
+        />
       ) : null}
     </div>
 

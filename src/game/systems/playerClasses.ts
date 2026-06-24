@@ -6,6 +6,28 @@
 
 export type PlayerClassId = 'scholar' | 'cartographer' | 'archivist';
 
+export type PlayerDirection = 'down' | 'left' | 'right' | 'up';
+
+export const DIRECTION_SUFFIX: Record<PlayerDirection, string> = {
+  down: '',
+  left: '-left',
+  right: '-right',
+  up: '-back',
+};
+
+const PLAYER_SPRITE_BASE: Record<PlayerClassId, string> = {
+  scholar: 'sprites/player-hero',
+  cartographer: 'sprites/player-explorer',
+  archivist: 'sprites/player-archivist',
+};
+
+const PLAYER_SPRITE_FALLBACK_BASE = 'sprites/player';
+
+export function getPlayerSpritePath(cls: PlayerClassId | null | undefined, dir: PlayerDirection): string {
+  const base = cls ? PLAYER_SPRITE_BASE[cls] : PLAYER_SPRITE_FALLBACK_BASE;
+  return `${base}${DIRECTION_SUFFIX[dir]}.svg`;
+}
+
 export interface PlayerClassDefinition {
   id: PlayerClassId;
   name: string;

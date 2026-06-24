@@ -21,7 +21,7 @@ function makeSnapshot({
       rootRoomId: 'room-1',
       rooms: [{ roomId: 'room-1', topic: 'Vector Spaces', status: 'Created' }],
       edges: [],
-      progression: { xpTotal: 0, rank: 'Novice', badges: [] },
+      progression: { xpTotal: 0, rank: 'Novice', badges: [], fishCollection: [] },
     },
     rooms: {
       'room-1': {

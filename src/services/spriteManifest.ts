@@ -50,7 +50,7 @@ function isManifest(obj: unknown): obj is SpriteManifest {
 export async function fetchSpriteManifest(): Promise<SpriteManifest> {
   if (isElectronAvailable()) {
     const bridge = window.electronKnowledgeBridge;
-    if (typeof bridge.getSpriteManifest === 'function') {
+    if (bridge && typeof bridge.getSpriteManifest === 'function') {
       const raw = await bridge.getSpriteManifest();
       if (isManifest(raw)) return raw;
       throw new Error('Invalid sprite manifest from Electron bridge');

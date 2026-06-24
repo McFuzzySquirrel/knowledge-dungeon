@@ -1,6 +1,27 @@
 import type { ProgressionSnapshot } from '@/core/validation/persistence';
 
 export const ROOM_XP_BASE = 20;
+
+// ── Fisher's Rest — Fishing XP & Badges ─────────────
+/** Base XP awarded for correctly answering a fishing recall question. */
+export const FSH_XP_PER_CORRECT_ANSWER = 5;
+
+/** Fishing milestone badge IDs. */
+export const FISHING_BADGE_IDS = [
+  'FshFirstCatch',
+  'FshAngler',
+  'FshMasterAngler',
+  'FshFullCreel',
+] as const;
+
+export type FishingBadgeId = (typeof FISHING_BADGE_IDS)[number];
+
+export const FISHING_BADGE_DEFS: Record<FishingBadgeId, { label: string; threshold: number }> = {
+  FshFirstCatch: { label: 'First Catch', threshold: 1 },
+  FshAngler: { label: 'Angler', threshold: 10 },
+  FshMasterAngler: { label: 'Master Angler', threshold: 25 },
+  FshFullCreel: { label: 'Full Creel', threshold: -1 }, // -1 = all unique fish types caught
+};
 export const MAX_QUALITY_BONUS = 10;
 export const MAX_STREAK_BONUS = 5;
 

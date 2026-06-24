@@ -17,8 +17,15 @@ import {
   rollEquippableLoot,
   computeCrossSubjectProgress,
   evaluateAchievementUnlocks,
+  FSH_XP_PER_CORRECT_ANSWER,
+  FISHING_BADGE_DEFS,
+  FISHING_BADGE_IDS,
+  type FishingBadgeId,
 } from '@/core/progression';
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
+import type { FishEntry, FishRarity, FishCollection } from '@/game/systems/fishingTypes';
+import { FISH_RARITY_XP_MULTIPLIER, FISH_CATALOG } from '@/game/systems/fishingTypes';
+import { deserializeFishCollection, createFishId, addFishToCollection, countUniqueTypes } from '@/core/fishing/fishCollectionService';
 
 export interface LootItem {
   id: string;
@@ -54,6 +61,8 @@ interface PersistedSubjectProgression {
   reviewPasses: number;
   artifacts: number;
   bossesDefeated: number;
+  /** Fisher's Rest: fish caught in this subject */
+  fishCollection: FishEntry[];
 }
 
 const REVIEW_PASS_XP = 6;
@@ -78,6 +87,7 @@ function cloneDefaultSubjectProgression(): PersistedSubjectProgression {
     reviewPasses: 0,
     artifacts: 0,
     bossesDefeated: 0,
+    fishCollection: [],
   };
 }
 
@@ -136,6 +146,7 @@ function normalizeSubjectProgression(raw: unknown): PersistedSubjectProgression 
     reviewPasses: typeof record.reviewPasses === 'number' ? Math.max(0, Math.trunc(record.reviewPasses)) : 0,
     artifacts: typeof record.artifacts === 'number' ? Math.max(0, Math.trunc(record.artifacts)) : 0,
     bossesDefeated: typeof record.bossesDefeated === 'number' ? Math.max(0, Math.trunc(record.bossesDefeated)) : 0,
+    fishCollection: deserializeFishCollection(record.fishCollection),
   };
 }
 
@@ -267,6 +278,8 @@ export interface ProgressionStoreState {
   bossesDefeated: number;
   /** Phase 3c: cross-subject achievements */
   crossSubjectAchievements: string[];
+  /** Fisher's Rest: fish caught in the active subject */
+  fishCollection: FishEntry[];
   setActiveSubject: (subjectId: string | null) => void;
   awardBadge: (badgeId: string) => boolean;
   collectArtifactNote: (entry: Omit<CollectedNoteEntry, 'noteId' | 'collectedAt'>) => boolean;
@@ -295,6 +308,12 @@ export interface ProgressionStoreState {
     rankChanged: boolean;
     unlockedAchievements: string[];
   };
+  /** Fisher's Rest: add a caught fish to the active subject's collection */
+  addFish: (input: { name: string; rarity: FishEntry['rarity']; subjectId: string; subjectName: string }) => FishEntry;
+  /** Fisher's Rest: award XP for correctly answering a fishing recall question */
+  awardFishingXp: (rarity: FishRarity) => { xpGained: number; newRank: RankTier; rankChanged: boolean };
+  /** Fisher's Rest: check and award any fishing badges based on current collection */
+  checkFishingBadges: () => FishingBadgeId[];
   /** Track 3c: equip an equippable item */
   equipItem: (itemId: string) => boolean;
   /** Track 3c: unequip an item */
@@ -401,6 +420,108 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     return true;
   },
 
+  // ── Fisher's Rest: addFish ──────────────────────────
+
+  addFish({ name, rarity, subjectId, subjectName }) {
+    const state = get();
+    if (!state.activeSubjectId) {
+      // If no active subject, still return a valid entry but don't persist
+      return {
+        id: createFishId('unknown'),
+        name,
+        rarity,
+        subjectId,
+        subjectName,
+        caughtAt: new Date().toISOString(),
+      };
+    }
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const entry: FishEntry = {
+      id: createFishId(name.toLowerCase().replace(/\s+/g, '-')),
+      name,
+      rarity,
+      subjectId,
+      subjectName,
+      caughtAt: new Date().toISOString(),
+    };
+
+    const updatedCollection = addFishToCollection(current.fishCollection, entry);
+    const nextSubject: PersistedSubjectProgression = {
+      ...current,
+      fishCollection: updatedCollection,
+    };
+    const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
+    set({ bySubject, ...nextSubject });
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+    return entry;
+  },
+
+  // ── Fisher's Rest: awardFishingXp ─────────────────
+
+  awardFishingXp(rarity) {
+    const state = get();
+    if (!state.activeSubjectId) {
+      return { xpGained: 0, newRank: 'Novice' as RankTier, rankChanged: false };
+    }
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const multiplier = FISH_RARITY_XP_MULTIPLIER[rarity] ?? 1.0;
+    const xpGained = Math.round(FSH_XP_PER_CORRECT_ANSWER * multiplier);
+    const nextXp = current.xpTotal + xpGained;
+    const nextRank = assignRankTier(nextXp);
+
+    const nextSubject: PersistedSubjectProgression = {
+      ...current,
+      xpTotal: nextXp,
+      rank: nextRank,
+    };
+    const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
+    set({ bySubject, ...nextSubject });
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    return {
+      xpGained,
+      newRank: nextRank,
+      rankChanged: nextRank !== current.rank,
+    };
+  },
+
+  // ── Fisher's Rest: checkFishingBadges ──────────────
+
+  checkFishingBadges() {
+    const state = get();
+    if (!state.activeSubjectId) return [];
+
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const collection: FishCollection = current.fishCollection;
+    const totalFish = collection.length;
+    const uniqueCount = countUniqueTypes(collection);
+    const existingBadges = new Set(current.badges);
+    const newlyAwarded: FishingBadgeId[] = [];
+
+    for (const badgeId of FISHING_BADGE_IDS) {
+      if (existingBadges.has(badgeId)) continue;
+
+      const def = FISHING_BADGE_DEFS[badgeId];
+      let earned = false;
+
+      if (badgeId === 'FshFullCreel') {
+        // -1 threshold means all unique fish types caught
+        earned = uniqueCount >= FISH_CATALOG.length;
+      } else {
+        earned = totalFish >= def.threshold;
+      }
+
+      if (earned) {
+        const awarded = get().awardBadge(badgeId);
+        if (awarded) {
+          newlyAwarded.push(badgeId);
+        }
+      }
+    }
+
+    return newlyAwarded;
+  },
+
   awardRoomClear({
     qualityBonus,
     totalRooms,
@@ -480,6 +601,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       reviewPasses: current.reviewPasses,
       artifacts: current.artifacts,
       bossesDefeated,
+      fishCollection: current.fishCollection,
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });

@@ -10,7 +10,8 @@ import type {
   DungeonMap,
   DungeonRoom,
 } from '@/game/systems/dungeonTypes';
-import type { PlayerClassId } from '@/game/systems/playerClasses';
+import type { PlayerClassId, PlayerDirection } from '@/game/systems/playerClasses';
+import { getPlayerSpritePath } from '@/game/systems/playerClasses';
 import {
   ensureBiomeFloorTexture,
   resolveFloorBiome,
@@ -69,23 +70,7 @@ const ZOOM_INSIDE_ROOM = 1.6;
 const ZOOM_ON_PATH = 0.85;
 const ZOOM_TWEEN_MS = 320;
 
-/**
- * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
- * (copied from the repo-dungeon project) and are served at a path relative
- * to the Vite base URL, which is `./` in Electron and `/` in the web build.
- * Fall back to `player.svg` when no class is selected.
- */
-/**
- * Per-class sprite asset path. Sprites live under `public/assets/sprites/`
- * and are resolved through `resolveSpriteUrl()` which checks for user
- * customizations before falling back to the bundled asset.
- */
-const PLAYER_SPRITE_BY_CLASS: Record<PlayerClassId, string> = {
-  scholar: 'sprites/player-hero.svg',
-  cartographer: 'sprites/player-explorer.svg',
-  archivist: 'sprites/player-archivist.svg',
-};
-const PLAYER_SPRITE_FALLBACK = 'sprites/player.svg';
+
 const SIGNPOST_SPRITE = 'sprites/signpost.svg';
 const NPC_GUIDE_SPRITE = 'sprites/npc-scribe.svg';
 const ARTIFACT_LOOT_SPRITE = 'sprites/objects/artifact-loot.svg';
@@ -114,7 +99,12 @@ const DECOR_TEXTURE_KEYS: Record<DecorKey, string> = {
 const DECOR_KEYS: readonly DecorKey[] = ['bookshelf', 'brazier', 'scrollPile'];
 const DECOR_SPRITE_SIZE = 24;
 
-const PLAYER_TEXTURE_KEY = 'kd-player';
+const PLAYER_TEX: Record<PlayerDirection, string> = {
+  down: 'kd-player-d',
+  left: 'kd-player-l',
+  right: 'kd-player-r',
+  up: 'kd-player-u',
+};
 const SIGNPOST_TEXTURE_KEY = 'kd-signpost';
 const NPC_GUIDE_TEXTURE_KEY = 'kd-npc-guide';
 const ARTIFACT_LOOT_TEXTURE_KEY = 'kd-artifact-loot';
@@ -166,6 +156,7 @@ export class DungeonScene extends Phaser.Scene {
   private roomGraphics: Phaser.GameObjects.Graphics | null = null;
   private corridorGraphics: Phaser.GameObjects.Graphics | null = null;
   private playerClass: PlayerClassId | null = null;
+  private playerDirection: PlayerDirection = 'down';
   private artifactIcons = new Map<string, Phaser.GameObjects.Container>();
   private artifactReviewMarkers = new Map<string, Phaser.GameObjects.Text>();
   private artifactRoomIds = new Set<string>();
@@ -251,16 +242,13 @@ export class DungeonScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const playerSprite = this.playerClass
-      ? PLAYER_SPRITE_BY_CLASS[this.playerClass]
-      : PLAYER_SPRITE_FALLBACK;
-    // Sprite URLs are resolved through resolveSpriteUrl() which checks for
-    // user customizations (localStorage/Electron) before falling back to the
-    // bundled asset in public/assets/.
-    this.load.svg(PLAYER_TEXTURE_KEY, resolveSpriteUrl(playerSprite), {
-      width: PLAYER_SPRITE_SIZE,
-      height: PLAYER_SPRITE_SIZE,
-    });
+    for (const dir of ['down', 'left', 'right', 'up'] as PlayerDirection[]) {
+      const path = getPlayerSpritePath(this.playerClass, dir);
+      this.load.svg(PLAYER_TEX[dir], resolveSpriteUrl(path), {
+        width: PLAYER_SPRITE_SIZE,
+        height: PLAYER_SPRITE_SIZE,
+      });
+    }
     this.load.svg(SIGNPOST_TEXTURE_KEY, resolveSpriteUrl(SIGNPOST_SPRITE), {
       width: SIGNPOST_SPRITE_SIZE,
       height: SIGNPOST_SPRITE_SIZE,
@@ -356,7 +344,7 @@ export class DungeonScene extends Phaser.Scene {
 
     this.refreshRoomNpcs();
 
-    this.player = this.add.image(start.x, start.y, PLAYER_TEXTURE_KEY).setDepth(10);
+    this.player = this.add.image(start.x, start.y, PLAYER_TEX.down).setDepth(10);
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     // Keep the collider tighter than the rendered sprite for nicer movement.
@@ -368,9 +356,7 @@ export class DungeonScene extends Phaser.Scene {
     this.playerBody.setCollideWorldBounds(false);
 
     // Player idle animation (custom or default breathing)
-    const playerPath = this.playerClass
-      ? (PLAYER_SPRITE_BY_CLASS[this.playerClass] ?? PLAYER_SPRITE_FALLBACK)
-      : PLAYER_SPRITE_FALLBACK;
+    const playerPath = getPlayerSpritePath(this.playerClass, 'down');
     const config = getAnimationConfig(playerPath);
     if (config.type !== 'none') {
       applySpriteAnimation(this, this.player, config);
@@ -479,6 +465,20 @@ export class DungeonScene extends Phaser.Scene {
     if (!typingInTextField) {
       vx += this.touchMoveVx;
       vy += this.touchMoveVy;
+    }
+
+    // Track direction for directional player sprites
+    let newDir: PlayerDirection = this.playerDirection;
+    if (vy < -0.1) newDir = 'up';
+    else if (vy > 0.1) newDir = 'down';
+    else if (vx < -0.1) newDir = 'left';
+    else if (vx > 0.1) newDir = 'right';
+
+    if (newDir !== this.playerDirection) {
+      this.playerDirection = newDir;
+      if (this.player && this.textures.exists(PLAYER_TEX[newDir])) {
+        this.player.setTexture(PLAYER_TEX[newDir]);
+      }
     }
 
     if (vx !== 0 || vy !== 0) {
@@ -1699,6 +1699,19 @@ export class DungeonScene extends Phaser.Scene {
     if (dist > DungeonScene.TOUCH_DRAG_THRESHOLD) {
       this.touchMoveVx = dx / dist;
       this.touchMoveVy = dy / dist;
+
+      // Track direction for directional player sprites (touch drag)
+      let newDir: PlayerDirection = this.playerDirection;
+      if (this.touchMoveVy < -0.1) newDir = 'up';
+      else if (this.touchMoveVy > 0.1) newDir = 'down';
+      else if (this.touchMoveVx < -0.1) newDir = 'left';
+      else if (this.touchMoveVx > 0.1) newDir = 'right';
+      if (newDir !== this.playerDirection) {
+        this.playerDirection = newDir;
+        if (this.player && this.textures.exists(PLAYER_TEX[newDir])) {
+          this.player.setTexture(PLAYER_TEX[newDir]);
+        }
+      }
     } else {
       this.touchMoveVx = 0;
       this.touchMoveVy = 0;

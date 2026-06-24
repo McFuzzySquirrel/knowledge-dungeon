@@ -1,12 +1,12 @@
 # Progress
 
-Current state as of 2026-06-22. Phases map to `docs/PRD.md` §14.
+Current state as of 2026-06-24. Phases map to `docs/PRD.md` §14.
 
 ---
 
 ## Current state
 
-All main PRD phases (0–5) are **complete**. The "Make It Yours" sprite customization feature (Phases F1–F3) is also complete.
+All main PRD phases (0–5) are **complete**. The "Make It Yours" sprite customization feature (Phases F1–F3) and "Fisher's Rest" fishing mini-game (Phases F1–F4) are also complete.
 
 ### Build & quality status
 
@@ -14,7 +14,7 @@ All main PRD phases (0–5) are **complete**. The "Make It Yours" sprite customi
 |-------|--------|
 | `npm run lint` | Passing (0 errors) |
 | `npm run typecheck` | Passing (0 errors) |
-| `npm test -- --run` | 168 tests passing (27 test files) |
+| `npm test -- --run` | 234 tests passing (32 test files) |
 | `npm run build` | Passing |
 
 ### Up next
@@ -416,3 +416,154 @@ Feature PRD: `docs/features/make-it-yours.md`
 - [x] Press E near workshop or click "Open Editor" to launch the Make It Yours editor modal
 - [x] Also accessible from Settings → "Make It Yours" tab (village ⚙ button + dungeon HUD settings)
 - [x] CSS: `.make-it-yours-modal` at 800px wide for comfortable split-pane layout
+
+---
+
+## Feature: "Fisher's Rest" — Fishing Mini-Game
+
+Feature PRD: `docs/features/fishers-rest.md`
+
+### Phase F1: Foundation & Data Layer (COMPLETE — 2026-06-24)
+
+- [x] Defined `FishRarity`, `FishEntry`, `FishCollection`, `FishCatalog`, and constants in `src/game/systems/fishingTypes.ts` — 8 fish types across all 3 rarities (4 common, 2 rare, 2 epic)
+- [x] Added `FishEntry` type and `fishCollection: FishEntry[]` to `ProgressionSnapshot` in `src/core/validation/persistence/types.ts`
+- [x] Added `fishCollection: FishEntry[]` to `PersistedSubjectProgression` in `src/store/progressionStore.ts`
+- [x] Added `addFish()` action to progression store — creates fish entry with unique id, persists to localStorage alongside other progression data
+- [x] Updated `cloneDefaultSubjectProgression` and `normalizeSubjectProgression` to include `fishCollection` with proper deserialization
+- [x] Updated `awardRoomClear` to preserve `fishCollection` when constructing next subject state
+- [x] Created `src/core/fishing/fishCollectionService.ts` — persistence layer with serialize/deserialize, addFishToCollection, countByRarity, countUniqueTypes
+- [x] Added `FSH_XP_PER_CORRECT_ANSWER = 5` constant and fishing badge IDs (`FshFirstCatch`, `FshAngler`, `FshMasterAngler`, `FshFullCreel`) with labels and thresholds to `src/core/progression/types.ts`
+- [x] Added `'fishing-pond'` and `'fish-stand'` to `VillageStructure.type` union in `src/data/villageLayout.ts`
+- [x] Defined 3 fishing pond structures (`pond-fish-nw` at 2,5 / `pond-fish-sw` at 10,23 / `pond-fish-e` at 32,13) and 1 Fish Stand (`fish-stand` at 19,0) in `VILLAGE_MAP.structures`
+- [x] Created `getFishingPondPortalMap()` — maps each fishing pond to its nearest dungeon portal slot by Euclidean grid distance
+- [x] Created `getNearestFishingPondToPortal()` — reverse lookup from portal position to nearest pond
+- [x] Created `src/game/systems/fishingMechanics.ts` — bite timer logic (3–15s random), rarity roll (65/28/7% weighted), recall question pulling via `generateSelfCheckPrompts` and `extractMarkdownHeadings`
+- [x] Created 12 sprite SVGs in `public/assets/sprites/fishing/` — 8 fish silhouettes (moss-carp, sun-skip, reed-darter, ink-minnow, lunar-trout, ember-perch, gilded-koi, abyssal-eel) + bobber, rod, water-surface, pier
+
+**Phase F1 Validation:**
+- [x] `npm run typecheck` — passing (0 errors)
+- [x] `npm run lint` — passing (0 errors, 0 warnings)
+- [x] `npm test -- --run` — all 168 existing tests still passing (0 regressions)
+- [x] `FishCatalog` has 8 fish types across all 3 rarities (4 Common, 2 Rare, 2 Epic) — exceeds the 6 minimum
+- [x] Proximity helper correctly maps each fishing pond to its nearest portal slot
+
+**Files created:**
+- `src/game/systems/fishingTypes.ts` — fish types, catalog, rarity weights, timing constants
+- `src/game/systems/fishingMechanics.ts` — bite timer, rarity roll, recall question pulling
+- `src/core/fishing/fishCollectionService.ts` — fish collection persistence layer
+- `public/assets/sprites/fishing/fish-moss-carp.svg`
+- `public/assets/sprites/fishing/fish-sun-skip.svg`
+- `public/assets/sprites/fishing/fish-reed-darter.svg`
+- `public/assets/sprites/fishing/fish-ink-minnow.svg`
+- `public/assets/sprites/fishing/fish-lunar-trout.svg`
+- `public/assets/sprites/fishing/fish-ember-perch.svg`
+- `public/assets/sprites/fishing/fish-gilded-koi.svg`
+- `public/assets/sprites/fishing/fish-abyssal-eel.svg`
+- `public/assets/sprites/fishing/bobber.svg`
+- `public/assets/sprites/fishing/rod.svg`
+- `public/assets/sprites/fishing/water-surface.svg`
+- `public/assets/sprites/fishing/pier.svg`
+
+**Files modified:**
+- `src/core/validation/persistence/types.ts` — `FishEntry` type + `fishCollection` in `ProgressionSnapshot`
+- `src/core/progression/types.ts` — `FSH_XP_PER_CORRECT_ANSWER`, `FISHING_BADGE_IDS`, `FishingBadgeId`, `FISHING_BADGE_DEFS`
+- `src/store/progressionStore.ts` — `fishCollection` in state/interface, `addFish()` action, fish collection in all subject state transitions
+- `src/data/villageLayout.ts` — `'fishing-pond'`/`'fish-stand'` types, 4 new structures, `getFishingPondPortalMap()`, `getNearestFishingPondToPortal()`
+
+### Phase F2: Fishing Scene (COMPLETE — 2026-06-24, redesigned)
+
+- [x] Created `src/game/scenes/FishingScene.ts` (~1200 lines) — top-down "first person" lake-perspective fishing mini-game
+  - **Layout**: Distant horizon with tree silhouettes at top (10% height), water area (10-80%), shore embankment at bottom (80-100%). Night sky with gradient and stars.
+  - **Player**: On the shore at bottom-center (87% height), movable left/right with A/D or arrow keys (200px/s), clamped to 50px margins
+  - **Cast mechanic**: Hold click to build power (green→yellow→red meter), release to launch bobber upward. Physics-based parabolic flight with velocity-driven movement
+  - **Splash effect**: 3 expanding ripple rings (80ms stagger) + 5 water droplets on bobber water entry
+  - **Wait mechanic**: Bobber bobs gently, fish silhouette swims toward bobber from right or below
+  - **Proximity-based bite**: Fish triggers bite when within 50px of bobber (no random timer). 20s max timeout fallback
+  - **Catch mechanic**: Reeling animation pulls fish toward rod tip (600ms), `onFishCaught` event emitted with fishName/rarity/catalogId/description
+  - **Curved fishing line**: Quadratic bezier from rod tip to bobber (12 segments) with slight curve
+  - **Shore decorations**: 3 trees and 4 bushes using village sprites (`tree.svg` 64×80 at scale 0.65, `bush.svg` 48×48 at scale 0.6), positioned with bases on shore line (depth 7, behind player)
+  - **Fish bucket**: Wooden trapezoid bucket (depth 8) beside player, redraws on movement. Mini fish sprites (scale 0.4) pop into bucket with Back.easeOut animation, stacking 3 wide × N rows
+  - **Depth ordering**: sky(-1) → deep water(0) → horizon(1) → fish(2.5) → water tiles(3) → shore(4) → line(5) → bobber(6) → trees(7) → bucket(8) → rod(9) → player(10). Fish always behind shore/land
+
+**Village scene integration:**
+- [x] Fish pond and fish stand sprites loaded in VillageScene preload
+- [x] Both added to interactive types — emit proximity/interact events
+- [x] Fishing pond info panel: 🎣 "Cast Line" button → transitions to FishingScene
+- [x] Fish stand info panel: 🐟 placeholder (disabled "View Collection" button for Phase F3)
+- [x] FishingScene registered in `createVillageGame.ts` scene array
+
+### Phase F3: Recall Question + Collection UI (COMPLETE — 2026-06-24)
+
+- [x] React overlay info panel on fish catch — styled `village-info-panel` with:
+  - Fish name header with 🎣 icon
+  - Rarity badge (`.fish-rarity-badge` — green/blue/gold by common/rare/epic)
+  - Fish description text
+  - "Keep Fish" button → triggers recall question flow
+  - "Release" button → closes panel, fish not saved
+  - Panel appears as modal backdrop overlay with slide-up animation
+- [x] `FishingRecallModal.tsx` — recall question overlay with self-evaluation ("I got it right" / "I need to review")
+  - Pulls recall question from nearest dungeon's cleared rooms via `pullRecallQuestion()`
+  - "I got it right" → keeps fish, awards XP, checks badges
+  - "I need to review" / Cancel → releases fish, no progression change
+  - Fallback state for zero cleared rooms: "No review material available — you can keep this fish without a question"
+- [x] `FishStandPanel.tsx` — fish collection gallery with grid of fish cards (name, rarity badge, subject name, caught date)
+  - Empty state: "No fish caught yet — visit a fishing pond near a dungeon portal!"
+  - Deleted subject detection: "(Deleted Subject)" label for fish from removed subjects
+  - All-fish-caught completion banner when all 8 catalog types are collected
+  - Data aggregated across all subjects (not just active one)
+- [x] XP award flow — `awardFishingXp()` in progression store: XP = 5 base × rarity multiplier (1.0/1.5/2.0)
+  - Wired into "I got it right" path of recall modal
+- [x] Fishing badge checks — `checkFishingBadges()` in progression store:
+  - FshFirstCatch (≥1), FshAngler (≥10), FshMasterAngler (≥25), FshFullCreel (all 8 unique types)
+  - Automatically evaluated after each fish kept
+
+**Phase F3 Validation:**
+- [x] `npm run typecheck` — passing (0 errors)
+- [x] `npm run lint` — passing (0 errors)
+- [x] `npm test -- --run` — 234 tests passing (32 test files)
+
+**Files created:**
+- `src/ui/components/FishingRecallModal.tsx` — recall question modal with self-evaluation
+- `src/ui/components/FishStandPanel.tsx` — fish collection gallery
+
+**Files modified:**
+- `src/ui/screens/VillageScreen.tsx` — recall modal integration, fish stand panel wiring, XP/badge wiring, tutorial hint, zero-cleared-rooms detection, handleKeepFish flow
+- `src/store/progressionStore.ts` — `awardFishingXp()` and `checkFishingBadges()` actions
+- `src/styles.css` — recall modal, fish stand panel, collection grid/cards, tutorial hint, completion banner CSS
+
+### Phase F4: Polish & Edge Cases (COMPLETE — 2026-06-24)
+
+- [x] Subject with zero cleared rooms message — FishingScene shows "Defeat encounters in the nearby dungeon to unlock fish here!" overlay; cast mechanic is disabled; player can still move and scenery renders
+- [x] Deleted subject fish label — FishStandPanel shows "(Deleted Subject)" in gray italic for fish from removed subjects (via `listSubjectIds()` check)
+- [x] All fish types caught feedback — green/gold completion banner in FishStandPanel when all 8 `FISH_CATALOG` types are collected
+- [x] Seeded RNG for determinism — `createSeededRng()` (mulberry32 PRNG) in `fishingMechanics.ts`; FishingScene generates daily seed from date + player class; all random calls (rarity, direction, positions) use seeded RNG
+- [x] Sound effect hooks — 6 fishing SFX kinds added to `audioManager` (`fish-cast`, `fish-splash`, `fish-bite`, `fish-reel`, `fish-catch`, `fish-miss`); calls wired into FishingScene at appropriate moments (non-blocking no-ops until audio assets added)
+- [x] Fishing tutorial hint — "💡 Cast a line, catch fish, and test your recall!" shown once in fishing-pond info panel; persists via localStorage, never re-shown after first view
+
+**Phase F4 Validation:**
+- [x] `npm run typecheck` — passing (0 errors)
+- [x] `npm run lint` — passing (0 errors)
+
+**Files modified:**
+- `src/game/systems/fishingMechanics.ts` — `createSeededRng()`, update `rollFishRarity()` to accept optional RNG
+- `src/game/scenes/FishingScene.ts` — zero-cleared-rooms guard + overlay, daily seed generation, seeded RNG usage, sound effect hooks
+- `src/services/audioManager.ts` — 6 fishing SFX kinds added to `SfxKind` type
+- `src/ui/screens/VillageScreen.tsx` — tutorial hint, zero-cleared-rooms detection for pond-to-portal mapping
+
+### Testing (COMPLETE — 2026-06-24)
+
+- [x] `tests/unit/fishingTypes.test.ts` — 5 tests: catalog size, field validation, weight sums, XP multipliers
+- [x] `tests/unit/fishCollectionService.test.ts` — 22 tests: serialization round-trips, add/deduplicate, countByRarity, countUniqueTypes, malformed data handling
+- [x] `tests/unit/fishingMechanics.test.ts` — 23 tests: rarity roll (mocked Math.random + seeded RNG), createSeededRng (determinism, distribution, range), getClearedRooms (filtering states), pullRecallQuestion (empty, headings, flat text)
+- [x] `tests/unit/FishingRecallModal.test.tsx` — 8 tests: render, button handlers, null-prompt fallback, rarity badge, accessibility
+- [x] `tests/unit/FishStandPanel.test.tsx` — 8 tests: empty state, fish cards, deleted subject label, completion banner, close/backdrop, header counts
+
+**Test Validation:**
+- [x] `npm test -- --run` — 234 tests passing (32 test files, +66 new tests)
+
+**Files created:**
+- `tests/unit/fishingTypes.test.ts`
+- `tests/unit/fishCollectionService.test.ts`
+- `tests/unit/fishingMechanics.test.ts`
+- `tests/unit/FishingRecallModal.test.tsx`
+- `tests/unit/FishStandPanel.test.tsx`

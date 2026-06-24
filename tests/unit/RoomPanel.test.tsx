@@ -16,7 +16,7 @@ function createSnapshot(): SubjectSnapshot {
       rootRoomId: 'room-1',
       rooms: [{ roomId: 'room-1', topic: 'Core Concepts', status: 'Created' }],
       edges: [],
-      progression: { xpTotal: 0, rank: 'Novice', badges: [] },
+      progression: { xpTotal: 0, rank: 'Novice', badges: [], fishCollection: [] },
     },
     rooms: {
       'room-1': {
