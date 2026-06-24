@@ -118,7 +118,7 @@ export function createRootDungeon(
     rootRoomId: input.rootRoomId,
     rooms: [{ roomId: input.rootRoomId, topic: topicResult.value, status: 'Created' }],
     edges: [],
-    progression: { xpTotal: 0, rank: 'Novice', badges: [] },
+    progression: { xpTotal: 0, rank: 'Novice', badges: [], fishCollection: [] },
     biome: input.biome,
     tagIndex: {},
   };

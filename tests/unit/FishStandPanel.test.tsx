@@ -60,7 +60,7 @@ describe('FishStandPanel', () => {
       bySubject: {
         'subject-1': {
           xpTotal: 100,
-          rank: 'Apprentice',
+          rank: 'Novice',
           badges: [],
           inventory: [],
           equippedItems: [],
@@ -100,7 +100,7 @@ describe('FishStandPanel', () => {
       bySubject: {
         'subject-1': {
           xpTotal: 100,
-          rank: 'Apprentice',
+          rank: 'Novice',
           badges: [],
           inventory: [],
           equippedItems: [],
@@ -174,7 +174,7 @@ describe('FishStandPanel', () => {
       bySubject: {
         'subject-1': {
           xpTotal: 100,
-          rank: 'Apprentice',
+          rank: 'Novice',
           badges: [],
           inventory: [],
           equippedItems: [],
@@ -206,7 +206,7 @@ describe('FishStandPanel', () => {
       bySubject: {
         'subject-1': {
           xpTotal: 100,
-          rank: 'Apprentice',
+          rank: 'Novice',
           badges: [],
           inventory: [],
           equippedItems: [],
@@ -240,7 +240,7 @@ describe('FishStandPanel', () => {
       bySubject: {
         'subject-1': {
           xpTotal: 100,
-          rank: 'Apprentice',
+          rank: 'Novice',
           badges: [],
           inventory: [],
           equippedItems: [],
@@ -287,7 +287,7 @@ describe('FishStandPanel', () => {
       bySubject: {
         'subject-1': {
           xpTotal: 100,
-          rank: 'Apprentice',
+          rank: 'Novice',
           badges: [],
           inventory: [],
           equippedItems: [],

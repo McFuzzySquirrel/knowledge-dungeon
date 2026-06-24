@@ -1,3 +1,4 @@
+/// <reference types="vitest/globals" />
 import '@testing-library/jest-dom';
 
 // Mock Phaser module globally — Phaser's Canvas/WebGL initialization
@@ -19,7 +20,8 @@ vi.mock('phaser', () => {
 });
 
 // Mock canvas context in case any code accesses it directly
-HTMLCanvasElement.prototype.getContext = function () {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(HTMLCanvasElement.prototype.getContext as any) = function () {
   return {
     fillStyle: '',
     fillRect: () => {},

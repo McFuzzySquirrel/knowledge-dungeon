@@ -39,7 +39,7 @@ export function createTutorialSubject(): SubjectSnapshot {
           createdByPhase: 'Creator',
         },
       ],
-      progression: { xpTotal: 0, rank: 'Novice', badges: [] },
+      progression: { xpTotal: 0, rank: 'Novice', badges: [], fishCollection: [] },
     },
     rooms: {
       [ROOT_ROOM_ID]: {

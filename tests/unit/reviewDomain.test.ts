@@ -21,7 +21,7 @@ function dungeonWithRooms(roomIds: string[]): DungeonMetadata {
     rootRoomId: roomIds[0],
     rooms: roomIds.map((id) => ({ roomId: id, topic: `Topic ${id}`, status: 'Created' })),
     edges: [],
-    progression: { xpTotal: 0, rank: 'Novice', badges: [] },
+    progression: { xpTotal: 0, rank: 'Novice', badges: [], fishCollection: [] },
   };
 }
 
