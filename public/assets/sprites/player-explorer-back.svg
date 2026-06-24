@@ -1,0 +1,41 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .outline { stroke: #1a1a1a; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    #left-leg { transform-origin: 52px 92px; animation: walkL 0.5s infinite alternate ease-in-out; }
+    #right-leg { transform-origin: 76px 92px; animation: walkR 0.5s infinite alternate ease-in-out; }
+    #body { transform-origin: 64px 60px; animation: bounce 0.5s infinite alternate ease-in-out; }
+    @keyframes walkL { from { transform: rotate(-8deg); } to { transform: rotate(8deg); } }
+    @keyframes walkR { from { transform: rotate(8deg); } to { transform: rotate(-8deg); } }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+  </style>
+  <ellipse cx="64" cy="112" rx="20" ry="8" fill="#00000033"/>
+  <g id="body">
+    <g id="left-leg">
+      <rect x="48" y="78" width="12" height="26" rx="3" fill="#4a3728" class="outline"/>
+      <rect x="46" y="102" width="16" height="7" rx="2" fill="#2f2f2f" class="outline"/>
+    </g>
+    <g id="right-leg">
+      <rect x="68" y="78" width="12" height="26" rx="3" fill="#4a3728" class="outline"/>
+      <rect x="66" y="102" width="16" height="7" rx="2" fill="#2f2f2f" class="outline"/>
+    </g>
+    <g id="torso">
+      <path d="M44 42 L84 42 L90 82 L38 82 Z" fill="#1f5a3a" class="outline"/>
+      <rect x="42" y="68" width="44" height="6" rx="2" fill="#5b3a1e" class="outline"/>
+    </g>
+    <g id="arms">
+      <rect x="34" y="46" width="10" height="24" rx="4" fill="#1f5a3a" class="outline"/>
+      <rect x="84" y="46" width="10" height="24" rx="4" fill="#1f5a3a" class="outline"/>
+      <g id="compass-back">
+        <circle cx="92" cy="36" r="7" fill="#b8983e" class="outline"/>
+        <line x1="92" y1="31" x2="92" y2="41" stroke="#3a2a1a" stroke-width="1.5"/>
+        <line x1="87" y1="36" x2="97" y2="36" stroke="#3a2a1a" stroke-width="1.5"/>
+      </g>
+    </g>
+    <g id="head">
+      <ellipse cx="64" cy="32" rx="18" ry="22" fill="#15332a" class="outline"/>
+      <path d="M52 14 Q64 8 76 14" fill="#1a4a3a" class="outline"/>
+      <path d="M48 30 Q50 26 54 28" stroke="#1a4a3a" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M80 30 Q78 26 74 28" stroke="#1a4a3a" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>

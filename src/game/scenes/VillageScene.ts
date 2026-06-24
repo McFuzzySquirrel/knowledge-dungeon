@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { VILLAGE_MAP, type VillageStructure } from '@/data/villageLayout';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
+import { type PlayerClassId, type PlayerDirection, getPlayerSpritePath } from '@/game/systems/playerClasses';
 
 const PLAYER_SPEED = 120;
 const NPC_SPEED = 45;
@@ -47,9 +48,6 @@ const SPRITE_PATHS = {
   fishingPond: 'sprites/village/fishing-pond.svg',
   fishStand: 'sprites/village/fish-stand.svg',
   keeperNpc: 'sprites/npc-keeper.svg',
-  playerHero: 'sprites/player-hero.svg',
-  playerExplorer: 'sprites/player-explorer.svg',
-  playerArchivist: 'sprites/player-archivist.svg',
 } as const;
 
 const TEX = {
@@ -81,9 +79,6 @@ const TEX = {
   fishingPond: 'v-fishing-pond',
   fishStand: 'v-fish-stand',
   keeperNpc: 'v-npc-keeper',
-  playerHero: 'v-player-hero',
-  playerExplorer: 'v-player-explorer',
-  playerArchivist: 'v-player-archivist',
 } as const;
 
 const TEX_TO_PATH: Record<string, string> = {};
@@ -92,16 +87,10 @@ for (const [k, tex] of Object.entries(TEX)) {
   if (key in SPRITE_PATHS) TEX_TO_PATH[tex] = SPRITE_PATHS[key];
 }
 
-const PLAYER_TEX_BY_CLASS: Record<string, string> = {
-  scholar: TEX.playerHero,
-  cartographer: TEX.playerExplorer,
-  archivist: TEX.playerArchivist,
-};
-
-const PLAYER_PATH_BY_CLASS: Record<string, string> = {
-  scholar: SPRITE_PATHS.playerHero,
-  cartographer: SPRITE_PATHS.playerExplorer,
-  archivist: SPRITE_PATHS.playerArchivist,
+const PLAYER_TEX: Record<string, Record<PlayerDirection, string>> = {
+  scholar: { down: 'v-scholar-d', left: 'v-scholar-l', right: 'v-scholar-r', up: 'v-scholar-u' },
+  cartographer: { down: 'v-cart-d', left: 'v-cart-l', right: 'v-cart-r', up: 'v-cart-u' },
+  archivist: { down: 'v-arch-d', left: 'v-arch-l', right: 'v-arch-r', up: 'v-arch-u' },
 };
 
 const STRUCTURE_TEXTURE: Record<string, string> = {
@@ -159,6 +148,7 @@ export class VillageScene extends Phaser.Scene {
   private currentNpcId: string | null = null;
   private pendingDynamicStructures: VillageStructure[] | null = null;
   private currentPlayerClass: string = 'scholar';
+  private playerDirection: PlayerDirection = 'down';
   /** Last known nearest POI data for React compass overlay. Updated every frame. */
   lastPoi: { name: string; angle: number; distance: number } = { name: '', angle: 0, distance: Infinity };
 
@@ -227,9 +217,14 @@ export class VillageScene extends Phaser.Scene {
     loadSvg(TEX.bench, SPRITE_PATHS.bench, 64, 32);
     loadSvg(TEX.villageGate, SPRITE_PATHS.villageGate, 120, 96);
     loadSvg(TEX.keeperNpc, SPRITE_PATHS.keeperNpc, 48, 48);
-    loadSvg(TEX.playerHero, SPRITE_PATHS.playerHero, 40, 40);
-    loadSvg(TEX.playerExplorer, SPRITE_PATHS.playerExplorer, 40, 40);
-    loadSvg(TEX.playerArchivist, SPRITE_PATHS.playerArchivist, 40, 40);
+
+    // Load all 12 directional player textures (3 classes × 4 directions)
+    for (const cls of ['scholar', 'cartographer', 'archivist'] as PlayerClassId[]) {
+      for (const dir of ['down', 'left', 'right', 'up'] as PlayerDirection[]) {
+        const path = getPlayerSpritePath(cls, dir);
+        this.load.svg(PLAYER_TEX[cls][dir], resolveSpriteUrl(path), { width: 40, height: 40 });
+      }
+    }
   }
 
   create(): void {
@@ -301,6 +296,21 @@ export class VillageScene extends Phaser.Scene {
       const len = Math.hypot(vx, vy) || 1;
       vx = (vx / len) * PLAYER_SPEED;
       vy = (vy / len) * PLAYER_SPEED;
+    }
+
+    // Track directional facing
+    let newDir: PlayerDirection = this.playerDirection;
+    if (vy < -0.1) newDir = 'up';
+    else if (vy > 0.1) newDir = 'down';
+    else if (vx < -0.1) newDir = 'left';
+    else if (vx > 0.1) newDir = 'right';
+
+    if (newDir !== this.playerDirection && this.player) {
+      this.playerDirection = newDir;
+      const texKey = PLAYER_TEX[this.currentPlayerClass]?.[newDir] ?? PLAYER_TEX.scholar.down;
+      if (this.textures.exists(texKey)) {
+        this.player.setTexture(texKey);
+      }
     }
 
     this.playerBody.setVelocity(0, 0);
@@ -584,9 +594,9 @@ export class VillageScene extends Phaser.Scene {
     const sx = gridX * ts + ts / 2;
     const sy = gridY * ts + ts / 2;
 
-    const playerTex = PLAYER_TEX_BY_CLASS[this.currentPlayerClass] ?? TEX.playerHero;
-    if (!this.textures.exists(playerTex)) return;
-    this.player = this.add.image(sx, sy, playerTex).setDepth(10);
+    const texKey = PLAYER_TEX[this.currentPlayerClass]?.[this.playerDirection] ?? PLAYER_TEX.scholar.down;
+    if (!this.textures.exists(texKey)) return;
+    this.player = this.add.image(sx, sy, texKey).setDepth(10);
     this.physics.add.existing(this.player);
     this.playerBody = this.player.body as Phaser.Physics.Arcade.Body;
     this.playerBody.setSize(20, 20);
@@ -594,7 +604,7 @@ export class VillageScene extends Phaser.Scene {
     this.playerBody.setCollideWorldBounds(true);
 
     // Player idle animation (custom or default sway)
-    const playerPath = PLAYER_PATH_BY_CLASS[this.currentPlayerClass] ?? SPRITE_PATHS.playerHero;
+    const playerPath = getPlayerSpritePath(this.currentPlayerClass as PlayerClassId, this.playerDirection);
     const config = getAnimationConfig(playerPath);
     if (config.type !== 'none') {
       applySpriteAnimation(this, this.player, config);
@@ -612,7 +622,7 @@ export class VillageScene extends Phaser.Scene {
 
   private updatePlayerSprite(): void {
     if (!this.player) return;
-    const texKey = PLAYER_TEX_BY_CLASS[this.currentPlayerClass] ?? TEX.playerHero;
+    const texKey = PLAYER_TEX[this.currentPlayerClass]?.[this.playerDirection] ?? PLAYER_TEX.scholar[this.playerDirection];
     if (this.textures.exists(texKey)) {
       this.player.setTexture(texKey);
     }

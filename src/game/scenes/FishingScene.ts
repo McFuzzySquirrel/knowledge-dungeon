@@ -11,6 +11,8 @@ import {
 import { rollFishRarity, createSeededRng } from '@/game/systems/fishingMechanics';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 import { audioManager } from '@/services/audioManager';
+import { PlayerDirection, getPlayerSpritePath } from '@/game/systems/playerClasses';
+import type { PlayerClassId } from '@/game/systems/playerClasses';
 
 // ── Layout constants ──────────────────────────────────────────────────────
 /** Fraction of canvas height for the distant horizon/shore at top. */
@@ -48,13 +50,13 @@ const POWER_BUILD_TIME_MS = 1500;
 const SHORE_GREEN = 0x2a4a1a;
 const SHORE_DIRT = 0x3a2a14;
 
-// ── Player sprite paths (same as VillageScene) ────────────────────────────
-const PLAYER_SPRITE_BY_CLASS: Record<string, string> = {
-  scholar: 'sprites/player-hero.svg',
-  cartographer: 'sprites/player-explorer.svg',
-  archivist: 'sprites/player-archivist.svg',
+// ── Directional player textures (loaded per-player-class via getPlayerSpritePath) ──
+const PLAYER_TEX: Record<PlayerDirection, string> = {
+  down: 'fish-player-d',
+  left: 'fish-player-l',
+  right: 'fish-player-r',
+  up: 'fish-player-u',
 };
-const PLAYER_TEX_KEY = 'fish-player';
 const PLAYER_SIZE = 40;
 
 // Fishing sprite texture keys
@@ -80,6 +82,7 @@ export class FishingScene extends Phaser.Scene {
   private callbacks: FishingSceneEvents | null = null;
   private state: FishingState = 'idle';
   private playerClass: string = 'scholar';
+  private playerDirection: PlayerDirection = 'up';
   private hasClearedRooms: boolean = true;
   private fishingRng: () => number = Math.random;
 
@@ -179,11 +182,13 @@ export class FishingScene extends Phaser.Scene {
     }
 
     // Player sprite (uses resolveSpriteUrl for customization support)
-    const playerSpritePath = PLAYER_SPRITE_BY_CLASS[this.playerClass] ?? PLAYER_SPRITE_BY_CLASS.scholar;
-    this.load.svg(PLAYER_TEX_KEY, resolveSpriteUrl(playerSpritePath), {
-      width: PLAYER_SIZE,
-      height: PLAYER_SIZE,
-    });
+    for (const dir of ['down', 'left', 'right', 'up'] as PlayerDirection[]) {
+      const path = getPlayerSpritePath(this.playerClass as PlayerClassId | null, dir);
+      this.load.svg(PLAYER_TEX[dir], resolveSpriteUrl(path), {
+        width: PLAYER_SIZE,
+        height: PLAYER_SIZE,
+      });
+    }
   }
 
   create(): void {
@@ -472,15 +477,16 @@ export class FishingScene extends Phaser.Scene {
   }
 
   private createPlayer(): void {
-    if (!this.textures.exists(PLAYER_TEX_KEY)) return;
+    const currentTex = PLAYER_TEX[this.playerDirection];
+    if (!this.textures.exists(currentTex)) return;
     const px = this.getPlayerX();
     const py = this.playerY;
-    this.playerSprite = this.add.image(px, py, PLAYER_TEX_KEY).setDepth(10);
+    this.playerSprite = this.add.image(px, py, currentTex).setDepth(10);
 
-    // Player faces UP toward the lake (back to camera in first-person perspective)
+    // Directional sprites face the correct way intrinsically; angle stays 0.
     this.playerSprite.setAngle(0);
 
-    const playerPath = PLAYER_SPRITE_BY_CLASS[this.playerClass] ?? PLAYER_SPRITE_BY_CLASS.scholar;
+    const playerPath = getPlayerSpritePath(this.playerClass as PlayerClassId | null, this.playerDirection);
     const config = getAnimationConfig(playerPath);
     if (config.type !== 'none') {
       applySpriteAnimation(this, this.playerSprite, config);
@@ -633,6 +639,23 @@ export class FishingScene extends Phaser.Scene {
     if (kb.checkDown(kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT))) dx -= 1;
     if (kb.checkDown(kb.addKey(Phaser.Input.Keyboard.KeyCodes.D))) dx += 1;
     if (kb.checkDown(kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT))) dx += 1;
+
+    // Track horizontal direction for sprite
+    let newDir: PlayerDirection;
+    if (dx < -0.1) {
+      newDir = 'left';
+    } else if (dx > 0.1) {
+      newDir = 'right';
+    } else {
+      newDir = this.playerDirection;
+    }
+
+    if (newDir !== this.playerDirection) {
+      this.playerDirection = newDir;
+      if (this.playerSprite && this.textures.exists(PLAYER_TEX[newDir])) {
+        this.playerSprite.setTexture(PLAYER_TEX[newDir]);
+      }
+    }
 
     if (dx !== 0) {
       this.playerX = Phaser.Math.Clamp(

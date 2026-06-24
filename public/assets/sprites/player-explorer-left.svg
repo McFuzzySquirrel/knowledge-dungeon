@@ -1,0 +1,39 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .outline { stroke: #1a1a1a; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    #leg { transform-origin: 56px 92px; animation: walk 0.5s infinite alternate ease-in-out; }
+    #arm { transform-origin: 56px 60px; animation: swing 0.5s infinite alternate ease-in-out; }
+    #body { transform-origin: 56px 60px; animation: bounce 0.5s infinite alternate ease-in-out; }
+    @keyframes walk { from { transform: translateX(-3px) rotate(-6deg); } to { transform: translateX(3px) rotate(6deg); } }
+    @keyframes swing { from { transform: rotate(10deg); } to { transform: rotate(-10deg); } }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+  </style>
+  <ellipse cx="56" cy="112" rx="18" ry="7" fill="#00000033"/>
+  <g id="body">
+    <g id="leg">
+      <rect x="48" y="78" width="14" height="24" rx="3" fill="#4a3728" class="outline"/>
+      <rect x="46" y="100" width="18" height="8" rx="2" fill="#2f2f2f" class="outline"/>
+    </g>
+    <g id="torso">
+      <path d="M46 48 L64 48 L62 82 L44 82 Z" fill="#2a6b4a" class="outline"/>
+      <rect x="42" y="68" width="22" height="7" rx="2" fill="#6b4a1e" class="outline"/>
+    </g>
+    <g id="arm">
+      <rect x="34" y="46" width="12" height="28" rx="4" fill="#2a6b4a" class="outline"/>
+      <g id="compass">
+        <circle cx="32" cy="34" r="8" fill="#c8a84e" class="outline"/>
+        <line x1="32" y1="28" x2="32" y2="40" stroke="#3a2a1a" stroke-width="1.5"/>
+        <line x1="26" y1="34" x2="38" y2="34" stroke="#3a2a1a" stroke-width="1.5"/>
+        <circle cx="32" cy="34" r="2" fill="#3a2a1a"/>
+        <path d="M32 28 L30 32 L34 32 Z" fill="#c0392b"/>
+      </g>
+    </g>
+    <g id="head">
+      <path d="M60 16 L60 50 C60 58 46 58 46 50 L46 36 C46 22 54 16 60 16 Z" fill="#1a4a3a" class="outline"/>
+      <circle cx="52" cy="36" r="14" fill="#d9b08c" class="outline"/>
+      <circle cx="46" cy="36" r="2" fill="#111"/>
+      <path d="M50 42 Q52 44 54 42" stroke="#5a2d2d" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <path d="M56 24 C58 20 62 18 64 18" stroke="#1a4a3a" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </g>
+  </g>
+</svg>
