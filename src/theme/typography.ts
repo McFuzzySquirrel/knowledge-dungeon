@@ -10,11 +10,11 @@
  */
 
 export const TYPOGRAPHY = {
-  /** Primary fantasy serif — headings, titles, prominent UI text */
+  /** Primary fantasy serif - headings, titles, prominent UI text */
   primary: "'Cinzel', 'Georgia', 'Times New Roman', serif",
-  /** Monospace — code, note editor, keyboard hints */
+  /** Monospace - code, note editor, keyboard hints */
   mono: "'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace",
-  /** Body font — clean sans-serif where fantasy feels too heavy */
+  /** Body font - clean sans-serif where fantasy feels too heavy */
   body: "'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 } as const;
 
@@ -32,7 +32,7 @@ export function phaserWebFontConfig() {
       families: ['Cinzel:400,700,900'],
     },
     active: () => {
-      // Font is loaded and ready — Phaser text will re-render automatically
+      // Font is loaded and ready - Phaser text will re-render automatically
     },
   };
 }

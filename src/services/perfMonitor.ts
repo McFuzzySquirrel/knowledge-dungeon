@@ -1,7 +1,7 @@
 /**
  * Performance monitoring utilities for Knowledge Dungeon.
  *
- * Phase 5: Quality & Scale — Performance optimization.
+ * Phase 5: Quality & Scale - Performance optimization.
  * Provides FPS tracking, memory usage estimation, and profiling helpers.
  */
 

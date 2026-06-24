@@ -4174,7 +4174,7 @@ textarea.game-input:focus {
     0 0 8px rgba(212, 168, 87, 0.2);
 }
 
-/* Shared panel border style — 2px stone with gold-ish trim */
+/* Shared panel border style - 2px stone with gold-ish trim */
 .game-panel {
   border: 2px solid var(--kd-stone);
   border-radius: 8px;
@@ -4688,7 +4688,7 @@ textarea.game-input:focus {
   color: var(--text-muted);
 }
 
-/* ── Phase 5: Accessibility — Skip-to-content link ──────────────────── */
+/* ── Phase 5: Accessibility - Skip-to-content link ──────────────────── */
 .skip-link {
   position: absolute;
   top: -100px;
@@ -4705,7 +4705,7 @@ textarea.game-input:focus {
   top: 0;
 }
 
-/* ── Phase 5: Error Recovery — Storage warning banner ───────────────── */
+/* ── Phase 5: Error Recovery - Storage warning banner ───────────────── */
 .storage-warning-banner {
   background: linear-gradient(135deg, #5a3a1a, #8f5821);
   color: #fbfbff;
@@ -4853,7 +4853,7 @@ textarea.game-input:focus {
   outline: none;
 }
 
-/* ── Make It Yours — Sprite Customization ───────────────────────────────── */
+/* ── Make It Yours - Sprite Customization ───────────────────────────────── */
 
 .make-it-yours-layout {
   display: flex;
@@ -5148,7 +5148,7 @@ textarea.game-input:focus {
   text-align: right;
 }
 
-/* Inline SVG preview — ensures the SVG fills the preview container */
+/* Inline SVG preview - ensures the SVG fills the preview container */
 .sprite-editor-preview svg {
   width: 100%;
   height: 100%;

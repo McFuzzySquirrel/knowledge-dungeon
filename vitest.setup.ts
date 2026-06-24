@@ -1,7 +1,7 @@
 /// <reference types="vitest/globals" />
 import '@testing-library/jest-dom';
 
-// Mock Phaser module globally — Phaser's Canvas/WebGL initialization
+// Mock Phaser module globally - Phaser's Canvas/WebGL initialization
 // requires a real browser environment that jsdom doesn't provide.
 vi.mock('phaser', () => {
   const Game = vi.fn().mockImplementation(() => ({

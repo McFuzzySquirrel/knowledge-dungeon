@@ -39,7 +39,7 @@ export function FishingRecallModal({
             <h3>{fishName}</h3>
             <p className="village-info-meta">
               {recallQuestion
-                ? 'Test your knowledge — did you remember this?'
+                ? 'Test your knowledge - did you remember this?'
                 : 'No review material available'}
             </p>
           </div>
@@ -71,7 +71,7 @@ export function FishingRecallModal({
         ) : (
           <>
             <p className="village-info-desc">
-              No review material available — you can keep this fish without a question.
+              No review material available - you can keep this fish without a question.
             </p>
             <div className="village-info-actions">
               <button

@@ -1,5 +1,5 @@
 /**
- * Fisher's Rest — Fishing mini-game types.
+ * Fisher's Rest - Fishing mini-game types.
  *
  * Defines the fish rarity tiers, individual fish entries, the fish catalog
  * (all catchable fish across every rarity), and the per-player fish collection.

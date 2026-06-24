@@ -27,55 +27,55 @@ revision, and concept mapping into an interactive adventure instead of a static 
 Large subjects (100+ rooms) now benefit from a spatial grid for O(1) room lookups instead of linear scanning. Includes FPS monitoring and localStorage usage tracking.
 
 ### ♿ Accessibility
-- **Skip-to-content link** — keyboard users can bypass navigation
-- **ARIA roles** — `alert`, `status`, `tablist`, `tabpanel`, `dialog` with `aria-modal` across all modals and panels
-- **Full keyboard navigation** — tab through settings, modals, and HUD controls
+- **Skip-to-content link** - keyboard users can bypass navigation
+- **ARIA roles** - `alert`, `status`, `tablist`, `tabpanel`, `dialog` with `aria-modal` across all modals and panels
+- **Full keyboard navigation** - tab through settings, modals, and HUD controls
 
 ### ⌨ Customizable Keyboard Shortcuts
 Configure key bindings for Help, Map, and Info Panel from the Settings modal. Uses a key-capture editor with "Reset Defaults" support.
 
 ### 🛡 Error Recovery
-- **Corrupt data detection** — damaged subjects are quarantined instead of crashing
-- **Automatic backups** — timestamped backups created before every save
-- **Storage quota monitoring** — warns when localStorage is near capacity
-- **Safe parsing** — never-throws JSON parsing for file imports
+- **Corrupt data detection** - damaged subjects are quarantined instead of crashing
+- **Automatic backups** - timestamped backups created before every save
+- **Storage quota monitoring** - warns when localStorage is near capacity
+- **Safe parsing** - never-throws JSON parsing for file imports
 
 ### 🌐 Localization
 Full i18n support via i18next with English and Spanish (Español) locales. Language selector in Settings modal.
 
 ### 🏘 Village UX Improvements
-- **NPC dialog anchoring** — dialogs now follow NPC positions on screen instead of appearing top-left
-- **Unique NPC names** — wandering villagers display their actual names (Wandering Scholar, Elder Sage, etc.)
-- **Larger player sprite** — village player character is now 40×40 (up from 32×32)
-- **Welcome dialog** — appears near the village entrance signpost, auto-hides when walking away
-- **Artisan Workshop** — a dedicated building near the Guild Hall where you can customize game sprites (see below)
+- **NPC dialog anchoring** - dialogs now follow NPC positions on screen instead of appearing top-left
+- **Unique NPC names** - wandering villagers display their actual names (Wandering Scholar, Elder Sage, etc.)
+- **Larger player sprite** - village player character is now 40×40 (up from 32×32)
+- **Welcome dialog** - appears near the village entrance signpost, auto-hides when walking away
+- **Artisan Workshop** - a dedicated building near the Guild Hall where you can customize game sprites (see below)
 
-### 🎨 Make It Yours — Sprite Customization
+### 🎨 Make It Yours - Sprite Customization
 
 A built-in SVG editor that lets you personalize the entire game's look and feel.
 
 - **Browse 60+ sprites** grouped by category with thumbnail previews
-- **Live SVG editor** — edit SVG code with inline animated preview (CSS keyframes render in real-time)
-- **Animation presets** — assign Pulse, Spin, Float, or Bounce animations per sprite
-- **Save collections** — bundle your customizations into named packs
-- **Export/Import** — share packs as portable `.kdpack` files
-- **Original backup** — first edit automatically saves the original; Reset restores it
-- **Apply Changes** — restarts the game scene to load your custom sprites in-game
+- **Live SVG editor** - edit SVG code with inline animated preview (CSS keyframes render in real-time)
+- **Animation presets** - assign Pulse, Spin, Float, or Bounce animations per sprite
+- **Save collections** - bundle your customizations into named packs
+- **Export/Import** - share packs as portable `.kdpack` files
+- **Original backup** - first edit automatically saves the original; Reset restores it
+- **Apply Changes** - restarts the game scene to load your custom sprites in-game
 - Access from **Settings → Make It Yours** or walk up to the 🎨 **Artisan Workshop** building in the village
 
-### 🎣 Fisher's Rest — Fishing Mini-Game
+### 🎣 Fisher's Rest - Fishing Mini-Game
 
 Take a break from studying with a relaxing fishing mini-game accessible from the village ponds.
 
-- **3 fishing ponds** near dungeon portal slots — walk up and press E to enter the fishing scene
-- **Top-down lake perspective** — player on the shore embankment at bottom, casting upward into the water. Night sky with stars, distant tree horizon, tiled water surface
-- **Hold-to-cast** — hold click to build power (green→yellow→red meter), release to launch the bobber with parabolic flight
-- **Proximity-based bite** — fish silhouette swims toward the bobber; bite triggers when fish gets close, with a 2-second click window to reel in
+- **3 fishing ponds** near dungeon portal slots - walk up and press E to enter the fishing scene
+- **Top-down lake perspective** - player on the shore embankment at bottom, casting upward into the water. Night sky with stars, distant tree horizon, tiled water surface
+- **Hold-to-cast** - hold click to build power (green→yellow→red meter), release to launch the bobber with parabolic flight
+- **Proximity-based bite** - fish silhouette swims toward the bobber; bite triggers when fish gets close, with a 2-second click window to reel in
 - **8 catchable fish** across 3 rarities: Common (Moss Carp, Sun Skip, Reed Darter, Ink Minnow), Rare (Lunar Trout, Ember Perch), Epic (Gilded Koi, Abyssal Eel)
-- **Fish bucket** — wooden bucket beside the player that visually fills with mini fish sprites on each catch
-- **React overlay info panel** — styled village panel showing fish name, color-coded rarity badge, and description. Keep or release each catch.
-- **Player movement** — walk left/right along the shore with A/D or arrow keys before casting
-- **Fish Stand** building in the village (coming soon) — view your full collection across all subjects
+- **Fish bucket** - wooden bucket beside the player that visually fills with mini fish sprites on each catch
+- **React overlay info panel** - styled village panel showing fish name, color-coded rarity badge, and description. Keep or release each catch.
+- **Player movement** - walk left/right along the shore with A/D or arrow keys before casting
+- **Fish Stand** building in the village (coming soon) - view your full collection across all subjects
 
 ---
 
@@ -85,8 +85,8 @@ Take a break from studying with a relaxing fishing mini-game accessible from the
 The Archaeologist review phase now uses the SM-2 algorithm for intelligent scheduling. Rate your recall on a 0–5 scale and the game schedules reviews at optimal intervals based on your performance. Track your ease factor, review streaks, overdue counts, and due-today counts.
 
 ### 🎨 Markdown Editor Enhancements
-- **Syntax highlighting** — headings, bold, italic, code, links, images, and lists are colorized in real-time as you type
-- **Format toolbar** — click the Format button to insert markdown syntax at the cursor (bold, italic, code, link, image, list, headings, quote, horizontal rule). Selected text is automatically wrapped.
+- **Syntax highlighting** - headings, bold, italic, code, links, images, and lists are colorized in real-time as you type
+- **Format toolbar** - click the Format button to insert markdown syntax at the cursor (bold, italic, code, link, image, list, headings, quote, horizontal rule). Selected text is automatically wrapped.
 
 ### 🌿 Custom Dungeon Biomes
 Choose from **9 biomes** when creating a subject, or change it anytime from the dungeon portal panel in the village. Each biome has distinct floor textures, wall colors, and corridor hues:
@@ -173,7 +173,7 @@ The **Dungeon Village** is your home base, replacing the direct welcome→dungeo
 
 From the village, press **H** in any dungeon to return. Portals persist across sessions.
 
-The **Welcome Screen** always appears on launch — create a subject, load an existing one, or click **Continue to Village** to jump straight to the hub.
+The **Welcome Screen** always appears on launch - create a subject, load an existing one, or click **Continue to Village** to jump straight to the hub.
 
 ### In-dungeon study view
 
@@ -348,7 +348,7 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 - [UI walkthrough with screenshots](./docs/UI.md)
 - [Game guide (full reference)](./docs/GAME-GUIDE.md)
 - [Customization: adding images, where subjects are saved, and desktop export helpers](./docs/CUSTOMIZATION.md)
-- [Make It Yours — sprite customization feature PRD](./docs/features/make-it-yours.md)
+- [Make It Yours - sprite customization feature PRD](./docs/features/make-it-yours.md)
 - [Create-repo-mindmap skill usage](./SKILL.md)
 - [Portable Copilot skill (copy/paste template)](./docs/COPILOT_SKILL_CREATE_REPO_MINDMAP.md)
 

@@ -4,7 +4,7 @@ This is a complete, working test file for a Knowledge Dungeon React UI component
 It demonstrates: store state setup, rendering, user interaction, conditional rendering, edge case handling, and the correct mock patterns.
 
 ```typescript
-// tests/unit/Hud.test.tsx — annotated example
+// tests/unit/Hud.test.tsx - annotated example
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -13,7 +13,7 @@ import { useSubjectStore } from '../../src/store/subjectStore';
 import { useProgressionStore } from '../../src/store/progressionStore';
 import { Hud } from '../../src/ui/components/Hud';
 
-// Mock Phaser imports — GameScreen/VillageScreen tests need this;
+// Mock Phaser imports - GameScreen/VillageScreen tests need this;
 // HUD doesn't import Phaser directly, but if the test file transitively
 // imports a module that does, mock it at the module level.
 vi.mock('../../src/game/createGame', () => ({
@@ -82,7 +82,7 @@ describe('Hud', () => {
       const user = userEvent.setup();
       render(<Hud />);
       await user.click(screen.getByLabelText(/map/i));
-      // Verify map is opened — actual check depends on implementation
+      // Verify map is opened - actual check depends on implementation
       expect(screen.getByRole('dialog')).toBeDefined();
     });
 
@@ -105,7 +105,7 @@ describe('Hud', () => {
     it('shows different tabs per phase', () => {
       render(<Hud />);
 
-      // Scribe phase — expect Notes-related elements
+      // Scribe phase - expect Notes-related elements
       expect(screen.queryByText(/add topic/i)).toBeNull();
 
       // Switch to Creator phase

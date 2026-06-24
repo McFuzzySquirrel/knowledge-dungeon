@@ -21,7 +21,7 @@ Before changing any scene or component files, create the single source of truth 
 Create `src/game/themeColors.ts`:
 
 ```typescript
-/** Single source of truth — CSS vars in src/styles.css must match these values. */
+/** Single source of truth - CSS vars in src/styles.css must match these values. */
 export const THEME_COLORS = {
   bgDark:       0x1a1025,
   bgPanel:      0x2a1a3e,
@@ -79,7 +79,7 @@ Apply to all panels, modals, buttons, text, and backgrounds. Update the three th
 Use the shared theme constants in Phaser scene code:
 
 ```typescript
-// In Phaser scene create() — import at top of file
+// In Phaser scene create() - import at top of file
 import { THEME_COLORS } from '../game/themeColors';
 
 this.add.rectangle(x, y, width, height, THEME_COLORS.bgPanel)
@@ -92,7 +92,7 @@ this.add.text(x, y, 'Room Info', {
 });
 ```
 
-**Note:** Phaser text `color` uses CSS hex strings (not 0xNNN) — keep text color strings in sync with `--text-primary` from `src/styles.css`.
+**Note:** Phaser text `color` uses CSS hex strings (not 0xNNN) - keep text color strings in sync with `--text-primary` from `src/styles.css`.
 
 ### Step 4: Choose and Apply a Shared Font
 
@@ -128,7 +128,7 @@ For readable body text, consider a secondary readable font (e.g., "IBM Plex Mono
 Pick a border style and apply consistently:
 
 ```css
-/* 2px solid gold border — all panels */
+/* 2px solid gold border - all panels */
 .panel, .modal, .tooltip {
   border: 2px solid var(--accent-gold);
   border-radius: 4px;
@@ -148,7 +148,7 @@ const panel = this.add.rectangle(x, y, w, h, THEME_COLORS.bgPanel)
 Create or source 10–15 icons as a sprite sheet in `public/assets/ui/icons.png` with a matching `public/assets/ui/icons.json` (Phaser frame data). Use the same sprite sheet in both React and Phaser:
 
 ```typescript
-// Phaser — load in preload()
+// Phaser - load in preload()
 this.load.atlas('icons', '/assets/ui/icons.png', '/assets/ui/icons.json');
 
 // Use in create()
@@ -156,7 +156,7 @@ this.add.image(x, y, 'icons', 'icon-chest');
 ```
 
 ```tsx
-// React — reference the same image
+// React - reference the same image
 import iconsUrl from '/assets/ui/icons.png';
 // Use CSS background-position or <img> with the sprite
 ```
@@ -188,12 +188,12 @@ The theme change should produce:
 
 ## Gotchas
 
-- Phaser uses hex numbers (0xRRGGBB) for fill/stroke, but CSS uses hex strings (#RRGGBB) — keep a mapping table in a shared constants file to ensure they stay in sync
-- Font sizes will NOT match 1:1 between React (CSS pixels) and Phaser (canvas pixels) — adjust Phaser fontSize to be ~2px smaller for visual parity
-- The "Press Start 2P" pixel font is very large at small sizes — use it for headings and labels, not body text; use a readable fallback for note content
-- Theme changes affect ALL components — test the full application after applying
+- Phaser uses hex numbers (0xRRGGBB) for fill/stroke, but CSS uses hex strings (#RRGGBB) - keep a mapping table in a shared constants file to ensure they stay in sync
+- Font sizes will NOT match 1:1 between React (CSS pixels) and Phaser (canvas pixels) - adjust Phaser fontSize to be ~2px smaller for visual parity
+- The "Press Start 2P" pixel font is very large at small sizes - use it for headings and labels, not body text; use a readable fallback for note content
+- Theme changes affect ALL components - test the full application after applying
 - The existing three themes (Night, Arcade, Aurora) must all adopt the new unified palette structure, not just the default theme
-- Google Fonts `@import` requires network access on first load — for Electron offline builds, download the font `.woff2` file to `public/assets/fonts/` and reference it via `@font-face` in `src/styles.css` instead of `@import url(...)`. Coordinate with `infrastructure-engineer` for Electron compatibility
+- Google Fonts `@import` requires network access on first load - for Electron offline builds, download the font `.woff2` file to `public/assets/fonts/` and reference it via `@font-face` in `src/styles.css` instead of `@import url(...)`. Coordinate with `infrastructure-engineer` for Electron compatibility
 
 ---
 

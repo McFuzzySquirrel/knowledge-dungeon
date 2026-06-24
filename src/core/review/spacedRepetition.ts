@@ -1,5 +1,5 @@
 /**
- * Spaced Repetition — SM-2 Algorithm
+ * Spaced Repetition - SM-2 Algorithm
  *
  * Implements the SuperMemo 2 (SM-2) algorithm for scheduling review sessions
  * on a per-room basis. The algorithm uses quality response ratings (0–5) to
@@ -21,7 +21,7 @@
  */
 export type QualityRating = 0 | 1 | 2 | 3 | 4 | 5;
 
-/** Minimum ease factor — prevents intervals from collapsing to zero. */
+/** Minimum ease factor - prevents intervals from collapsing to zero. */
 export const MIN_EASE_FACTOR = 1.3;
 
 /** Starting ease factor for new items. */
@@ -101,7 +101,7 @@ export function updateSm2State(input: Sm2Input): Sm2State {
   let consecutiveCorrect: number;
 
   if (quality < 3) {
-    // Reset on poor quality — restart interval.
+    // Reset on poor quality - restart interval.
     intervalDays = INITIAL_INTERVAL_DAYS;
     consecutiveCorrect = 0;
   } else {
@@ -180,12 +180,12 @@ function addDaysToIso(iso: string, days: number): string {
  * Quality rating labels for UI display.
  */
 export const QUALITY_LABELS: Record<QualityRating, string> = {
-  0: 'Complete blackout — could not recall anything',
-  1: 'Incorrect — but remembered after seeing the answer',
-  2: 'Incorrect — answer seemed easy to recall upon seeing it',
-  3: 'Correct — required serious mental effort',
-  4: 'Correct — after brief hesitation',
-  5: 'Perfect — immediate and confident recall',
+  0: 'Complete blackout - could not recall anything',
+  1: 'Incorrect - but remembered after seeing the answer',
+  2: 'Incorrect - answer seemed easy to recall upon seeing it',
+  3: 'Correct - required serious mental effort',
+  4: 'Correct - after brief hesitation',
+  5: 'Perfect - immediate and confident recall',
 };
 
 /**

@@ -1,5 +1,5 @@
 /**
- * Fish collection persistence layer — serialize, deserialize, and query
+ * Fish collection persistence layer - serialize, deserialize, and query
  * the player's caught fish collection. Backed by localStorage via the
  * progression store.
  *
@@ -18,7 +18,7 @@ export function createFishId(catalogId: string): string {
 
 /**
  * Serialize a FishCollection to a JSON-safe array of plain objects.
- * No loss — FishEntry is already POJO-compatible.
+ * No loss - FishEntry is already POJO-compatible.
  */
 export function serializeFishCollection(collection: FishCollection): FishEntry[] {
   return collection.map((entry) => ({ ...entry }));

@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 ```
 
-Do NOT mock the entire store — just set the initial state. This keeps tests realistic and catches store integration issues.
+Do NOT mock the entire store - just set the initial state. This keeps tests realistic and catches store integration issues.
 
 ### Step 4: Write Test Cases
 
@@ -138,8 +138,8 @@ describe('ComponentName', () => {
 
 ## Validation
 
-- [ ] `npm run typecheck` — no type errors in test files
-- [ ] `npm run lint` — no lint errors
+- [ ] `npm run typecheck` - no type errors in test files
+- [ ] `npm run lint` - no lint errors
 - [ ] All tests pass: `npm test -- --run`
 - [ ] Tests cover: render, primary interaction, empty state, error state
 - [ ] No Phaser imports in test files (cannot run in jsdom)
@@ -149,15 +149,15 @@ describe('ComponentName', () => {
 
 ## Gotchas
 
-- Phaser CANNOT run in jsdom — test files must never import Phaser. If a component depends on Phaser data, receive it through Zustand stores, not directly from Phaser
-- `localStorage` is not native in jsdom — the vitest setup file provides a mock; if you need a clean slate, use `localStorage.clear()` in `beforeEach`
-- `useUserEvent` setup is async — always `await user.click()` not `fireEvent.click()`
+- Phaser CANNOT run in jsdom - test files must never import Phaser. If a component depends on Phaser data, receive it through Zustand stores, not directly from Phaser
+- `localStorage` is not native in jsdom - the vitest setup file provides a mock; if you need a clean slate, use `localStorage.clear()` in `beforeEach`
+- `useUserEvent` setup is async - always `await user.click()` not `fireEvent.click()`
 - For components that use `window.matchMedia` (mobile drawer), the vitest setup file provides a polyfill. If testing mobile-specific behavior, set the matchMedia mock before rendering
-- Component tests should NOT test the underlying domain logic — mock the store state and test the UI behavior
-- Use `screen.getByRole()` and `screen.getByText()` over `screen.getByTestId()` — prefer accessible queries
+- Component tests should NOT test the underlying domain logic - mock the store state and test the UI behavior
+- Use `screen.getByRole()` and `screen.getByText()` over `screen.getByTestId()` - prefer accessible queries
 - For time-based features (toast auto-dismiss, cooldown timers), use `vi.useFakeTimers()` and `vi.advanceTimersByTime()`
-- Testing `GameScreen` or `VillageScreen` (components that render a Phaser container `<div>`): mock `createGame` and `createVillageGame` from `src/game/` to return `{ destroy: vi.fn() }` (a dummy Phaser instance). Test that the container `<div>` is present and the React children it wraps render correctly — do not test Phaser canvas internals
-- Direct `useXxxStore.setState()` calls in tests trigger React re-renders — wrap them in `act()` from `@testing-library/react` to flush state updates before making assertions. Example: `await act(() => useSessionStore.setState({ phase: 'archaeologist' }))`
+- Testing `GameScreen` or `VillageScreen` (components that render a Phaser container `<div>`): mock `createGame` and `createVillageGame` from `src/game/` to return `{ destroy: vi.fn() }` (a dummy Phaser instance). Test that the container `<div>` is present and the React children it wraps render correctly - do not test Phaser canvas internals
+- Direct `useXxxStore.setState()` calls in tests trigger React re-renders - wrap them in `act()` from `@testing-library/react` to flush state updates before making assertions. Example: `await act(() => useSessionStore.setState({ phase: 'archaeologist' }))`
 
 ---
 
@@ -169,6 +169,6 @@ See [docs/PRD.md](../../../docs/PRD.md):
 - **Section 15** - Testing strategy and key test scenarios
 
 For existing test examples:
-- `tests/unit/Hud.test.tsx` — HUD component tests
-- `tests/unit/RoomPanel.test.tsx` — Room panel tests
-- `tests/unit/NoteEditorModal.test.tsx` — Note editor tests
+- `tests/unit/Hud.test.tsx` - HUD component tests
+- `tests/unit/RoomPanel.test.tsx` - Room panel tests
+- `tests/unit/NoteEditorModal.test.tsx` - Note editor tests

@@ -260,7 +260,7 @@ export class FishingScene extends Phaser.Scene {
         if (this.bobberSprite.x < margin) { this.bobberSprite.x = margin; this.bobberVX = 0; }
         if (this.bobberSprite.x > this.canvasW - margin) { this.bobberSprite.x = this.canvasW - margin; this.bobberVX = 0; }
 
-        // Bobber reaches its target Y (traveling upward) — snap and splash
+        // Bobber reaches its target Y (traveling upward) - snap and splash
         if (this.bobberSprite.y <= this.bobberTargetX) {
           this.bobberSprite.y = this.bobberTargetX;
           this.splashAt(this.bobberSprite.x, this.bobberSprite.y);
@@ -405,7 +405,7 @@ export class FishingScene extends Phaser.Scene {
 
   private placeTrees(): void {
     if (!this.textures.exists(TEX_TREE)) return;
-    // Tree bases sit on the shore. Origin is (0.5, 0.5) — Y is center.
+    // Tree bases sit on the shore. Origin is (0.5, 0.5) - Y is center.
     // tree 80px × 0.65 = 52px visible, half = 26
     // bush 48px × 0.6 = 29px visible, half = 14.5
     const tScale = 0.65;
@@ -561,7 +561,7 @@ export class FishingScene extends Phaser.Scene {
     this.returnBtn.on('pointerout', () => this.returnBtn?.setColor('#f2e2c4'));
 
     // Catch text
-    // (removed — handled by React overlay via onFishCaught callback)
+    // (removed - handled by React overlay via onFishCaught callback)
 
     // Show zero-cleared-rooms message if applicable
     if (!this.hasClearedRooms) {
@@ -935,7 +935,7 @@ export class FishingScene extends Phaser.Scene {
     this.bobberVX = p * CAST_SPEED * Math.sin(spreadAngle);
     this.bobberVY = -p * CAST_SPEED * Math.cos(spreadAngle); // negative = upward
 
-    // TODO: wire sound effect — audioManager.playSfx('fish-cast')
+    // TODO: wire sound effect - audioManager.playSfx('fish-cast')
     audioManager.playSfx('fish-cast');
 
     // Target Y for bobber landing: further = higher on screen (closer to horizon)
@@ -1054,7 +1054,7 @@ export class FishingScene extends Phaser.Scene {
     this.state = 'biting';
     this.biteWindowActive = true;
 
-    // TODO: wire sound effect — audioManager.playSfx('fish-bite')
+    // TODO: wire sound effect - audioManager.playSfx('fish-bite')
     audioManager.playSfx('fish-bite');
 
     // Splash effect on bobber
@@ -1100,7 +1100,7 @@ export class FishingScene extends Phaser.Scene {
     this.biteWindowActive = false;
     this.state = 'reeling';
 
-    // TODO: wire sound effect — audioManager.playSfx('fish-reel')
+    // TODO: wire sound effect - audioManager.playSfx('fish-reel')
     audioManager.playSfx('fish-reel');
 
     if (this.biteWindowTimer) {
@@ -1144,7 +1144,7 @@ export class FishingScene extends Phaser.Scene {
   private catchFish(): void {
     this.state = 'caught';
 
-    // TODO: wire sound effect — audioManager.playSfx('fish-catch')
+    // TODO: wire sound effect - audioManager.playSfx('fish-catch')
     audioManager.playSfx('fish-catch');
 
     if (this.bobberSprite) this.bobberSprite.setVisible(false);
@@ -1198,7 +1198,7 @@ export class FishingScene extends Phaser.Scene {
     this.state = 'missed';
     this.biteWindowActive = false;
 
-    // TODO: wire sound effect — audioManager.playSfx('fish-miss')
+    // TODO: wire sound effect - audioManager.playSfx('fish-miss')
     audioManager.playSfx('fish-miss');
 
     this.updateHint('The fish got away... Click to cast again');
@@ -1283,7 +1283,7 @@ export class FishingScene extends Phaser.Scene {
   }
 
   private splashAt(x: number, y: number): void {
-    // TODO: wire sound effect — audioManager.playSfx('fish-splash')
+    // TODO: wire sound effect - audioManager.playSfx('fish-splash')
     audioManager.playSfx('fish-splash');
 
     // Ripple rings expanding outward

@@ -161,7 +161,7 @@ export function SpriteEditor({
       </div>
 
       <div className="sprite-editor-body">
-        {/* Inline SVG preview — CSS animations execute here */}
+        {/* Inline SVG preview - CSS animations execute here */}
         <div
           className="sprite-editor-preview"
           ref={previewRef}

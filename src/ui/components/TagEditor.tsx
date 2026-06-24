@@ -1,5 +1,5 @@
 /**
- * Tag Editor — inline tag assignment for rooms during Creator phase.
+ * Tag Editor - inline tag assignment for rooms during Creator phase.
  *
  * Phase 4f: Tag system for cross-subject topic linking.
  */
@@ -87,7 +87,7 @@ export function TagEditor({ roomId }: Props): JSX.Element {
 }
 
 /**
- * Cross-subject tag navigation component — shows rooms across all
+ * Cross-subject tag navigation component - shows rooms across all
  * subjects matching a given tag.
  */
 interface TagNavigationProps {

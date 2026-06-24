@@ -1,7 +1,7 @@
 /**
  * Error recovery and data integrity utilities.
  *
- * Phase 5: Quality & Scale — Comprehensive error recovery.
+ * Phase 5: Quality & Scale - Comprehensive error recovery.
  * Handles corrupt subject data, persistence failures, and localStorage quota
  * exceeded scenarios with graceful degradation and user-friendly recovery
  * options.
@@ -17,7 +17,7 @@ export interface RecoveryResult {
 }
 
 /**
- * Parse a JSON string safely — never throws.
+ * Parse a JSON string safely - never throws.
  * Returns the parsed value on success, null on failure.
  */
 export function safeJsonParse(raw: string): unknown {

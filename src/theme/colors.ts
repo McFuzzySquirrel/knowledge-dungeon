@@ -1,5 +1,5 @@
 /**
- * Shared 5-color palette for Knowledge Dungeon — applied in both
+ * Shared 5-color palette for Knowledge Dungeon - applied in both
  * React CSS custom properties AND Phaser runtime colors.
  *
  * Our "Wood & Stone" palette:

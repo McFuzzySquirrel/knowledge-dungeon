@@ -93,7 +93,7 @@ describe('FishStandPanel', () => {
   });
 
   it('shows "(Deleted Subject)" when subject is not in the store', async () => {
-    // listSubjectIds returns some IDs but NOT subject-1 — so subject-1 is "deleted"
+    // listSubjectIds returns some IDs but NOT subject-1 - so subject-1 is "deleted"
     mockListSubjectIds.mockResolvedValue(['subject-2', 'subject-3']);
 
     useProgressionStore.setState({

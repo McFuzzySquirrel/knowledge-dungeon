@@ -3,7 +3,7 @@ name: add-village-structure
 description: >
   Adds a new interactive structure type (building, landmark, or interaction point) to the Knowledge
   Dungeon village hub. Use this skill when adding any new structure that players can approach and
-  interact with — fishing ponds, new buildings, interactable decorations, or custom landmarks.
+  interact with - fishing ponds, new buildings, interactable decorations, or custom landmarks.
   Covers the full cross-agent pipeline: layout data, Phaser rendering, React info panel, and
   interaction routing.
 ---
@@ -171,7 +171,7 @@ Work in `src/ui/screens/VillageScreen.tsx`. This step is owned by **ui-engineer*
 ### Step 4: Add Sprite Asset
 
 1. **Create the SVG sprite** at `public/assets/sprites/village/your-structure.svg`.
-2. **Keep SVGs small** — target under 5KB per sprite. Use simple shapes and fills.
+2. **Keep SVGs small** - target under 5KB per sprite. Use simple shapes and fills.
 3. **Use viewBox** for proper scaling:
    ```svg
    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -187,7 +187,7 @@ Work in test files. This step is owned by **qa-engineer**.
 
 1. **Unit test layout data:** verify the new structure type validates, structure entries have correct grid bounds.
 2. **Component test info panel:** verify the new info panel type renders with correct content (use the `write-component-tests` skill).
-3. **Integration test:** verify structure interaction flow — approach → info panel appears → interact → action triggers.
+3. **Integration test:** verify structure interaction flow - approach → info panel appears → interact → action triggers.
 4. **Regression test:** verify all existing village structures still work (approached + interact).
 
 ---
@@ -218,9 +218,9 @@ Modified (tests):
 ## Validation
 
 After completing all steps:
-- [ ] `npm run typecheck` passes — zero errors across all modified files
-- [ ] `npm run lint` passes — zero errors
-- [ ] `npm test -- --run` passes — no regressions in existing tests
+- [ ] `npm run typecheck` passes - zero errors across all modified files
+- [ ] `npm run lint` passes - zero errors
+- [ ] `npm test -- --run` passes - no regressions in existing tests
 - [ ] Visual check via `npm run dev`: new structure appears at correct grid position
 - [ ] Walk up to structure: info panel appears with correct content
 - [ ] Press E / tap on structure: interaction handler fires correctly
@@ -235,14 +235,14 @@ If a check fails and the cause is unclear, load `references/troubleshooting.md` 
 
 ## Gotchas
 
-- **`VillageStructure.type` is a string literal union** — adding a new type requires updating this union. If you forget, TypeScript will error. If game-engineer or ui-engineer references the type before it's added, their code won't compile.
-- **Grid coordinates are 0-indexed** — `gridX: 0, gridY: 0` is the top-left tile. Off-by-one errors are common. Verify visually after placement.
-- **Sprite origin** — use `setOrigin(0.5, 0.8)` for bottom-aligned buildings so they sit on the ground plane. For flat sprites (signs, ponds), use `setOrigin(0.5, 0.5)`.
-- **Info panel type union** is in TWO places — `VillageStructure.type` in `villageLayout.ts` AND `infoPanel.type` in `VillageScreen.tsx`. They are separate unions with different members (not all structure types have info panels). Make sure you add to BOTH if your structure needs an info panel.
-- **Dynamic structures** — if your structure depends on runtime data (like portal slots depend on subjects), you may need to add it to `dynamicStructures` in VillageScreen rather than static `VILLAGE_MAP.structures`. The merge happens in the callback: `[...VILLAGE_MAP.structures, ...dynamicStructuresRef.current]`.
-- **SVG sprites in Phaser** — use `this.load.svg()` not `this.load.image()`. The texture key must be unique. SVG sprites can't be tinted like bitmap sprites; use separate SVG files for color variants.
-- **Scene coordinates** — Phaser world coordinates = grid × TILE_SIZE. The Y-axis increases downward. Building sprites may need `setOrigin(0.5, 0.8)` to sit correctly on the ground.
-- **Interaction emits must happen AFTER rendering** — the structure sprite must be created and made interactive in `create()` before the click handler can detect it. Don't split these between `preload()` and `create()`.
+- **`VillageStructure.type` is a string literal union** - adding a new type requires updating this union. If you forget, TypeScript will error. If game-engineer or ui-engineer references the type before it's added, their code won't compile.
+- **Grid coordinates are 0-indexed** - `gridX: 0, gridY: 0` is the top-left tile. Off-by-one errors are common. Verify visually after placement.
+- **Sprite origin** - use `setOrigin(0.5, 0.8)` for bottom-aligned buildings so they sit on the ground plane. For flat sprites (signs, ponds), use `setOrigin(0.5, 0.5)`.
+- **Info panel type union** is in TWO places - `VillageStructure.type` in `villageLayout.ts` AND `infoPanel.type` in `VillageScreen.tsx`. They are separate unions with different members (not all structure types have info panels). Make sure you add to BOTH if your structure needs an info panel.
+- **Dynamic structures** - if your structure depends on runtime data (like portal slots depend on subjects), you may need to add it to `dynamicStructures` in VillageScreen rather than static `VILLAGE_MAP.structures`. The merge happens in the callback: `[...VILLAGE_MAP.structures, ...dynamicStructuresRef.current]`.
+- **SVG sprites in Phaser** - use `this.load.svg()` not `this.load.image()`. The texture key must be unique. SVG sprites can't be tinted like bitmap sprites; use separate SVG files for color variants.
+- **Scene coordinates** - Phaser world coordinates = grid × TILE_SIZE. The Y-axis increases downward. Building sprites may need `setOrigin(0.5, 0.8)` to sit correctly on the ground.
+- **Interaction emits must happen AFTER rendering** - the structure sprite must be created and made interactive in `create()` before the click handler can detect it. Don't split these between `preload()` and `create()`.
 
 Load `references/troubleshooting.md` if the structure sprite does not appear, if pressing E does not trigger the interaction, if TypeScript reports union type errors, if the info panel does not show, or if existing structures stop working after your addition.
 

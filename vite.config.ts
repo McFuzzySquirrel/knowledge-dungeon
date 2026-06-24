@@ -17,7 +17,7 @@ function spriteManifestPlugin(): Plugin {
         stdio: 'pipe',
       });
     } catch {
-      // Non-fatal — the manifest script may not exist during initial setup
+      // Non-fatal - the manifest script may not exist during initial setup
     }
   }
 

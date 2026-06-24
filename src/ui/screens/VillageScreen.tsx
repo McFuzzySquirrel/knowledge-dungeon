@@ -180,7 +180,7 @@ export function VillageScreen(): JSX.Element {
 
   const handleKeepFish = useCallback((data: typeof fishCaughtData) => {
     if (!data) return;
-    // Find a subject to associate the fish with — prefer the most recently active one
+    // Find a subject to associate the fish with - prefer the most recently active one
     const subjectIds = Object.keys(useProgressionStore.getState().bySubject);
     const subjectId = subjectIds.length > 0 ? subjectIds[subjectIds.length - 1] : 'village';
     const subjectName = useSubjectStore.getState().snapshot?.dungeon.subjectName || subjectId;

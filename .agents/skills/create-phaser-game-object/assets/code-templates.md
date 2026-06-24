@@ -1,4 +1,4 @@
-# Code Templates — Creating Phaser Game Objects
+# Code Templates - Creating Phaser Game Objects
 
 Full TypeScript snippets for each step of `create-phaser-game-object`.
 

@@ -126,7 +126,7 @@ describe('fishCollectionService', () => {
       expect(afterSecond[1]).toEqual(fish1);
     });
 
-    it('deduplicates — same fish ID is not added twice', () => {
+    it('deduplicates - same fish ID is not added twice', () => {
       const fish = makeFish({ id: 'moss-carp:1' });
       const collection = addFishToCollection([], fish);
       const result = addFishToCollection(collection, fish);

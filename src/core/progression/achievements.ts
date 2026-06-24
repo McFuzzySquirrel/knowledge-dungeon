@@ -1,5 +1,5 @@
 /**
- * Cross-subject achievements system — Track 3c: Gameplay Depth.
+ * Cross-subject achievements system - Track 3c: Gameplay Depth.
  *
  * Tracks milestones across ALL subjects and awards achievements
  * for meta-progression (e.g., "Master 3 Subjects", "Write 100 Notes").

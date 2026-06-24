@@ -5,7 +5,7 @@
 **Product Name:** Knowledge Dungeon
 **Summary:** A local-first, mindmap-driven dungeon crawler for studying. Each subject (e.g. "Linear Algebra") becomes a dungeon whose rooms are topic-nodes in a user-authored mindmap. To "defeat" a room, the player writes structured notes that pass a deterministic quality rubric. Defeated rooms drop XP, loot, and a generated artifact. Once every room is cleared, the Archaeologist phase unlocks self-check prompts and review-streak tracking. The game begins in a Dungeon Village hub world where players create subjects, select their archetype, meet the guide NPC, view their collection, and enter dungeon portals.
 **Target Platform:** Web (Vite) and Desktop (Electron 42)
-**Key Constraints:** Fully local-first — no network calls required. Desktop persists to filesystem; web falls back to localStorage. Zero AI grading — all validation deterministic and auditable.
+**Key Constraints:** Fully local-first - no network calls required. Desktop persists to filesystem; web falls back to localStorage. Zero AI grading - all validation deterministic and auditable.
 
 ---
 
@@ -13,8 +13,8 @@
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2026-06-21 | — | Initial comprehensive PRD from existing codebase |
-| 1.1 | 2026-06-21 | — | Added NPC/Archetype requirement groups, per-component AC, expanded NFRs, error recovery, server/Electron sections; restructured Phase 3 per UI research |
+| 1.0 | 2026-06-21 | - | Initial comprehensive PRD from existing codebase |
+| 1.1 | 2026-06-21 | - | Added NPC/Archetype requirement groups, per-component AC, expanded NFRs, error recovery, server/Electron sections; restructured Phase 3 per UI research |
 
 ---
 
@@ -75,7 +75,7 @@ The tech stack was inherited from `repo-dungeon`, a sibling project, to maximize
 |-----------|---------|-----------|
 | React | 19.x | Industry-standard UI framework for overlays, modals, HUD |
 | Phaser | 3.87.x | Mature 2D game engine with WebGL/canvas rendering, scene management, input handling |
-| Zustand | 4.5.x | Minimal, TypeScript-first state management — lighter than Redux, simpler than Context |
+| Zustand | 4.5.x | Minimal, TypeScript-first state management - lighter than Redux, simpler than Context |
 | Vite | 8.x | Fast dev server, native ESM, excellent TypeScript support, plugin ecosystem |
 | TypeScript | 5.6.x | Type safety across the entire codebase |
 | Electron | 42.x | Cross-platform desktop packaging with filesystem access |
@@ -86,9 +86,9 @@ The tech stack was inherited from `repo-dungeon`, a sibling project, to maximize
 
 | Technology | PRD Version | Latest Available | Status |
 |-----------|-------------|-----------------|--------|
-| Phaser | 3.87.x (package.json) | 4.2.0 | Behind — v4 is a major upgrade with new renderer; migration requires planning |
-| Zustand | 4.5.x (package.json) | 5.0.14 | Behind — v5 has breaking changes; stable path forward |
-| TypeScript | 5.6.x (package.json) | 6.0.3 | Behind — minor breaking changes in v6 |
+| Phaser | 3.87.x (package.json) | 4.2.0 | Behind - v4 is a major upgrade with new renderer; migration requires planning |
+| Zustand | 4.5.x (package.json) | 5.0.14 | Behind - v5 has breaking changes; stable path forward |
+| TypeScript | 5.6.x (package.json) | 6.0.3 | Behind - minor breaking changes in v6 |
 | React | 19.x (package.json) | 19.2.7 | Current patch behind |
 | Vite | 8.x (package.json) | 8.0.16 | Current patch behind |
 | Electron | 42.x (package.json) | 42.4.1 | Current patch behind |
@@ -425,8 +425,8 @@ The production Express server provides a self-hosted deployment option for the w
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| NF-01 | All data stored locally — zero network calls for core functionality | Must |
-| NF-02 | Note validation is fully deterministic — same input always produces same result | Must |
+| NF-01 | All data stored locally - zero network calls for core functionality | Must |
+| NF-02 | Note validation is fully deterministic - same input always produces same result | Must |
 | NF-03 | Application runs offline with no degradation | Must |
 | NF-04 | Bundle size monitored via CI guard (scripts/check-bundle-size.mjs) | Must |
 | NF-05 | All state changes are synchronous with no loading states for local operations | Should |
@@ -459,11 +459,11 @@ The application collects, stores, and transmits zero user data externally. Every
 |----|-------------|----------|
 | DR-01 | Subject data is validated on load; corrupt data shows a descriptive error rather than crashing | Must |
 | DR-02 | Timestamped backups created before every save (Electron: filesystem; web: retained in memory for session) | Should |
-| DR-03 | Persistence writes are synchronous and atomic — partial writes do not leave subjects in an unrecoverable state | Must |
+| DR-03 | Persistence writes are synchronous and atomic - partial writes do not leave subjects in an unrecoverable state | Must |
 | DR-04 | Export reminder nudges web users to back up data every 30 minutes | Should |
 | DR-05 | Import validates JSON structure before applying; rejects malformed input with actionable feedback | Should |
 | DR-06 | Session state (active subject, phase, UI preferences) persists across page reloads | Must |
-| DR-07 | Application degrades gracefully when localStorage quota is exceeded (web) — warns user and suggests export | Should |
+| DR-07 | Application degrades gracefully when localStorage quota is exceeded (web) - warns user and suggests export | Should |
 
 ---
 
@@ -534,7 +534,7 @@ Three themes: Night (dark background, light text), Arcade (colorful, high satura
 SubjectCreated
     ↓ (user creates subject)
 CreatorActive
-    ↓ (first artifact collected — auto-advance)
+    ↓ (first artifact collected - auto-advance)
 CreatorComplete
     ↓ (user can still edit, but Scribe is active)
 ScribeActive
@@ -617,7 +617,7 @@ The UI enhancement plan follows the research in `docs/research/ui-enhancements.t
 
 Implements the research recommendations from `docs/research/ui-enhancements.txt` items 1–4, 6.
 
-**Week 1 — Color & Font:**
+**Week 1 - Color & Font:**
 - [x] Define a single 5-color palette (Dark Fantasy or Wood & Stone tone)
 - [x] Apply palette as CSS custom properties in React app
 - [x] Use same hex codes for Phaser dungeon sprites, text, and HUD overlays
@@ -625,14 +625,14 @@ Implements the research recommendations from `docs/research/ui-enhancements.txt`
 - [x] Load font in both React (globally via CSS) and Phaser (via CSS font-face)
 - [x] Set explicit `fontFamily` on all Phaser text objects to match React
 
-**Week 2 — UI Re-skin:**
+**Week 2 - UI Re-skin:**
 - [x] Style HUD sidebar as an in-game panel (themed background texture, trim)
 - [x] Apply consistent border style (2px solid / 9-patch / unified rounded) to all React panels, modals, tooltips
 - [x] Recreate same border style on Phaser in-game UI panels
 - [x] Collapse less-used HUD features into secondary menu to reduce clutter
 - [x] Use tooltips and icons instead of inline text on game canvas
 
-**Week 3 — Shared Assets:**
+**Week 3 - Shared Assets:**
 - [x] Create or source 10–15 shared UI icons (chest, map, book, gear, sword, potion, etc.)
 - [x] Use same icons in both React components and Phaser scene (shared sprite sheet)
 - [x] Style React buttons as game elements (stone button, parchment scroll, etc.)
@@ -710,7 +710,7 @@ Implements the research recommendations from `docs/research/ui-enhancements.txt`
 
 | Level | Scope | Tools / Approach |
 |-------|-------|------------------|
-| Unit Tests | Core domain logic (graph, validation, progression, artifacts, review) | Vitest — 23 existing tests |
+| Unit Tests | Core domain logic (graph, validation, progression, artifacts, review) | Vitest - 23 existing tests |
 | Component Tests | React UI components (HUD, RoomPanel, NoteEditor, etc.) | Vitest + Testing Library |
 | Integration Tests | State transitions, persistence round-trips | Vitest with mock stores |
 | Manual / Exploratory | End-to-end user experience (create subject → clear rooms → review) | Playtesting via `npm run dev` |
@@ -884,11 +884,11 @@ No telemetry is collected. Success is evaluated through:
 
 | # | Question | Default Assumption |
 |---|----------|--------------------|
-| 1 | Should the tutorial be skippable for returning users? | Yes — show only on first subject creation |
-| 2 | Should Archaeologist phase use spaced repetition intervals? | Not yet — manual review only; consider adding in Phase 4 |
-| 3 | Should there be a daily login streak bonus? | Not yet — considered for future gamification pass |
-| 4 | Should Phaser 3 be upgraded to Phaser 4? | Not now — v3.87 is stable; evaluate migration when v4 ecosystem matures |
-| 5 | Should Zustand 4.5 be upgraded to Zustand 5? | Not now — v4.5 is stable; plan migration before adding new store features |
+| 1 | Should the tutorial be skippable for returning users? | Yes - show only on first subject creation |
+| 2 | Should Archaeologist phase use spaced repetition intervals? | Not yet - manual review only; consider adding in Phase 4 |
+| 3 | Should there be a daily login streak bonus? | Not yet - considered for future gamification pass |
+| 4 | Should Phaser 3 be upgraded to Phaser 4? | Not now - v3.87 is stable; evaluate migration when v4 ecosystem matures |
+| 5 | Should Zustand 4.5 be upgraded to Zustand 5? | Not now - v4.5 is stable; plan migration before adding new store features |
 
 ---
 

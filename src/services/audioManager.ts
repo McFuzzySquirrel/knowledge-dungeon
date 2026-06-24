@@ -51,7 +51,7 @@ class AudioManagerImpl {
     bgmPlaying: false,
   };
 
-  // Audio cache placeholders — reserved for future audio file integration.
+  // Audio cache placeholders - reserved for future audio file integration.
   // private bgmCache = new Map<AudioTrack, unknown>();
   // private sfxCache = new Map<SfxKind, unknown>();
   private listeners = new Set<AudioStateChangeListener>();

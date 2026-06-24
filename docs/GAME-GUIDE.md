@@ -1,10 +1,10 @@
-# Knowledge Dungeon — Game Guide
+# Knowledge Dungeon - Game Guide
 
 ## Overview
 
 Knowledge Dungeon is a local-first study dungeon-crawler. You build subjects as mindmaps of topic-rooms, then defeat each room's encounter by writing structured notes. Your progress earns XP, loot, badges, and cross-subject achievements.
 
-All data lives on your device — no accounts, no cloud.
+All data lives on your device - no accounts, no cloud.
 
 ---
 
@@ -14,9 +14,9 @@ All data lives on your device — no accounts, no cloud.
 
 When you open the app, you arrive at the **Welcome Screen**. From here you can:
 
-1. **Create a new subject** — Enter a subject name, root topic, and pick a Dungeon theme (biome). Click Create.
-2. **Continue to Village** — If subjects already exist, jump straight to the village.
-3. **Start the tutorial** — A guided 3-room dungeon that teaches notes, attachments, and navigation.
+1. **Create a new subject** - Enter a subject name, root topic, and pick a Dungeon theme (biome). Click Create.
+2. **Continue to Village** - If subjects already exist, jump straight to the village.
+3. **Start the tutorial** - A guided 3-room dungeon that teaches notes, attachments, and navigation.
 
 ### Player Setup
 
@@ -24,7 +24,7 @@ Before entering a dungeon, pick an **archetype** from the Player Setup tab:
 
 | Archetype | Perk |
 |-----------|------|
-| **Scholar** | Quality bonus on notes — higher loot rates |
+| **Scholar** | Quality bonus on notes - higher loot rates |
 | **Cartographer** | Cross-link suggestions in the editor |
 | **Archivist** | Higher self-check cap during review phase |
 
@@ -38,11 +38,11 @@ The village is your home base. Walk around with **WASD** or arrow keys and press
 
 | Building | What it does |
 |----------|-------------|
-| **🌀 Dungeon Portals** | Enter a subject dungeon. Biome shows in the info panel — you can change it anytime. |
+| **🌀 Dungeon Portals** | Enter a subject dungeon. Biome shows in the info panel - you can change it anytime. |
 | **🏛 Keeper's Tower** | Quest board with guided objectives. The Keeper NPC gives step-by-step advice. |
 | **🏰 Guild Hall** | Lists all your subjects. Create new subjects or enter existing ones. |
 | **⚔ Training Grounds** | Start the tutorial dungeon. |
-| **🏆 Trophy Hall** | View cross-subject stats — badges, inventory, collected notes, dungeons mastered. |
+| **🏆 Trophy Hall** | View cross-subject stats - badges, inventory, collected notes, dungeons mastered. |
 | **📖 Library** | Game guide and controls reference (this document!). |
 | **📋 Quest Board** | Active quests with progress indicators. |
 | **🪧 Signposts** | Directional waypoints. The entrance signpost shows a welcome message. |
@@ -66,7 +66,7 @@ Knowledge Dungeon has three gameplay phases. You progress through them for each 
 - Each new line becomes a separate room. Commas also split topics
 - Rooms are linked as subtopics and form the dungeon layout
 - The root room (your subject's central topic) cannot be deleted
-- You can create rooms from ANY room — deeper nesting stays on the same floor
+- You can create rooms from ANY room - deeper nesting stays on the same floor
 
 **Tip:** Each direct child of the root topic becomes its own "floor" in the dungeon.
 
@@ -80,7 +80,7 @@ Knowledge Dungeon has three gameplay phases. You progress through them for each 
 - Click **Images** to upload and attach images to the room
 - Click **Checks** to see validation criteria (scored 0-2 per criterion)
 - Tick "I confirm these notes are my own" and click **Defeat Encounter** to clear the room
-- Quality bonus (0-10) determines loot rarity — thorough notes with all sections yield better rewards
+- Quality bonus (0-10) determines loot rarity - thorough notes with all sections yield better rewards
 
 **Markdown tips:**
 - `**bold**` for emphasis
@@ -146,9 +146,9 @@ Five unique boss types cycle as you progress deeper.
 
 Defeating rooms with high-quality notes earns loot. Loot includes:
 
-- **Equippable items** — Weapons, armor, accessories. Equip from your inventory for stat bonuses
-- **Rarity tiers** — Common, Rare, Epic (higher quality notes = better rarity)
-- **Stat bonuses** — Quality bonus, XP multiplier, streak protection
+- **Equippable items** - Weapons, armor, accessories. Equip from your inventory for stat bonuses
+- **Rarity tiers** - Common, Rare, Epic (higher quality notes = better rarity)
+- **Stat bonuses** - Quality bonus, XP multiplier, streak protection
 
 ### Room NPCs
 
@@ -167,7 +167,7 @@ Each room has a guide NPC. Walk up and press **E** to get tips and lore about th
 ### Badges
 
 Special achievements earned across subjects:
-- **Scribe Century** — Write 120+ words in a single note
+- **Scribe Century** - Write 120+ words in a single note
 - Clear rooms, master subjects, collect artifacts, and more
 
 ### Achievements
@@ -199,10 +199,10 @@ Access your stats from the village HUD. The dashboard shows:
 
 From the Welcome Screen's **Data** tab or the village's data management modal:
 
-- **Export subject as JSON** — Full backup including notes and artifacts
-- **Export as template** — Graph structure only (no notes/artifacts), reusable as a starting point
-- **Import from JSON** — Restore a subject from a backup or template
-- **Electron desktop** — Open subjects folder directly or export entire subjects root
+- **Export subject as JSON** - Full backup including notes and artifacts
+- **Export as template** - Graph structure only (no notes/artifacts), reusable as a starting point
+- **Import from JSON** - Restore a subject from a backup or template
+- **Electron desktop** - Open subjects folder directly or export entire subjects root
 
 ### Tags
 
@@ -218,12 +218,12 @@ All data persists to localStorage (web) or your local filesystem (Electron).
 
 ## Tips & Strategy
 
-1. **Start with the tutorial** — It walks through all core mechanics in a 3-room dungeon
-2. **Write thorough notes** — Include all three sections (Summary, Key Points, Recall Question) for maximum quality bonus and better loot
-3. **Use the Format button** — Markdown formatting makes notes more readable and earns better clarity scores
-4. **Attach images** — Visual aids improve recall question quality
-5. **Check the Checks tab** — See exactly what criteria you're missing before submitting
-6. **Change biomes** — If a dungeon feels stale, swap the theme from the village portal panel
-7. **Review regularly** — The SM-2 algorithm spaces reviews optimally; don't let them pile up
-8. **Tag rooms** — Tags help you find connections across subjects during review
-9. **Boss floors reward preparation** — Save your best notes for floors 5, 10, 15... for maximum loot
+1. **Start with the tutorial** - It walks through all core mechanics in a 3-room dungeon
+2. **Write thorough notes** - Include all three sections (Summary, Key Points, Recall Question) for maximum quality bonus and better loot
+3. **Use the Format button** - Markdown formatting makes notes more readable and earns better clarity scores
+4. **Attach images** - Visual aids improve recall question quality
+5. **Check the Checks tab** - See exactly what criteria you're missing before submitting
+6. **Change biomes** - If a dungeon feels stale, swap the theme from the village portal panel
+7. **Review regularly** - The SM-2 algorithm spaces reviews optimally; don't let them pile up
+8. **Tag rooms** - Tags help you find connections across subjects during review
+9. **Boss floors reward preparation** - Save your best notes for floors 5, 10, 15... for maximum loot

@@ -1,5 +1,5 @@
 /**
- * Simplified screenshot capture — avoids Phaser-heavy screens.
+ * Simplified screenshot capture - avoids Phaser-heavy screens.
  * Usage: npm run dev -- --port 4173 & sleep 3 && node scripts/capture-screenshots.mjs
  */
 
@@ -27,7 +27,7 @@ async function shot(name, fn) {
   }
 }
 
-// 1. Welcome screen — showing create form with biome selector
+// 1. Welcome screen - showing create form with biome selector
 await shot('welcome-screen', async (p) => {
   await p.goto(BASE, { waitUntil: 'networkidle' });
   await p.fill('input[placeholder*="Subject name"]', 'Demo Subject');
@@ -35,7 +35,7 @@ await shot('welcome-screen', async (p) => {
   await p.waitForTimeout(500);
 });
 
-// 2. Welcome screen — Continue to Village visible after injecting subjects
+// 2. Welcome screen - Continue to Village visible after injecting subjects
 await shot('welcome-continue-to-village', async (p) => {
   await p.goto(BASE, { waitUntil: 'networkidle' });
   await p.evaluate(() => {
@@ -50,7 +50,7 @@ await shot('welcome-continue-to-village', async (p) => {
   await p.waitForTimeout(800);
 });
 
-// 3. Welcome screen — template export/import in Data tab
+// 3. Welcome screen - template export/import in Data tab
 await shot('welcome-data-tab', async (p) => {
   await p.goto(BASE, { waitUntil: 'networkidle' });
   await p.evaluate(() => {

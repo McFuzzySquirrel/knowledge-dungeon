@@ -1,5 +1,5 @@
 /**
- * Session Tracker — logs study session start/end times, rooms visited,
+ * Session Tracker - logs study session start/end times, rooms visited,
  * and aggregates data for the statistics dashboard.
  *
  * Phase 4e: Study Statistics Dashboard

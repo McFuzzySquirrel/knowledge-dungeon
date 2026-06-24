@@ -367,7 +367,7 @@ export function InventoryBadgesPanel({
                     <div
                       key={slot}
                       className={`equip-slot${item ? ' equip-slot--filled' : ''}`}
-                      title={item ? `${item.name} — ${item.description}` : `Empty ${EQUIP_SLOT_LABELS[slot]} slot`}
+                      title={item ? `${item.name} - ${item.description}` : `Empty ${EQUIP_SLOT_LABELS[slot]} slot`}
                     >
                       <span style={{ fontSize: 14 }}>{slotIcon(slot)}</span>
                       <span style={{ fontSize: 11, flex: 1 }}>{item ? item.name : EQUIP_SLOT_LABELS[slot]}</span>

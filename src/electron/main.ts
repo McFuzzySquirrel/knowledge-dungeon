@@ -486,7 +486,7 @@ function registerKnowledgeBridgeHandlers(): void {
         await fs.mkdir(path.dirname(publicFile), { recursive: true });
         await fs.writeFile(publicFile, svgContent, 'utf8');
       } catch {
-        // Non-fatal — public/dist may be read-only in production builds.
+        // Non-fatal - public/dist may be read-only in production builds.
         // The userData copy is the authoritative one.
       }
     },
@@ -587,7 +587,7 @@ function registerKnowledgeBridgeHandlers(): void {
     try {
       return JSON.parse(raw);
     } catch {
-      throw new Error('Invalid sprite pack file — not valid JSON');
+      throw new Error('Invalid sprite pack file - not valid JSON');
     }
   });
 }

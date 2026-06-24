@@ -1,5 +1,5 @@
 /**
- * Boss room system — Track 3c: Gameplay Depth.
+ * Boss room system - Track 3c: Gameplay Depth.
  *
  * Generates boss encounter data for milestone floors and provides
  * the logic for boss room XP and loot multipliers.
@@ -72,7 +72,7 @@ const BOSS_TITLES: ReadonlyArray<{
   {
     title: 'Master of the Empty Page',
     description:
-      'An invisible presence fills the room — the terror of the blank page. Only structured notes can banish it.',
+      'An invisible presence fills the room - the terror of the blank page. Only structured notes can banish it.',
     xpMultiplier: 4.0,
     qualityMultiplier: 2.5,
     minLootRarity: 'epic',

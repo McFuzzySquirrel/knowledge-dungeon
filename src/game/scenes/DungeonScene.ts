@@ -198,7 +198,7 @@ export class DungeonScene extends Phaser.Scene {
   private biomeWallTint = 0x3a3228;
   private biomeCorridorColor = 0xb8a87a;
 
-  // Phase 5: Performance — spatial grid for O(1) room lookup in large dungeons
+  // Phase 5: Performance - spatial grid for O(1) room lookup in large dungeons
   private spatialGrid: Map<string, DungeonRoom> = new Map();
   private spatialGridCellSize = 0;
   private spatialGridOriginX = 0;

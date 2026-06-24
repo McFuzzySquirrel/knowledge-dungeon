@@ -2,7 +2,7 @@ import type { ProgressionSnapshot } from '@/core/validation/persistence';
 
 export const ROOM_XP_BASE = 20;
 
-// ── Fisher's Rest — Fishing XP & Badges ─────────────
+// ── Fisher's Rest - Fishing XP & Badges ─────────────
 /** Base XP awarded for correctly answering a fishing recall question. */
 export const FSH_XP_PER_CORRECT_ANSWER = 5;
 

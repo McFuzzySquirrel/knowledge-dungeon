@@ -121,7 +121,7 @@ export async function loadSubjectSnapshot(subjectId: string): Promise<SubjectSna
     const parsed = JSON.parse(raw) as SubjectSnapshot;
     return parsed;
   } catch {
-    // Phase 5: Data is corrupt — quarantine it for recovery and return null
+    // Phase 5: Data is corrupt - quarantine it for recovery and return null
     quarantineCorruptData(subjectId);
     return null;
   }
@@ -574,7 +574,7 @@ export function importSubjectFromJson(raw: string): SubjectSnapshot {
     }
   }
 
-  // Phase 4a: migrate from 1.0.0 to 1.1.0 — ensure SM-2 defaults exist on rooms
+  // Phase 4a: migrate from 1.0.0 to 1.1.0 - ensure SM-2 defaults exist on rooms
   const migrated = dungeon.schemaVersion === '1.0.0' ? migrateToV11(parsed as unknown as SubjectSnapshot) : parsed;
 
   return migrated as unknown as SubjectSnapshot;

@@ -1,5 +1,5 @@
 /**
- * Equippable loot / gear system — Track 3c: Gameplay Depth.
+ * Equippable loot / gear system - Track 3c: Gameplay Depth.
  *
  * Expands the existing loot system to support equippable items that
  * modify gameplay stats (XP multipliers, quality bonuses, etc.).
@@ -79,7 +79,7 @@ export const EQUIPPABLE_LOOT_POOL: ReadonlyArray<Omit<EquippableLootItem, 'id' |
   // ── Accessory slot ─────────────────────────────────────────
   {
     name: 'Inkwell Charm',
-    description: 'A tiny inkwell on a chain — never runs dry. +1 quality bonus.',
+    description: 'A tiny inkwell on a chain - never runs dry. +1 quality bonus.',
     rarity: 'common',
     equipSlot: 'accessory',
     qualityBonus: 1,

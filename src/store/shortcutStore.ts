@@ -1,7 +1,7 @@
 /**
  * Keyboard shortcut configuration store.
  *
- * Phase 5: Quality & Scale — Keyboard shortcut customization.
+ * Phase 5: Quality & Scale - Keyboard shortcut customization.
  * Extends preferencesStore with configurable shortcut bindings persisted
  * to localStorage.
  */

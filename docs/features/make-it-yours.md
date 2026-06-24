@@ -1,8 +1,8 @@
-# Feature: "Make It Yours" — SVG Sprite Customization
+# Feature: "Make It Yours" - SVG Sprite Customization
 
 ## 1. Feature Overview
 
-**Feature Name:** Make It Yours — SVG Sprite Customization
+**Feature Name:** Make It Yours - SVG Sprite Customization
 **Parent Document:** [docs/PRD.md](../PRD.md)
 **Status:** Draft
 **Summary:** A standalone capability that lets users browse, edit, and replace game sprites (SVGs) using an embedded WYSIWYG editor. Custom sprites persist across sessions and load automatically. Users can save collections of edits as shareable packs, import packs from others, and switch between collections. Newly added SVGs are discovered dynamically via a sprite manifest.
@@ -18,7 +18,7 @@
 **Out of scope:**
 - Visual editor for PNG/WebP raster assets
 - Procedural texture customization (biome floors are generated via Canvas API, not SVG)
-- Custom sprite per subject — overrides are global to the application
+- Custom sprite per subject - overrides are global to the application
 - Arbitrary file upload for new sprites (only editing existing manifests)
 - CSS/HTML UI theming (the existing Themes tab covers that)
 
@@ -71,7 +71,7 @@
 - Phaser textures loaded via `this.load.svg()` in `preload()`, rendered in `create()`
 - Zustand stores with `create<T>()((set) => ({...}))` pattern
 - Electron IPC via `ipcMain.handle('knowledge:*', ...)` and `contextBridge`
-- All data local-first — no network calls
+- All data local-first - no network calls
 
 ---
 
@@ -198,7 +198,7 @@
 
 ## 8. Agent Impact Assessment
 
-### 8.1 Existing Agents — Extended Responsibilities
+### 8.1 Existing Agents - Extended Responsibilities
 
 | Agent | New Responsibilities | Modified Boundaries |
 |-------|---------------------|-------------------|
@@ -212,7 +212,7 @@
 
 None. All work falls within existing agent domains.
 
-### 8.3 Existing Agents — No Changes
+### 8.3 Existing Agents - No Changes
 
 | Agent | Reason |
 |-------|--------|
@@ -225,9 +225,9 @@ None. All work falls within existing agent domains.
 
 ### Phase F1: Foundation (~2–3 days)
 
-- [ ] Create `scripts/generate-sprite-manifest.mjs` — scans `public/assets/**/*.svg`, reads `viewBox` dimensions, outputs `public/assets/sprite-manifest.json`
-- [ ] Create `src/services/spriteManifest.ts` — fetches and validates the manifest
-- [ ] Create `src/services/customSprites.ts` — URL resolution layer with `resolveSpriteUrl(path)`, localStorage read/write for web, Electron IPC integration, pack CRUD
+- [ ] Create `scripts/generate-sprite-manifest.mjs` - scans `public/assets/**/*.svg`, reads `viewBox` dimensions, outputs `public/assets/sprite-manifest.json`
+- [ ] Create `src/services/spriteManifest.ts` - fetches and validates the manifest
+- [ ] Create `src/services/customSprites.ts` - URL resolution layer with `resolveSpriteUrl(path)`, localStorage read/write for web, Electron IPC integration, pack CRUD
 - [ ] Add `activeSpritePack` field to `src/store/preferencesStore.ts`
 - [ ] Add Electron IPC handlers: `knowledge:save-custom-sprite`, `knowledge:reset-custom-sprite`, `knowledge:get-sprite-manifest`, `knowledge:export-sprite-pack`, `knowledge:import-sprite-pack`
 - [ ] Update `src/electron/preload.ts` to expose new channels
@@ -245,9 +245,9 @@ None. All work falls within existing agent domains.
 ### Phase F2: Editor Integration (~2–3 days)
 
 - [ ] Self-host SVGEdit distribution in `public/editor/svg-edit/`
-- [ ] Create `src/ui/components/SpriteEditor.tsx` — iframe wrapper with `postMessage` bridge for load/save
-- [ ] Create `src/ui/components/SpriteBrowser.tsx` — category-grouped list with thumbnail images from SVG content
-- [ ] Create `src/ui/components/MakeItYoursTab.tsx` — composes browser + editor; save/reset/reset-all buttons
+- [ ] Create `src/ui/components/SpriteEditor.tsx` - iframe wrapper with `postMessage` bridge for load/save
+- [ ] Create `src/ui/components/SpriteBrowser.tsx` - category-grouped list with thumbnail images from SVG content
+- [ ] Create `src/ui/components/MakeItYoursTab.tsx` - composes browser + editor; save/reset/reset-all buttons
 - [ ] Add "Make It Yours" tab to `SettingsModal.tsx` (tab enum, tab panel)
 - [ ] Implement save-to-collection flow with name input
 - [ ] Implement reset-to-original flow (per sprite and reset all)
@@ -264,7 +264,7 @@ None. All work falls within existing agent domains.
 
 ### Phase F3: Collections & Sharing (~1–2 days)
 
-- [ ] Create `src/ui/components/CollectionSwitcher.tsx` — dropdown to switch active pack
+- [ ] Create `src/ui/components/CollectionSwitcher.tsx` - dropdown to switch active pack
 - [ ] Implement pack save: name + description + serialize all current overrides
 - [ ] Implement pack export: download `.kdpack` JSON file (Electron: native save dialog; web: `<a download>`)
 - [ ] Implement pack import: FileReader → parse JSON → preview changed sprites → confirm → apply
@@ -284,11 +284,11 @@ None. All work falls within existing agent domains.
 
 | Level | Scope | Approach |
 |-------|-------|----------|
-| Unit Tests | `customSprites.ts` resolution logic, manifest parsing, pack JSON schema validation | Vitest — pure function tests, no mocking needed |
-| Unit Tests | `preferencesStore` — `activeSpritePack` field persistence | Vitest with localStorage mock |
-| Component Tests | `SpriteBrowser` — renders categories, thumbnails, modified badges | Vitest + Testing Library — mock manifest data |
-| Component Tests | `MakeItYoursTab` — tab navigation, editor load, save flow | Vitest + Testing Library — mock iframe postMessage |
-| Integration Tests | Persistence round-trip: save sprite → reload → verify override intact | Vitest — mock localStorage or temp fs |
+| Unit Tests | `customSprites.ts` resolution logic, manifest parsing, pack JSON schema validation | Vitest - pure function tests, no mocking needed |
+| Unit Tests | `preferencesStore` - `activeSpritePack` field persistence | Vitest with localStorage mock |
+| Component Tests | `SpriteBrowser` - renders categories, thumbnails, modified badges | Vitest + Testing Library - mock manifest data |
+| Component Tests | `MakeItYoursTab` - tab navigation, editor load, save flow | Vitest + Testing Library - mock iframe postMessage |
+| Integration Tests | Persistence round-trip: save sprite → reload → verify override intact | Vitest - mock localStorage or temp fs |
 | Integration Tests | Pack round-trip: save pack → export → import → verify | Vitest |
 | Regression Tests | DungeonScene and VillageScene render correctly with and without custom sprites | Manual playtesting via `npm run dev` |
 | Regression Tests | SettingsModal tabs all still work | Existing SettingsModal component tests |
@@ -310,15 +310,15 @@ None. All work falls within existing agent domains.
 If this feature needs to be reverted:
 
 **Modified files to revert:**
-- `src/ui/components/SettingsModal.tsx` — remove "Make It Yours" tab; restore original tab enum
-- `src/store/preferencesStore.ts` — remove `activeSpritePack` field
-- `src/game/scenes/DungeonScene.ts` — restore hardcoded `SPRITE_PATHS`
-- `src/game/scenes/VillageScene.ts` — restore hardcoded `SPRITE_PATHS`
-- `src/electron/main.ts` — remove 5 new IPC handlers
-- `src/electron/preload.ts` — remove 5 new channel exposures
-- `server/index.js` — remove `GET /api/sprite-manifest`
-- `vite.config.ts` — remove manifest plugin
-- `package.json` — remove `manifest` script
+- `src/ui/components/SettingsModal.tsx` - remove "Make It Yours" tab; restore original tab enum
+- `src/store/preferencesStore.ts` - remove `activeSpritePack` field
+- `src/game/scenes/DungeonScene.ts` - restore hardcoded `SPRITE_PATHS`
+- `src/game/scenes/VillageScene.ts` - restore hardcoded `SPRITE_PATHS`
+- `src/electron/main.ts` - remove 5 new IPC handlers
+- `src/electron/preload.ts` - remove 5 new channel exposures
+- `server/index.js` - remove `GET /api/sprite-manifest`
+- `vite.config.ts` - remove manifest plugin
+- `package.json` - remove `manifest` script
 
 **New files to remove:**
 - `src/services/customSprites.ts`
@@ -332,10 +332,10 @@ If this feature needs to be reverted:
 - `public/editor/` (SVGEdit distribution)
 
 **Data changes to handle:**
-- `localStorage` keys with `knowledge-dungeon:custom-sprites:*` — user can ignore (harmless orphan keys)
-- `{userData}/custom-sprites/` directory — user can delete manually
-- `public/assets/.originals/` — delete and restore original SVGs from git
-- Modified `public/assets/` SVGs — `git checkout public/assets/` restores originals
+- `localStorage` keys with `knowledge-dungeon:custom-sprites:*` - user can ignore (harmless orphan keys)
+- `{userData}/custom-sprites/` directory - user can delete manually
+- `public/assets/.originals/` - delete and restore original SVGs from git
+- Modified `public/assets/` SVGs - `git checkout public/assets/` restores originals
 
 **Existing tests that verify original behavior:**
 - Phaser scene rendering tests (manual playtest)
@@ -368,9 +368,9 @@ If this feature needs to be reverted:
 
 | # | Question | Default Assumption |
 |---|----------|--------------------|
-| 1 | Should sprite packs be shareable via a community gallery (upload/download from a server)? | No — packs are shareable as files only (user-driven, not hosted). Consistent with local-first principle. |
-| 2 | Should the editor support "undo" for sprite edits within a session? | Yes — SVGEdit provides built-in undo/redo. |
+| 1 | Should sprite packs be shareable via a community gallery (upload/download from a server)? | No - packs are shareable as files only (user-driven, not hosted). Consistent with local-first principle. |
+| 2 | Should the editor support "undo" for sprite edits within a session? | Yes - SVGEdit provides built-in undo/redo. |
 | 3 | Should there be a "preview in game" button that shows the sprite at game scale without restarting? | Phase F2 ships with "Apply Changes" (restart scene). Live preview without restart can be a Phase F3 enhancement. |
-| 4 | Should custom sprites persist across app updates (new Vite build)? | Yes — `public/assets/` copy persists. Electron userData backup persists. Web: localStorage persists across builds on same domain. |
-| 5 | Should the editor support adding new blank SVGs (not just editing existing)? | No — out of scope for v1. Users can drop new SVGs into `public/assets/` and regenerate the manifest manually. |
+| 4 | Should custom sprites persist across app updates (new Vite build)? | Yes - `public/assets/` copy persists. Electron userData backup persists. Web: localStorage persists across builds on same domain. |
+| 5 | Should the editor support adding new blank SVGs (not just editing existing)? | No - out of scope for v1. Users can drop new SVGs into `public/assets/` and regenerate the manifest manually. |
 | 6 | How should sprite conflicts be handled when importing a pack that the user has already customized? | Show a diff preview: "5 of 12 sprites in this pack will overwrite your existing customizations." Confirm before applying. |

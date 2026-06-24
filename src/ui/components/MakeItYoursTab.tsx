@@ -23,7 +23,7 @@ function backupOriginal(spritePath: string, svgContent: string): void {
       localStorage.setItem(key, svgContent);
     }
   } catch {
-    // quota exceeded — non-fatal
+    // quota exceeded - non-fatal
   }
 }
 

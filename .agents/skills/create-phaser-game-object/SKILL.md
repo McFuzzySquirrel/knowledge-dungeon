@@ -121,7 +121,7 @@ if (roomState.encounterState === 'ArtifactCollected') {
 
 For dungeon decorations, add the object to the decor placement in `DungeonScene.ts`'s `buildDecorForRoom()` function, using the deterministic PRNG.
 
-The PRNG seed chain is `roomIndex * 7 + floor` — decor for any given room on a given floor is fully deterministic from this seed. **Do not alter the seed formula** without coordinating with `core-logic-engineer`. Deterministic generation is a hard requirement (NF-02: same topic graph must always produce the same dungeon layout).
+The PRNG seed chain is `roomIndex * 7 + floor` - decor for any given room on a given floor is fully deterministic from this seed. **Do not alter the seed formula** without coordinating with `core-logic-engineer`. Deterministic generation is a hard requirement (NF-02: same topic graph must always produce the same dungeon layout).
 
 ```typescript
 const decorType = seededRandom(roomIndex * 7 + floor);
@@ -147,8 +147,8 @@ The new object should be:
 
 ## Validation
 
-- [ ] `npm run typecheck` — no type errors
-- [ ] `npm run lint` — no lint errors
+- [ ] `npm run typecheck` - no type errors
+- [ ] `npm run lint` - no lint errors
 - [ ] Object renders at correct position in the scene
 - [ ] Animation plays correctly (no jitter, correct easing)
 - [ ] Interactive objects respond to clicks/taps and E key
@@ -159,12 +159,12 @@ The new object should be:
 
 ## Gotchas
 
-- Phaser texture keys must be unique across the entire game — use namespaced keys like `village-tree-1`, `dungeon-chest-open`
-- Do NOT load textures in `create()` — always use `preload()` to ensure textures are ready before rendering
-- The village uses a 48px tile grid — positions should be `tileX * 48 + offset` to align with the tilemap
-- NPC dialog bubbles must emit world coordinates for the React overlay — use `scene.cameras.main.getWorldPoint()` for conversion
+- Phaser texture keys must be unique across the entire game - use namespaced keys like `village-tree-1`, `dungeon-chest-open`
+- Do NOT load textures in `create()` - always use `preload()` to ensure textures are ready before rendering
+- The village uses a 48px tile grid - positions should be `tileX * 48 + offset` to align with the tilemap
+- NPC dialog bubbles must emit world coordinates for the React overlay - use `scene.cameras.main.getWorldPoint()` for conversion
 - For objects that need to persist state (opened chests, collected items), update `RoomMetadata` via `subjectStore` rather than Phaser data manager
-- Interactive objects must register in the scene's input handler list for E key support — add to `interactiveObjects` array in DungeonScene
+- Interactive objects must register in the scene's input handler list for E key support - add to `interactiveObjects` array in DungeonScene
 
 ---
 

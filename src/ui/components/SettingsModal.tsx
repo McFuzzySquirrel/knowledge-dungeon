@@ -162,7 +162,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
           </div>
         )}
 
-        {/* Language Tab — Phase 5: i18n */}
+        {/* Language Tab - Phase 5: i18n */}
         {activeTab === 'language' && (
           <div role="tabpanel" aria-label="Language settings">
             <p className="room-help-text">
@@ -185,7 +185,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
           </div>
         )}
 
-        {/* Shortcuts Tab — Phase 5: Keyboard shortcut customization */}
+        {/* Shortcuts Tab - Phase 5: Keyboard shortcut customization */}
         {activeTab === 'shortcuts' && (
           <div role="tabpanel" aria-label="Keyboard shortcut settings">
             <p className="room-help-text">

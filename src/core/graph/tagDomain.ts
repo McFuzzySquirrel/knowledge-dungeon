@@ -1,5 +1,5 @@
 /**
- * Tag Domain — tag management for room metadata.
+ * Tag Domain - tag management for room metadata.
  *
  * Phase 4f: Tag system for cross-subject topic linking.
  * Provides tag indexing, search, and cross-subject navigation helpers.

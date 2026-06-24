@@ -249,7 +249,7 @@ export function CollectionSwitcher({ modifiedCount, onPackChanged }: CollectionS
           <div className="collection-import-info">
             <strong>{importPreview.name}</strong>
             {importPreview.description && (
-              <span className="collection-pack-desc"> — {importPreview.description}</span>
+              <span className="collection-pack-desc"> - {importPreview.description}</span>
             )}
           </div>
           <div className="collection-import-sprites">

@@ -213,7 +213,7 @@ export function resolveSpriteUrl(spritePath: string): string {
           blobUrls.add(url);
           return url;
         } catch {
-          // Malformed XML — clear the override silently
+          // Malformed XML - clear the override silently
         }
       }
       safeRemove(overrideKey(spritePath));

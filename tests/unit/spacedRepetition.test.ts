@@ -26,7 +26,7 @@ function makeDummyState(overrides: Partial<Sm2State> = {}): Sm2State {
 
 const REVIEWED_AT = '2026-06-01T00:00:00.000Z';
 
-describe('spacedRepetition — SM-2', () => {
+describe('spacedRepetition - SM-2', () => {
   // ── Validation helpers ──────────────────────────────────────────
 
   describe('isValidQualityRating', () => {
@@ -86,7 +86,7 @@ describe('spacedRepetition — SM-2', () => {
 
   // ── SM-2 Algorithm ──────────────────────────────────────────────
 
-  describe('updateSm2State — first review (no previous state)', () => {
+  describe('updateSm2State - first review (no previous state)', () => {
     it('quality 5 → initial interval 1, consecutive 1', () => {
       const result = updateSm2State({ quality: 5, previousState: null, reviewedAtIso: REVIEWED_AT });
       expect(result.qualityResponse).toBe(5);
@@ -125,7 +125,7 @@ describe('spacedRepetition — SM-2', () => {
     });
   });
 
-  describe('updateSm2State — second review', () => {
+  describe('updateSm2State - second review', () => {
     it('quality ≥ 3 and prev consecutive = 1 → interval = 6 days', () => {
       const prev = makeDummyState({ consecutiveCorrect: 1, intervalDays: 1 });
       const result = updateSm2State({ quality: 4, previousState: prev, reviewedAtIso: REVIEWED_AT });
@@ -141,7 +141,7 @@ describe('spacedRepetition — SM-2', () => {
     });
   });
 
-  describe('updateSm2State — third+ review (interval scaling)', () => {
+  describe('updateSm2State - third+ review (interval scaling)', () => {
     it('quality ≥ 3 with consecutiveCorrect ≥ 2 → interval = prev * EF', () => {
       const prev = makeDummyState({ consecutiveCorrect: 2, intervalDays: 6, easeFactor: 2.5 });
       const result = updateSm2State({ quality: 5, previousState: prev, reviewedAtIso: REVIEWED_AT });

@@ -3,7 +3,7 @@
 **Generated:** 2026-06-24
 **Audited by:** `forge-optimize-skills`
 **Skills audited:** 1 (project-specific, excludes forge meta-skills)
-**Status:** Changes applied — scores below reflect post-optimization state
+**Status:** Changes applied - scores below reflect post-optimization state
 
 ---
 
@@ -14,9 +14,9 @@
 | `add-village-structure` | 3 | 3 | 3 | 3 | 3 | 3 | **3.0** |
 
 **Score interpretation:**
-- 2.5–3.0: Strong — follows best practices well
-- 1.5–2.4: Adequate — works but has improvement opportunities
-- 1.0–1.4: Needs work — significant gaps against best practices
+- 2.5–3.0: Strong - follows best practices well
+- 1.5–2.4: Adequate - works but has improvement opportunities
+- 1.0–1.4: Needs work - significant gaps against best practices
 
 ---
 

@@ -57,5 +57,5 @@ Common failure modes when adding a new village structure and how to diagnose the
 
 **Checklist:**
 1. **Broken `if/else if` chain.** In VillageScreen callbacks (`onStructureApproached`, `onStructureInteract`), verify your new branch is properly chained with `} else if (sType === 'your-new-type') {`. A missing `else` or misplaced brace can break all subsequent branches.
-2. **Union type narrowing.** Adding your type to `VillageStructure.type` union should not affect existing types. If you accidentally removed an existing member while editing, TypeScript will catch it — but only if you run typecheck.
+2. **Union type narrowing.** Adding your type to `VillageStructure.type` union should not affect existing types. If you accidentally removed an existing member while editing, TypeScript will catch it - but only if you run typecheck.
 3. **VILLAGE_MAP mutation.** Adding entries to `VILLAGE_MAP.structures` should be append-only. If you accidentally modified or removed existing entries, the rendering loop breaks for those structures.

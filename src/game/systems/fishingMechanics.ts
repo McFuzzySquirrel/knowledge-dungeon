@@ -1,5 +1,5 @@
 /**
- * Fisher's Rest — Fishing mechanics: bite timing, rarity rolls, and
+ * Fisher's Rest - Fishing mechanics: bite timing, rarity rolls, and
  * recall question pulling from cleared dungeon rooms.
  */
 

@@ -21,7 +21,7 @@ Add the new fields to the appropriate type definition in `src/core/validation/pe
 ```typescript
 export interface RoomMetadata {
   // ... existing fields
-  /** New field — add JSDoc comment */
+  /** New field - add JSDoc comment */
   readonly newField?: string; // Optional = backward compatible
 }
 ```
@@ -40,11 +40,11 @@ export interface NewEntity {
 
 ### Step 2: Update Defaults
 
-Update the factory/defaults functions so the new field is initialized. Default values are set in three locations — update all that apply:
+Update the factory/defaults functions so the new field is initialized. Default values are set in three locations - update all that apply:
 
-1. **`src/core/validation/persistence/types.ts`** → `createDefaultRoomMetadata()` — per-room defaults
-2. **`src/core/graph/graphDomain.ts`** → `createRootDungeon()` — initial subject creation defaults
-3. **`src/store/subjectStore.ts`** → hydration/reconstruction logic — fallback when loading saved data
+1. **`src/core/validation/persistence/types.ts`** → `createDefaultRoomMetadata()` - per-room defaults
+2. **`src/core/graph/graphDomain.ts`** → `createRootDungeon()` - initial subject creation defaults
+3. **`src/store/subjectStore.ts`** → hydration/reconstruction logic - fallback when loading saved data
 
 ```typescript
 // In createDefaultRoomMetadata():
@@ -61,7 +61,7 @@ export function createDefaultRoomMetadata(): RoomMetadata {
 Add the field to the relevant Zustand store in `src/store/`:
 
 ```typescript
-// In subjectStore.ts — add action to set the new field
+// In subjectStore.ts - add action to set the new field
 setNewField: (roomId: string, value: string) =>
   set((state) => ({
     rooms: {
@@ -145,9 +145,9 @@ The persistence change should produce:
 
 ## Validation
 
-- [ ] `npm run typecheck` — no type errors
-- [ ] `npm run lint` — no lint errors
-- [ ] `npm test -- --run` — existing tests pass + new tests pass
+- [ ] `npm run typecheck` - no type errors
+- [ ] `npm run lint` - no lint errors
+- [ ] `npm test -- --run` - existing tests pass + new tests pass
 - [ ] Manual test: create subject → add data → refresh page → verify data restored
 - [ ] Manual test: import legacy JSON (without new field) → verify default value applied
 - [ ] If Electron: test save/load in desktop build
@@ -156,12 +156,12 @@ The persistence change should produce:
 
 ## Gotchas
 
-- localStorage has a ~5–10MB limit — if the new field stores large data (e.g., base64 images), use the attachment system instead of inline storage
-- The `SubjectSnapshot` JSON is the persistence contract — adding a field to `RoomMetadata` will automatically include it in the snapshot if the store is serialized correctly
-- Legacy data WITHOUT the new field MUST still load without errors — always use `??` default or optional chaining
+- localStorage has a ~5–10MB limit - if the new field stores large data (e.g., base64 images), use the attachment system instead of inline storage
+- The `SubjectSnapshot` JSON is the persistence contract - adding a field to `RoomMetadata` will automatically include it in the snapshot if the store is serialized correctly
+- Legacy data WITHOUT the new field MUST still load without errors - always use `??` default or optional chaining
 - If the new field needs to be indexed or searchable, add it to the subject index in `subjectPersistence.ts`
-- The Electron filesystem backend saves the entire `SubjectSnapshot` as a single JSON file — no special handling needed for new fields
-- If a new field MUST be present (not optional), you need a data migration. Add a version check in `subjectPersistence.ts` that detects the old schema version and applies the migration on load. Never delete old fields — soft-deprecate with `@deprecated` JSDoc tags
+- The Electron filesystem backend saves the entire `SubjectSnapshot` as a single JSON file - no special handling needed for new fields
+- If a new field MUST be present (not optional), you need a data migration. Add a version check in `subjectPersistence.ts` that detects the old schema version and applies the migration on load. Never delete old fields - soft-deprecate with `@deprecated` JSDoc tags
 
 ---
 
