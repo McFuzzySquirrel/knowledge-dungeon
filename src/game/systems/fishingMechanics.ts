@@ -15,6 +15,22 @@ import type { RoomMetadata, DungeonRoomSummary } from '@/core/validation/persist
 import { generateSelfCheckPrompts, extractMarkdownHeadings } from '@/core/review/reviewDomain';
 import type { SelfCheckPrompt } from '@/core/review/types';
 
+// ── Seeded PRNG (mulberry32 variant) ────────────────────────────────────
+
+/**
+ * Create a deterministic pseudo-random number generator from a numeric seed.
+ * Returns a function that yields floats in [0, 1), same signature as Math.random.
+ */
+export function createSeededRng(seed: number): () => number {
+  let state = seed | 0;
+  return function mulberry32(): number {
+    state = (state + 0x6D2B79F5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /**
  * Generate a random bite delay in milliseconds between BITE_TIMER_MIN and MAX.
  *
@@ -32,9 +48,12 @@ export function rollBiteDelayMs(): number {
 /**
  * Roll a fish rarity using the weighted distribution.
  * Returns the rolled rarity and the fish catalog entry.
+ *
+ * @param rng - Optional seeded RNG function; defaults to Math.random.
  */
-export function rollFishRarity(): { rarity: FishRarity; entry: FishCatalogEntry } {
-  const roll = Math.random() * 100;
+export function rollFishRarity(rng?: () => number): { rarity: FishRarity; entry: FishCatalogEntry } {
+  const random = rng ?? Math.random;
+  const roll = random() * 100;
   let cumulative = 0;
   let rolledRarity: FishRarity = 'common';
 
@@ -47,7 +66,7 @@ export function rollFishRarity(): { rarity: FishRarity; entry: FishCatalogEntry 
   }
 
   const candidates = FISH_CATALOG.filter((f) => f.rarity === rolledRarity);
-  const entry = candidates[Math.floor(Math.random() * candidates.length)];
+  const entry = candidates[Math.floor(random() * candidates.length)];
 
   return { rarity: rolledRarity, entry };
 }

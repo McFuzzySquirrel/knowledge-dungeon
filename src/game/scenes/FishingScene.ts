@@ -8,8 +8,9 @@ import {
   type FishRarity,
   type FishDirection,
 } from '@/game/systems/fishingTypes';
-import { rollFishRarity } from '@/game/systems/fishingMechanics';
+import { rollFishRarity, createSeededRng } from '@/game/systems/fishingMechanics';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
+import { audioManager } from '@/services/audioManager';
 
 // ── Layout constants ──────────────────────────────────────────────────────
 /** Fraction of canvas height for the distant horizon/shore at top. */
@@ -79,6 +80,8 @@ export class FishingScene extends Phaser.Scene {
   private callbacks: FishingSceneEvents | null = null;
   private state: FishingState = 'idle';
   private playerClass: string = 'scholar';
+  private hasClearedRooms: boolean = true;
+  private fishingRng: () => number = Math.random;
 
   // ── Layout (recalculated on resize) ──────────────────────────────────────
   private horizonY = 0;
@@ -103,6 +106,9 @@ export class FishingScene extends Phaser.Scene {
   private caughtCount = 0;
   private hintText: Phaser.GameObjects.Text | null = null;
   private returnBtn: Phaser.GameObjects.Text | null = null;
+  private noRoomsOverlay: Phaser.GameObjects.Text | null = null;
+  private noRoomsIcon: Phaser.GameObjects.Text | null = null;
+  private noRoomsArrowLabel: Phaser.GameObjects.Text | null = null;
 
   // ── Power meter visuals ──────────────────────────────────────────────────
   private powerBarGfx: Phaser.GameObjects.Graphics | null = null;
@@ -130,9 +136,30 @@ export class FishingScene extends Phaser.Scene {
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
-  init(data: { callbacks: FishingSceneEvents; playerClass?: string }): void {
+  init(data: { callbacks: FishingSceneEvents; playerClass?: string; hasClearedRooms?: boolean }): void {
     this.callbacks = data.callbacks;
     if (data.playerClass) this.playerClass = data.playerClass;
+    this.hasClearedRooms = data.hasClearedRooms ?? true;
+    this.seedRng();
+  }
+
+  /**
+   * Generate a deterministic RNG seed from the current date + player class,
+   * so that fish rarity and positions are consistent per day.
+   */
+  private seedRng(): void {
+    const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    let hash = 0;
+    for (let i = 0; i < dateStr.length; i++) {
+      hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+      hash |= 0;
+    }
+    // Also mix in the player class code points for per-class variation
+    for (let i = 0; i < this.playerClass.length; i++) {
+      hash = ((hash << 5) - hash) + this.playerClass.charCodeAt(i);
+      hash |= 0;
+    }
+    this.fishingRng = createSeededRng(hash);
   }
 
   preload(): void {
@@ -529,6 +556,67 @@ export class FishingScene extends Phaser.Scene {
 
     // Catch text
     // (removed — handled by React overlay via onFishCaught callback)
+
+    // Show zero-cleared-rooms message if applicable
+    if (!this.hasClearedRooms) {
+      this.showNoRoomsMessage();
+    }
+  }
+
+  // ── Zero-cleared-rooms overlay ───────────────────────────────────────────
+
+  private showNoRoomsMessage(): void {
+    const waterCenterY = (this.horizonY + this.shoreY) / 2;
+
+    // Main overlay message centered on water
+    this.noRoomsOverlay = this.add.text(this.canvasW / 2, waterCenterY, 'Defeat encounters in the nearby\ndungeon to unlock fish here!', {
+      fontFamily: "'Cinzel', Georgia, serif",
+      fontSize: '18px',
+      color: '#ffffff',
+      align: 'center',
+      wordWrap: { width: this.canvasW * 0.8 },
+      stroke: '#000000',
+      strokeThickness: 4,
+      shadow: {
+        offsetX: 2,
+        offsetY: 2,
+        color: '#000000',
+        blur: 6,
+        fill: true,
+      },
+      lineSpacing: 8,
+    }).setOrigin(0.5, 0.5).setDepth(22).setScrollFactor(0).setAlpha(0.92);
+
+    // Small dungeon portal icon pointing left (toward village exit)
+    this.noRoomsIcon = this.add.text(60, waterCenterY, '🌀', {
+      fontSize: '32px',
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5, 0.5).setDepth(22).setScrollFactor(0);
+
+    // Subtle pulse tween on the icon
+    this.tweens.add({
+      targets: this.noRoomsIcon,
+      alpha: { from: 0.7, to: 1 },
+      scaleX: { from: 1, to: 1.15 },
+      scaleY: { from: 1, to: 1.15 },
+      duration: 1200,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    // Arrow label next to the icon
+    this.noRoomsArrowLabel = this.add.text(90, waterCenterY, '← Portal', {
+      fontFamily: "'Cinzel', Georgia, serif",
+      fontSize: '13px',
+      color: '#cfe1ff',
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0, 0.5).setDepth(22).setScrollFactor(0).setAlpha(0.8);
+
+    // Update the bottom hint text
+    this.updateHint('Return to the village and clear some dungeon rooms first');
   }
 
   // ── Layout helpers ───────────────────────────────────────────────────────
@@ -637,6 +725,9 @@ export class FishingScene extends Phaser.Scene {
     if (this.skyGfx) { this.skyGfx.destroy(); this.skyGfx = null; }
     if (this.starGfx) { this.starGfx.destroy(); this.starGfx = null; }
     if (this.shoreGfx) { this.shoreGfx.destroy(); this.shoreGfx = null; }
+    if (this.noRoomsOverlay) { this.noRoomsOverlay.destroy(); this.noRoomsOverlay = null; }
+    if (this.noRoomsIcon) { this.noRoomsIcon.destroy(); this.noRoomsIcon = null; }
+    if (this.noRoomsArrowLabel) { this.noRoomsArrowLabel.destroy(); this.noRoomsArrowLabel = null; }
     for (const tile of this.waterTiles) { if (tile && tile.active) tile.destroy(); }
     this.waterTiles = [];
 
@@ -667,6 +758,11 @@ export class FishingScene extends Phaser.Scene {
     this.powerBarGfx = null;
     this.powerBarText = null;
     if (this.state === 'powering') this.createPowerBar();
+
+    // Re-show zero-cleared-rooms overlay if applicable
+    if (!this.hasClearedRooms) {
+      this.showNoRoomsMessage();
+    }
   }
 
   private updateHint(text: string): void {
@@ -752,6 +848,9 @@ export class FishingScene extends Phaser.Scene {
     // Cast anywhere in the water area (above shore)
     if (pointer.y > this.shoreY - 20) return;
 
+    // Block casting when no cleared dungeon rooms exist
+    if (!this.hasClearedRooms) return;
+
     switch (this.state) {
       case 'idle':
         this.startPowering();
@@ -809,9 +908,12 @@ export class FishingScene extends Phaser.Scene {
     const p = Math.max(0.12, powerValue);
 
     // Launch upward: slight horizontal spread, strong upward velocity
-    const spreadAngle = (Math.random() - 0.5) * 0.3; // slight random left/right
+    const spreadAngle = (this.fishingRng() - 0.5) * 0.3; // slight random left/right
     this.bobberVX = p * CAST_SPEED * Math.sin(spreadAngle);
     this.bobberVY = -p * CAST_SPEED * Math.cos(spreadAngle); // negative = upward
+
+    // TODO: wire sound effect — audioManager.playSfx('fish-cast')
+    audioManager.playSfx('fish-cast');
 
     // Target Y for bobber landing: further = higher on screen (closer to horizon)
     this.bobberTargetX = this.shoreY - p * (this.shoreY - this.horizonY - HORIZON_MARGIN * 2);
@@ -823,7 +925,7 @@ export class FishingScene extends Phaser.Scene {
     this.waitStartTime = this.time.now;
 
     // Determine what fish will bite
-    const { entry } = rollFishRarity();
+    const { entry } = rollFishRarity(this.fishingRng);
     this.currentFish = entry;
 
     // Pick a random fish direction
@@ -852,7 +954,7 @@ export class FishingScene extends Phaser.Scene {
    */
   private rollFishDirection(): FishDirection {
     const total = Object.values(FISH_DIRECTION_WEIGHTS).reduce((a, b) => a + b, 0);
-    const roll = Math.random() * total;
+    const roll = this.fishingRng() * total;
     let cumulative = 0;
     for (const [dir, weight] of Object.entries(FISH_DIRECTION_WEIGHTS)) {
       cumulative += weight;
@@ -894,7 +996,7 @@ export class FishingScene extends Phaser.Scene {
         break;
       }
       case 'bottom': {
-        startX = targetX + (Math.random() * 160 - 80);
+        startX = targetX + (this.fishingRng() * 160 - 80);
         startY = this.canvasH + 40;
         this.fishSprite.setAngle(-90);
         const vertDist = this.canvasH + 40 - targetY;
@@ -928,6 +1030,9 @@ export class FishingScene extends Phaser.Scene {
     if (this.state !== 'waiting') return;
     this.state = 'biting';
     this.biteWindowActive = true;
+
+    // TODO: wire sound effect — audioManager.playSfx('fish-bite')
+    audioManager.playSfx('fish-bite');
 
     // Splash effect on bobber
     if (this.bobberSprite) {
@@ -972,6 +1077,9 @@ export class FishingScene extends Phaser.Scene {
     this.biteWindowActive = false;
     this.state = 'reeling';
 
+    // TODO: wire sound effect — audioManager.playSfx('fish-reel')
+    audioManager.playSfx('fish-reel');
+
     if (this.biteWindowTimer) {
       this.biteWindowTimer.remove();
       this.biteWindowTimer = null;
@@ -1012,6 +1120,9 @@ export class FishingScene extends Phaser.Scene {
 
   private catchFish(): void {
     this.state = 'caught';
+
+    // TODO: wire sound effect — audioManager.playSfx('fish-catch')
+    audioManager.playSfx('fish-catch');
 
     if (this.bobberSprite) this.bobberSprite.setVisible(false);
     if (this.lineGfx) this.lineGfx.clear();
@@ -1063,6 +1174,9 @@ export class FishingScene extends Phaser.Scene {
   private missFish(): void {
     this.state = 'missed';
     this.biteWindowActive = false;
+
+    // TODO: wire sound effect — audioManager.playSfx('fish-miss')
+    audioManager.playSfx('fish-miss');
 
     this.updateHint('The fish got away... Click to cast again');
 
@@ -1146,6 +1260,9 @@ export class FishingScene extends Phaser.Scene {
   }
 
   private splashAt(x: number, y: number): void {
+    // TODO: wire sound effect — audioManager.playSfx('fish-splash')
+    audioManager.playSfx('fish-splash');
+
     // Ripple rings expanding outward
     for (let i = 0; i < 3; i++) {
       const ring = this.add.circle(x, y, 6, 0x8899aa, 0).setDepth(15).setStrokeStyle(1.5, 0xaabbcc, 0.7);
@@ -1162,15 +1279,15 @@ export class FishingScene extends Phaser.Scene {
 
     // Water droplets flying up
     for (let i = 0; i < 5; i++) {
-      const dx = (Math.random() - 0.5) * 40;
-      const dy = -(15 + Math.random() * 20);
+      const dx = (this.fishingRng() - 0.5) * 40;
+      const dy = -(15 + this.fishingRng() * 20);
       const drop = this.add.circle(x, y, 2, 0x8899cc, 0.8).setDepth(16);
       this.tweens.add({
         targets: drop,
         x: x + dx,
         y: y + dy,
         alpha: { from: 0.8, to: 0 },
-        duration: 350 + Math.random() * 200,
+        duration: 350 + this.fishingRng() * 200,
         onComplete: () => drop.destroy(),
       });
     }

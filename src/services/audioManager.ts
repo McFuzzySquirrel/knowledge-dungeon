@@ -22,7 +22,13 @@ export type SfxKind =
   | 'boss-encounter'
   | 'achievement-unlock'
   | 'loot-drop'
-  | 'portal-enter';
+  | 'portal-enter'
+  | 'fish-cast'
+  | 'fish-splash'
+  | 'fish-bite'
+  | 'fish-reel'
+  | 'fish-catch'
+  | 'fish-miss';
 
 interface AudioManagerState {
   musicEnabled: boolean;

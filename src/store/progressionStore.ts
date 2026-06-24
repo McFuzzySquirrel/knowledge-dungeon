@@ -17,10 +17,15 @@ import {
   rollEquippableLoot,
   computeCrossSubjectProgress,
   evaluateAchievementUnlocks,
+  FSH_XP_PER_CORRECT_ANSWER,
+  FISHING_BADGE_DEFS,
+  FISHING_BADGE_IDS,
+  type FishingBadgeId,
 } from '@/core/progression';
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
-import type { FishEntry } from '@/game/systems/fishingTypes';
-import { deserializeFishCollection, createFishId, addFishToCollection } from '@/core/fishing/fishCollectionService';
+import type { FishEntry, FishRarity, FishCollection } from '@/game/systems/fishingTypes';
+import { FISH_RARITY_XP_MULTIPLIER, FISH_CATALOG } from '@/game/systems/fishingTypes';
+import { deserializeFishCollection, createFishId, addFishToCollection, countUniqueTypes } from '@/core/fishing/fishCollectionService';
 
 export interface LootItem {
   id: string;
@@ -305,6 +310,10 @@ export interface ProgressionStoreState {
   };
   /** Fisher's Rest: add a caught fish to the active subject's collection */
   addFish: (input: { name: string; rarity: FishEntry['rarity']; subjectId: string; subjectName: string }) => FishEntry;
+  /** Fisher's Rest: award XP for correctly answering a fishing recall question */
+  awardFishingXp: (rarity: FishRarity) => { xpGained: number; newRank: RankTier; rankChanged: boolean };
+  /** Fisher's Rest: check and award any fishing badges based on current collection */
+  checkFishingBadges: () => FishingBadgeId[];
   /** Track 3c: equip an equippable item */
   equipItem: (itemId: string) => boolean;
   /** Track 3c: unequip an item */
@@ -445,6 +454,72 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     set({ bySubject, ...nextSubject });
     savePersistedBySubject(bySubject, state.crossSubjectAchievements);
     return entry;
+  },
+
+  // ── Fisher's Rest: awardFishingXp ─────────────────
+
+  awardFishingXp(rarity) {
+    const state = get();
+    if (!state.activeSubjectId) {
+      return { xpGained: 0, newRank: 'Novice' as RankTier, rankChanged: false };
+    }
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const multiplier = FISH_RARITY_XP_MULTIPLIER[rarity] ?? 1.0;
+    const xpGained = Math.round(FSH_XP_PER_CORRECT_ANSWER * multiplier);
+    const nextXp = current.xpTotal + xpGained;
+    const nextRank = assignRankTier(nextXp);
+
+    const nextSubject: PersistedSubjectProgression = {
+      ...current,
+      xpTotal: nextXp,
+      rank: nextRank,
+    };
+    const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
+    set({ bySubject, ...nextSubject });
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    return {
+      xpGained,
+      newRank: nextRank,
+      rankChanged: nextRank !== current.rank,
+    };
+  },
+
+  // ── Fisher's Rest: checkFishingBadges ──────────────
+
+  checkFishingBadges() {
+    const state = get();
+    if (!state.activeSubjectId) return [];
+
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const collection: FishCollection = current.fishCollection;
+    const totalFish = collection.length;
+    const uniqueCount = countUniqueTypes(collection);
+    const existingBadges = new Set(current.badges);
+    const newlyAwarded: FishingBadgeId[] = [];
+
+    for (const badgeId of FISHING_BADGE_IDS) {
+      if (existingBadges.has(badgeId)) continue;
+
+      const def = FISHING_BADGE_DEFS[badgeId];
+      let earned = false;
+
+      if (badgeId === 'FshFullCreel') {
+        // -1 threshold means all unique fish types caught
+        earned = uniqueCount >= FISH_CATALOG.length;
+      } else {
+        earned = totalFish >= def.threshold;
+      }
+
+      if (earned) {
+        const awarded = get().awardBadge(badgeId);
+        if (awarded) {
+          newlyAwarded.push(badgeId);
+        }
+      }
+    }
+
+    return newlyAwarded;
   },
 
   awardRoomClear({
