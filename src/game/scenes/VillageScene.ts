@@ -44,6 +44,8 @@ const SPRITE_PATHS = {
   bench: 'sprites/village/bench.svg',
   villageGate: 'sprites/village/village-gate.svg',
   workshop: 'sprites/village/workshop.svg',
+  fishingPond: 'sprites/village/fishing-pond.svg',
+  fishStand: 'sprites/village/fish-stand.svg',
   keeperNpc: 'sprites/npc-keeper.svg',
   playerHero: 'sprites/player-hero.svg',
   playerExplorer: 'sprites/player-explorer.svg',
@@ -76,6 +78,8 @@ const TEX = {
   bench: 'v-bench',
   villageGate: 'v-gate',
   workshop: 'v-workshop',
+  fishingPond: 'v-fishing-pond',
+  fishStand: 'v-fish-stand',
   keeperNpc: 'v-npc-keeper',
   playerHero: 'v-player-hero',
   playerExplorer: 'v-player-explorer',
@@ -121,6 +125,8 @@ const STRUCTURE_TEXTURE: Record<string, string> = {
   'gate': TEX.villageGate,
   'library': TEX.library,
   'workshop': TEX.workshop,
+  'fishing-pond': TEX.fishingPond,
+  'fish-stand': TEX.fishStand,
 };
 
 interface NpcState {
@@ -215,6 +221,8 @@ export class VillageScene extends Phaser.Scene {
     loadSvg(TEX.rock, SPRITE_PATHS.rock, 32, 24);
     loadSvg(TEX.trophyHall, SPRITE_PATHS.trophyHall, 120, 120);
     loadSvg(TEX.workshop, SPRITE_PATHS.workshop, 120, 120);
+    loadSvg(TEX.fishingPond, SPRITE_PATHS.fishingPond, 96, 96);
+    loadSvg(TEX.fishStand, SPRITE_PATHS.fishStand, 96, 72);
     loadSvg(TEX.library, SPRITE_PATHS.library, 120, 140);
     loadSvg(TEX.bench, SPRITE_PATHS.bench, 64, 32);
     loadSvg(TEX.villageGate, SPRITE_PATHS.villageGate, 120, 96);
@@ -431,7 +439,7 @@ export class VillageScene extends Phaser.Scene {
       // decorations at depth (player walks in front), tall foreground objects at
       // depth 11 (player walks behind).
       const foregroundTypes = new Set(['tree', 'bush', 'torch', 'lamp', 'signpost', 'waysign']);
-      const groundDecorTypes = new Set(['fountain', 'pond', 'bench', 'flower']);
+      const groundDecorTypes = new Set(['fountain', 'pond', 'bench', 'flower', 'fishing-pond']);
       let depth: number;
       if (foregroundTypes.has(struct.type)) depth = 11;
       else if (groundDecorTypes.has(struct.type)) depth = 9;
@@ -471,7 +479,7 @@ export class VillageScene extends Phaser.Scene {
         }
       }
 
-      const interactiveTypes = new Set(['portal-icon', 'keeper-tower', 'guild-hall', 'training-gate', 'signpost', 'waysign', 'trophy-hall', 'library', 'workshop', 'fountain']);
+      const interactiveTypes = new Set(['portal-icon', 'keeper-tower', 'guild-hall', 'training-gate', 'signpost', 'waysign', 'trophy-hall', 'library', 'workshop', 'fountain', 'fishing-pond', 'fish-stand']);
       const isInteractive = interactiveTypes.has(struct.type);
       if (isInteractive) {
         const zone = this.add.zone(cx, cy, struct.width * ts, struct.height * ts).setInteractive();

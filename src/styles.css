@@ -5401,3 +5401,29 @@ textarea.game-input:focus {
   padding: 4px 8px;
   border-radius: 4px;
 }
+
+/* ── Fisher's Rest: fish rarity badge ───────────────────────────────────── */
+.fish-rarity-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.fish-rarity-badge[data-rarity="common"] {
+  background: #3a5a3a;
+  color: #aabbaa;
+  border: 1px solid #4a7a4a;
+}
+.fish-rarity-badge[data-rarity="rare"] {
+  background: #1a3a5a;
+  color: #5aaaff;
+  border: 1px solid #2a5a8a;
+}
+.fish-rarity-badge[data-rarity="epic"] {
+  background: #4a3a1a;
+  color: #ffd700;
+  border: 1px solid #8a7a2a;
+}

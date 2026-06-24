@@ -53,7 +53,7 @@ export function VillageScreen(): JSX.Element {
 
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [infoPanel, setInfoPanel] = useState<{
-    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop' | 'fountain';
+    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop' | 'fountain' | 'fishing-pond' | 'fish-stand';
     structureId: string;
     subject?: SubjectSummary;
   } | null>(null);
@@ -98,6 +98,52 @@ export function VillageScreen(): JSX.Element {
   const [showStats, setShowStats] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [makeItYoursOpen, setMakeItYoursOpen] = useState(false);
+  const [fishCaughtData, setFishCaughtData] = useState<{
+    fishName: string; rarity: string; catalogId: string; description: string;
+  } | null>(null);
+
+  const handleStartFishing = useCallback((_pondId: string) => {
+    const game = gameRef.current;
+    if (!game) return;
+    setInfoPanel(null);
+    setFishCaughtData(null);
+    game.scene.getScene('VillageScene')?.scene.sleep();
+    game.scene.start('FishingScene', {
+      callbacks: {
+        onFishCaught: (data: { fishName: string; rarity: string; catalogId: string; description: string }) => {
+          setFishCaughtData(data);
+        },
+        onReturnToVillage: () => {
+          setTimeout(() => {
+            const g = gameRef.current;
+            if (g) {
+              g.scene.stop('FishingScene');
+              g.scene.getScene('VillageScene')?.scene.wake();
+            }
+          }, 0);
+        },
+        onReady: () => {},
+      },
+      playerClass: selectedClass ?? 'scholar',
+    });
+  }, [selectedClass]);
+
+  const addFishToCollection = useProgressionStore((s) => s.addFish);
+
+  const handleKeepFish = useCallback((data: typeof fishCaughtData) => {
+    if (!data) return;
+    // Find a subject to associate the fish with — prefer the most recently active one
+    const subjectIds = Object.keys(useProgressionStore.getState().bySubject);
+    const subjectId = subjectIds.length > 0 ? subjectIds[subjectIds.length - 1] : 'village';
+    const subjectName = useSubjectStore.getState().subjectName || subjectId;
+    addFishToCollection({
+      name: data.fishName,
+      rarity: data.rarity as 'common' | 'rare' | 'epic',
+      subjectId,
+      subjectName,
+    });
+    setFishCaughtData(null);
+  }, [addFishToCollection]);
 
   const refreshSubjects = useCallback(async () => {
     try {
@@ -209,6 +255,10 @@ export function VillageScreen(): JSX.Element {
           setInfoPanel({ type: 'workshop', structureId });
         } else if (sType === 'fountain') {
           setInfoPanel({ type: 'fountain', structureId });
+        } else if (sType === 'fishing-pond') {
+          setInfoPanel({ type: 'fishing-pond', structureId });
+        } else if (sType === 'fish-stand') {
+          setInfoPanel({ type: 'fish-stand', structureId });
         }
       },
       onStructureLeft: (structureId) => {
@@ -264,6 +314,10 @@ export function VillageScreen(): JSX.Element {
           setMakeItYoursOpen(true);
         } else if (sType === 'fountain') {
           setShowStats(true);
+        } else if (sType === 'fishing-pond') {
+          handleStartFishing(structureId);
+        } else if (sType === 'fish-stand') {
+          setInfoPanel({ type: 'fish-stand', structureId });
         }
       },
       onNpcApproached: (npcId) => {
@@ -889,6 +943,52 @@ export function VillageScreen(): JSX.Element {
         </div>
       ) : null}
 
+      {infoPanel?.type === 'fishing-pond' ? (
+        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
+          <div className="village-info-panel-header">
+            <span className="village-info-portal-icon">🎣</span>
+            <div>
+              <h3>Fishing Pond</h3>
+              <p className="village-info-meta">Cast a line and reel in some knowledge</p>
+            </div>
+          </div>
+          <p className="village-info-desc">
+            Take a break from studying and try your luck at the fishing pond.
+            Catch fish, test your recall, and build your collection.
+          </p>
+          <div className="village-info-actions">
+            <button
+              type="button"
+              className="village-enter-btn"
+              onClick={() => handleStartFishing(infoPanel.structureId)}
+            >
+              Cast Line
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {infoPanel?.type === 'fish-stand' ? (
+        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
+          <div className="village-info-panel-header">
+            <span className="village-info-portal-icon">🐟</span>
+            <div>
+              <h3>Fish Stand</h3>
+              <p className="village-info-meta">View your fish collection</p>
+            </div>
+          </div>
+          <p className="village-info-desc">
+            All the fish you have caught across every subject are displayed here.
+            Visit a fishing pond to start your collection!
+          </p>
+          <div className="village-info-actions">
+            <button type="button" className="village-action-btn" disabled>
+              View Collection (Coming Soon)
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {infoPanel?.type === 'signpost' ? (
         <SignpostPanel structureId={infoPanel.structureId} colorTheme={colorTheme} />
       ) : null}
@@ -1022,6 +1122,37 @@ export function VillageScreen(): JSX.Element {
 
       {makeItYoursOpen ? (
         <MakeItYoursModal onClose={() => setMakeItYoursOpen(false)} />
+      ) : null}
+
+      {fishCaughtData ? (
+        <div className="modal-backdrop" style={{ zIndex: 350, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="village-info-panel ui-skin screen-slide-up" data-theme={colorTheme}
+            style={{ maxWidth: 420, width: '90%' }}>
+            <div className="village-info-panel-header">
+              <span className="village-info-portal-icon">🎣</span>
+              <div>
+                <h3>{fishCaughtData.fishName}</h3>
+                <p className="village-info-meta">{fishCaughtData.rarity.charAt(0).toUpperCase() + fishCaughtData.rarity.slice(1)} Fish</p>
+              </div>
+              <span className="fish-rarity-badge" data-rarity={fishCaughtData.rarity}>
+                {fishCaughtData.rarity.toUpperCase()}
+              </span>
+            </div>
+            <p className="village-info-desc">{fishCaughtData.description}</p>
+            <div className="village-info-actions">
+              <button type="button" className="village-enter-btn"
+                onClick={() => handleKeepFish(fishCaughtData)}
+              >
+                Keep Fish
+              </button>
+              <button type="button" className="village-action-btn"
+                onClick={() => setFishCaughtData(null)}
+              >
+                Release
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
 

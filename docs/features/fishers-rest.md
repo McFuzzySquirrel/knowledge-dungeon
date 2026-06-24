@@ -4,18 +4,20 @@
 
 **Feature Name:** Fisher's Rest — Fishing Mini-Game
 **Parent Document:** [docs/PRD.md](../PRD.md)
-**Status:** Draft
-**Summary:** Adds a side-view fishing mini-game accessible from village ponds located near dungeon portals. Players cast a line into the water, wait for a bite, and reel in fish using a timed click. Each caught fish triggers a recall question pulled randomly from a cleared room in the nearest dungeon portal's subject. Answering correctly keeps the fish (added to collection) and awards XP; answering incorrectly lets the fish escape. A new **Fish Stand** building in the village displays the player's full fish collection across all subjects.
+**Status:** In Progress (Phases F1-F2 complete, F3 partially complete)
+**Summary:** Adds a top-down "first person" lake-perspective fishing mini-game accessible from village ponds. Player stands on the shore embankment, holds to build casting power, releases to launch the bobber into the lake. Fish silhouettes swim toward the bobber; proximity triggers a bite with a timed click window to reel in. Caught fish display in a React overlay info panel with rarity badge and description; player chooses to keep (adds to collection) or release. A **fish bucket** sits next to the player and visually fills with caught fish. A **Fish Stand** building in the village displays the player's full collection.
 
 **Scope:**
-- New Phaser fishing scene with side-view cast-and-wait gameplay
-- 2–3 new interactive "fishing pond" structures placed near dungeon portal slots in the village
-- Recall question pulling from cleared rooms in the nearest dungeon subject
+- New Phaser fishing scene with top-down lake perspective and physics-based cast
+- 3 interactive "fishing pond" structures placed near dungeon portal slots in the village
+- Hold-to-cast power meter mechanic with parabolic bobber flight
+- Proximity-based bite detection (fish must reach bobber area)
 - Fish rarity system (Common, Rare, Epic) with weighted random rolls
-- Fish collection persisted per player alongside progression data
+- Fish collection persisted alongside progression data
 - Fish Stand building in the village with a gallery of collected fish
-- XP awards for correctly answering recall questions during fishing
 - Fishing-related badges in the progression system
+- Embankment shore with trees, bushes, and a fish bucket that fills with catches
+- Player can walk left/right along the shore before casting
 
 **Out of scope:**
 - Fishing in dungeon rooms or non-village scenes
@@ -115,18 +117,27 @@
 
 ## 5. Technical Approach
 
-### 5.1 Impact on Existing Architecture
+### 5.1 Implemented Architecture
 
-**Files modified:**
+The fishing scene uses a **top-down "first person" lake perspective** — player at bottom center facing up into the lake, distant horizon at top. All visuals use Phaser primitives + village sprite assets (no new npm dependencies).
+
+**FishingScene layout (depths):**
+```
+sky (-1) → stars (0) → deep water (0) → horizon trees (1) → water surface (2)
+→ fish silhouettes (2.5) → water tiles (3) → shore (4) → line (5)
+→ bobber (6) → trees/bushes (7) → bucket (8) → rod (9) → player (10)
+```
+
+**Files modified vs original PRD plan:**
 
 | File | Change |
 |------|--------|
-| `src/data/villageLayout.ts` | Add `'fishing-pond'` and `'fish-stand'` to `VillageStructure.type` union; add 2–3 `fishing-pond` structures and 1 `fish-stand` structure to `VILLAGE_MAP.structures`; add portal-proximity helper |
-| `src/game/scenes/VillageScene.ts` | Add `fishingPond` and `fishStand` entries to `SPRITE_PATHS` and `TEX`; add `fishing-pond` and `fish-stand` rendering in `create()`; emit `onStructureInteract` for fishing ponds |
-| `src/ui/screens/VillageScreen.tsx` | Add `'fishing-pond'` and `'fish-stand'` to `infoPanel.type` union; handle fishing pond interaction → launch FishingScene or transition to FishingScreen; handle fish stand → show collection gallery |
-| `src/core/progression/types.ts` | Add `FSH_XP_PER_CORRECT_ANSWER = 5` constant; add fishing badge IDs |
-| `src/store/progressionStore.ts` | Add `fishCollection: FishEntry[]` to state; add `addFish()`, `getFishCollection()` actions |
-| `src/core/validation/persistence/types.ts` | Add `FishEntry` and `FishCollection` types to `ProgressionSnapshot` |
+| `src/game/scenes/FishingScene.ts` | New — ~1200 line Phaser scene: top-down lake perspective, hold-to-cast with power meter, parabolic bobber flight, proximity-based bite, curved bezier line, splash effects, shore decorations (trees/bushes from village SVGs), fish bucket with visual fill, player movement (A/D keys) |
+| `src/game/systems/fishingTypes.ts` | Types: FishRarity, FishEntry, FishCatalog (8 fish), FishDirection ('right'\|'bottom'), timing/weight constants |
+| `src/game/systems/fishingMechanics.ts` | Pure functions: rollFishRarity (weighted), pullRecallQuestion, getClearedRooms |
+| `src/core/fishing/fishCollectionService.ts` | Persistence: serialize/deserialize/add/countByRarity |
+| `src/ui/screens/VillageScreen.tsx` | Fish caught info panel (village-info-panel style) with rarity badge, Keep/Release buttons. addFish() wiring. |
+| `src/styles.css` | `.fish-rarity-badge` CSS — color-coded by rarity (green/blue/gold) |
 
 **No files removed.**
 
@@ -222,86 +233,54 @@ None. All work falls within existing agent domains.
 
 ## 9. Implementation Phases
 
-### Phase F1: Foundation & Data Layer (~1–2 days)
+### Phase F1: Foundation & Data Layer (COMPLETE)
 
-- [ ] Define `FishEntry`, `FishCollection`, `FishCatalog`, and `FishRarity` types in `src/game/systems/fishingTypes.ts`
-- [ ] Add `fishCollection: FishEntry[]` to `ProgressionSnapshot` in `src/core/validation/persistence/types.ts`
-- [ ] Add `fishCollection` state + `addFish()` action to `src/store/progressionStore.ts`
-- [ ] Create `src/core/fishing/fishCollectionService.ts` — persistence layer (serialize/deserialize fish collection)
-- [ ] Add fishing XP constants (`FSH_XP_PER_CORRECT_ANSWER`) and badge IDs to `src/core/progression/types.ts`
-- [ ] Add `'fishing-pond'` and `'fish-stand'` to `VillageStructure.type` union in `villageLayout.ts`
-- [ ] Define 2–3 fishing pond structures near portal slots and 1 Fish Stand structure in `VILLAGE_MAP.structures`
-- [ ] Create portal-to-pond proximity helper in `villageLayout.ts`
-- [ ] Create `src/game/systems/fishingMechanics.ts` — bite timer logic, rarity roll, question pulling (calls `generateSelfCheckPrompts`)
-- [ ] Create fish sprite SVGs in `public/assets/sprites/fishing/` (3+ fish silhouettes, bobber, rod, water surface, pier)
+- [x] Define `FishEntry`, `FishCollection`, `FishCatalog`, and `FishRarity` types in `src/game/systems/fishingTypes.ts`
+- [x] Add `fishCollection: FishEntry[]` to `ProgressionSnapshot` in `src/core/validation/persistence/types.ts`
+- [x] Add `fishCollection` state + `addFish()` action to `src/store/progressionStore.ts`
+- [x] Create `src/core/fishing/fishCollectionService.ts` — persistence layer
+- [x] Add fishing XP constants and badge IDs to `src/core/progression/types.ts`
+- [x] Add `'fishing-pond'` and `'fish-stand'` to `VillageStructure.type` union
+- [x] Define 3 fishing pond structures and 1 Fish Stand in village layout
+- [x] Create portal-to-pond proximity helper
+- [x] Create `src/game/systems/fishingMechanics.ts` — rarity roll, question pulling
+- [x] Create fish sprite SVGs (8 fish + bobber + rod + water-surface + pier)
 
-**Validation:**
-- [ ] `npm run typecheck` and `npm run lint` pass
-- [ ] `FishCatalog` has at least 6 fish types across all 3 rarities
-- [ ] Proximity helper correctly maps each fishing pond to its nearest portal slot
+### Phase F2: Fishing Scene (COMPLETE)
 
-### Phase F2: Fishing Scene (~2–3 days)
+- [x] Created `src/game/scenes/FishingScene.ts` (~1200 lines) — top-down lake-perspective fishing mini-game
+  - [x] **Layout**: Distant horizon with tree silhouettes at top (10%), water area (10-80%), shore embankment at bottom (80-100%). Night sky with gradient and stars.
+  - [x] **Player**: On the shore embankment at bottom-center, movable left/right with A/D or arrow keys. Rod extends upward toward the lake.
+  - [x] **Cast mechanic**: Hold click to build power (visible meter), release to launch bobber upward into the lake. Physics-based parabolic flight.
+  - [x] **Splash effect**: Expanding ripple rings and water droplets on bobber landing.
+  - [x] **Wait mechanic**: Bobber bobs gently, fish silhouette swims toward bobber from right or below.
+  - [x] **Proximity bite**: Fish triggers bite when within 50px of bobber (no random timer). 20s max timeout fallback.
+  - [x] **Catch mechanic**: Reeling animation pulls fish toward rod, `onFishCaught` event sent to React overlay.
+  - [x] **Curved fishing line**: Quadratic bezier from rod tip to bobber with 12 segments.
+  - [x] **Shore decorations**: 3 trees and 4 bushes from village sprites, positioned with bases on the shore line.
+  - [x] **Fish bucket**: Wooden bucket beside player that visually fills with mini fish sprites on each catch. Redraws when player moves.
+  - [x] **Exit**: Escape key or "Return to Village" button returns to village scene.
+- [x] Added `fishingPond` and `fishStand` sprites, rendering, and interactivity to `VillageScene.ts`
+- [x] Added fishing pond and fish stand info panels to `VillageScreen.tsx`
+- [x] Fishing scene registered in `createVillageGame.ts`
 
-- [ ] Create `src/game/scenes/FishingScene.ts` — Phaser scene with side-view layout
-  - [ ] Preload: load fishing sprites (bobber, rod, fish silhouettes, water surface, pier)
-  - [ ] Create: render pier/ground (upper portion), water surface with animated wave tiles (lower portion), player avatar at cast position, bobber (hidden initially)
-  - [ ] Cast mechanic: click water → animate line extending from rod to click point, bobber appears at water surface
-  - [ ] Wait mechanic: bobber idle bobbing tweens, random 3–15s timer, fish silhouette swims toward bobber
-  - [ ] Bite mechanic: on timer end, bobber splash animation + visual cue; 2-second click window
-  - [ ] Catch mechanic: on bite click → reeling animation, fish pulled up, fish name/rarity displayed on screen
-  - [ ] Miss mechanic: on window expiry → fish silhouette swims away, bobber resets, player can cast again
-- [ ] Add `fishing-pond` and `fish-stand` sprites to `VillageScene.ts` `SPRITE_PATHS` and `TEX`
-- [ ] Add `fishing-pond` rendering in `VillageScene.create()` (same pattern as existing structures)
-- [ ] Add `fish-stand` rendering in `VillageScene.create()` (same pattern as existing buildings)
-- [ ] Emit `onStructureInteract` for fishing pond structures
-- [ ] Add fishing pond interaction to `VillageScreen.tsx`: `fishing-pond` case in `infoPanel` type, scene transition to FishingScene with subject context
-- [ ] Add scene registration in game creation (`src/game/createVillageGame.ts` or equivalent)
+### Phase F3: Recall Question + Collection UI (PARTIALLY COMPLETE)
 
-**Validation:**
-- [ ] Player can approach fishing pond → press E → FishingScene loads
-- [ ] Cast → wait → bite → reel flow works visually and mechanically
-- [ ] Missed bite window correctly resets
-- [ ] "Return to Village" exits scene cleanly
-- [ ] Existing decorative ponds remain non-interactive (regression check)
+- [x] React overlay info panel shown on fish catch — styled village-info-panel with fish name, rarity badge (common/rare/epic color-coded), and description
+- [x] "Keep Fish" button adds fish to progression store collection via `addFish()`; "Release" button closes panel
+- [ ] Recall question modal with self-evaluation (deferred — see Open Questions below)
+- [ ] Fish Stand collection gallery (`FishStandPanel.tsx`)
+- [ ] XP award flow wired to correct recall answers
+- [ ] Fishing badge checks in progression engine
 
-### Phase F3: Recall Question + Collection UI (~1–2 days)
+### Phase F4: Polish & Edge Cases (NOT STARTED)
 
-- [ ] Create `src/ui/components/FishingRecallModal.tsx`
-  - [ ] Displays recall question text (pulled from `generateSelfCheckPrompts`)
-  - [ ] "I got it right" / "I need to review" self-evaluation buttons
-  - [ ] Shows fish name and rarity as header
-  - [ ] On "I got it right": fish added to collection, XP awarded, success animation
-  - [ ] On "I need to review": "The fish wriggles free..." message, fish not added
-- [ ] Wire FishingScene → RecallModal communication (Phaser emits event → React displays modal)
-- [ ] Create `src/ui/components/FishStandPanel.tsx`
-  - [ ] Gallery grid of collected fish with name, rarity badge (color-coded: gray/green, blue, purple/gold), subject label
-  - [ ] Sort by most recent catch
-  - [ ] Empty state: "No fish caught yet — visit a fishing pond near a dungeon portal!"
-  - [ ] Counts per rarity displayed in header
-- [ ] Add `fish-stand` interaction to `VillageScreen.tsx`: `fish-stand` case in `infoPanel.type`, opens `FishStandPanel`
-- [ ] Implement fishing badge checks in progression engine (first catch, 10, 25, full collection)
-
-**Validation:**
-- [ ] Catch fish → recall modal appears → "I got it right" → fish saved, XP earned
-- [ ] Catch fish → recall modal appears → "I need to review" → fish not saved, line resets
-- [ ] Fish Stand shows all collected fish with correct rarity and subject labels
-- [ ] Empty Fish Stand shows appropriate message
-- [ ] Fishing badges unlock at correct thresholds
-
-### Phase F4: Polish & Edge Cases (~1 day)
-
-- [ ] Subject with zero cleared rooms: show "Defeat encounters in the nearby dungeon to unlock fish here!" message instead of allowing fishing
-- [ ] Subject deleted after fish caught: fish remains in collection but shows "(Deleted Subject)" label
-- [ ] All fish types caught from a pond: "You've caught every fish this pond has to offer!" message
-- [ ] Seeded RNG for bite timing and rarity (based on `subjectId + fishCount`) for deterministic replay
-- [ ] Sound effects (if audio system available): splash on bite, reel sound on catch, bloop on miss
-- [ ] Fishing tutorial hint added to quest/onboarding system (optional step after completing a dungeon)
-
-**Validation:**
-- [ ] Zero-room subject shows informative message, no error
-- [ ] Deleted subject's fish still display with graceful label
-- [ ] Full pond catch state shows appropriate feedback
-- [ ] Regression: all existing village interactions still work
+- [ ] Subject with zero cleared rooms: show informative message
+- [ ] Deleted subject fish: "(Deleted Subject)" label
+- [ ] All fish types caught message
+- [ ] Seeded RNG for deterministic replay
+- [ ] Sound effects (splash, reel, bite)
+- [ ] Fishing tutorial hint in onboarding
 
 ---
 

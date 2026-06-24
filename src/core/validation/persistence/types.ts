@@ -111,10 +111,22 @@ export interface DungeonEdge {
   createdByPhase: EdgeCreatedByPhase;
 }
 
+/** A single caught fish entry for persistence. */
+export interface FishEntry {
+  id: string;
+  name: string;
+  rarity: 'common' | 'rare' | 'epic';
+  subjectId: string;
+  subjectName: string;
+  caughtAt: string;
+}
+
 export interface ProgressionSnapshot {
   xpTotal: number;
   rank: string;
   badges: string[];
+  /** Fisher's Rest: fish caught by the player. */
+  fishCollection: FishEntry[];
 }
 
 export interface DungeonMetadata {

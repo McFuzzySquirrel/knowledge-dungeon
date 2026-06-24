@@ -63,6 +63,20 @@ A built-in SVG editor that lets you personalize the entire game's look and feel.
 - **Apply Changes** — restarts the game scene to load your custom sprites in-game
 - Access from **Settings → Make It Yours** or walk up to the 🎨 **Artisan Workshop** building in the village
 
+### 🎣 Fisher's Rest — Fishing Mini-Game
+
+Take a break from studying with a relaxing fishing mini-game accessible from the village ponds.
+
+- **3 fishing ponds** near dungeon portal slots — walk up and press E to enter the fishing scene
+- **Top-down lake perspective** — player on the shore embankment at bottom, casting upward into the water. Night sky with stars, distant tree horizon, tiled water surface
+- **Hold-to-cast** — hold click to build power (green→yellow→red meter), release to launch the bobber with parabolic flight
+- **Proximity-based bite** — fish silhouette swims toward the bobber; bite triggers when fish gets close, with a 2-second click window to reel in
+- **8 catchable fish** across 3 rarities: Common (Moss Carp, Sun Skip, Reed Darter, Ink Minnow), Rare (Lunar Trout, Ember Perch), Epic (Gilded Koi, Abyssal Eel)
+- **Fish bucket** — wooden bucket beside the player that visually fills with mini fish sprites on each catch
+- **React overlay info panel** — styled village panel showing fish name, color-coded rarity badge, and description. Keep or release each catch.
+- **Player movement** — walk left/right along the shore with A/D or arrow keys before casting
+- **Fish Stand** building in the village (coming soon) — view your full collection across all subjects
+
 ---
 
 ## Phase 4 Features

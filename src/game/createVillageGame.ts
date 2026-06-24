@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { VillageScene, type VillageSceneEvents } from '@/game/scenes/VillageScene';
+import { FishingScene } from '@/game/scenes/FishingScene';
 import type { VillageStructure } from '@/data/villageLayout';
 
 export interface CreateVillageGameOptions {
@@ -26,7 +27,7 @@ export function createVillageGame(options: CreateVillageGameOptions): Phaser.Gam
       default: 'arcade',
       arcade: { gravity: { x: 0, y: 0 }, debug: false },
     },
-    scene: [VillageScene],
+    scene: [VillageScene, FishingScene],
   });
 
   game.scene.start('VillageScene', {

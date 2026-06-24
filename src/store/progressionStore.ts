@@ -19,6 +19,8 @@ import {
   evaluateAchievementUnlocks,
 } from '@/core/progression';
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
+import type { FishEntry } from '@/game/systems/fishingTypes';
+import { deserializeFishCollection, createFishId, addFishToCollection } from '@/core/fishing/fishCollectionService';
 
 export interface LootItem {
   id: string;
@@ -54,6 +56,8 @@ interface PersistedSubjectProgression {
   reviewPasses: number;
   artifacts: number;
   bossesDefeated: number;
+  /** Fisher's Rest: fish caught in this subject */
+  fishCollection: FishEntry[];
 }
 
 const REVIEW_PASS_XP = 6;
@@ -78,6 +82,7 @@ function cloneDefaultSubjectProgression(): PersistedSubjectProgression {
     reviewPasses: 0,
     artifacts: 0,
     bossesDefeated: 0,
+    fishCollection: [],
   };
 }
 
@@ -136,6 +141,7 @@ function normalizeSubjectProgression(raw: unknown): PersistedSubjectProgression 
     reviewPasses: typeof record.reviewPasses === 'number' ? Math.max(0, Math.trunc(record.reviewPasses)) : 0,
     artifacts: typeof record.artifacts === 'number' ? Math.max(0, Math.trunc(record.artifacts)) : 0,
     bossesDefeated: typeof record.bossesDefeated === 'number' ? Math.max(0, Math.trunc(record.bossesDefeated)) : 0,
+    fishCollection: deserializeFishCollection(record.fishCollection),
   };
 }
 
@@ -267,6 +273,8 @@ export interface ProgressionStoreState {
   bossesDefeated: number;
   /** Phase 3c: cross-subject achievements */
   crossSubjectAchievements: string[];
+  /** Fisher's Rest: fish caught in the active subject */
+  fishCollection: FishEntry[];
   setActiveSubject: (subjectId: string | null) => void;
   awardBadge: (badgeId: string) => boolean;
   collectArtifactNote: (entry: Omit<CollectedNoteEntry, 'noteId' | 'collectedAt'>) => boolean;
@@ -295,6 +303,8 @@ export interface ProgressionStoreState {
     rankChanged: boolean;
     unlockedAchievements: string[];
   };
+  /** Fisher's Rest: add a caught fish to the active subject's collection */
+  addFish: (input: { name: string; rarity: FishEntry['rarity']; subjectId: string; subjectName: string }) => FishEntry;
   /** Track 3c: equip an equippable item */
   equipItem: (itemId: string) => boolean;
   /** Track 3c: unequip an item */
@@ -401,6 +411,42 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     return true;
   },
 
+  // ── Fisher's Rest: addFish ──────────────────────────
+
+  addFish({ name, rarity, subjectId, subjectName }) {
+    const state = get();
+    if (!state.activeSubjectId) {
+      // If no active subject, still return a valid entry but don't persist
+      return {
+        id: createFishId('unknown'),
+        name,
+        rarity,
+        subjectId,
+        subjectName,
+        caughtAt: new Date().toISOString(),
+      };
+    }
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const entry: FishEntry = {
+      id: createFishId(name.toLowerCase().replace(/\s+/g, '-')),
+      name,
+      rarity,
+      subjectId,
+      subjectName,
+      caughtAt: new Date().toISOString(),
+    };
+
+    const updatedCollection = addFishToCollection(current.fishCollection, entry);
+    const nextSubject: PersistedSubjectProgression = {
+      ...current,
+      fishCollection: updatedCollection,
+    };
+    const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
+    set({ bySubject, ...nextSubject });
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+    return entry;
+  },
+
   awardRoomClear({
     qualityBonus,
     totalRooms,
@@ -480,6 +526,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       reviewPasses: current.reviewPasses,
       artifacts: current.artifacts,
       bossesDefeated,
+      fishCollection: current.fishCollection,
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
