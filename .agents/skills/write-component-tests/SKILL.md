@@ -1,174 +1,38 @@
 ---
 name: write-component-tests
-description: >
-  Writes Vitest + React Testing Library tests for a Knowledge Dungeon React
-  UI component, covering render, user interaction, state integration, and
-  edge cases.
+description: Writes Vitest and React Testing Library tests for Knowledge Dungeon DOM components, with store isolation, accessibility semantics, and browser follow-up for Pixi behavior.
 ---
 
-# Skill: Write Component Tests
+# Write Component Tests
 
-Creates comprehensive tests for a Knowledge Dungeon React UI component using Vitest and React Testing Library.
-
----
+Use this skill for React DOM components and application-facing controls. Test renderer-neutral behavior here and use browser tests for actual Pixi canvas behavior.
 
 ## Process
 
-### Step 1: Locate the Component
+1. Read the component, its selectors, store dependencies, and accessible contract.
+2. Create or update a focused test under `tests/unit/` or the established component-test location.
+3. Set only the relevant store state before each test and reset it afterward.
+4. Cover render, primary interaction, keyboard interaction, conditional phase/state, empty, loading, error, recovery, and conflict cases.
+5. Prefer `screen.getByRole`, `getByLabelText`, and other accessible queries.
+6. Test Data Center conflict and restore states, statistics empty/restored states, assistance explanation, share preview, Web Share cancellation, and local attachment states where relevant.
+7. Use fake timers for cooldowns, toasts, and session timing.
+8. Run the focused test and then the phase gate.
 
-Find the component file in `src/ui/components/`. Determine:
-- What Zustand stores it reads from (sessionStore, subjectStore, etc.)
-- What user interactions it supports (clicks, key presses, drags)
-- What conditional rendering it does (phase-based tabs, loading states, error states)
+## Rules
 
-### Step 2: Create the Test File
-
-Create `tests/unit/{ComponentName}.test.tsx`. Follow the existing test patterns:
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { ComponentName } from '../../src/ui/components/ComponentName';
-```
-
-### Step 3: Set Up Store Mocks
-
-Mock the Zustand stores that the component depends on. Use `useXxxStore.setState()` to set up the desired state before each test:
-
-```typescript
-import { useSessionStore } from '../../src/store/sessionStore';
-
-beforeEach(() => {
-  // Reset stores to default state
-  useSessionStore.setState({
-    phase: 'scribe',
-    activeScreen: 'game',
-  });
-});
-```
-
-Do NOT mock the entire store - just set the initial state. This keeps tests realistic and catches store integration issues.
-
-### Step 4: Write Test Cases
-
-Cover these categories:
-
-**Render tests:**
-```typescript
-it('renders the subject name', () => {
-  useSubjectStore.setState({ subjects: { 'test-id': { name: 'Linear Algebra' } } });
-  render(<SubjectList />);
-  expect(screen.getByText('Linear Algebra')).toBeDefined();
-});
-```
-
-**Interaction tests:**
-```typescript
-it('opens the note editor on click', async () => {
-  const user = userEvent.setup();
-  render(<RoomPanel roomId="room-1" />);
-  await user.click(screen.getByText('Open encounter'));
-  expect(screen.getByRole('dialog')).toBeDefined();
-});
-```
-
-**Conditional rendering tests:**
-```typescript
-it('shows Archaeologist tab only when phase allows', () => {
-  useSessionStore.setState({ phase: 'scribe' });
-  render(<RoomPanel roomId="room-1" />);
-  expect(screen.queryByText('Self-Check')).toBeNull();
-});
-```
-
-**Edge case tests:**
-```typescript
-it('handles empty subject list gracefully', () => {
-  useSubjectStore.setState({ subjects: {} });
-  render(<SubjectList />);
-  expect(screen.getByText('No subjects yet')).toBeDefined();
-});
-```
-
-### Step 5: Run and Verify
-
-```bash
-npx vitest run tests/unit/ComponentName.test.tsx
-```
-
----
-
-## Output Format
-
-The test file should follow this structure:
-
-```typescript
-import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-
-// Store imports as needed
-
-describe('ComponentName', () => {
-  beforeEach(() => {
-    // Reset all relevant stores to defaults
-  });
-
-  describe('rendering', () => {
-    it('renders primary content');
-    it('renders empty/loading state');
-    it('renders error state');
-  });
-
-  describe('interactions', () => {
-    it('responds to click');
-    it('responds to keyboard');
-  });
-
-  describe('conditional behavior', () => {
-    it('adapts to phase');
-    it('adapts to room state');
-    it('adapts to mobile viewport');
-  });
-});
-```
-
----
+- Do not import Phaser or Pixi into jsdom component tests.
+- Do not make real network, IndexedDB filesystem, or upload calls in unit tests unless the test is explicitly an integration test with controlled adapters.
+- Mock the world through renderer-neutral events or a world handle.
+- Test the DOM alternative for every core Pixi interaction.
+- Test focus trapping, restoration, Escape, live status, and error recovery for dialogs.
+- Keep tests behavior-focused and accessible-query-first.
 
 ## Validation
 
-- [ ] `npm run typecheck` - no type errors in test files
-- [ ] `npm run lint` - no lint errors
-- [ ] All tests pass: `npm test -- --run`
-- [ ] Tests cover: render, primary interaction, empty state, error state
-- [ ] No Phaser imports in test files (cannot run in jsdom)
-- [ ] No real localStorage or fetch calls (use mocks)
+```bash
+npm test -- tests/unit/ComponentName.test.tsx
+npm run lint
+npm run typecheck
+```
 
----
-
-## Gotchas
-
-- Phaser CANNOT run in jsdom - test files must never import Phaser. If a component depends on Phaser data, receive it through Zustand stores, not directly from Phaser
-- `localStorage` is not native in jsdom - the vitest setup file provides a mock; if you need a clean slate, use `localStorage.clear()` in `beforeEach`
-- `useUserEvent` setup is async - always `await user.click()` not `fireEvent.click()`
-- For components that use `window.matchMedia` (mobile drawer), the vitest setup file provides a polyfill. If testing mobile-specific behavior, set the matchMedia mock before rendering
-- Component tests should NOT test the underlying domain logic - mock the store state and test the UI behavior
-- Use `screen.getByRole()` and `screen.getByText()` over `screen.getByTestId()` - prefer accessible queries
-- For time-based features (toast auto-dismiss, cooldown timers), use `vi.useFakeTimers()` and `vi.advanceTimersByTime()`
-- Testing `GameScreen` or `VillageScreen` (components that render a Phaser container `<div>`): mock `createGame` and `createVillageGame` from `src/game/` to return `{ destroy: vi.fn() }` (a dummy Phaser instance). Test that the container `<div>` is present and the React children it wraps render correctly - do not test Phaser canvas internals
-- Direct `useXxxStore.setState()` calls in tests trigger React re-renders - wrap them in `act()` from `@testing-library/react` to flush state updates before making assertions. Example: `await act(() => useSessionStore.setState({ phase: 'archaeologist' }))`
-
----
-
-## Reference
-
-Load `assets/test-template.tsx` for a complete, annotated example test file with real store states, real selectors, and real assertions.
-
-See [docs/PRD.md](../../../docs/PRD.md):
-- **Section 15** - Testing strategy and key test scenarios
-
-For existing test examples:
-- `tests/unit/Hud.test.tsx` - HUD component tests
-- `tests/unit/RoomPanel.test.tsx` - Room panel tests
-- `tests/unit/NoteEditorModal.test.tsx` - Note editor tests
+For Pixi lifecycle, pointer, camera, resize, and teardown behavior, add a Playwright browser test instead of trying to test canvas internals in jsdom.

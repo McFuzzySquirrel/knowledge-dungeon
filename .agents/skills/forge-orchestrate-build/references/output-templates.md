@@ -1,107 +1,69 @@
 # Orchestration Output Templates
 
-Load this file when writing output for a specific execution mode.
+Load this file after selecting the execution mode and active phase.
 
----
+## Plan Phase Output
 
-## Full Build Output
+```markdown
+## Phase {N}: {Phase Name}
+
+**Status:** {not-started|in-progress|blocked|verified|complete}
+**Plan:** docs/plans/{plan-file}
+**Primary owner:** {agent}
+**Supporting agents:** {agents}
+
+### Scope
+- {allowed work}
+- {allowed work}
+
+### Non-goals
+- {explicit exclusion}
+- {explicit exclusion}
+
+### Evidence
+- Files: {paths}
+- Commands: {commands and results}
+- Device checks: {browser, viewport, input, or manual checks}
+- Migration/data: {result or not applicable}
+- Accessibility/performance/privacy/license: {result or not applicable}
+- Known limitations: {limitations or none}
+- Rollback: {procedure}
+
+### Acceptance
+Continue to Phase {N+1}?
+```
+
+## Requirements Phase Output
 
 ```markdown
 ## Starting Phase {N}: {Phase Name}
 
-**Agents involved**: {agent-list}
+**Source:** {PRD or feature document}
+**Primary owner:** {agent}
+**Supporting agents:** {agents}
 
-**Deliverables**:
-- [ ] {Deliverable 1}
-- [ ] {Deliverable 2}
+### Deliverables
+- [ ] {deliverable}
+- [ ] {deliverable}
 
----
+### Evidence
+- Files: {paths}
+- Commands: {commands and results}
+- Limitations: {limitations or none}
+- Rollback: {procedure}
 
-### Task {N}.{M}: {Task Name}
-**Agent**: @{agent-name}
-**Input**: PRD Section {N}
-**Output**: {expected output}
-
-Calling @{agent-name}...
-
-**Completed**: {summary}
+### Acceptance
+Continue to the next phase?
 ```
 
----
-
-## Feature Execution Output
+## Handoff Output
 
 ```markdown
-## Starting Feature: {Feature Name}
-**Feature PRD**: docs/features/{feature}.md
-**Original PRD**: docs/PRD.md
+## Handoff: {from-agent} to {to-agent}
 
----
-
-## Starting Phase F{N}: {Phase Name}
-
-**Agents involved**: {existing-extended}, {new}, {existing-unchanged}
-
-**Deliverables**:
-- [ ] {New component}
-- [ ] {Extended API}
-- [ ] {Tests}
-
----
-
-### Task F{N}.{M}: {Task Name}
-**Agent**: @{agent-name} (NEW for this feature)
-**Input**: Feature PRD Section {N}
-**Output**: {expected output}
-
-Calling @{agent-name}...
-
-**Completed**: {summary}
-
----
-
-## Phase F{N} Complete
-
-**Delivered**:
-- {deliverable}
-- {deliverable}
-
-**Modified existing files**: {file-list}
-**New files**: {file-list}
-
-**Continue to Phase F{N+1}?**
-```
-
----
-
-## Feature-Based Build Output
-
-```markdown
-## Building Project from Decomposed Features
-**Product Vision**: docs/product-vision.md
-**Features**: {N} features identified
-
-### Feature Dependency Order
-
-| Order | Feature | File | Dependencies | Status |
-|-------|---------|------|-------------|--------|
-| 1 | {Name} | docs/features/{name}.md | None | Pending |
-| 2 | {Name} | docs/features/{name}.md | {dep} | Pending |
-
----
-
-## Starting Feature {N}: {Name}
-**Feature document**: docs/features/{name}.md
-**Dependencies**: {list}
-
----
-
-## Feature {N} Complete: {Name}
-
-**Delivered**:
-- {deliverable}
-
-**Unlocked features**: {next-features}
-
-**Continue to Feature {N+1}: {Name}?**
+**Completed:** {summary}
+**Contracts:** {types, events, commands, or files}
+**Verification:** {evidence}
+**Known limitations:** {limitations or none}
+**Next owner action:** {action}
 ```
