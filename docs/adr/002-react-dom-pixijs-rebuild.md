@@ -295,9 +295,8 @@ documentation, characterization tests, and synthetic fixtures. It does
 not implement PixiJS, renderer-neutral contracts, storage-v2, migration, feature
 flags, CC0 tooling, accessibility automation, performance hardening, production
 cutover, or Phaser removal. Those remain future phase work and must not be
-treated as complete based on this ADR. Phase 0 verification evidence is recorded
-in the authoritative plan; explicit maintainer acceptance is still required,
-and these documentation/test-fixture artifacts do not unlock Phase 1.
+treated as complete based on this ADR. The maintainer accepted Phase 0 on
+2026-09-24, completing that phase without automatically starting Phase 1.
 
 ## Related Documents
 

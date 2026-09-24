@@ -627,7 +627,7 @@ Phase 24 Remove Phaser and legacy renderer
 
 | Phase | Status | Objective |
 | --- | --- | --- |
-| 0 | verified | Freeze behavior and legacy compatibility fixtures. |
+| 0 | complete | Freeze behavior and legacy compatibility fixtures. |
 | 1 | not-started | Add flags, browser tests, accessibility scaffolding, and quality rails. |
 | 2 | not-started | Extract renderer-neutral application contracts. |
 | 3 | not-started | Build storage-v2 and migration infrastructure. |
@@ -659,7 +659,7 @@ Phase 24 Remove Phaser and legacy renderer
 
 ## Phase 0: Baseline and Compatibility Fixtures
 
-**Status:** verified
+**Status:** complete
 **Objective:** Freeze the current main flow and legacy data behavior before changing architecture.
 
 ### Prerequisites
@@ -719,6 +719,7 @@ Recorded on 2026-09-24:
 - The golden-flow, route/control, app-owned localStorage, build-size, and known-defect records are in `tests/contracts/phase-0-baseline.md`.
 - Subject schema `1.0.0`/`1.1.0` and progression versions 1/2/3 use synthetic fixtures and deterministic characterization tests. No migration or learner data was modified.
 - No production source, dependency, or build configuration changed. No new browser/device, accessibility, performance, privacy-network, or license gate was introduced in this documentation/test-only phase.
+- The maintainer accepted Phase 0 on 2026-09-24, so its status advanced from `verified` to `complete`. Phase 1 remains `not-started` until separately requested.
 
 ### Exit criteria
 
@@ -744,7 +745,7 @@ Phase 1.
 
 ### Prerequisites
 
-Phase 0 accepted.
+Phase 0 accepted on 2026-09-24.
 
 ### Scope
 

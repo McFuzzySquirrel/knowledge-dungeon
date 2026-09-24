@@ -151,9 +151,9 @@ The complete Phase 0 documentation and test/fixture change set includes:
 The full measured Vitest suite is 34 files / 254 tests, including the two
 characterization files listed above. These artifacts characterize current
 behavior; they do not implement storage-v2, browser/renderer parity, or any
-later rebuild phase. Phase 0 is `verified` in the authoritative plan after the
-recorded checks. Explicit maintainer acceptance is still required, and Phase 1
-remains `not-started` and locked until that acceptance.
+later rebuild phase. The maintainer accepted Phase 0 on 2026-09-24, so it is
+`complete` in the authoritative plan. Phase 1 remains `not-started` until it is
+separately requested.
 
 ## Phase 5 Features (new)
 
