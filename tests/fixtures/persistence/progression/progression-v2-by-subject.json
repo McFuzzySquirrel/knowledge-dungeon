@@ -1,0 +1,56 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "progression-v2-by-subject",
+  "version": 2,
+  "bySubject": {
+    "subject-phase0-v2": {
+      "xpTotal": 805,
+      "rank": "Novice",
+      "badges": [
+        "synthetic-v2-badge",
+        8
+      ],
+      "inventory": [
+        {
+          "id": "loot-phase0-v2-synthetic",
+          "name": "Synthetic V2 Relic",
+          "description": "A synthetic by-subject item.",
+          "rarity": "epic",
+          "acquiredAt": "2026-02-03T03:04:05.000Z"
+        }
+      ],
+      "equippedItems": [],
+      "collectedNotes": [
+        {
+          "noteId": "subject-phase0-v2:room-phase0-v2-root",
+          "dungeonId": "subject-phase0-v2",
+          "roomId": "room-phase0-v2-root",
+          "topic": "Synthetic V2 Topic",
+          "floorLabel": "Synthetic Floor",
+          "artifactPreview": "Synthetic V2 preview",
+          "noteMarkdown": "Synthetic V2 note",
+          "artifactMarkdown": "Synthetic V2 artifact",
+          "collectedAt": "2026-02-03T04:00:00.000Z"
+        }
+      ],
+      "streakCount": 3,
+      "subjectsMastered": 1,
+      "roomsCleared": 5,
+      "reviewPasses": 4,
+      "artifacts": 5,
+      "bossesDefeated": 1,
+      "fishCollection": [
+        {
+          "id": "fish-phase0-v2-synthetic",
+          "name": "Synthetic V2 Fish",
+          "rarity": "rare",
+          "subjectId": "subject-phase0-v2",
+          "subjectName": "Synthetic V2 Subject",
+          "caughtAt": "2026-02-03T05:00:00.000Z"
+        }
+      ]
+    },
+    "subject-phase0-v2-empty": {}
+  },
+  "v2OnlyField": "ignored-by-current-normalizer"
+}

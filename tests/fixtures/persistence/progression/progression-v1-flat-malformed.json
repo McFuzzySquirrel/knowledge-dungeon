@@ -1,0 +1,68 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "progression-v1-flat-malformed",
+  "xpTotal": "not-a-number",
+  "rank": "Master",
+  "badges": [
+    "synthetic-valid-badge",
+    19,
+    null
+  ],
+  "inventory": [
+    null,
+    {
+      "name": "Synthetic Item Without Identifier",
+      "description": "Synthetic malformed item.",
+      "rarity": "mystery"
+    }
+  ],
+  "equippedItems": [
+    null,
+    {
+      "name": "Synthetic Gear Without Identifier",
+      "description": "Synthetic malformed gear.",
+      "rarity": "mystery",
+      "equipSlot": "not-a-slot"
+    }
+  ],
+  "collectedNotes": [
+    null,
+    {
+      "dungeonId": "subject-phase0-v1-malformed",
+      "roomId": 99,
+      "topic": 123
+    },
+    {
+      "noteId": "",
+      "dungeonId": "subject-phase0-v1-malformed",
+      "roomId": "room-phase0-v1-malformed-root",
+      "topic": "Synthetic filtered note",
+      "floorLabel": "Synthetic floor",
+      "artifactPreview": "Synthetic preview",
+      "noteMarkdown": "Synthetic note",
+      "artifactMarkdown": "Synthetic artifact",
+      "collectedAt": "2026-02-02T04:00:00.000Z"
+    }
+  ],
+  "streakCount": -7,
+  "subjectsMastered": "four",
+  "roomsCleared": 2.9,
+  "reviewPasses": null,
+  "artifacts": false,
+  "bossesDefeated": "none",
+  "fishCollection": [
+    {
+      "id": "fish-phase0-v1-malformed",
+      "name": "Synthetic Fish Missing Rarity",
+      "rarity": "not-a-rarity",
+      "subjectId": "subject-phase0-v1-malformed",
+      "subjectName": "Synthetic V1 Subject",
+      "caughtAt": "2026-02-02T05:00:00.000Z"
+    },
+    {
+      "id": "fish-phase0-v1-invalid",
+      "rarity": "common"
+    }
+  ],
+  "malformedCompatibilityMarker": "synthetic-only"
+}

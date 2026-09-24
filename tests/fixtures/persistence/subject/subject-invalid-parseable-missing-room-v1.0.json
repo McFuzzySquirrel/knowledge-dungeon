@@ -1,0 +1,15 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-invalid-parseable-missing-room-v1.0",
+  "dungeon": {
+    "schemaVersion": "1.0.0",
+    "dungeonId": "subject-phase0-parseable-invalid-v100",
+    "subjectName": "Synthetic Parseable Invalid Subject",
+    "rooms": [
+      {
+        "roomId": "room-phase0-parseable-invalid-v100-root"
+      }
+    ]
+  },
+  "rooms": {}
+}

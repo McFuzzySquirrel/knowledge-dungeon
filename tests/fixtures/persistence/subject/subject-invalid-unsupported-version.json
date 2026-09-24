@@ -1,0 +1,20 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-invalid-unsupported-version",
+  "dungeon": {
+    "schemaVersion": "2.0.0",
+    "dungeonId": "subject-phase0-invalid-version",
+    "subjectName": "Synthetic Invalid Version Subject",
+    "rooms": [
+      {
+        "roomId": "room-phase0-invalid-version-root"
+      }
+    ]
+  },
+  "rooms": {
+    "room-phase0-invalid-version-root": {
+      "roomId": "room-phase0-invalid-version-root",
+      "validationState": {}
+    }
+  }
+}

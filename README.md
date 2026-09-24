@@ -21,6 +21,140 @@ portal to enter a dungeon.
 Built with a simple goal: make learning feel fun again by turning note-taking,
 revision, and concept mapping into an interactive adventure instead of a static checklist.
 
+## Phase 0 Baseline (2026-09-24)
+
+This is the dated Phase 0 baseline for the renderer rebuild. It records the
+current application behavior, compatibility surface, and measured build output;
+it does not describe a completed rebuild. Only documentation and test/fixture
+artifacts changed: this README, the Phase 0 ADR, the dated baseline record and
+contract characterization tests, and the synthetic persistence fixtures. No
+application behavior changes, dependency changes, or build configuration
+changes are included.
+
+### Current route and control baseline
+
+- Screen navigation is state-based rather than URL-based. The current screen
+  state is `welcome`, `village`, or `game`; `App.tsx` selects among those
+  state-backed surfaces, with the distinct entry semantics detailed below.
+- Welcome entry actions are distinct: `Enter Dungeon` requires a selected
+  subject and an archetype, loads and synchronizes that subject, then enters
+  `village`. `Start Tutorial` selects Scholar and enters `game` after loading
+  the tutorial subject. `Continue to Village` renders whenever at least one
+  existing subject is present; it does not require or load a selected subject
+  or archetype and changes the screen state to `village`.
+- The production baseline is still Phaser 3. The current web path constructs the
+  Phaser village/dungeon worlds directly; there is no Pixi runtime or renderer
+  cutover flag in this baseline. Fishing is entered from Village ponds and
+  currently runs in the Phaser fishing scene bundled with the Village game;
+  `Escape` returns from that activity.
+- The preserved flow is Welcome → Village → Game. Welcome creates or loads a
+  subject and selects an archetype; Village provides the hub, NPCs, quest, and
+  subject portals; Game contains the Creator, Scribe, and Archaeologist phases.
+  The verified return path to Village is the DOM `Home` / `Return to subject
+  selection` control.
+- The current control inventory distinguishes movement: Village and Dungeon use
+  `W A S D` or arrow keys, while Fishing uses only horizontal `A`/`D` or
+  `Left`/`Right` movement along the shore. `E` interacts with a room, NPC, or
+  portal; `I` opens room information; `M` opens the full map; and
+  `?`/`Shift+/` opens help. The current guide also lists `H`, but no
+  `GameScreen` handler for `H` was found, so that shortcut is
+  unverified/unimplemented in `GameScreen` and is not a claimed current
+  keyboard control. The Village/Dungeon Phaser worlds also have pointer/touch
+  movement, tap interaction, and zoom paths, plus touch HUD controls where
+  implemented. Full DOM-equivalent parity for a future Pixi world is not yet
+  established.
+
+The Phase 0 golden path to preserve and make reviewable is:
+
+1. Open Welcome, create or load a subject, and select a player archetype.
+2. Enter Village, meet the Keeper, follow the current quest/tutorial path, and
+   approach a subject portal.
+3. Enter the dungeon in Creator mode and author or revise the topic graph.
+4. Switch to Scribe, open a room encounter, save a resumable draft, and submit a
+   note that passes the current validation rules.
+5. Collect the artifact, switch to Archaeologist, complete the self-check/review
+   flow, and use the DOM `Home` / `Return to subject selection` control to
+   return to Village.
+6. Confirm that subject and progression state remain available after the return
+   transition.
+
+### Build measurements
+
+The following are the already measured outputs recorded for this baseline. The
+production figures come from `npm run build:web`; the profile figures come from
+`npm run build:web:profile`.
+
+| Artifact | Raw bytes | Gzip bytes | Result |
+| --- | ---: | ---: | --- |
+| Production `dist` | 4,093,638 bytes (3.90 MiB) / 105 files | — | `npm run check:bundle-size` passes |
+| Modern app index chunk | 438,306 | 125,578 | Recorded production measurement |
+| `vendor-phaser` chunk | 1,199,711 | 318,038 | Recorded production measurement |
+| CSS | 87,825 | 15,473 | Recorded production measurement |
+| Profile `dist` | 28,397,913 bytes (27.08 MiB) / 113 files | — | `npm run check:bundle-size` fails because source maps are included in the raw total |
+
+The checker currently applies a 12,000,000-byte raw-total ceiling and a
+2,500,000-byte JavaScript/CSS chunk ceiling. The profile result is a
+profiling-artifact result, not a production release result: its source maps are
+counted by the raw checker and push the profile directory over the
+12,000,000-byte limit.
+
+### Known baseline limitations
+
+- The renderer migration, renderer-neutral contracts, typed cutover flags, route-
+  aware lazy loading, and local attachment path are not implemented yet.
+- The current web image path can use the legacy Express `/api/upload` endpoint;
+  broad “nothing is sent” wording is therefore not accurate for image attachments.
+  The rebuild target is local IndexedDB storage, but that target is not present in
+  the current baseline.
+- Current persistence is still localStorage/Electron compatibility code, not
+  storage-v2. Existing backup and import behavior does not yet provide the planned
+  generation staging, atomic rollback, authoritative progression/fish/session
+  coverage, or complete attachment-byte coverage.
+- The authoritative plan records known correctness risks that remain baseline
+  work, including unwired session statistics, inconsistent fishing context/catalog
+  identity, non-transactional reward writes, stale same-ID imports, possible
+  duplicate room-clear rewards, review unlock/interruption gaps, and inaccurate
+  mastery/streak metrics.
+- The current test setup mocks Phaser and does not yet provide the planned
+  Playwright/Chromebook/tablet, axe, privacy-network, storage-v2 migration,
+  memory, or release-verification coverage. Existing accessibility and
+  performance features are not yet evidence for the complete WCAG 2.2 AA and
+  performance gates.
+- A static-shell offline cache with an explicit no-learner-data policy is not
+  established in this baseline. Any future cache must exclude all learner state.
+
+### Phase 0 documentation and QA handoff
+
+The complete Phase 0 documentation and test/fixture change set includes:
+
+- [`docs/adr/002-react-dom-pixijs-rebuild.md`](./docs/adr/002-react-dom-pixijs-rebuild.md)
+  for the locked renderer, storage, privacy, media, flag, accessibility,
+  performance, release, and rollback decisions.
+- [`tests/contracts/phase-0-baseline.md`](./tests/contracts/phase-0-baseline.md)
+  for the dated route/state and control inventory, golden-path matrix, app-owned
+  localStorage inventory, build measurements, known defects, and verification
+  record.
+- [`tests/contracts/phase-0-subject-characterization.test.ts`](./tests/contracts/phase-0-subject-characterization.test.ts)
+  for the current subject importer and raw-loader behavior, including schema
+  `1.0.0`/`1.1.0` handling, migration defaults, unknown fields, invalid inputs,
+  and corrupt-subject quarantine.
+- [`tests/contracts/phase-0-progression-characterization.test.ts`](./tests/contracts/phase-0-progression-characterization.test.ts)
+  for current localStorage progression hydration and normalization across
+  versions 1, 2, and 3, active-subject and `__legacy__` selection, malformed
+  values, and corrupt-JSON fallback.
+- [`tests/fixtures/persistence/README.md`](./tests/fixtures/persistence/README.md)
+  and the files under `tests/fixtures/persistence/subject/` and
+  `tests/fixtures/persistence/progression/` for hand-authored, synthetic,
+  learner-free subject schema `1.0.0`/`1.1.0` and progression version 1/2/3
+  compatibility inputs, including malformed and invalid cases.
+
+The full measured Vitest suite is 34 files / 254 tests, including the two
+characterization files listed above. These artifacts characterize current
+behavior; they do not implement storage-v2, browser/renderer parity, or any
+later rebuild phase. Phase 0 is `verified` in the authoritative plan after the
+recorded checks. Explicit maintainer acceptance is still required, and Phase 1
+remains `not-started` and locked until that acceptance.
+
 ## Phase 5 Features (new)
 
 ### ⚡ Performance Optimization
@@ -74,7 +208,9 @@ Take a break from studying with a relaxing fishing mini-game accessible from the
 - **8 catchable fish** across 3 rarities: Common (Moss Carp, Sun Skip, Reed Darter, Ink Minnow), Rare (Lunar Trout, Ember Perch), Epic (Gilded Koi, Abyssal Eel)
 - **Fish bucket** - wooden bucket beside the player that visually fills with mini fish sprites on each catch
 - **React overlay info panel** - styled village panel showing fish name, color-coded rarity badge, and description. Keep or release each catch.
-- **Player movement** - walk left/right along the shore with A/D or arrow keys before casting
+- **Player movement** - walk horizontally along the shore with `A`/`D` or the
+  `Left`/`Right` arrow keys before casting; Fishing does not use full WASD
+  movement
 - **Fish Stand** building in the village (coming soon) - view your full collection across all subjects
 
 ---
@@ -171,9 +307,17 @@ The **Dungeon Village** is your home base, replacing the direct welcome→dungeo
 
 - **Fixed sidebar HUD** with archetype selector, quest log, and theme picker. Collapsible drawer on mobile.
 
-From the village, press **H** in any dungeon to return. Portals persist across sessions.
+Use the DOM **Home** / **Return to subject selection** control to return from a
+dungeon. The current guide also lists **H**, but no current `GameScreen` handler
+for **H** was found; it is an unverified/unimplemented guide path, not a
+verified current keyboard control. Portals persist across sessions.
 
-The **Welcome Screen** always appears on launch - create a subject, load an existing one, or click **Continue to Village** to jump straight to the hub.
+The **Welcome Screen** always appears on launch. Create or load a subject and
+choose an archetype before using **Enter Dungeon**; that action loads and
+synchronizes the selected subject and enters `village`. **Start Tutorial**
+selects Scholar and enters `game`. **Continue to Village** is shown whenever at
+least one existing subject is present and changes the screen state to `village`
+without selecting or loading a subject or requiring an archetype.
 
 ### In-dungeon study view
 
@@ -336,12 +480,18 @@ Open the `.dmg`, drag the app to `/Applications`, and launch it normally.
 
 | Action | Keyboard | Touch |
 | ------ | -------- | ----- |
-| Move   | `W A S D` / arrows | On-screen D-pad |
+| Move (Village / Dungeon) | `W A S D` / arrows | On-screen D-pad |
+| Move (Fishing shoreline) | `A` / `D` / `Left` / `Right` | - |
 | Interact (open encounter / talk to NPC / use portal) | `E` | `Interact` button |
 | Toggle room info panel | `I` | - |
 | Toggle full map | `M` | - |
-| Return to village | `H` | - |
+| Return to subject selection | No verified `GameScreen` shortcut | **Home** / **Return to subject selection** |
 | Toggle help | `?` / `Shift+/` | - |
+
+The current guide lists `H` for returning from a dungeon, but no current
+`GameScreen` handler for `H` was found. The verified current return path is the
+DOM **Home** / **Return to subject selection** control; `H` remains a documented
+guide limitation, not a claimed current keyboard control.
 
 ## UI docs
 
@@ -379,8 +529,12 @@ src/
     screens/             # WelcomeScreen, VillageScreen, GameScreen
     utils/               # markdown rendering, syntax highlighting, auto-complete
   data/                  # village layout, tutorial subject, game guide
-tests/unit/              # Vitest unit tests (168 tests, 27 files)
-docs/                    # PRD, progress notes, game guide
+tests/                    # 34 files / 254 tests measured
+  unit/                  # existing Vitest unit tests
+  contracts/             # Phase 0 baseline and characterization tests
+  fixtures/
+    persistence/         # synthetic Phase 0 compatibility fixtures
+docs/                      # plans, ADRs, and game/user guides
 ```
 
 ## Persistence
@@ -393,12 +547,16 @@ docs/                    # PRD, progress notes, game guide
 - **Web**: subjects fall back to `localStorage`; import/export is supported
   via the persistence facade.
 
-> 🔒 **Privacy**: all data - subjects, notes, progression, and images - is stored
-> **locally on your device only** (in your browser's `localStorage` for the web
-> version, or in your user-data folder for Electron). Nothing is ever sent to any
-> server. Clearing your browser's site data will permanently remove web subjects, so
-> use the **Export** tools in the **Data** tab to back up anything you want to keep.
-> The app periodically nudges web users to export a backup as a reminder.
+> 🔒 **Current privacy baseline:** subjects, notes, progression, preferences, and
+> other app state are stored locally in the browser's `localStorage` or in the
+> Electron user-data folder. The current web image-attachment path can still post
+> image bytes to the legacy Express `/api/upload` endpoint, so image attachments
+> are **not** covered by a blanket “nothing leaves the device” guarantee in this
+> baseline. The rebuild target is local IndexedDB attachments with no redesigned-app
+> upload; that target is not implemented yet. Clearing browser site data can
+> permanently remove web subjects, so use the **Export** tools in the **Data** tab
+> to back up anything you want to keep. The app periodically nudges web users to
+> export a backup as a reminder.
 
 ## Why this exists
 

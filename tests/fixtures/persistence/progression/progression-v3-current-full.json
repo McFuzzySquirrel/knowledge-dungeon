@@ -1,0 +1,99 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "progression-v3-current-full",
+  "version": 3,
+  "bySubject": {
+    "subject-phase0-v3": {
+      "xpTotal": 980,
+      "rank": "Novice",
+      "badges": [
+        "synthetic-v3-badge",
+        "another-synthetic-badge"
+      ],
+      "inventory": [
+        {
+          "id": "loot-phase0-v3-synthetic",
+          "name": "Synthetic V3 Relic",
+          "description": "A synthetic current-schema item.",
+          "rarity": "epic",
+          "acquiredAt": "2026-02-04T03:04:05.000Z"
+        }
+      ],
+      "equippedItems": [
+        {
+          "id": "gear-phase0-v3-synthetic",
+          "name": "Synthetic V3 Gear",
+          "description": "A synthetic equipped item.",
+          "rarity": "rare",
+          "acquiredAt": "2026-02-04T03:05:05.000Z",
+          "equipSlot": "accessory",
+          "qualityBonus": 1,
+          "xpMultiplier": 1.1,
+          "equipped": true
+        }
+      ],
+      "collectedNotes": [
+        {
+          "noteId": "subject-phase0-v3:room-phase0-v3-root",
+          "dungeonId": "subject-phase0-v3",
+          "roomId": "room-phase0-v3-root",
+          "topic": "Synthetic V3 Topic",
+          "floorLabel": "Synthetic Floor",
+          "artifactPreview": "Synthetic V3 preview",
+          "noteMarkdown": "Synthetic V3 note",
+          "artifactMarkdown": "Synthetic V3 artifact",
+          "collectedAt": "2026-02-04T04:00:00.000Z"
+        },
+        {
+          "noteId": "subject-phase0-v3-other:room-phase0-v3-other",
+          "dungeonId": "subject-phase0-v3-other",
+          "roomId": "room-phase0-v3-other",
+          "topic": "Synthetic Other Topic",
+          "floorLabel": "Synthetic Other Floor",
+          "artifactPreview": "Synthetic other preview",
+          "noteMarkdown": "Synthetic other note",
+          "artifactMarkdown": "Synthetic other artifact",
+          "collectedAt": "2026-02-04T04:05:00.000Z"
+        }
+      ],
+      "streakCount": 4,
+      "subjectsMastered": 2,
+      "roomsCleared": 8,
+      "reviewPasses": 6,
+      "artifacts": 8,
+      "bossesDefeated": 2,
+      "fishCollection": [
+        {
+          "id": "fish-phase0-v3-synthetic",
+          "name": "Synthetic V3 Fish",
+          "rarity": "epic",
+          "subjectId": "subject-phase0-v3",
+          "subjectName": "Synthetic V3 Subject",
+          "caughtAt": "2026-02-04T05:00:00.000Z"
+        }
+      ]
+    },
+    "subject-phase0-v3-secondary": {
+      "xpTotal": 20,
+      "rank": "Novice",
+      "badges": [],
+      "inventory": [],
+      "equippedItems": [],
+      "collectedNotes": [],
+      "streakCount": 0,
+      "subjectsMastered": 0,
+      "roomsCleared": 1,
+      "reviewPasses": 0,
+      "artifacts": 1,
+      "bossesDefeated": 0,
+      "fishCollection": []
+    }
+  },
+  "crossSubjectAchievements": [
+    "meta-subjects-5",
+    42,
+    null,
+    "meta-notes-50"
+  ],
+  "v3OnlyField": "ignored-by-current-normalizer"
+}

@@ -1,0 +1,126 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-1.0.0-full-unknown-fields",
+  "unknownTopLevelField": {
+    "marker": "synthetic-top-level-field-for-1.1-characterization"
+  },
+  "dungeon": {
+    "schemaVersion": "1.0.0",
+    "dungeonId": "subject-phase0-v100-full",
+    "subjectName": "Synthetic Phase 0 Full 1.0 Subject",
+    "createdAt": "2026-01-03T03:04:05.000Z",
+    "updatedAt": "2026-01-03T03:04:05.000Z",
+    "phaseState": "ScribeActive",
+    "rootRoomId": "room-phase0-v100-full-root",
+    "rooms": [
+      {
+        "roomId": "room-phase0-v100-full-root",
+        "topic": "Synthetic Root Topic",
+        "status": "ArtifactCollected"
+      },
+      {
+        "roomId": "room-phase0-v100-full-branch",
+        "topic": "Synthetic Branch Topic",
+        "status": "NotesDrafted"
+      }
+    ],
+    "edges": [
+      {
+        "fromRoomId": "room-phase0-v100-full-root",
+        "toRoomId": "room-phase0-v100-full-branch",
+        "relationType": "subtopic",
+        "createdAt": "2026-01-03T03:04:05.000Z",
+        "createdByPhase": "Creator",
+        "fixtureEdgeField": "preserve-this-synthetic-edge-field"
+      }
+    ],
+    "progression": {
+      "xpTotal": 48,
+      "rank": "Novice",
+      "badges": ["synthetic-phase0-badge"],
+      "fishCollection": [
+        {
+          "id": "fish-phase0-synthetic-1",
+          "name": "Synthetic Common Fish",
+          "rarity": "common",
+          "subjectId": "subject-phase0-v100-full",
+          "subjectName": "Synthetic Phase 0 Full 1.0 Subject",
+          "caughtAt": "2026-01-03T04:00:00.000Z"
+        }
+      ],
+      "fixtureProgressionField": "preserve-this-synthetic-progression-field"
+    },
+    "fixtureDungeonField": "preserve-this-synthetic-dungeon-field"
+  },
+  "rooms": {
+    "room-phase0-v100-full-root": {
+      "roomId": "room-phase0-v100-full-root",
+      "topic": "Synthetic Root Topic",
+      "createdAt": "2026-01-03T03:04:05.000Z",
+      "updatedAt": "2026-01-03T03:06:05.000Z",
+      "state": "ArtifactCollected",
+      "notePath": "rooms/room-phase0-v100-full-root/notes.md",
+      "artifactPath": "rooms/room-phase0-v100-full-root/artifact.md",
+      "noteText": "Summary\nSynthetic root note.\n\nKey Points\n- Synthetic point.\n\nRecall Question\nWhat is synthetic?",
+      "artifactMarkdown": "# Synthetic Artifact\n\nThis artifact contains only synthetic fixture text.",
+      "validationState": {
+        "wordCount": 16,
+        "requiredSectionsPresent": true,
+        "manualConfirmed": true,
+        "criterionScores": {
+          "sectionCompleteness": 5,
+          "conceptTermCoverage": 5,
+          "linkReferences": 4,
+          "recallQuestionQuality": 5,
+          "clarityReadability": 5
+        },
+        "failedChecks": [],
+        "qualityBonus": 4,
+        "finalPass": true,
+        "fixtureValidationField": "preserve-this-synthetic-validation-field"
+      },
+      "reviewPassCount": 1,
+      "attachments": [
+        {
+          "attachmentId": "attachment-phase0-synthetic-external",
+          "sourceType": "external",
+          "fileName": "phase0-synthetic-image.png",
+          "mimeType": "image/png",
+          "externalUrl": "https://example.invalid/phase0-synthetic-image.png",
+          "altText": "Synthetic fixture image",
+          "addedAt": "2026-01-03T03:07:05.000Z",
+          "fixtureAttachmentField": "preserve-this-synthetic-attachment-field"
+        }
+      ],
+      "fixtureRoomField": "preserve-this-synthetic-room-field"
+    },
+    "room-phase0-v100-full-branch": {
+      "roomId": "room-phase0-v100-full-branch",
+      "topic": "Synthetic Branch Topic",
+      "createdAt": "2026-01-03T03:04:05.000Z",
+      "updatedAt": "2026-01-03T03:08:05.000Z",
+      "state": "NotesDrafted",
+      "notePath": "rooms/room-phase0-v100-full-branch/notes.md",
+      "artifactPath": "rooms/room-phase0-v100-full-branch/artifact.md",
+      "noteText": "Synthetic branch draft.",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 3,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 1,
+          "conceptTermCoverage": 1,
+          "linkReferences": 0,
+          "recallQuestionQuality": 1,
+          "clarityReadability": 1
+        },
+        "failedChecks": ["synthetic-incomplete-check"],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": []
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-invalid-missing-room",
+  "dungeon": {
+    "schemaVersion": "1.1.0",
+    "dungeonId": "subject-phase0-invalid-missing-room",
+    "subjectName": "Synthetic Invalid Missing Room Subject",
+    "rooms": [
+      {
+        "roomId": "room-phase0-invalid-missing-room-root"
+      }
+    ]
+  },
+  "rooms": {}
+}

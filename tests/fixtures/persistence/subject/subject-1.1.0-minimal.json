@@ -1,0 +1,30 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-1.1.0-minimal",
+  "dungeon": {
+    "schemaVersion": "1.1.0",
+    "dungeonId": "subject-phase0-v110-minimal",
+    "subjectName": "Synthetic Phase 0 Minimal 1.1 Subject",
+    "rootRoomId": "room-phase0-v110-minimal-root",
+    "rooms": [
+      {
+        "roomId": "room-phase0-v110-minimal-root",
+        "topic": "Synthetic Root Topic",
+        "status": "Created"
+      }
+    ],
+    "progression": {
+      "xpTotal": 0,
+      "rank": "Novice",
+      "badges": [],
+      "fishCollection": []
+    }
+  },
+  "rooms": {
+    "room-phase0-v110-minimal-root": {
+      "roomId": "room-phase0-v110-minimal-root",
+      "topic": "Synthetic Root Topic",
+      "validationState": {}
+    }
+  }
+}

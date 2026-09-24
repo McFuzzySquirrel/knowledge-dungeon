@@ -1,0 +1,36 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "progression-v3-malformed-values",
+  "version": 3,
+  "bySubject": {
+    "subject-phase0-v3-malformed": {
+      "xpTotal": "not-a-number",
+      "badges": [
+        "synthetic-v3-valid",
+        false
+      ],
+      "inventory": "not-an-array",
+      "equippedItems": [
+        {
+          "name": "Synthetic Gear Missing Identifier"
+        }
+      ],
+      "collectedNotes": [
+        {
+          "dungeonId": "subject-phase0-v3-malformed",
+          "roomId": "room-phase0-v3-malformed-root",
+          "topic": "Synthetic malformed note"
+        }
+      ],
+      "fishCollection": [
+        {
+          "id": "fish-phase0-v3-malformed",
+          "name": "Synthetic V3 malformed fish",
+          "rarity": "invalid"
+        }
+      ]
+    }
+  },
+  "crossSubjectAchievements": "not-an-array",
+  "malformedCompatibilityMarker": "synthetic-only"
+}

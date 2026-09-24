@@ -1,6 +1,6 @@
 # Cozy React and PixiJS Rebuild Implementation Plan
 
-**Status:** not-started
+**Status:** in-progress
 **Created:** 2026-09-24
 **Plan owner:** Project maintainer
 **Target file:** `docs/plans/001-cozy-pixi-rebuild.md`
@@ -627,7 +627,7 @@ Phase 24 Remove Phaser and legacy renderer
 
 | Phase | Status | Objective |
 | --- | --- | --- |
-| 0 | not-started | Freeze behavior and legacy compatibility fixtures. |
+| 0 | verified | Freeze behavior and legacy compatibility fixtures. |
 | 1 | not-started | Add flags, browser tests, accessibility scaffolding, and quality rails. |
 | 2 | not-started | Extract renderer-neutral application contracts. |
 | 3 | not-started | Build storage-v2 and migration infrastructure. |
@@ -659,7 +659,7 @@ Phase 24 Remove Phaser and legacy renderer
 
 ## Phase 0: Baseline and Compatibility Fixtures
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Freeze the current main flow and legacy data behavior before changing architecture.
 
 ### Prerequisites
@@ -706,6 +706,19 @@ Run the common gate plus:
 npm run build:web:profile
 npm run check:bundle-size
 ```
+
+### Verification evidence
+
+Recorded on 2026-09-24:
+
+- Focused characterization suite: 2 files and 20 tests passed.
+- Full Vitest suite: 34 files and 254 tests passed.
+- `npm run lint`, `npm run typecheck`, and `npm run build:web` passed.
+- Production `npm run check:bundle-size` passed at 4,093,638 bytes across 105 files.
+- `npm run build:web:profile` passed. The following profile bundle check reports the existing source-map-inclusive baseline of 28,397,913 bytes across 113 files, above the 12,000,000-byte raw ceiling. This is documented as a baseline limitation, not a production bundle result.
+- The golden-flow, route/control, app-owned localStorage, build-size, and known-defect records are in `tests/contracts/phase-0-baseline.md`.
+- Subject schema `1.0.0`/`1.1.0` and progression versions 1/2/3 use synthetic fixtures and deterministic characterization tests. No migration or learner data was modified.
+- No production source, dependency, or build configuration changed. No new browser/device, accessibility, performance, privacy-network, or license gate was introduced in this documentation/test-only phase.
 
 ### Exit criteria
 

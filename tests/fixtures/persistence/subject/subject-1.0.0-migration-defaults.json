@@ -1,0 +1,109 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-1.0.0-migration-defaults",
+  "legacyEnvelope": {
+    "marker": "synthetic-top-level-field-for-characterization"
+  },
+  "dungeon": {
+    "schemaVersion": "1.0.0",
+    "dungeonId": "subject-phase0-v100-migration",
+    "subjectName": "Synthetic Phase 0 Migration Subject",
+    "createdAt": "2026-01-02T03:04:05.000Z",
+    "updatedAt": "2026-01-02T03:04:05.000Z",
+    "phaseState": "CreatorActive",
+    "rootRoomId": "room-phase0-v100-migration-root",
+    "rooms": [
+      {
+        "roomId": "room-phase0-v100-migration-root",
+        "topic": "Synthetic Root Topic",
+        "status": "Created"
+      },
+      {
+        "roomId": "room-phase0-v100-migration-branch",
+        "topic": "Synthetic Branch Topic",
+        "status": "NotesDrafted"
+      }
+    ],
+    "edges": [
+      {
+        "fromRoomId": "room-phase0-v100-migration-root",
+        "toRoomId": "room-phase0-v100-migration-branch",
+        "relationType": "subtopic",
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "createdByPhase": "Creator"
+      }
+    ],
+    "progression": {
+      "xpTotal": 12,
+      "rank": "Novice",
+      "badges": ["synthetic-legacy-badge"],
+      "fishCollection": []
+    },
+    "fixtureDungeonField": "preserve-this-synthetic-dungeon-field"
+  },
+  "rooms": {
+    "room-phase0-v100-migration-root": {
+      "roomId": "room-phase0-v100-migration-root",
+      "topic": "Synthetic Root Topic",
+      "createdAt": "2026-01-02T03:04:05.000Z",
+      "updatedAt": "2026-01-02T03:04:05.000Z",
+      "state": "Created",
+      "notePath": "rooms/room-phase0-v100-migration-root/notes.md",
+      "artifactPath": "rooms/room-phase0-v100-migration-root/artifact.md",
+      "noteText": "",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 0,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 0,
+          "conceptTermCoverage": 0,
+          "linkReferences": 0,
+          "recallQuestionQuality": 0,
+          "clarityReadability": 0
+        },
+        "failedChecks": [],
+        "qualityBonus": 0,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": [],
+      "fixtureRoomField": "preserve-this-synthetic-room-field"
+    },
+    "room-phase0-v100-migration-branch": {
+      "roomId": "room-phase0-v100-migration-branch",
+      "topic": "Synthetic Branch Topic",
+      "createdAt": "2026-01-02T03:04:05.000Z",
+      "updatedAt": "2026-01-02T03:05:05.000Z",
+      "state": "NotesDrafted",
+      "notePath": "rooms/room-phase0-v100-migration-branch/notes.md",
+      "artifactPath": "rooms/room-phase0-v100-migration-branch/artifact.md",
+      "noteText": "Synthetic draft for migration characterization.",
+      "artifactMarkdown": null,
+      "validationState": {
+        "wordCount": 5,
+        "requiredSectionsPresent": false,
+        "manualConfirmed": false,
+        "criterionScores": {
+          "sectionCompleteness": 1,
+          "conceptTermCoverage": 1,
+          "linkReferences": 0,
+          "recallQuestionQuality": 1,
+          "clarityReadability": 1
+        },
+        "failedChecks": ["synthetic-incomplete-check"],
+        "qualityBonus": 1,
+        "finalPass": false
+      },
+      "reviewPassCount": 0,
+      "attachments": [],
+      "sm2QualityResponse": 5,
+      "sm2EaseFactor": 2.7,
+      "sm2IntervalDays": 6,
+      "sm2NextReviewDate": "2026-01-08T03:04:05.000Z",
+      "sm2ConsecutiveCorrect": 2,
+      "tags": ["synthetic-existing-tag"]
+    }
+  }
+}
