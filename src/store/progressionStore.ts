@@ -23,8 +23,8 @@ import {
   type FishingBadgeId,
 } from '@/core/progression';
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
-import type { FishEntry, FishRarity, FishCollection } from '@/game/systems/fishingTypes';
-import { FISH_RARITY_XP_MULTIPLIER, FISH_CATALOG } from '@/game/systems/fishingTypes';
+import type { FishEntry, FishRarity, FishCollection } from '@/core/fishing/fishingTypes';
+import { FISH_RARITY_XP_MULTIPLIER, FISH_CATALOG } from '@/core/fishing/fishingTypes';
 import { deserializeFishCollection, createFishId, addFishToCollection, countUniqueTypes } from '@/core/fishing/fishCollectionService';
 
 export interface LootItem {

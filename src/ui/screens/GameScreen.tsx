@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import type Phaser from 'phaser';
 import { computeFloorVisibility, deriveGraphHierarchy } from '@/core/graph';
-import { evaluatePhaseBadgeUnlocks } from '@/core/progression';
 import { isReviewableRoom, summarizeReviewAnalytics } from '@/core/review';
+import {
+  createStudyFlowController,
+  type StudyFlowController,
+} from '@/application/studyFlow';
 import { TELEPORT_COOLDOWN_MS, useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
 import { useShortcutStore } from '@/store/shortcutStore';
-import { createGame } from '@/game/createGame';
-import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
-import type { DungeonScene, NpcDialogAnchor } from '@/game/scenes/DungeonScene';
-import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
+import { createGame, type PhaserDungeonRenderer } from '@/game/createGame';
+import { generateDungeonMap } from '@/core/layout/dungeonGenerator';
+import type { DungeonWorldModel } from '@/application/contracts/world';
 import { Hud } from '@/ui/components/Hud';
 import { HudDrawer } from '@/ui/components/HudDrawer';
 import { FloatingActions } from '@/ui/components/FloatingActions';
@@ -74,10 +75,12 @@ export function GameScreen(): JSX.Element {
   const sceneRestartCounter = useSessionStore((s) => s.sceneRestartCounter);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const gameRef = useRef<Phaser.Game | null>(null);
-  const sceneRef = useRef<DungeonScene | null>(null);
+  const rendererRef = useRef<PhaserDungeonRenderer | null>(null);
   const npcDialogRoomIdRef = useRef<string | null>(null);
   const roomPanelTabRequestSequenceRef = useRef(0);
+  const isInfoPanelOpenRef = useRef(false);
+  const currentFloorIdRef = useRef<string | null>(null);
+  const teleportRemainingMsRef = useRef(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -95,7 +98,6 @@ export function GameScreen(): JSX.Element {
   const [npcDialogRoomId, setNpcDialogRoomId] = useState<string | null>(null);
   const [npcDialogAnchor, setNpcDialogAnchor] = useState<{ x: number; y: number } | null>(null);
   const [autoOpenCollectedNoteId, setAutoOpenCollectedNoteId] = useState<string | null>(null);
-  const [pendingReviewRoomId, setPendingReviewRoomId] = useState<string | null>(null);
   const [attachmentUrlsByRoomId, setAttachmentUrlsByRoomId] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -148,134 +150,88 @@ export function GameScreen(): JSX.Element {
     : 0;
   const showScribeNudge = phase === 'creator' && snapshot ? snapshot.dungeon.rooms.length >= 3 : false;
 
+  // Refs mirroring render state the flow controller needs to read without
+  // capturing a stale value (the controller itself stays identity-stable).
+  isInfoPanelOpenRef.current = isInfoPanelOpen;
+  currentFloorIdRef.current = currentFloorId;
+  teleportRemainingMsRef.current = teleportRemainingMs;
+
+  // The shared renderer-neutral learning flow. Every dependency below is a
+  // stable store action, ref, or setter, so the controller is created once and
+  // keeps its deferred-review state for the lifetime of the screen.
+  const flowRef = useRef<StudyFlowController | null>(null);
+  if (flowRef.current === null) {
+    flowRef.current = createStudyFlowController({
+      store: {
+        getSnapshot: () => useSubjectStore.getState().snapshot,
+        getPhase: () => useSessionStore.getState().phase,
+        persistActiveSubjectId,
+        setFocusedRoomId,
+        setActiveSubjectId,
+        setActiveScreen,
+        openNoteEditor,
+        closeMapView,
+        cancelTeleportMode,
+        setMobileHudOpen,
+        setProgressionActiveSubject,
+        collectArtifactNote: (entry) =>
+          useProgressionStore.getState().collectArtifactNote(entry),
+        awardReviewPass: () => useProgressionStore.getState().awardReviewPass(),
+        awardBadge: (badgeId) => {
+          useProgressionStore.getState().awardBadge(badgeId);
+        },
+        readProgressionBadges: () => useProgressionStore.getState().badges,
+        recordReviewPass,
+      },
+      renderer: {
+        setFloorVisibility: (visibility) => {
+          rendererRef.current?.setFloorVisibility(visibility);
+        },
+        teleportToRoom: (roomId) => {
+          rendererRef.current?.teleportToRoom(roomId);
+        },
+      },
+      teleport: {
+        remainingMs: () => teleportRemainingMsRef.current,
+        markConsumed: (at) => {
+          setClockMs(at);
+          markTeleported(at);
+        },
+      },
+      dungeonUi: {
+        pushToast,
+        requestRoomPanelTab,
+        setInfoPanelOpen: setIsInfoPanelOpen,
+        isInfoPanelOpen: () => isInfoPanelOpenRef.current,
+        clearNpcDialog: () => {
+          setNpcDialogRoomId(null);
+          setNpcDialogAnchor(null);
+        },
+        openJournalForCollectedNote: (noteId) => {
+          setInventoryView('journal');
+          setAutoOpenCollectedNoteId(noteId);
+        },
+        getCurrentFloorId: () => currentFloorIdRef.current,
+        setCurrentFloorId,
+      },
+    });
+  }
+  const flow = flowRef.current;
+
   const handleRoomInteract = useCallback(
     (roomId: string) => {
-      setMobileHudOpen(false);
-      setNpcDialogRoomId(null);
-      setNpcDialogAnchor(null);
-      setFocusedRoomId(roomId);
-      setPendingReviewRoomId(null);
-
-      if (phase === 'creator') {
-        requestRoomPanelTab('topic');
-        setIsInfoPanelOpen(true);
-        return;
-      }
-
-      if (phase === 'scribe') {
-        openNoteEditor(roomId);
-        return;
-      }
-
-      const liveSnapshot = useSubjectStore.getState().snapshot;
-
-      if (liveSnapshot) {
-        const room = liveSnapshot.rooms[roomId];
-        if (room && room.validationState.finalPass) {
-          setPendingReviewRoomId(roomId);
-        }
-      }
-
-      requestRoomPanelTab('notes');
-      setIsInfoPanelOpen(true);
+      flow.roomInteract(roomId);
     },
-    [openNoteEditor, phase, requestRoomPanelTab, setFocusedRoomId, setMobileHudOpen],
-  );
-
-  const finalizePendingReview = useCallback(
-    (roomId: string) => {
-      const liveSnapshot = useSubjectStore.getState().snapshot;
-      if (!liveSnapshot) return;
-
-      const room = liveSnapshot.rooms[roomId];
-      if (!room || !room.validationState.finalPass) return;
-
-      const reviewableRoomIds = liveSnapshot.dungeon.rooms
-        .map((summary) => summary.roomId)
-        .filter((candidateRoomId) => {
-          const candidate = liveSnapshot.rooms[candidateRoomId];
-          return candidate ? isReviewableRoom(candidate) : false;
-        });
-      const analyticsBefore = summarizeReviewAnalytics({
-        rooms: liveSnapshot.rooms,
-        reviewableRoomIds,
-        currentReviewStreak: 0,
-        longestReviewStreak: 0,
-      });
-      const nextPassTarget = analyticsBefore.fullReviewPasses + 1;
-      const shouldAwardReviewXp = room.reviewPassCount < nextPassTarget;
-
-      void recordReviewPass(roomId);
-      const reviewProgression = shouldAwardReviewXp
-        ? useProgressionStore.getState().awardReviewPass()
-        : { xpGained: 0, newRank: useProgressionStore.getState().rank, rankChanged: false };
-
-      const roomsWithIncrement = {
-        ...liveSnapshot.rooms,
-        [roomId]: {
-          ...room,
-          reviewPassCount: room.reviewPassCount + 1,
-        },
-      };
-      const analytics = summarizeReviewAnalytics({
-        rooms: roomsWithIncrement,
-        reviewableRoomIds,
-        currentReviewStreak: 0,
-        longestReviewStreak: 0,
-      });
-
-      const unlockedBadges = evaluatePhaseBadgeUnlocks(
-        {
-          totalRooms: liveSnapshot.dungeon.rooms.length,
-          creatorMappedRooms: liveSnapshot.dungeon.rooms.length,
-          scribeClearedRooms: reviewableRoomIds.length,
-          archaeologistFullReviewPasses: analytics.fullReviewPasses,
-        },
-        useProgressionStore.getState().badges,
-      );
-      if (unlockedBadges.length > 0) {
-        const progression = useProgressionStore.getState();
-        unlockedBadges.forEach((badgeId) => {
-          progression.awardBadge(badgeId);
-        });
-        pushToast(
-          'info',
-          `Archaeologist badge unlocked: ${unlockedBadges.join(', ')}`,
-        );
-      }
-
-      const nextPassProgressTarget = analytics.fullReviewPasses + 1;
-      const reviewedTowardNextPass = liveSnapshot.dungeon.rooms.filter((summary) => {
-        const count = roomsWithIncrement[summary.roomId]?.reviewPassCount ?? 0;
-        return count >= nextPassProgressTarget;
-      }).length;
-      const xpMessage =
-        reviewProgression.xpGained > 0
-          ? ` (+${reviewProgression.xpGained} XP)`
-          : ' (already counted for this pass)';
-      pushToast(
-        'info',
-        `Review recorded${xpMessage}: ${reviewedTowardNextPass}/${liveSnapshot.dungeon.rooms.length} rooms toward pass ${nextPassProgressTarget}. Completed full passes: ${analytics.fullReviewPasses}.`,
-      );
-    },
-    [pushToast, recordReviewPass],
+    [flow],
   );
 
   const closeInfoPanel = useCallback(() => {
-    setIsInfoPanelOpen(false);
-    if (phase === 'archaeologist' && pendingReviewRoomId) {
-      finalizePendingReview(pendingReviewRoomId);
-    }
-    setPendingReviewRoomId(null);
-  }, [finalizePendingReview, pendingReviewRoomId, phase]);
+    flow.closeInfoPanel();
+  }, [flow]);
 
   const toggleInfoPanel = useCallback(() => {
-    if (isInfoPanelOpen) {
-      closeInfoPanel();
-      return;
-    }
-    setIsInfoPanelOpen(true);
-  }, [closeInfoPanel, isInfoPanelOpen]);
+    flow.toggleInfoPanel();
+  }, [flow]);
 
   useEffect(() => {
     if (teleportRemainingMs <= 0) return;
@@ -284,39 +240,30 @@ export function GameScreen(): JSX.Element {
   }, [teleportRemainingMs]);
 
   useEffect(() => {
-    if (!dungeonMap || !containerRef.current) return;
-    const initialFloor =
-      hierarchy && snapshot
-        ? computeFloorVisibility(
-            hierarchy,
-            snapshot.dungeon,
-            currentFloorId ?? snapshot.dungeon.rootRoomId,
-          )
-        : null;
-    const game = createGame({
-      parent: containerRef.current,
-      dungeonMap,
-      colorTheme,
+    if (!snapshot || !dungeonMap || !hierarchy || !containerRef.current) return;
+    // The renderer-neutral model of the world this screen presents. The
+    // adapter turns it into engine calls at mount time.
+    const world: DungeonWorldModel = {
+      kind: 'dungeon',
+      map: dungeonMap,
+      floor: flow.buildFloorVisibilityModel(
+        snapshot,
+        currentFloorId ?? snapshot.dungeon.rootRoomId,
+      ),
       playerClass: selectedClass,
-      initialFloor: initialFloor
-        ? {
-            floorId: initialFloor.floorId,
-            visibleRoomIds: initialFloor.visibleRoomIds,
-            portalUpRoomId: initialFloor.portalUpRoomId,
-            portalDownRoomIds: initialFloor.portalDownRoomIds,
-            biomeId: (snapshot?.dungeon.biome && FLOOR_BIOME_IDS.includes(snapshot.dungeon.biome as FloorBiomeId)
-              ? (snapshot.dungeon.biome as FloorBiomeId)
-              : undefined),
-          }
-        : undefined,
+    };
+    const renderer = createGame({
+      parent: containerRef.current,
+      world,
+      colorTheme,
       callbacks: {
         onRoomEntered: (roomId) => setFocusedRoomId(roomId),
-        onNpcInteract: ({ roomId, clientX, clientY }: NpcDialogAnchor) => {
+        onNpcInteract: ({ roomId, clientX, clientY }) => {
           setNpcDialogRoomId(roomId);
           setNpcDialogAnchor({ x: clientX, y: clientY });
           setFocusedRoomId(roomId);
         },
-        onNpcDialogPosition: ({ roomId, clientX, clientY }: NpcDialogAnchor) => {
+        onNpcDialogPosition: ({ roomId, clientX, clientY }) => {
           setNpcDialogAnchor((current) => {
             if (!current || npcDialogRoomIdRef.current !== roomId) {
               return { x: clientX, y: clientY };
@@ -334,160 +281,98 @@ export function GameScreen(): JSX.Element {
           );
         },
         onInteract: (roomId) => handleRoomInteract(roomId),
-        onArtifactCollected: (roomId) => {
-          const liveSnapshot = useSubjectStore.getState().snapshot;
-          if (!liveSnapshot) return;
-          const room = liveSnapshot.rooms[roomId];
-          if (!room?.artifactMarkdown) return;
-
-          const liveHierarchy = deriveGraphHierarchy(liveSnapshot.dungeon);
-          const floorId = liveHierarchy.floorIdByRoomId[roomId] ?? liveSnapshot.dungeon.rootRoomId;
-          const floorLabel = liveHierarchy.floorLabelByFloorId[floorId] ?? liveSnapshot.dungeon.subjectName;
-          const previewSource = room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown;
-          const preview = previewSource
-            .replace(/^#\s+.*$/gm, '')
-            .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-            .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 180);
-
-          const collected = useProgressionStore.getState().collectArtifactNote({
-            dungeonId: liveSnapshot.dungeon.dungeonId,
-            roomId,
-            topic: room.topic,
-            floorLabel,
-            artifactPreview: preview,
-            noteMarkdown: room.noteText.trim().length > 0 ? room.noteText : room.artifactMarkdown,
-            artifactMarkdown: room.artifactMarkdown,
-          });
-
-          if (collected) {
-            setInventoryView('journal');
-            setAutoOpenCollectedNoteId(`${liveSnapshot.dungeon.dungeonId}:${roomId}`);
-          }
-        },
-        onFloorTransition: ({ fromRoomId, direction }) => {
-          const liveSnapshot = useSubjectStore.getState().snapshot;
-          if (!liveSnapshot) return;
-          const liveHierarchy = deriveGraphHierarchy(liveSnapshot.dungeon);
-          // For both directions the destination room is the very portal the
-          // player is standing on - we just swap which floor is "active" so
-          // that room's neighbors become visible.
-          const destinationFloorId =
-            direction === 'up'
-              ? liveHierarchy.floorIdByRoomId[fromRoomId] ?? liveSnapshot.dungeon.rootRoomId
-              : liveHierarchy.floorIdByRoomId[fromRoomId] ?? fromRoomId;
-          const nextVisibility = computeFloorVisibility(
-            liveHierarchy,
-            liveSnapshot.dungeon,
-            destinationFloorId,
-          );
-          setCurrentFloorId(destinationFloorId);
-          sceneRef.current?.setFloorVisibility({
-            floorId: nextVisibility.floorId,
-            visibleRoomIds: nextVisibility.visibleRoomIds,
-            portalUpRoomId: nextVisibility.portalUpRoomId,
-            portalDownRoomIds: nextVisibility.portalDownRoomIds,
-            biomeId: (liveSnapshot.dungeon.biome && FLOOR_BIOME_IDS.includes(liveSnapshot.dungeon.biome as FloorBiomeId)
-              ? (liveSnapshot.dungeon.biome as FloorBiomeId)
-              : undefined),
-          });
-          sceneRef.current?.teleportToRoom(fromRoomId);
-        },
+        onArtifactCollected: (roomId) => flow.collectArtifact(roomId),
+        onFloorTransition: ({ fromRoomId, direction }) =>
+          flow.changeFloor(fromRoomId, direction),
       },
     });
-    gameRef.current = game;
-    game.events.once('ready', () => {
-      sceneRef.current = game.scene.getScene('DungeonScene') as DungeonScene;
-      setSceneReady(true);
-    });
+    rendererRef.current = renderer;
+    const stopWaitingForReady = renderer.onReady(() => setSceneReady(true));
+    renderer.mount();
     return () => {
-      game.destroy(true);
-      gameRef.current = null;
-      sceneRef.current = null;
+      stopWaitingForReady();
+      renderer.unmount();
+      rendererRef.current = null;
       setSceneReady(false);
     };
-    // We intentionally do NOT depend on `phase` or `currentFloorId` here —
-    // phase reads happen at interact-time via the closure update below, and
-    // floor changes are pushed via `scene.setFloorVisibility` to avoid
-    // tearing down the Phaser game on every transition.
+    // We intentionally do NOT depend on `currentFloorId` here — floor changes
+    // are pushed via the renderer's `setFloorVisibility` to avoid tearing down
+    // the world host on every transition. `phase` stays in the list because the
+    // previous inline `handleRoomInteract` closure captured it, which
+    // re-created the host on every phase change; that behaviour is preserved
+    // verbatim.
   }, [
     colorTheme,
     dungeonMap,
+    flow,
     handleRoomInteract,
     hierarchy,
+    phase,
     selectedClass,
     setFocusedRoomId,
   ]);
 
-  // Restart the dungeon scene when the user saves custom sprites and clicks "Apply Changes"
+  // Restart the dungeon world when the user saves custom sprites and clicks "Apply Changes"
   useEffect(() => {
     if (sceneRestartCounter === 0) return;
-    if (!gameRef.current) return;
-    // Revoke old blob URLs before restarting so Phaser reloads fresh SVGs
-    import('@/services/customSprites').then(({ revokeAllBlobUrls }) => revokeAllBlobUrls());
-    const scene = gameRef.current.scene.getScene('DungeonScene');
-    if (scene) scene.scene.restart();
-    // Re-acquire scene reference on next ready
-    gameRef.current.events.once('ready', () => {
-      sceneRef.current = gameRef.current!.scene.getScene('DungeonScene') as DungeonScene;
-    });
+    if (!rendererRef.current) return;
+    // The adapter revokes the old blob URLs and restarts the scene in place.
+    rendererRef.current.restart();
   }, [sceneRestartCounter]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
-    const scene = sceneRef.current;
-    if (!scene) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
     const artifactRoomIds = Object.values(snapshot.rooms)
       .filter((room) => room.validationState.finalPass)
       .map((room) => room.roomId);
-    scene.setArtifactRooms(artifactRoomIds, phase === 'archaeologist');
+    renderer.setArtifactRooms(artifactRoomIds, phase === 'archaeologist');
   }, [sceneReady, snapshot, phase]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
-    const scene = sceneRef.current;
-    if (!scene) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
     const subjectCollectedArtifactRoomIds = collectedNotes
       .filter((entry) => entry.dungeonId === snapshot.dungeon.dungeonId)
       .map((entry) => entry.roomId);
-    scene.setCollectedArtifactRooms(subjectCollectedArtifactRoomIds);
+    renderer.setCollectedArtifactRooms(subjectCollectedArtifactRoomIds);
   }, [sceneReady, snapshot, collectedNotes]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
-    const scene = sceneRef.current;
-    if (!scene) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
     const reviewedArtifactRoomIds =
       phase === 'archaeologist'
         ? Object.values(snapshot.rooms)
             .filter((room) => room.reviewPassCount > 0)
             .map((room) => room.roomId)
         : [];
-    scene.setReviewedArtifactRooms(reviewedArtifactRoomIds);
+    renderer.setReviewedArtifactRooms(reviewedArtifactRoomIds);
   }, [phase, sceneReady, snapshot]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
-    const scene = sceneRef.current;
-    if (!scene) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
     const imageRoomIds = Object.values(snapshot.rooms)
       .filter((room) => room.attachments.length > 0)
       .map((room) => room.roomId);
-    scene.setImageRooms(imageRoomIds);
+    renderer.setImageRooms(imageRoomIds);
   }, [sceneReady, snapshot]);
 
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
-    const scene = sceneRef.current;
-    if (!scene) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
     const roomStates: Record<string, string> = {};
     for (const room of snapshot.dungeon.rooms) {
       const meta = snapshot.rooms[room.roomId];
       roomStates[room.roomId] = meta?.state ?? room.status;
     }
-    scene.setRoomOverlayStates(roomStates);
+    renderer.setRoomOverlayStates(roomStates);
   }, [sceneReady, snapshot]);
 
   useEffect(() => {
@@ -603,14 +488,7 @@ export function GameScreen(): JSX.Element {
   }, [pushToast, snapshot]);
 
   function handleHome() {
-    closeMapView();
-    setPendingReviewRoomId(null);
-    setFocusedRoomId(null);
-    setActiveSubjectId(null);
-    persistActiveSubjectId(null);
-    cancelTeleportMode();
-    setProgressionActiveSubject(null);
-    setActiveScreen('village');
+    flow.returnToVillage();
   }
 
   const noteMarkdownByRoomId = useMemo(() => {
@@ -710,30 +588,7 @@ export function GameScreen(): JSX.Element {
       : snapshot.dungeon.subjectName;
 
   function handleTravelToRoom(roomId: string) {
-    syncFloorForRoom(roomId);
-    sceneRef.current?.teleportToRoom(roomId);
-  }
-
-  function syncFloorForRoom(roomId: string) {
-    if (!hierarchy || !snapshot) return;
-    const targetFloorId =
-      hierarchy.floorIdByRoomId[roomId] ?? snapshot.dungeon.rootRoomId;
-    if (targetFloorId === currentFloorId) return;
-    const nextVisibility = computeFloorVisibility(
-      hierarchy,
-      snapshot.dungeon,
-      targetFloorId,
-    );
-    setCurrentFloorId(targetFloorId);
-    sceneRef.current?.setFloorVisibility({
-      floorId: nextVisibility.floorId,
-      visibleRoomIds: nextVisibility.visibleRoomIds,
-      portalUpRoomId: nextVisibility.portalUpRoomId,
-      portalDownRoomIds: nextVisibility.portalDownRoomIds,
-      biomeId: (snapshot.dungeon.biome && FLOOR_BIOME_IDS.includes(snapshot.dungeon.biome as FloorBiomeId)
-        ? (snapshot.dungeon.biome as FloorBiomeId)
-        : undefined),
-    });
+    flow.travelToRoom(roomId);
   }
 
   function handleTeleport() {
@@ -747,13 +602,7 @@ export function GameScreen(): JSX.Element {
   }
 
   function handleTeleportToRoom(roomId: string) {
-    if (teleportRemainingMs > 0) return;
-    syncFloorForRoom(roomId);
-    sceneRef.current?.teleportToRoom(roomId);
-    const now = Date.now();
-    setClockMs(now);
-    markTeleported(now);
-    closeMapView();
+    flow.teleportToRoom(roomId);
   }
 
   function handleCloseOnboarding() {
@@ -822,7 +671,7 @@ export function GameScreen(): JSX.Element {
               className="touch-interact-btn"
               aria-label="Interact with current room"
               onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-              onClick={() => sceneRef.current?.triggerInteract()}
+              onClick={() => rendererRef.current?.triggerInteract()}
             >
               ⚔
             </button>

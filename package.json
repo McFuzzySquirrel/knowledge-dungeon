@@ -39,6 +39,7 @@
     "typecheck": "tsc -b --pretty false",
     "manifest": "node scripts/generate-sprite-manifest.mjs",
     "test": "vitest run",
+    "test:contracts": "vitest run tests/contracts",
     "test:e2e": "npm run build:web && playwright test tests/e2e/currentBuild.spec.ts",
     "test:e2e:recorded": "playwright test tests/e2e/currentBuild.spec.ts",
     "test:e2e:compat": "npm run build:web && npm run record:web-artifact && playwright test tests/e2e/compatibility.spec.ts --project=compat-chromium --project=compat-firefox --project=compat-webkit --project=compat-edge",

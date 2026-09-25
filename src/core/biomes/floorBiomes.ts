@@ -1,0 +1,154 @@
+/**
+ * Renderer-neutral floor biome data.
+ *
+ * Biome identity, palettes, and texture keys are pure data with no rendering
+ * dependency, so they live in `src/core` and are shared by every renderer
+ * adapter (the Phaser scenes today, the PixiJS host later). The pixel-level
+ * drawing of a floor tile stays on the renderer side in
+ * `src/game/systems/proceduralTextures.ts`, which re-exports this module.
+ */
+
+export const FLOOR_BIOME_IDS = [
+  'knowledgeDungeon',
+  'mathematicsCaverns',
+  'scienceLabs',
+  'historyRuins',
+  'languageLibrary',
+  // Phase 3c new biomes:
+  'deepForest',
+  'frozenTundra',
+  'crystalCaverns',
+  'sunkenSwamp',
+] as const;
+
+export type FloorBiomeId = (typeof FLOOR_BIOME_IDS)[number];
+
+export interface FloorBiomePalette {
+  base: number;
+  mottles: readonly number[];
+  fleck: number;
+  grain: number;
+  crack: number;
+  edgeMin: number;
+  edgeMax: number;
+  wallTint: number;
+  corridorColor: number;
+}
+
+export const FLOOR_BIOME_PALETTES: Record<FloorBiomeId, FloorBiomePalette> = {
+  knowledgeDungeon: {
+    base: 0x2f3136,
+    mottles: [0x3b3d42, 0x45474c, 0x25272b],
+    fleck: 0xc7bb94,
+    grain: 0x6a624e,
+    crack: 0x181818,
+    edgeMin: 48,
+    edgeMax: 58,
+    wallTint: 0x3a3228,
+    corridorColor: 0xb8a87a,
+  },
+  mathematicsCaverns: {
+    base: 0x2d364a,
+    mottles: [0x3e4a62, 0x596680, 0x222a3a],
+    fleck: 0x6fd5e9,
+    grain: 0x7f8ca6,
+    crack: 0x161d2a,
+    edgeMin: 52,
+    edgeMax: 66,
+    wallTint: 0x2a3348,
+    corridorColor: 0x5e8eb8,
+  },
+  scienceLabs: {
+    base: 0x30373d,
+    mottles: [0x454f57, 0x5c6872, 0x262d31],
+    fleck: 0x87c88e,
+    grain: 0x6e7a83,
+    crack: 0x171c1f,
+    edgeMin: 50,
+    edgeMax: 64,
+    wallTint: 0x2e3a32,
+    corridorColor: 0x6ea878,
+  },
+  historyRuins: {
+    base: 0x2f3850,
+    mottles: [0x3e4a68, 0x53617f, 0x242c3d],
+    fleck: 0x8ab6e8,
+    grain: 0x7083a5,
+    crack: 0x1b2231,
+    edgeMin: 62,
+    edgeMax: 82,
+    wallTint: 0x3a3a2a,
+    corridorColor: 0x8a9eb8,
+  },
+  languageLibrary: {
+    base: 0x2a3452,
+    mottles: [0x374464, 0x4b5a80, 0x202a41],
+    fleck: 0xa7bff3,
+    grain: 0x6e80ab,
+    crack: 0x181f32,
+    edgeMin: 58,
+    edgeMax: 80,
+    wallTint: 0x2a2844,
+    corridorColor: 0x9e8abf,
+  },
+  // ── Phase 3c new biomes ──────────────────────────────────────
+  deepForest: {
+    base: 0x2d3a28,
+    mottles: [0x3e4e36, 0x4a5e3f, 0x1e2a1a],
+    fleck: 0x7a9c6c,
+    grain: 0x5a7a4e,
+    crack: 0x121a0e,
+    edgeMin: 57,
+    edgeMax: 76,
+    wallTint: 0x263a1e,
+    corridorColor: 0x5a8a3e,
+  },
+  frozenTundra: {
+    base: 0x34404d,
+    mottles: [0x465565, 0x53667a, 0x26323a],
+    fleck: 0xa8d4f0,
+    grain: 0x829bb0,
+    crack: 0x1a242e,
+    edgeMin: 60,
+    edgeMax: 84,
+    wallTint: 0x2a3e50,
+    corridorColor: 0x70b8d8,
+  },
+  crystalCaverns: {
+    base: 0x2f2d44,
+    mottles: [0x423e5c, 0x514c6e, 0x242136],
+    fleck: 0xb48cff,
+    grain: 0x7b74a8,
+    crack: 0x1a1730,
+    edgeMin: 50,
+    edgeMax: 68,
+    wallTint: 0x2c2844,
+    corridorColor: 0x9e78d0,
+  },
+  sunkenSwamp: {
+    base: 0x2e3826,
+    mottles: [0x3b4a2e, 0x445a34, 0x1f2818],
+    fleck: 0x8bbf6a,
+    grain: 0x5e7248,
+    crack: 0x141d0e,
+    edgeMin: 55,
+    edgeMax: 72,
+    wallTint: 0x22341a,
+    corridorColor: 0x6a9e40,
+  },
+};
+
+export function resolveFloorBiome(seed: number, override?: FloorBiomeId): FloorBiomeId {
+  if (override) return override;
+  const normalizedSeed = Number.isFinite(seed) ? Math.abs(Math.trunc(seed)) : 0;
+  return FLOOR_BIOME_IDS[normalizedSeed % FLOOR_BIOME_IDS.length];
+}
+
+export function getBiomePalette(biome: FloorBiomeId): { wallTint: number; corridorColor: number } {
+  const p = FLOOR_BIOME_PALETTES[biome];
+  return { wallTint: p.wallTint, corridorColor: p.corridorColor };
+}
+
+export function floorBiomeTextureKey(biome: FloorBiomeId): string {
+  return `kd-floor-biome-${biome}`;
+}

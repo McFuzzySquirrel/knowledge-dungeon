@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FishStandPanel } from '@/ui/components/FishStandPanel';
 import { useProgressionStore } from '@/store/progressionStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
-import type { FishEntry } from '@/game/systems/fishingTypes';
-import { FISH_CATALOG } from '@/game/systems/fishingTypes';
+import type { FishEntry } from '@/core/fishing/fishingTypes';
+import { FISH_CATALOG } from '@/core/fishing/fishingTypes';
 
 const mockListSubjectIds = vi.fn<() => Promise<string[]>>();
 

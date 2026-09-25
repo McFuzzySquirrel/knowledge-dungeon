@@ -6,7 +6,7 @@ import {
   countByRarity,
   countUniqueTypes,
 } from '@/core/fishing/fishCollectionService';
-import type { FishEntry, FishCollection } from '@/game/systems/fishingTypes';
+import type { FishEntry, FishCollection } from '@/core/fishing/fishingTypes';
 
 function makeFish(overrides: Partial<FishEntry> = {}): FishEntry {
   return {

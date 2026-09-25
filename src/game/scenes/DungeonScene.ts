@@ -9,7 +9,7 @@ import type {
   DungeonDoor,
   DungeonMap,
   DungeonRoom,
-} from '@/game/systems/dungeonTypes';
+} from '@/core/layout/dungeonTypes';
 import type { PlayerClassId, PlayerDirection } from '@/game/systems/playerClasses';
 import { getPlayerSpritePath } from '@/game/systems/playerClasses';
 import {
@@ -18,34 +18,51 @@ import {
   getBiomePalette,
   type FloorBiomeId,
 } from '@/game/systems/proceduralTextures';
+import type {
+  WorldEventHandler,
+  WorldEventPayload,
+  WorldEventPayloadField,
+} from '@/application/contracts/events';
 import { isEditableElementFocused } from '@/ui/utils/editableElement';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 
-export interface DungeonSceneEvents {
-  onRoomEntered: (roomId: string) => void;
-  onInteract: (roomId: string) => void;
-  onNpcInteract?: (payload: NpcDialogAnchor) => void;
-  onNpcDialogPosition?: (payload: NpcDialogAnchor) => void;
-  onNpcOutOfRange?: (roomId: string) => void;
-  onArtifactCollected?: (roomId: string) => void;
+/**
+ * Renderer adapter for the dungeon world.
+ *
+ * Every callback this scene emits is derived from the renderer-neutral event
+ * contract in `src/application/contracts/events.ts`: callbacks that always
+ * received the whole payload reuse `WorldEventHandler`, and the ones that
+ * historically received a single field use `WorldEventPayloadField`. A Phaser
+ * host and a PixiJS host therefore cannot drift apart, while the public
+ * callback shape stays exactly as it was.
+ */
+export type DungeonSceneEvents = {
+  onRoomEntered: (roomId: WorldEventPayloadField<'dungeon:room-entered', 'roomId'>) => void;
+  onInteract: (roomId: WorldEventPayloadField<'dungeon:interact', 'roomId'>) => void;
+  onNpcInteract?: WorldEventHandler<'dungeon:npc-interact'>;
+  onNpcDialogPosition?: WorldEventHandler<'dungeon:npc-dialog-position'>;
+  onNpcOutOfRange?: (roomId: WorldEventPayloadField<'dungeon:npc-out-of-range', 'roomId'>) => void;
+  onArtifactCollected?: (
+    roomId: WorldEventPayloadField<'dungeon:artifact-collected', 'roomId'>,
+  ) => void;
   /**
    * Fired when the player presses E inside a portal room (up or down).
-   * The React layer is responsible for choosing the destination floor,
-   * calling {@link DungeonScene.setFloorVisibility}, then
-   * {@link DungeonScene.teleportToRoom}.
+   * The host is responsible for choosing the destination floor, calling
+   * {@link DungeonScene.setFloorVisibility}, then {@link DungeonScene.teleportToRoom}.
    */
-  onFloorTransition?: (info: {
-    fromRoomId: string;
-    direction: 'up' | 'down';
-  }) => void;
-}
+  onFloorTransition?: WorldEventHandler<'dungeon:floor-transition'>;
+};
 
-export interface NpcDialogAnchor {
-  roomId: string;
-  clientX: number;
-  clientY: number;
-}
+/** Payload of `dungeon:npc-interact`, re-exported under its historical name. */
+export type NpcDialogAnchor = WorldEventPayload<'dungeon:npc-interact'>;
 
+/** Payload of `dungeon:npc-dialog-position`. */
+export type NpcDialogPosition = WorldEventPayload<'dungeon:npc-dialog-position'>;
+
+/**
+ * Phaser-side floor-visibility input. Accepts `Set`s (as the scene builds
+ * internally) or the renderer-neutral readonly arrays of `FloorVisibilityModel`.
+ */
 export interface FloorVisibilityInput {
   floorId: string;
   visibleRoomIds: ReadonlySet<string> | readonly string[];

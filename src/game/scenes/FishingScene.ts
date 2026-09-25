@@ -5,10 +5,10 @@ import {
   FISH_DIRECTION_WEIGHTS,
   MAX_PROXIMITY_WAIT_MS,
   type FishCatalogEntry,
-  type FishRarity,
   type FishDirection,
-} from '@/game/systems/fishingTypes';
-import { rollFishRarity, createSeededRng } from '@/game/systems/fishingMechanics';
+} from '@/core/fishing/fishingTypes';
+import { rollFishRarity, createSeededRng } from '@/core/fishing/fishingMechanics';
+import type { WorldEventHandler, WorldEventPayload } from '@/application/contracts/events';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 import { audioManager } from '@/services/audioManager';
 import { PlayerDirection, getPlayerSpritePath } from '@/game/systems/playerClasses';
@@ -69,14 +69,24 @@ const TEX_ROD = 'fish-rod';
 // ── Fishing state ──────────────────────────────────────────────────────────
 type FishingState = 'idle' | 'powering' | 'casting' | 'waiting' | 'biting' | 'reeling' | 'caught' | 'missed';
 
-export interface FishingSceneEvents {
+/**
+ * Renderer adapter for the fishing world.
+ *
+ * Every callback is derived from the renderer-neutral event contract in
+ * `src/application/contracts/events.ts`, so the Phaser host and a future PixiJS
+ * host emit the same payloads. The public callback shape is unchanged.
+ */
+export type FishingSceneEvents = {
   /** Fired when a fish is successfully caught. */
-  onFishCaught?: (data: { fishName: string; rarity: FishRarity; catalogId: string; description: string }) => void;
+  onFishCaught?: WorldEventHandler<'fishing:fish-caught'>;
   /** Fired when the player wants to return to the village. */
-  onReturnToVillage: () => void;
+  onReturnToVillage: WorldEventHandler<'fishing:return-to-village'>;
   /** Fired when the scene is fully created and ready. */
-  onReady: () => void;
-}
+  onReady: WorldEventHandler<'fishing:ready'>;
+};
+
+/** Payload of `fishing:fish-caught`, re-exported under its historical shape. */
+export type FishCaughtEvent = WorldEventPayload<'fishing:fish-caught'>;
 
 export class FishingScene extends Phaser.Scene {
   private callbacks: FishingSceneEvents | null = null;
@@ -135,6 +145,14 @@ export class FishingScene extends Phaser.Scene {
 
   constructor() {
     super({ key: 'FishingScene' });
+  }
+
+  /**
+   * Number of fish currently kept in the bucket this session. Read by the
+   * renderer adapter for the `getCaughtCount` capability.
+   */
+  getCaughtCount(): number {
+    return this.caughtCount;
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────────────

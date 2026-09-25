@@ -4,7 +4,7 @@ import {
   rollFishRarity,
   pullRecallQuestion,
   getClearedRooms,
-} from '@/game/systems/fishingMechanics';
+} from '@/core/fishing/fishingMechanics';
 import type { RoomMetadata, DungeonRoomSummary } from '@/core/validation/persistence';
 
 function makeRoomMeta(overrides: Partial<RoomMetadata> = {}): RoomMetadata {

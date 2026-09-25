@@ -1,42 +1,38 @@
-import Phaser from 'phaser';
-import { VillageScene, type VillageSceneEvents } from '@/game/scenes/VillageScene';
-import { FishingScene } from '@/game/scenes/FishingScene';
-import type { VillageStructure } from '@/data/villageLayout';
+/**
+ * Village world seam for the application layer.
+ *
+ * The React screen imports only this module: it hands over a host element, a
+ * renderer-neutral {@link VillageWorldModel}, and the contract-derived scene
+ * callbacks, and receives a renderer-neutral {@link PhaserVillageRenderer}
+ * that also owns the fishing world sharing its canvas. Nothing Phaser-shaped
+ * crosses this boundary.
+ */
+import {
+  createPhaserVillageRenderer,
+  type PhaserVillageRenderer,
+  type VillageSceneEvents,
+  type VillageSpawnPoint,
+} from '@/game/adapters';
+import type { VillageWorldModel } from '@/application/contracts/world';
 
 export interface CreateVillageGameOptions {
+  /** Element the world canvas is appended to. */
   parent: HTMLElement;
+  /** Renderer-neutral model of the village to present. */
+  world: VillageWorldModel;
+  /** Contract-derived callbacks the village world reports through. */
   callbacks: VillageSceneEvents;
-  dynamicStructures?: VillageStructure[];
-  playerClass?: string;
-  spawnGridX?: number | null;
-  spawnGridY?: number | null;
+  /** One-time spawn grid override, or `null` for the map default. */
+  spawn?: VillageSpawnPoint;
 }
 
-export function createVillageGame(options: CreateVillageGameOptions): Phaser.Game {
-  const game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: options.parent,
-    backgroundColor: '#1a2a1a',
-    scale: {
-      mode: Phaser.Scale.RESIZE,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-      width: '100%',
-      height: '100%',
-    },
-    physics: {
-      default: 'arcade',
-      arcade: { gravity: { x: 0, y: 0 }, debug: false },
-    },
-    scene: [VillageScene, FishingScene],
-  });
+export type { VillageSceneEvents, VillageSpawnPoint, PhaserVillageRenderer };
 
-  game.scene.start('VillageScene', {
-    callbacks: options.callbacks,
-    dynamicStructures: options.dynamicStructures,
-    playerClass: options.playerClass,
-    spawnGridX: options.spawnGridX,
-    spawnGridY: options.spawnGridY,
-  });
-
-  return game;
+/**
+ * Build the village world renderer for a host element.
+ *
+ * The returned renderer is inert until `mount()` is called.
+ */
+export function createVillageGame(options: CreateVillageGameOptions): PhaserVillageRenderer {
+  return createPhaserVillageRenderer(options);
 }
