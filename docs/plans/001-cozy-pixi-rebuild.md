@@ -628,7 +628,7 @@ Phase 24 Remove Phaser and legacy renderer
 | Phase | Status | Objective |
 | --- | --- | --- |
 | 0 | complete | Freeze behavior and legacy compatibility fixtures. |
-| 1 | not-started | Add flags, browser tests, accessibility scaffolding, and quality rails. |
+| 1 | verified | Add flags, browser tests, accessibility scaffolding, and quality rails. |
 | 2 | not-started | Extract renderer-neutral application contracts. |
 | 3 | not-started | Build storage-v2 and migration infrastructure. |
 | 4 | not-started | Cut over storage behind a flag and add local attachments. |
@@ -740,7 +740,7 @@ Phase 1.
 
 ## Phase 1: Runtime Flags, Browser Tests, and Quality Rails
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Introduce safe cutover controls and browser-level test infrastructure while Phaser remains the default.
 
 ### Prerequisites
@@ -792,6 +792,19 @@ npm run test:e2e -- --project=tablet
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-09-25:
+
+- `npm ci --ignore-scripts` passed. `npm run lint`, `npm run typecheck`, and `npm test` passed after the clean install; Vitest reported 35 files and 260 tests.
+- `npm run test:e2e` passed all 12 tests across `desktop-chromium` (1440x900), `chromebook` (1366x768), `tablet` (834x1112 portrait), and `tablet-landscape` (1112x834 landscape). The exact `chromebook` and `tablet` commands passed 3 tests each, and the explicit `tablet-landscape` command passed 3 tests.
+- The production-preview smoke test starts the current synthetic tutorial, verifies a non-zero Phaser canvas, requires the `vendor-phaser` chunk, rejects Pixi script requests, and blocks unexpected network traffic. No analytics, telemetry, remote-configuration, API, upload, WebSocket, or non-static request was observed. Known legacy Google Font requests were blocked and recorded for the Phase 8 font-removal work; no request body, query, header, or learner data was captured.
+- Axe runs WCAG 2.0/2.1 A/AA and WCAG 2.2 AA tags on Welcome. No new serious or critical violation was introduced. One pre-existing serious contrast node, `.welcome-checklist-status--done`, remains explicitly recorded for the later accessibility audit.
+- `npx tsc -b --dry --verbose` lists `tsconfig.app.json`, `tsconfig.node.json`, and `tsconfig.electron.typecheck.json`; `npm run typecheck` therefore checks application, Node/config, and Electron source intentionally. Electron packaging remains deferred.
+- `npm run build:web` and `npm run check:bundle-size` passed. Production `dist` is 4,093,638 bytes across 105 files (3.90 MB), with the existing Phaser chunk retained. `npm run record:build-metadata` passed and recorded 105 files, 1,136,039 summed per-file gzip bytes, and 11 JS/CSS chunks in the ignored `artifacts/build-metadata.json` artifact.
+- All valid feature-flag overrides compile. An invalid `VITE_WEB_SHARE=maybe` build fails during Vite configuration with a sanitized error. The nine documented flags default to Phaser, legacy storage, and all future booleans false; each records an owner phase and rollback behavior.
+- No storage migration, renderer migration, learner-data change, new media, or deployment occurred. Chromium viewport/touch emulation is not physical-device verification; full accessibility remediation, remote-font removal, performance enforcement, and memory/offline gates remain assigned to their later phases.
 
 ### Exit criteria
 

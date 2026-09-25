@@ -1,10 +1,11 @@
 /// <reference types="vitest/config" />
 import path from 'node:path';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import legacy from '@vitejs/plugin-legacy';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import { parseRuntimeConfig } from './src/config/runtimeConfig';
 
 function spriteManifestPlugin(): Plugin {
   const ASSETS_DIR = path.resolve(__dirname, 'public', 'assets');
@@ -46,6 +47,14 @@ function spriteManifestPlugin(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
+  // Reject malformed build-time flags from both shell and mode-specific .env
+  // inputs before Vite starts transforming the app.
+  const buildEnvironment = {
+    ...loadEnv(mode, process.cwd(), 'VITE_'),
+    ...process.env,
+  };
+  parseRuntimeConfig(buildEnvironment);
+
   const isProfileMode = mode === 'profile';
   const isElectronMode = mode === 'electron';
 
