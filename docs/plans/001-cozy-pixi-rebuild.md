@@ -1741,6 +1741,50 @@ the first time. Accessibility, memory, and offline results are unchanged: this
 phase adds no user-facing surface, so the Phase 1 and Phase 1A gates remain the
 evidence.
 
+#### Checkpoint and merge evidence
+
+Recorded on 2026-09-26. The phase was committed and pushed as the explicitly
+authorized checkpoint, opened as pull request #52, and reviewed again by CI.
+
+- Commit `4241a4f` (`feat: add phase 3 storage-v2 repository foundation`) was
+  pushed to `phase-3-storage-v2`. 36 files, +14,384 / −238, working tree clean.
+  `main` was deliberately not written to, because the lint, typecheck, unit,
+  build, viewport, and compatibility gates live on pull requests in this
+  repository.
+- **Pull-request run `36188860682` failed Unit Tests on 5 tests in
+  `tests/migrations/qaHardening.test.ts` and `tests/migrations/qaRoundTwo.test.ts`,
+  all with `TypeError: Failed to execute 'digest' on 'SubtleCrypto': 2nd
+  argument is not instance of ArrayBuffer, Buffer, TypedArray, or DataView`.**
+  Lint and Typecheck passed. This was a **test-helper** defect, not a
+  production defect: the helpers passed `bytes.buffer.slice(...)` to
+  `crypto.subtle.digest`.
+- **Root cause, reproduced rather than assumed.** CI pins **Node 20** in
+  `.github/workflows/ci.yml` while local development runs Node 22. Under jsdom
+  the test realm and Node's crypto realm differ, so `.buffer.slice(...)`
+  produces a cross-realm `ArrayBuffer`. Node 20's `SubtleCrypto` validates its
+  argument with an `instanceof` chain and rejects it; Node 22 accepts the same
+  value. A `node:vm` probe run under both runtimes confirmed exactly that
+  divergence, which is why the suite was green locally and red only in CI.
+- **Fix:** the helpers now pass `new Uint8Array(bytes)`, which copies the
+  view's elements into the current realm, is accepted on Node 20 and Node 22
+  and in every browser, and preserves the slice semantics the "hashes a
+  `Uint8Array` view over its own slice" test depends on. No production code
+  changed. Both call sites and the reference comment were updated; the
+  comment now names the Node 20 versus Node 22 divergence rather than
+  describing it loosely.
+- **Evidence the fix works on the failing runtime:** the full 55-file / 744-test
+  suite was re-run under `node@20` and passed, having failed there before the
+  change, and also passes under the local Node 22.
+- **Environment caveat carried forward:** every local gate in this phase ran on
+  Node 22.22.2, but CI runs Node 20. The two runtimes differ in at least one
+  place that mattered here. A green local gate is therefore not by itself
+  evidence of a green CI run, and any future phase that depends on a Node
+  built-in, Web Crypto, or a cross-realm object type must be verified under
+  Node 20 as well. This is a tooling and verification gap, not a product one.
+- The phase was not merged on a red run. The full result, including the CI
+  outcome of the follow-up commit, is recorded below once the pull request
+  settles.
+
 #### Known limitations and evidence boundaries
 
 - All storage-v2 tests run on `fake-indexeddb` under `jsdom`. Real-browser

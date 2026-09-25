@@ -823,9 +823,12 @@ describe('R2 attack: no stale checksum survives the SHA-256 correction', () => {
         const bytes = new TextEncoder().encode(
           (await import('@/services/persistence/v2/checksum')).canonicalJsonStringify(envelope.value),
         );
+        // Copy the view's elements into a typed array in this realm. See the
+        // full explanation in qaHardening.test.ts: `.buffer.slice(...)` yields
+        // a cross-realm ArrayBuffer that Node 20's SubtleCrypto rejects.
         const digest = await globalThis.crypto.subtle.digest(
           'SHA-256',
-          bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
+          new Uint8Array(bytes),
         );
         const expected = Array.from(new Uint8Array(digest))
           .map((byte) => byte.toString(16).padStart(2, '0'))
@@ -859,11 +862,8 @@ describe('R2 attack: no stale checksum survives the SHA-256 correction', () => {
       new TextEncoder().encode(JSON.stringify({ sessionId, startedAt }));
     const expectedFor = async (sessionId: string, startedAt: string): Promise<string> => {
       const bytes = bytesFor(sessionId, startedAt);
-      const digest = await globalThis.crypto.subtle.digest(
-        'SHA-256',
-        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
-      );
-      return Array.from(new Uint8Array(digest))
+      // Copy into a typed array in this realm; see qaHardening.test.ts.
+      const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes));      return Array.from(new Uint8Array(digest))
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('')
         .slice(0, 32);

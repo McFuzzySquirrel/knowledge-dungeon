@@ -300,8 +300,21 @@ describe('QA checksum against Web Crypto', () => {
   const hasSubtle = typeof globalThis.crypto?.subtle?.digest === 'function';
 
   async function subtleHex(bytes: Uint8Array): Promise<string> {
-    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', buffer);
+    // Copy the view's elements into a typed array constructed in THIS realm.
+    //
+    // `bytes.buffer.slice(...)` looks equivalent but is not portable. Under
+    // jsdom the test realm and Node's crypto realm differ, so the sliced value
+    // is a cross-realm ArrayBuffer. Node 20's SubtleCrypto validates its
+    // argument with an `instanceof` chain and rejects it with "Failed to
+    // execute 'digest' on 'SubtleCrypto': 2nd argument is not instance of
+    // ArrayBuffer, Buffer, TypedArray, or DataView"; Node 22 accepts it. CI
+    // pins Node 20 (see .github/workflows/ci.yml) while local development runs
+    // Node 22, so the original form passed locally and failed only in CI.
+    //
+    // `new Uint8Array(bytes)` copies exactly the view's elements into the
+    // current realm, is accepted on every engine, and preserves the slice
+    // semantics the "view over its own slice" test depends on.
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
     return Array.from(new Uint8Array(digest))
       .map((byte) => byte.toString(16).padStart(2, '0'))
       .join('');
