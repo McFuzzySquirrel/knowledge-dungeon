@@ -1781,9 +1781,22 @@ authorized checkpoint, opened as pull request #52, and reviewed again by CI.
   evidence of a green CI run, and any future phase that depends on a Node
   built-in, Web Crypto, or a cross-realm object type must be verified under
   Node 20 as well. This is a tooling and verification gap, not a product one.
-- The phase was not merged on a red run. The full result, including the CI
-  outcome of the follow-up commit, is recorded below once the pull request
-  settles.
+- The phase was not merged on a red run. Follow-up commit `ecfddb3` (`fix: make
+  the Web Crypto checksum cross-check portable to Node 20`) was pushed to the
+  same branch; it changed two QA test helpers and the plan, and no production
+  code.
+- **Pull-request run `36189936366` then passed all nine jobs:** Lint, Typecheck
+  (App, Node, Electron), Unit Tests, Web Build and Bundle, Browser Smoke
+  (Chromium Matrix), and the four representative compatibility lanes
+  `pr-linux-chromium`, `pr-linux-firefox`, `pr-macos-webkit`, and
+  `pr-windows-edge`.
+- **PR #52 merged as `f0092e2`** (squash). **Main CI run `36190475179`** passed
+  the same nine jobs, and **Pages deployment run `36190475069`** succeeded.
+- Every lane continued to classify its runner as emulated, representative, and
+  synthetic. No new browser, host, device, or assistive-technology claim was
+  made, and the physical-device gates remain assigned to Phases 21 and 23.
+- Rollback is now `git revert f0092e2`, or a reset to the Phase 2 checkpoint
+  `5345493`.
 
 #### Known limitations and evidence boundaries
 
