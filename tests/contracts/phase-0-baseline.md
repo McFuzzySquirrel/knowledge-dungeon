@@ -250,8 +250,9 @@ ownership.
 
 The authoritative plan controls the Phase 0 status. After the recorded gates,
 the orchestrator set Phase 0 to `verified`, and the maintainer accepted it on
-2026-09-24. Phase 0 is now `complete`; Phase 1 remains `not-started` until
-separately requested.
+2026-09-24. Phase 0 is now `complete`. At that historical checkpoint Phase 1
+remained `not-started` until separately requested; its current status is
+recorded in the authoritative plan.
 
 ## 7. Known limitations and handoff
 

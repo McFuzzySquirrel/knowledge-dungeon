@@ -29,6 +29,8 @@
     "package:electron:linux:full": "npm run build:electron && electron-builder --config electron-builder.config.js --linux",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "record:build-metadata": "node scripts/record-build-metadata.mjs --mode production",
+    "record:web-artifact": "node scripts/web-artifact-manifest.mjs write",
+    "verify:web-artifact": "node scripts/web-artifact-manifest.mjs verify",
     "release:verify": "npm run lint && npm run typecheck && npm test && npm run test:e2e && npm run build:web && npm run check:bundle-size && npm run record:build-metadata",
     "electron": "npm run build:electron && electron .",
     "preview": "vite preview",
@@ -37,7 +39,10 @@
     "typecheck": "tsc -b --pretty false",
     "manifest": "node scripts/generate-sprite-manifest.mjs",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build:web && playwright test tests/e2e/currentBuild.spec.ts",
+    "test:e2e:recorded": "playwright test tests/e2e/currentBuild.spec.ts",
+    "test:e2e:compat": "npm run build:web && npm run record:web-artifact && playwright test tests/e2e/compatibility.spec.ts --project=compat-chromium --project=compat-firefox --project=compat-webkit --project=compat-edge",
+    "test:e2e:compat:recorded": "playwright test tests/e2e/compatibility.spec.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

@@ -100,6 +100,10 @@ counted by the raw checker and push the profile directory over the
 
 ### Known baseline limitations
 
+The limitations in this section describe the dated Phase 0 baseline. Current
+rebuild status and remaining scope are recorded above and in the authoritative
+plan.
+
 - The renderer migration, renderer-neutral contracts, typed cutover flags, route-
   aware lazy loading, and local attachment path are not implemented yet.
 - The current web image path can use the legacy Express `/api/upload` endpoint;
@@ -149,11 +153,198 @@ The complete Phase 0 documentation and test/fixture change set includes:
   compatibility inputs, including malformed and invalid cases.
 
 The full measured Vitest suite is 34 files / 254 tests, including the two
-characterization files listed above. These artifacts characterize current
+characterization files listed above. These artifacts characterize the Phase 0
 behavior; they do not implement storage-v2, browser/renderer parity, or any
 later rebuild phase. The maintainer accepted Phase 0 on 2026-09-24, so it is
-`complete` in the authoritative plan. Phase 1 remains `not-started` until it is
-separately requested.
+`complete` in the authoritative plan. The Phase 0 handoff above is historical;
+it does not describe the current rebuild status.
+
+### Current rebuild status
+
+Phase 1 was verified and accepted on 2026-09-25 and is `complete` in the
+authoritative plan. It added typed build-time flags, Linux/Chromium Playwright
+smoke coverage, axe and privacy-network scaffolding, intentional
+application/Node/Electron typechecking, CI jobs, and build metadata recording.
+
+Phase 1A, the cross-platform web compatibility rails, is implemented and is
+`blocked` pending required remote macOS, Windows, Edge, and release-candidate CI
+evidence. It adds a machine-readable support matrix, named Playwright projects for
+Chromium, Firefox, WebKit, and the Windows Edge channel, a bounded cross-engine
+suite that exercises one recorded production web artifact, and staged
+pull-request and scheduled release-candidate CI lanes. No renderer, storage,
+persistence, media, packaging, or application behavior changed, and no new
+dependency was added. The current Vitest suite is 38 files / 313 tests. Local
+Linux Chromium and Firefox evidence passes, but no GitHub Actions workflow has
+run yet, so Phase 1A is not `verified`.
+
+### Approved web support matrix
+
+[`tests/e2e/support-matrix.ts`](./tests/e2e/support-matrix.ts) is the single
+machine-readable source for these dimensions. `playwright.config.ts` generates its
+projects from that matrix, so a project cannot drift from the documented support
+contract, and `tests/e2e/support-matrix.test.ts` fails if the matrix, the
+projects, or the CI lanes disagree.
+
+Host operating system, browser engine, branded-browser channel, and form factor
+are separate dimensions. Viewport and touch emulation is form-factor evidence
+only, and Playwright WebKit is WebKit engine evidence rather than a Safari
+release claim.
+
+| Project | Suite | Approved host | Engine | Channel | Viewport / DSF | Input | Evidence class | CI lanes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `desktop-chromium` | Phase 1 current build | Linux | Chromium | Playwright build | 1440x900 / 1 | pointer + keyboard | emulated viewport | pull request |
+| `chromebook` | Phase 1 current build | Linux | Chromium | Playwright build | 1366x768 / 1 | pointer + keyboard | emulated viewport | pull request |
+| `tablet` | Phase 1 current build | Linux | Chromium | Playwright build | 834x1112 / 1 | touch emulated | emulated viewport | pull request |
+| `tablet-landscape` | Phase 1 current build | Linux | Chromium | Playwright build | 1112x834 / 1 | touch emulated | emulated viewport | pull request |
+| `compat-chromium` | cross-engine compatibility | Linux, macOS, Windows | Chromium | Playwright build | 1280x800 / 1 | pointer + keyboard | engine automation | pull request, release candidate |
+| `compat-firefox` | cross-engine compatibility | Linux, macOS, Windows | Firefox | Playwright build | 1280x800 / 1 | pointer + keyboard | engine automation | pull request, release candidate |
+| `compat-webkit` | cross-engine compatibility | macOS | WebKit | Playwright build | 1280x800 / 1 | pointer + keyboard | engine automation | pull request, release candidate |
+| `compat-edge` | cross-engine compatibility | Windows | Chromium | Microsoft Edge stable | 1280x800 / 1 | pointer + keyboard | branded channel | pull request, release candidate |
+
+Each complete CI run uses one shared artifact. "One artifact" always means one
+artifact per workflow run, never a single global artifact shared across unrelated
+historical runs.
+
+- [`ci.yml`](./.github/workflows/ci.yml) runs on every pull request. Its
+  `web-build` job is the single build, record, and upload point: it produces
+  `dist` plus `artifacts/web-artifact-manifest.json` and uploads both as the
+  `web-artifact` artifact. Two consumers download that same artifact and verify
+  its recorded identity: the Phase 1 `browser-smoke` viewport suite
+  (`npm run test:e2e:recorded`) and the four representative `compatibility-pr`
+  lanes (Linux/Chromium, Linux/Firefox, macOS/WebKit, Windows/Edge). Neither
+  rebuilds.
+- [`compatibility.yml`](./.github/workflows/compatibility.yml) has no pull-request
+  trigger, so it never creates a second artifact in a pull-request run. It runs
+  weekly and on demand, builds and records once, and its eight release-candidate
+  cells (Linux Chromium/Firefox, macOS Chromium/Firefox/WebKit, Windows
+  Chromium/Firefox/Edge) download and verify that same artifact.
+
+Every browser or compatibility lane job prints the runner image and version when
+GitHub exposes them (`ImageOS` / `ImageVersion`) along with the Node, npm, and
+Playwright versions. Each compatibility evidence record stores the runner image
+it ran on. No lane
+builds, signs, packages, launches, or downloads the Electron runtime. The
+`electron` package is still an unchanged dev dependency used by the deferred
+desktop path; the Phase 1A web jobs install with `npm ci --ignore-scripts`, which
+skips its postinstall runtime download. The Pages
+`/knowledge-dungeon/` deployment artifact is a later Phase 23 target and is not
+the `/` preview artifact these lanes test.
+
+### Commands
+
+```bash
+npm run test:e2e                # build, then run the Phase 1 current-build suite (4 Chromium viewports)
+npm run test:e2e:recorded       # preview-only current-build suite (CI: uses the shared artifact)
+npm run test:e2e:compat         # build, record the artifact identity, run the 4 compat projects
+npm run test:e2e:compat:recorded# preview-only compatibility suite (CI: uses the shared artifact)
+npm run record:web-artifact     # record the SHA-256 identity of the current dist tree
+npm run verify:web-artifact     # fail if dist differs from the recorded artifact
+```
+
+`npm run test:e2e` and `npm run test:e2e:compat` are separate suites. Each
+Playwright project is bound to exactly one spec file, so the current-build suite
+is never multiplied across the compatibility projects. Playwright itself only ever
+previews an existing `dist` tree; the build and record steps belong to the package
+scripts and the CI build job, so no suite can decide for itself whether to rebuild.
+
+### Lane selection and failure behavior
+
+- A compatibility lane never reports passing evidence on a host it is not approved
+  for. On a local host where the lane does not apply, it is explicitly skipped and
+  logged as *not selected*; the same mismatch fails the lane on a runner.
+- An unavailable browser build on an otherwise approved host is a **lane failure**,
+  never a green run with silently skipped tests.
+- The lane's host is asserted against `KD_COMPAT_EXPECT_HOST`, which each CI matrix
+  cell sets to its declared host.
+
+### Artifact identity and reproducibility
+
+Every compatibility lane must exercise the *same* production web artifact:
+
+1. One job or command runs `npm run build:web` once.
+2. `npm run record:web-artifact` writes
+   `artifacts/web-artifact-manifest.json` with a deterministic `sha256-tree-v1`
+   identity: a SHA-256 tree hash over `sha256(bytes)  posix/relative/path` lines
+   sorted by path, plus per-file hashes, the `index.html` hash, and the
+   toolchain context that produced the build. The script is cross-platform and
+   uses Node built-ins only.
+3. The CI build job uploads `dist` plus the manifest; each lane job downloads both,
+   runs `npm run verify:web-artifact`, and only then previews the artifact. Lanes
+   never rebuild.
+4. The compatibility suite independently re-verifies the tree identity, compares
+   the served `index.html` bytes with the **recorded** manifest entrypoint hash,
+   and records the artifact identity with the run.
+
+Verification is an integrity check, not just a hash comparison. The script rejects
+symlinks and special files in the build, requires a complete and well-formed
+recorded manifest, recomputes the recorded tree digest from the recorded file
+entries, validates the recorded file count, byte total, and entrypoint against
+those entries, and only then compares the recomputed build with the recorded
+identity. `verify --json` always returns sanitized structured output - bounded
+problem codes plus dist-relative build-output paths - instead of a raw exception.
+`tests/e2e/web-artifact-manifest.test.ts` covers the accepted state plus modified,
+added, removed, renamed, malformed, duplicate, invalid-path, digest, count,
+entrypoint, missing-build, and symlink cases in isolated temporary directories, so
+the repository's own `dist` and manifest are never modified.
+
+The identity is deterministic to recompute, but the current production build is
+not guaranteed to be bit-reproducible: `scripts/generate-sprite-manifest.mjs`
+embeds a `generatedAt` timestamp in `assets/sprite-manifest.json`, and that file
+is regenerated whenever the manifest is missing or a dev server starts. A clean
+rebuild with the sprite manifest unchanged reproduced the same tree hash; a
+rebuild after regeneration produced a different one. This is precisely why lanes
+consume one uploaded artifact and verify its recorded identity instead of
+rebuilding.
+
+### Evidence and privacy
+
+Each compatibility test writes one sanitized JSON record per test, per run, and
+per project at `artifacts/compatibility-evidence/<run-id>/<project>--<test>.json`
+and prints a compact summary line. The run identifier is generated by the
+Playwright config and shared by every worker of that run, and it combines UTC
+date, seconds, milliseconds, and a short per-process discriminator, so two
+invocations cannot overwrite or blur each other's records. Each record carries
+`hostExecution` (`ci` or `local-host`), `deviceEvidence: emulated`, and
+`physicalDevice: false`, plus the actual host OS,
+architecture, and kernel release, the GitHub runner image when available, the
+browser engine, channel, version, and user agent, the project, the declared and
+observed viewport, device scale factor, and orientation, the input mode with the
+observed `maxTouchPoints` and `ontouchstart` support, the renderer mode, Phaser
+canvas size, and observed graphics context, the evidence classification, the
+recorded artifact identity and served-entrypoint comparison, the sanitized network
+report, and the pending physical-device gates.
+
+The suite uses only the built-in synthetic tutorial subject. Network input is
+reduced immediately to bounded categories and counts: resource type, idempotent
+method, and a destination category. Request headers, query strings, fragments,
+request bodies, credentials, hostnames, ports, and private URLs are never captured,
+and non-loopback HTTP(S) traffic is blocked before it can leave the test browser.
+Violation failure messages contain only categories and counts, never an origin or
+a path. Compatibility projects run with `trace: 'off'`, no failure screenshot, and
+no video, so a failing lane cannot leave a raw DOM, network, or video artifact, and
+CI compatibility jobs upload only the allowlisted sanitized JSON evidence - never
+the Playwright HTML report or the test-results directory. The known pre-Cozy Google
+Fonts stylesheet request is blocked and counted as a known legacy external static
+request, which Phase 8 removes. `tests/e2e/compat-evidence.test.ts` exercises these
+failure paths with synthetic sentinels in a query string, fragment, header, body,
+credential, and private URL and fails if any sentinel reaches an observation, an
+aggregate, a message, or an evidence path.
+
+### Physical-device gates still required
+
+Phase 1A defines these gates; the later accessibility, performance, and cutover
+phases must complete them before any device, touch, or screen-reader claim:
+
+- One physical Chromebook completing the core flow with ChromeVox.
+- One physical macOS Safari check of the released artifact.
+- One physical iPad or Android touch-platform screen-reader check.
+- One physical Windows desktop browser check.
+- One physical Linux desktop browser check.
+
+Until then, support claims are limited to the documented matrix and its recorded
+evidence. Automated lanes do not certify every operating-system version,
+distribution, device, or browser patch, and Electron installers, signing, and
+desktop packaging remain deferred and separate from the web result.
 
 ## Phase 5 Features (new)
 
@@ -529,11 +720,16 @@ src/
     screens/             # WelcomeScreen, VillageScreen, GameScreen
     utils/               # markdown rendering, syntax highlighting, auto-complete
   data/                  # village layout, tutorial subject, game guide
-tests/                    # 34 files / 254 tests measured
+tests/                    # 38 files / 313 tests measured
   unit/                  # existing Vitest unit tests
   contracts/             # Phase 0 baseline and characterization tests
+  e2e/
+    currentBuild.spec.ts # Phase 1 Phaser/axe/privacy suite (4 Chromium viewports)
+    compatibility.spec.ts# Phase 1A cross-engine suite over the recorded artifact
+    support-matrix.ts    # machine-readable web support matrix (drives the projects)
   fixtures/
     persistence/         # synthetic Phase 0 compatibility fixtures
+scripts/                  # bundle guard, build metadata, web-artifact identity
 docs/                      # plans, ADRs, and game/user guides
 ```
 

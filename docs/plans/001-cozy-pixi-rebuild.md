@@ -25,7 +25,7 @@ The plan covers:
 - Lossless full-device backups, individual subject backups, and blank reusable templates.
 - Device-local storage for learner content and image attachments.
 - CC0-only new art and audio.
-- Web, Chromebook, desktop-browser, and tablet/touch support.
+- Web on Linux, macOS, and Windows host environments, plus Chromebook, desktop-browser, and tablet/touch support.
 - Deferred Electron packaging.
 
 ---
@@ -71,15 +71,45 @@ The following decisions are fixed unless the plan is explicitly revised before i
 - If no suitable CC0 font is selected, the application must use a system font stack rather than introducing a non-CC0 font dependency.
 - Remote Google Fonts are removed from the production UI.
 
-### 2.5 Release targets
+### 2.5 Release targets and web support contract
 
-Primary release targets are:
+The primary release is one static web application served over HTTPS. It must be
+usable in supported browser environments on Linux, macOS, and Windows, with
+Chromebook/ChromeOS, desktop, and tablet form factors treated as separate
+support dimensions. Tablet portrait and landscape with touch remain
+first-class input targets.
 
-- Web on Chromebook.
-- Desktop browsers.
-- Tablet portrait and landscape with touch as a first-class input.
+Browser-engine support is separate from host-OS support. The initial automated
+engine targets are Chromium, Firefox, and WebKit. A branded-browser claim such
+as Edge or Safari requires evidence from that browser or an explicitly
+documented manual check. Playwright WebKit is WebKit evidence, not a claim
+about every Safari release. Vite's legacy targets are transpilation floors, not
+automatic runtime-support evidence.
 
-Electron installers, signing, and release packaging are deferred.
+A support claim means that the same production web artifact passes the
+approved core-flow checks on the stated host/browser matrix. It does not mean
+that every operating-system version, distribution, device, or browser patch is
+certified. Evidence must identify the OS, architecture, browser, version,
+channel, viewport, input mode, and whether the check used emulation or a
+physical device.
+
+Electron installers, signing, and native release packaging remain deferred.
+They are separate compatibility work and are not prerequisites for web
+compatibility, web builds, Pages deployment, or web release acceptance.
+
+### 2.6 Browser compatibility versus native packaging
+
+A web compatibility result means that a static web build was loaded and
+exercised in a browser on a host operating system. It does not build, sign,
+install, or launch an Electron executable and does not exercise an Electron
+filesystem bridge.
+
+`package:electron:*`, `electron-builder`, and desktop release workflows are
+separate compatibility work. Electron source may remain in the common
+typecheck as a source-compatibility check; that typecheck is not Electron
+packaging. GitHub-hosted `*-latest` runners are representative test
+environments, not exhaustive certification of every OS version or
+distribution.
 
 ---
 
@@ -468,6 +498,51 @@ CI must reject any newly registered media that lacks:
 
 Unverified legacy assets may remain available to the legacy renderer during migration but must not be included in the default PixiJS bundle.
 
+### 10.4 Cross-platform web compatibility gate
+
+Cross-platform verification uses a staged matrix so pull requests remain
+useful without hiding release risk:
+
+- **Pull-request lanes:** the existing Linux/Chromium viewport matrix, plus
+  representative Linux/Firefox, macOS/WebKit, and Windows/Edge smoke lanes.
+- **Release lanes:** Linux/Chromium and Firefox; macOS/Chromium, Firefox, and
+  WebKit; Windows/Chromium, Firefox, and Edge. The exact browser channels and
+  versions are recorded with each run.
+- **Manual device evidence:** at least one physical Chromebook with ChromeVox,
+  one physical macOS Safari check, one iPad or Android touch-platform
+  screen-reader check, one Windows desktop browser check, and one Linux desktop
+  check.
+
+Phase 1A establishes the compatibility lanes and evidence format; the physical
+checks are completed in the later accessibility, performance, and cutover
+phases before a release claim is made. Every automated lane must test the same
+production web artifact, or an explicitly
+reproducible artifact with recorded hashes. Tests must record OS, architecture,
+browser/channel/version, viewport, device scale factor, input mode, and
+renderer mode. Synthetic fixtures only are allowed; no learner data, request
+body, credential, or private URL may enter reports.
+
+The approved matrix is machine-readable in `tests/e2e/support-matrix.ts` and
+drives the Playwright projects in `playwright.config.ts`. The current-build and
+cross-engine suites stay separate: `npm run test:e2e` runs the Phase 1
+Phaser/axe/privacy suite in the four Chromium viewport projects, and
+`npm run test:e2e:compat` builds and records the artifact once before running
+`tests/e2e/compatibility.spec.ts` in the four named compatibility projects.
+`scripts/web-artifact-manifest.mjs` records and verifies the shared artifact
+identity. `.github/workflows/ci.yml` owns the pull-request compatibility lanes
+alongside the Phase 1 viewport suite, and
+`.github/workflows/compatibility.yml` is restricted to the scheduled and manual
+release-candidate lanes so a pull-request run never builds a second artifact.
+
+Viewport and touch emulation are form-factor evidence, not physical-device or
+operating-system certification. Playwright WebKit must be labeled WebKit, and
+Edge channel runs must be labeled Edge. Native Electron packaging and installer
+workflows do not satisfy this web-compatibility gate.
+
+The staged lanes are a quality rail, not a promise that every browser/OS patch
+or distribution is certified. Support claims are limited to the documented
+matrix and its recorded evidence.
+
 ---
 
 ## 11. Feature Flags and Cutover
@@ -542,6 +617,8 @@ Additional phase-specific commands are listed in each phase.
 Phase 0 Baseline
    ↓
 Phase 1 Flags, E2E, and quality rails
+   ↓
+Phase 1A Cross-platform web compatibility rails
    ↓
 Phase 2 Renderer-neutral contracts
    ↓
@@ -628,7 +705,8 @@ Phase 24 Remove Phaser and legacy renderer
 | Phase | Status | Objective |
 | --- | --- | --- |
 | 0 | complete | Freeze behavior and legacy compatibility fixtures. |
-| 1 | verified | Add flags, browser tests, accessibility scaffolding, and quality rails. |
+| 1 | complete | Add flags, browser tests, accessibility scaffolding, and quality rails. |
+| 1A | blocked | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
 | 2 | not-started | Extract renderer-neutral application contracts. |
 | 3 | not-started | Build storage-v2 and migration infrastructure. |
 | 4 | not-started | Cut over storage behind a flag and add local attachments. |
@@ -719,7 +797,7 @@ Recorded on 2026-09-24:
 - The golden-flow, route/control, app-owned localStorage, build-size, and known-defect records are in `tests/contracts/phase-0-baseline.md`.
 - Subject schema `1.0.0`/`1.1.0` and progression versions 1/2/3 use synthetic fixtures and deterministic characterization tests. No migration or learner data was modified.
 - No production source, dependency, or build configuration changed. No new browser/device, accessibility, performance, privacy-network, or license gate was introduced in this documentation/test-only phase.
-- The maintainer accepted Phase 0 on 2026-09-24, so its status advanced from `verified` to `complete`. Phase 1 remains `not-started` until separately requested.
+- The maintainer accepted Phase 0 on 2026-09-24, so its status advanced from `verified` to `complete`. At that checkpoint, Phase 1 remained `not-started` until separately requested; its current status is recorded in this plan.
 
 ### Exit criteria
 
@@ -740,7 +818,7 @@ Phase 1.
 
 ## Phase 1: Runtime Flags, Browser Tests, and Quality Rails
 
-**Status:** verified
+**Status:** complete
 **Objective:** Introduce safe cutover controls and browser-level test infrastructure while Phaser remains the default.
 
 ### Prerequisites
@@ -805,6 +883,8 @@ Recorded on 2026-09-25:
 - `npm run build:web` and `npm run check:bundle-size` passed. Production `dist` is 4,093,638 bytes across 105 files (3.90 MB), with the existing Phaser chunk retained. `npm run record:build-metadata` passed and recorded 105 files, 1,136,039 summed per-file gzip bytes, and 11 JS/CSS chunks in the ignored `artifacts/build-metadata.json` artifact.
 - All valid feature-flag overrides compile. An invalid `VITE_WEB_SHARE=maybe` build fails during Vite configuration with a sanitized error. The nine documented flags default to Phaser, legacy storage, and all future booleans false; each records an owner phase and rollback behavior.
 - No storage migration, renderer migration, learner-data change, new media, or deployment occurred. Chromium viewport/touch emulation is not physical-device verification; full accessibility remediation, remote-font removal, performance enforcement, and memory/offline gates remain assigned to their later phases.
+- This verified checkpoint intentionally records the current Linux/Chromium baseline only. Broader Linux/macOS/Windows and browser-engine evidence is assigned to Phase 1A and the later release gates.
+- The maintainer accepted Phase 1 on 2026-09-25, so its status advanced from `verified` to `complete` and Phase 1A became the next authorized phase.
 
 ### Exit criteria
 
@@ -819,7 +899,240 @@ Revert tooling and leave all new flags disabled.
 
 ### Unlocks
 
-Phases 2, 8, 9, and 19.
+Phase 1A.
+
+---
+
+## Phase 1A: Cross-Platform Web Compatibility Rails
+
+**Status:** blocked
+**Objective:** Extend the verified Phase 1 quality rails across representative Linux, macOS, and Windows browser environments without changing the renderer, storage architecture, or learner data model.
+
+### Prerequisites
+
+Phase 1 verified and accepted on 2026-09-25.
+
+### Scope
+
+- Define and document the approved web support matrix, separating host OS, browser engine, branded-browser channel, and form factor.
+- Add named Playwright projects for Chromium, Firefox, WebKit, and a Windows Edge channel while preserving the existing Linux/Chromium Chromebook and tablet projects.
+- Add a bounded compatibility smoke suite and an explicit `npm run test:e2e:compat` command that uses the production web artifact.
+- Add pull-request CI lanes for representative coverage: Linux/Chromium and Firefox, macOS/WebKit, and Windows/Edge.
+- Add scheduled or release-candidate lanes for Linux Chromium/Firefox, macOS Chromium/Firefox/WebKit, and Windows Chromium/Firefox/Edge.
+- Record OS, architecture, browser/channel/version, viewport, input mode, renderer mode, and artifact identity in sanitized reports.
+- Keep the existing current-build Phaser smoke suite separate from the cross-engine compatibility suite.
+- Synchronize the README and ADR with the support contract and the verified Phase 1 status.
+
+### Non-goals
+
+- No Pixi implementation or renderer migration.
+- No storage migration or persistence behavior change.
+- No visual redesign or user-facing compatibility switch.
+- No Electron installer, signing, or native packaging requirement.
+- No claim that emulation is physical-device or operating-system certification.
+
+### Expected files
+
+- `playwright.config.ts`
+- `package.json`
+- `package-lock.json`
+- `.github/workflows/ci.yml`
+- `.github/workflows/compatibility.yml`
+- `tests/e2e/compatibility.spec.ts`
+- `tests/e2e/support-matrix.ts`
+- `docs/plans/001-cozy-pixi-rebuild.md`
+- `docs/adr/002-react-dom-pixijs-rebuild.md`
+- `README.md`
+
+### Deliverables
+
+- Documented Linux/macOS/Windows and browser-engine support matrix.
+- Staged pull-request and release-candidate CI lanes.
+- Cross-engine production-artifact smoke reports with no learner data.
+- Manual physical-device verification plan for later release gates.
+- Synchronized current status and support documentation.
+
+### Verification
+
+```bash
+npm run test:e2e:compat
+npm run test:e2e
+npm run test:e2e -- --project=chromebook
+npm run test:e2e -- --project=tablet
+npm run test:e2e -- --project=tablet-landscape
+```
+
+Run the common gate.
+
+### Implemented design (status is `blocked` pending required remote lane evidence)
+
+The implementation records what Phase 1A delivers. Local implementation and
+verification are complete, but the phase remains blocked until the required
+remote macOS, Windows, Edge, and full release-candidate lanes run and record
+results against their shared artifacts.
+
+- **Machine-readable matrix.** `tests/e2e/support-matrix.ts` is the single source
+  for the approved web support dimensions. Host operating system, browser engine,
+  branded-browser channel, form factor, viewport, device scale factor, input
+  mode, evidence class, and allowed CI lane are separate fields, and every lane
+  carries a bounded claim plus an explicit does-not-prove list. Emulation,
+  engine builds, branded channels, and physical devices are distinct evidence
+  classes. `playwright.config.ts` generates its projects from the matrix, so a
+  project cannot drift from the support contract.
+- **Named projects.** The four verified Phase 1 projects (`desktop-chromium`,
+  `chromebook`, `tablet`, `tablet-landscape`) are preserved with their existing
+  viewports, device scale factors, and touch settings and remain bound to
+  `currentBuild.spec.ts`. Four compatibility projects were added: `compat-chromium`,
+  `compat-firefox`, `compat-webkit` (WebKit engine evidence, not Safari
+  certification), and `compat-edge` (Microsoft Edge stable channel, branded-browser
+  evidence). Each project is bound to exactly one spec file, so `npm run test:e2e`
+  cannot multiply the current-build suite across compatibility projects.
+- **Bounded compatibility suite.** `tests/e2e/compatibility.spec.ts` runs through
+  `npm run test:e2e:compat` (build, record the artifact identity, then run the four
+  compatibility projects) and `npm run test:e2e:compat:recorded` (preview-only,
+  used by CI lanes). It uses only the synthetic tutorial subject, the default
+  Phaser renderer, static-only network observation, and sanitized evidence.
+  `tests/e2e/compat-evidence.ts` reduces every request to bounded categories and
+  counts, so headers, query strings, fragments, request bodies, credentials,
+  hostnames, ports, and private URLs never reach an observation, an aggregate, a
+  failure message, or an evidence record; non-loopback HTTP(S) traffic is blocked
+  before it can leave the test browser. Compatibility projects use `trace: 'off'`
+  with no failure screenshot or video, and CI compatibility jobs upload only the
+  allowlisted sanitized JSON evidence. Each run writes
+  `artifacts/compatibility-evidence/<run-id>/<project>--<test>.json` with a run
+  identifier shared by every worker of that run, plus `hostExecution`
+  (`ci` or `local-host`), `deviceEvidence: emulated`, and `physicalDevice: false`,
+  one record per test, per run, and per project, and records the actual host OS
+  and architecture, runner image, browser engine/channel/version, project,
+  viewport, device scale factor, input mode with observed touch capability,
+  renderer mode, evidence classification, and artifact identity. The run
+  identifier combines UTC date, seconds, milliseconds, and a short per-process
+  discriminator, so two invocations cannot overwrite each other's records.
+  `tests/e2e/compat-evidence.test.ts` exercises the failure paths with synthetic
+  sentinels in a query, fragment, header, body, credential, and private URL.
+- **Honest lane selection.** A lane never reports passing evidence on a host it is
+  not approved for: a locally inapplicable lane is explicitly skipped and logged as
+  not selected evidence, and the same mismatch fails the lane on a runner. An
+  unavailable browser build on an approved host fails the lane instead of producing
+  a green run with skipped tests, and the declared host is asserted through
+  `KD_COMPAT_EXPECT_HOST`.
+- **One artifact per complete CI run.** Playwright only ever previews an existing
+  `dist` tree; the package scripts and the single build job in each workflow own
+  the build and record steps. `scripts/web-artifact-manifest.mjs` records and
+  verifies a deterministic `sha256-tree-v1` identity of the `dist` tree using Node
+  built-ins only, and verifies manifest integrity as well: symlinks and special
+  files are rejected, a malformed or incomplete manifest is rejected, the recorded
+  tree digest is recomputed from the recorded file entries, and the recorded file
+  count, byte total, and entrypoint must match those entries before the recomputed
+  build is compared with the recorded identity. `verify --json` always returns
+  sanitized structured output rather than a raw exception. The suite independently
+  re-verifies the tree identity and compares the served `index.html` bytes with
+  the recorded manifest entrypoint hash. A clean rebuild with the sprite manifest
+  unchanged reproduced the same tree hash, but the current build is not guaranteed
+  to be bit-reproducible because `scripts/generate-sprite-manifest.mjs` embeds a
+  `generatedAt` timestamp; that is the reason lanes consume one uploaded artifact.
+  "One artifact" means one artifact per complete CI run, never one global
+  artifact shared across unrelated workflow runs.
+- **Staged CI lanes.** Pull-request lanes live in `.github/workflows/ci.yml`, whose
+  `web-build` job is the single build, record, and upload point; the Phase 1
+  `browser-smoke` viewport suite and the four representative compatibility lanes
+  (Linux/Chromium, Linux/Firefox, macOS/WebKit, Windows/Edge) both download that
+  same artifact and verify its recorded identity, and neither rebuilds.
+  `.github/workflows/compatibility.yml` has no pull-request trigger, so it never
+  creates a second artifact in a pull-request run; it builds and records once on a
+  weekly schedule and on demand, and its eight release-candidate cells (Linux
+  Chromium/Firefox, macOS Chromium/Firefox/WebKit, Windows Chromium/Firefox/Edge)
+  download and verify that same artifact. Every browser or compatibility lane job
+  prints the runner image and version when GitHub exposes
+  `ImageOS`/`ImageVersion`, and the evidence records it along with the actual
+  browser, Node, and toolchain versions.
+  `tests/e2e/support-matrix.test.ts` parses both workflows and fails if the matrix,
+  the Playwright projects, or the lanes disagree, if a lane is missing, if a lane
+  job does not depend on its workflow's build job, if any job other than the build
+  job runs `build:web`, if a compatibility job uploads anything outside the
+  allowlisted evidence path, or if a lane's host, project, or browser install
+  mapping is wrong. The Pages `/knowledge-dungeon/` deployment artifact is a later
+  Phase 23 target and is not the `/` preview artifact these lanes test. No lane
+  builds, signs, packages, launches, or downloads the Electron runtime. The
+  `electron` package remains an unchanged dev dependency for the deferred desktop
+  path, and the Phase 1A web jobs install with `npm ci --ignore-scripts`, which
+  skips its postinstall runtime download.
+- **Later physical-device gates.** The matrix records the manual gates that no
+  automated lane can satisfy: one physical Chromebook with ChromeVox, one physical
+  macOS Safari check, one physical iPad or Android touch-platform screen-reader
+  check, one physical Windows desktop browser check, and one physical Linux desktop
+  browser check. Phase 21 and Phase 23 must complete them before a release claim.
+
+### Known limitations at implementation time
+
+- Only the local Linux host was exercised. Linux/Chromium and Linux/Firefox
+  compatibility results were produced locally; the macOS/WebKit, Windows/Edge, and
+  all release-candidate lanes are defined but have not run on those hosts.
+- `compat-webkit` and `compat-edge` are approved for macOS and Windows only, so on a
+  local Linux host they are explicitly skipped and logged as not selected evidence
+  rather than reporting a pass. In CI, a host that does not match the approved lane
+  fails, and an unavailable browser build on an approved host fails the lane.
+- No CI workflow has been executed yet, so no remote runner evidence exists.
+
+### Verification evidence
+
+Recorded on 2026-09-25:
+
+- The pre-change baseline passed `npm run lint`, `npm run typecheck`, 35 Vitest
+  files / 260 tests, `npm run build:web`, `npm run check:bundle-size`, and all 12
+  Phase 1 browser tests across the four existing Chromium viewport projects.
+- The Phase 1A common gate passed after implementation: `npm run lint`,
+  `npm run typecheck`, `npm test` with 38 files / 313 tests, `npm run build:web`,
+  and `npm run check:bundle-size` at 4,093,638 bytes across 105 files. The
+  production build remains 3.90 MB, and `npm run record:build-metadata` recorded
+  1,136,039 summed per-file gzip bytes across 11 JavaScript/CSS chunks.
+- `npm run test:e2e:compat` completed with four passing host-applicable tests and
+  four explicitly not-selected host-inapplicable tests. Linux Playwright Chromium
+  153.0.8010.12 and Firefox 155.0 each passed the artifact-identity and default
+  Phaser/static-network checks at 1280x800, DSF 1, pointer/keyboard input. The
+  macOS-only WebKit and Windows-only Edge projects produced no local evidence.
+- `npm run test:e2e` passed all 12 preserved Phase 1 tests. The explicit
+  `chromebook`, `tablet`, and `tablet-landscape` commands each passed three tests.
+  The existing single allowed Welcome contrast exception remained the only
+  serious automated accessibility finding; no new serious or critical violation
+  was introduced.
+- The final locally recorded production artifact used
+  `sha256-tree-v1:543f0db91677061fb4ca7d85fddcb806f4e5d75cd0404587a73e923a93dcd913`,
+  105 files, and 4,093,638 bytes. Its recorded and served `index.html` hashes
+  matched. Final preview-only Chromium and Firefox runs passed four tests with no
+  static-network violations, no WebSocket attempts, a non-zero Phaser WebGL
+  canvas, the Phaser chunk observed, and no Pixi chunk. One known legacy Google
+  Font stylesheet request was blocked and recorded only as a sanitized category.
+- Manifest integrity, failure-path privacy, and matrix/workflow contract tests
+  passed within the full 313-test suite. The manifest checks cover modified,
+  added, removed, renamed, malformed, duplicate, invalid-path, digest, count,
+  entrypoint, missing-build, and symlink cases using isolated temporary data.
+- No migration, persistence, learner-data, renderer, visual, media, feature-flag,
+  or application behavior changed. No dependency, Electron package/installer,
+  commit, push, deployment, analytics, telemetry, or upload was introduced.
+- **Blocker:** no required remote CI lane has run. Passing the local implementation
+  and common gates cannot satisfy the Phase 1A exit criteria until the four PR
+  compatibility lanes and all eight release-candidate lanes pass on their declared
+  hosts, record the same artifact identity within each complete workflow run, and
+  upload their sanitized evidence. Commit and push authorization is still required
+  before those workflows can execute.
+
+### Exit criteria
+
+- The existing Linux/Chromium viewport projects continue to pass.
+- Every required representative pull-request compatibility lane passes.
+- The full approved release matrix is defined, reproducible, and recorded.
+- Compatibility results use the same production artifact or documented reproducible hashes.
+- Emulation, browser-engine, branded-browser, and physical-device evidence are clearly distinguished.
+- No Electron package or installer is required for the web result.
+
+### Rollback
+
+Remove the additional browser projects and CI lanes while retaining the existing Phase 1 Chromium smoke. Feature-flag defaults, production behavior, and learner data remain unchanged.
+
+### Unlocks
+
+Phase 2.
 
 ---
 
@@ -830,7 +1143,7 @@ Phases 2, 8, 9, and 19.
 
 ### Prerequisites
 
-Phase 1 accepted.
+Phase 1A accepted.
 
 ### Scope
 
@@ -2273,7 +2586,7 @@ Phase 21.
 ## Phase 21: Accessibility and Responsive-Device Audit
 
 **Status:** not-started
-**Objective:** Prove the entire application is operable on Chromebook and tablet without canvas-only behavior.
+**Objective:** Prove the entire application is operable across the approved web OS/browser/device matrix, including Chromebook and tablet, without canvas-only behavior.
 
 ### Prerequisites
 
@@ -2292,6 +2605,10 @@ Phases 11 through 20 accepted.
 - Perform ChromeVox and at least one touch-platform screen-reader review.
 - Ensure no state is communicated by color alone.
 - Test long localized labels and content expansion.
+- Run the approved web compatibility smoke on Linux, macOS, and Windows across representative Chromium, Firefox, WebKit, and Edge lanes.
+- Run accessibility checks on at least one Chromium and one non-Chromium lane for each supported OS family.
+- Keep viewport/touch emulation distinct from physical Chromebook, tablet, desktop, and operating-system verification.
+- Record actual Safari, Edge, ChromeVox, and touch-screen-reader evidence separately from automated Playwright evidence.
 
 ### Non-goals
 
@@ -2312,6 +2629,7 @@ Phases 11 through 20 accepted.
 - `src/styles/`
 - `tests/a11y/`
 - `tests/e2e/`
+- `tests/e2e/compatibility.spec.ts`
 
 ### Deliverables
 
@@ -2326,8 +2644,10 @@ Phases 11 through 20 accepted.
 
 ```bash
 npm run test:a11y
+npm run test:e2e:compat
 npm run test:e2e -- --project=chromebook
 npm run test:e2e -- --project=tablet
+npm run test:e2e -- --project=tablet-landscape
 ```
 
 Run the common gate.
@@ -2340,6 +2660,10 @@ Run the common gate.
 - Core layouts work at 200% zoom and a 320 CSS-pixel viewport.
 - Reduced-motion mode has no continuous decorative movement.
 - ChromeVox and the selected touch screen-reader script pass.
+- Every required OS/browser compatibility cell passes the core-flow smoke.
+- The full learning path remains keyboard- and DOM-operable in the selected accessibility cells.
+- Viewport emulation is not reported as physical Chromebook or tablet verification.
+- Actual Safari, Edge, ChromeVox, and touch-screen-reader evidence is clearly distinguished from automated Playwright evidence.
 
 ### Rollback
 
@@ -2354,7 +2678,7 @@ Phase 22.
 ## Phase 22: Performance, Memory, and Offline Hardening
 
 **Status:** not-started
-**Objective:** Meet the performance budgets while preserving local-first offline behavior.
+**Objective:** Meet the performance budgets while preserving local-first offline behavior across the approved web OS/browser matrix.
 
 ### Prerequisites
 
@@ -2374,6 +2698,10 @@ Phase 21 accepted.
 - Ensure the cache never contains subjects, notes, attachments, progression, statistics, or preferences.
 - Replace raw-only bundle checks with route-aware gzip budgets while retaining the 12 MB raw total ceiling.
 - Enforce the performance targets in this plan.
+- Run route-load, memory, and offline-shell smoke across the approved OS/browser matrix using the same production artifact.
+- Add service-worker-enabled compatibility projects without globally relaxing the privacy network policy.
+- Run expensive frame-time and memory measurements on declared reference environments, with browser, OS, hardware, and GPU information recorded.
+- Report browser/OS differences as measurements rather than hiding them behind one desktop benchmark.
 
 ### Non-goals
 
@@ -2391,6 +2719,8 @@ Phase 21 accepted.
 - `src/services/offlineShell.ts`
 - `public/manifest.webmanifest`
 - `tests/performance/`
+- `tests/e2e/compatibility.spec.ts`
+- `tests/e2e/offline.spec.ts`
 - Performance fixtures for 1, 10, and 100 rooms
 
 ### Deliverables
@@ -2408,6 +2738,8 @@ npm run check:bundle-size
 npm run check:perf
 npm run check:memory
 npm run test:e2e
+npm run test:e2e:compat
+npm run test:e2e:offline
 ```
 
 Run the common gate.
@@ -2420,6 +2752,9 @@ Run the common gate.
 - A previously loaded app reloads offline with local data intact.
 - Static caches update without serving mixed-version assets.
 - Service-worker inspection confirms no learner data is cached.
+- The approved OS/browser matrix passes route-load and offline-shell checks.
+- Reference performance measurements record the browser, OS, hardware, and GPU environment.
+- Browser and OS differences are reported with measurements rather than hidden behind a single desktop benchmark.
 
 ### Rollback
 
@@ -2434,13 +2769,15 @@ Phase 23.
 ## Phase 23: Production Cutover and Soak
 
 **Status:** not-started
-**Objective:** Make Pixi, Cozy visuals, storage-v2, data products, assistance, and Web Share the defaults with a tested rollback.
+**Objective:** Make Pixi, Cozy visuals, storage-v2, data products, assistance, and Web Share the defaults with a tested rollback across the approved web OS/browser matrix.
 
 ### Prerequisites
 
 Phase 22 accepted.
 
 All accessibility, performance, migration, backup, and CC0 gates pass.
+
+Phase 1A compatibility rails and the approved OS/browser matrix pass.
 
 At least one deployable Pixi release exists.
 
@@ -2454,6 +2791,8 @@ At least one deployable Pixi release exists.
 - Run all three learning phases.
 - Run Village, NPC, quest, Fishing, Statistics, sharing, and Data Center flows.
 - Run the complete Chromebook, tablet, accessibility, and performance matrix.
+- Run the approved Linux/macOS/Windows browser matrix against the production Pages artifact and its base path.
+- Repeat critical default and rollback flows on the physical device set defined by the compatibility contract.
 - Soak for at least seven days and one release cycle.
 - Use no production telemetry.
 
@@ -2471,6 +2810,7 @@ At least one deployable Pixi release exists.
 - Data Center and Settings release copy
 - `README.md`
 - `docs/UI.md`
+- `docs/adr/002-react-dom-pixijs-rebuild.md`
 - CI and deployment workflows
 
 ### Deliverables
@@ -2485,6 +2825,7 @@ At least one deployable Pixi release exists.
 ```bash
 npm run release:verify
 npm run test:e2e
+npm run test:e2e:compat
 npm run test:migrations
 npm run test:data
 npm run test:a11y
@@ -2500,6 +2841,8 @@ npm run test:privacy
 - Legacy rollback is tested.
 - Fresh and migrated profiles behave identically.
 - Network inspection confirms no application upload or analytics.
+- The production Pages artifact passes the approved Linux/macOS/Windows browser matrix.
+- Physical-device checks cover the required Chromebook, touch-platform, macOS/Safari, Windows, and Linux representative set.
 - Seven-day and one-release soak requirements are satisfied.
 
 ### Rollback
@@ -2675,6 +3018,9 @@ Project completion.
 - [ ] Core layouts pass at 200% zoom and a 320 CSS-pixel viewport.
 - [ ] Reduced-motion behavior is complete.
 - [ ] Chromebook, tablet portrait and landscape, ChromeVox, and a touch screen reader pass manual verification.
+- [ ] The approved Linux, macOS, and Windows web support matrix passes on the production artifact.
+- [ ] Chromium, Firefox, WebKit, Edge, and Safari evidence is labeled by actual browser/channel and not inferred from emulation.
+- [ ] Physical-device checks cover representative Chromebook, macOS/Safari, Windows, Linux, and touch-platform devices.
 
 ### Performance and offline behavior
 
@@ -2695,6 +3041,7 @@ Project completion.
 ### Release and rollback
 
 - [ ] The complete web release verification passes.
+- [ ] The approved OS/browser compatibility matrix is part of web release acceptance and does not require Electron packaging.
 - [ ] Fresh, migrated, restored, and template-created profiles pass E2E.
 - [ ] The previous Pixi-only release remains deployable after Phaser removal.
 - [ ] Documentation identifies Pixi as the sole renderer and Electron packaging as deferred.

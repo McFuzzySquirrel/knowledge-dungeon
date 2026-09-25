@@ -1,0 +1,168 @@
+name: Web Compatibility Release Candidates
+
+# Phase 1A release-candidate web compatibility matrix.
+#
+# Pull-request compatibility lanes live in `ci.yml` so that each pull-request run
+# builds and records exactly one shared artifact. This workflow runs only on a
+# weekly schedule or on demand, builds and records the artifact once, and every
+# full-matrix cell downloads and verifies that same artifact instead of
+# rebuilding. "One shared artifact" always means one artifact per complete CI run,
+# never one global artifact shared across unrelated workflow runs.
+#
+# Release lanes: Linux Chromium/Firefox, macOS Chromium/Firefox/WebKit, and
+# Windows Chromium/Firefox/Edge on current GitHub-hosted runners. Playwright
+# WebKit lanes are WebKit engine evidence, not Safari certification, and
+# viewport/touch emulation is form-factor evidence, not physical-device or
+# operating-system certification. No lane builds, signs, installs, or launches
+# Electron, and `npm ci --ignore-scripts` keeps the native Electron download out
+# of web compatibility work.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-web-artifact:
+    name: Build Shared Production Artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run build:web
+      - run: npm run check:bundle-size
+      - run: npm run record:web-artifact
+      - name: Record the shared artifact identity
+        run: npm run verify:web-artifact
+      - name: Upload the shared production web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest.json
+          if-no-files-found: error
+          retention-days: 14
+
+  release-candidate-compatibility:
+    name: Compatibility RC ${{ matrix.id }}
+    needs: build-web-artifact
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: rc-linux-chromium
+            lane: scheduled-release
+            os: linux
+            runs_on: ubuntu-latest
+            project: compat-chromium
+            expect_host: linux
+            install_args: --with-deps
+            install: chromium
+          - id: rc-linux-firefox
+            lane: scheduled-release
+            os: linux
+            runs_on: ubuntu-latest
+            project: compat-firefox
+            expect_host: linux
+            install_args: --with-deps
+            install: firefox
+          - id: rc-macos-chromium
+            lane: scheduled-release
+            os: macos
+            runs_on: macos-latest
+            project: compat-chromium
+            expect_host: macos
+            install_args: ''
+            install: chromium
+          - id: rc-macos-firefox
+            lane: scheduled-release
+            os: macos
+            runs_on: macos-latest
+            project: compat-firefox
+            expect_host: macos
+            install_args: ''
+            install: firefox
+          - id: rc-macos-webkit
+            lane: scheduled-release
+            os: macos
+            runs_on: macos-latest
+            project: compat-webkit
+            expect_host: macos
+            install_args: ''
+            install: webkit
+          - id: rc-windows-chromium
+            lane: scheduled-release
+            os: windows
+            runs_on: windows-latest
+            project: compat-chromium
+            expect_host: windows
+            install_args: ''
+            install: chromium
+          - id: rc-windows-firefox
+            lane: scheduled-release
+            os: windows
+            runs_on: windows-latest
+            project: compat-firefox
+            expect_host: windows
+            install_args: ''
+            install: firefox
+          - id: rc-windows-edge
+            lane: scheduled-release
+            os: windows
+            runs_on: windows-latest
+            project: compat-edge
+            expect_host: windows
+            install_args: ''
+            install: msedge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Download the shared production artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-artifact
+          path: .
+      - name: Verify the shared artifact identity
+        run: npm run verify:web-artifact
+      - name: Install the lane browser
+        run: npx playwright install ${{ matrix.install_args }} ${{ matrix.install }}
+      - name: Record the runner image and toolchain
+        shell: bash
+        run: |
+          echo "runner image: ${ImageOS:-unavailable} ${ImageVersion:-unavailable}"
+          node --version
+          npm --version
+          npx playwright --version
+      - name: Run the compatibility lane
+        env:
+          KD_COMPAT_EXPECT_HOST: ${{ matrix.expect_host }}
+        run: npm run test:e2e:compat:recorded -- --project=${{ matrix.project }}
+      - name: Upload sanitized compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Allowlist: sanitized per-run JSON evidence only. No Playwright HTML
+          # report, trace, screenshot, or test-results directory is uploaded.
+          name: compatibility-evidence-${{ matrix.id }}
+          path: artifacts/compatibility-evidence
+          if-no-files-found: warn
+          retention-days: 14

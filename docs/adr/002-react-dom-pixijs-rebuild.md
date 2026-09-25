@@ -228,12 +228,45 @@ The initial performance targets are:
 - Correct Pixi Application and asset-bundle teardown, ticker pause while hidden,
   and lower resolution/antialiasing profiles for constrained devices.
 
-Primary release targets are web on Chromebook, desktop browsers, and tablet
-portrait and landscape with touch as a first-class input. Electron installers are
-deferred and are not a web release gate. Release evidence includes lint, typecheck,
-unit tests, web build, bundle checks, and the phase-specific browser, privacy,
-license, migration, accessibility, performance, and memory checks defined by the
-plan.
+Primary release targets are the static web application on Linux, macOS, and
+Windows host environments, with Chromebook/ChromeOS, desktop browsers, and
+tablet portrait/landscape touch as separate form-factor targets. Automated
+browser-engine evidence covers Chromium, Firefox, and WebKit; Edge and Safari
+claims require branded-browser or manual evidence. Emulation is not physical
+device or operating-system certification.
+
+The approved staged matrix is machine-readable in
+`tests/e2e/support-matrix.ts`, which keeps host operating system, browser
+engine, branded-browser channel, form factor, input mode, evidence class, and
+allowed CI lane as separate dimensions. `playwright.config.ts` generates its
+projects from that matrix, so a project cannot drift from the support contract.
+Pull-request lanes cover Linux/Chromium and Firefox, macOS/WebKit, and
+Windows/Edge; scheduled release-candidate lanes cover Linux Chromium/Firefox,
+macOS Chromium/Firefox/WebKit, and Windows Chromium/Firefox/Edge. Playwright
+WebKit is WebKit engine evidence, not Safari certification, and the Edge channel
+is branded-browser evidence for the recorded Windows host only.
+
+Every automated lane tests the same production web artifact. Within each
+complete CI run, one job builds the artifact, records a deterministic SHA-256 tree
+identity, and uploads it; every lane job in that run downloads and verifies that
+identity instead of rebuilding, because the current production build is not
+guaranteed to be bit-reproducible. One artifact means one artifact per complete
+CI run, never one global artifact shared across unrelated workflow runs. Each run
+records actual host OS, architecture, browser engine/channel/version, viewport,
+device scale factor, input mode, renderer mode, artifact identity, and whether the
+lane ran on CI or a local host, using synthetic fixtures only. A lane never reports
+passing evidence on a host it is not approved for, and an unavailable browser build
+on an approved host is a lane failure. Physical-device checks (Chromebook with
+ChromeVox, macOS Safari, a touch-platform screen reader, a Windows desktop
+browser, and a Linux desktop browser) remain manual gates for the later
+accessibility, performance, and cutover phases.
+
+Electron installers are deferred and are not a web release gate. The approved
+staged OS/browser matrix, the production web artifact, and physical-device
+checks are required by the plan before cutover. Release evidence also includes
+lint, typecheck, unit tests, web build, bundle checks, and the phase-specific
+browser, privacy, license, migration, accessibility, performance, and memory
+checks defined by the plan.
 
 ## Consequences
 
@@ -248,6 +281,7 @@ plan.
 - Local-first storage and explicit sharing preserve user control without adding a
   learner-data backend.
 - Typed flags and lazy bundles allow measured, reversible cutover.
+- A staged OS/browser matrix makes Linux, macOS, Windows, Chromebook, and tablet support explicit without coupling web acceptance to native packaging.
 
 ### Negative and risks
 
@@ -260,6 +294,8 @@ plan.
   production and profile measurements must remain distinguishable.
 - Legacy upload behavior and privacy copy can conflict until the redesigned web
   path is cut over and verified.
+- Browser, operating-system, GPU, file-picker, storage, and Web Share differences
+  can surface only after the first Linux/Chromium smoke baseline.
 
 ### Mitigations
 
@@ -268,6 +304,7 @@ plan.
 - Enforce renderer import boundaries, contract tests, DOM action mirrors, CC0
   registry checks, and no-learner-data cache inspection.
 - Require fresh, migrated, offline, and rollback profiles to pass before cutover.
+- Use representative OS/browser CI lanes on pull requests, the full approved matrix before cutover, and physical-device checks for browser, touch, and screen-reader claims.
 - Treat Electron packaging as compatibility work rather than a web release gate.
 
 ## Non-goals
@@ -289,14 +326,23 @@ The rebuild does not include:
 
 ## Implementation status
 
-This ADR establishes the target architecture and guardrails. Phase 0 records the
-current behavior, compatibility expectations, and build baseline in
-documentation, characterization tests, and synthetic fixtures. It does
-not implement PixiJS, renderer-neutral contracts, storage-v2, migration, feature
-flags, CC0 tooling, accessibility automation, performance hardening, production
-cutover, or Phaser removal. Those remain future phase work and must not be
-treated as complete based on this ADR. The maintainer accepted Phase 0 on
-2026-09-24, completing that phase without automatically starting Phase 1.
+This ADR establishes the target architecture and guardrails. Phase 0 records
+the current behavior, compatibility expectations, and build baseline in
+documentation, characterization tests, and synthetic fixtures. Phase 1 was
+verified and accepted on 2026-09-25 and added typed feature-flag contracts,
+Linux/Chromium Playwright coverage, axe and privacy-network scaffolding,
+intentional application/Node/Electron typechecking, CI jobs, and build metadata
+recording. Phase 1A has implemented the staged cross-platform web compatibility
+rails described above. Local Linux Chromium and Firefox verification passes, but
+required remote macOS, Windows, Edge, and release-candidate lanes have not run;
+its status in the authoritative plan is `blocked`, not `verified`.
+
+The rebuild still does not implement renderer-neutral contracts, storage-v2,
+migrations, CC0 tooling, the full accessibility and responsive audit, PixiJS,
+performance/memory/offline hardening, production cutover, or Phaser removal. The
+macOS, Windows, and Edge lanes are defined but have not been executed on those
+hosts, and the physical-device gates are still manual work. Those later gates
+must not be treated as complete based on this ADR.
 
 ## Related Documents
 
@@ -315,3 +361,14 @@ treated as complete based on this ADR. The maintainer accepted Phase 0 on
 - `tests/fixtures/persistence/README.md` and the synthetic `subject/` and
   `progression/` fixture sets - learner-free subject schema `1.0.0`/`1.1.0` and
   progression version 1/2/3 compatibility inputs, including invalid cases.
+- `tests/e2e/support-matrix.ts` - the machine-readable web support matrix
+  (host, engine, channel, form factor, input mode, evidence class, allowed CI
+  lane) and the pending physical-device gates.
+- `tests/e2e/currentBuild.spec.ts` and `tests/e2e/compatibility.spec.ts` - the
+  separate Phase 1 current-build suite and Phase 1A cross-engine suite.
+- `.github/workflows/ci.yml` - the Phase 1 current-build viewport suite plus the
+  staged pull-request compatibility lanes; its `web-build` job is the single
+  build, record, and upload point for both suites in a pull-request run.
+- `.github/workflows/compatibility.yml` - the scheduled and manual
+  release-candidate compatibility lanes only; it has no pull-request trigger, so a
+  pull-request run never builds a second artifact.
