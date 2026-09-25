@@ -1358,9 +1358,8 @@ Recorded on 2026-09-25:
   new file: every Phase 2 test fixture is synthetic and self-describing, and the
   only URL used is the reserved `example.invalid` host. No new image,
   animation, sound, music, or font was added, so the CC0 media gate is not
-  triggered in this phase. Nothing was committed, pushed, or deployed; the
-  changes are an uncommitted worktree on `main` at Phase 1A checkpoint
-  `d69579c`.
+  triggered in this phase. The change was then committed and merged as the
+  explicitly authorized checkpoint below.
 - **Verification result:** all three Phase 2 exit criteria pass. The renderer
   boundary is mechanically enforced and proven to bite, the extracted
   behavior is pinned by 135 new contract tests plus the preserved 313 unit
@@ -1370,14 +1369,32 @@ Recorded on 2026-09-25:
 - **Rollback deviation, accepted.** The written rollback says "disable
   the new controller and return to the current screen orchestration." No
   runtime flag was added, so the controller is unconditional and the rollback
-  is a source revert to the Phase 1A checkpoint `d69579c`. A runtime toggle
-  would require keeping the old inline orchestration and the new controller in
-  the tree indefinitely, which is the duplication the contract tests exist to
-  remove. The phase is behavior-preserving and fully test-covered, so a revert
-  is the complete rollback; a dirty worktree with no commit is the whole
-  restore surface. The maintainer accepted this deviation on 2026-09-25. If a
-  runtime toggle is wanted later, it is its own scoped change and must not
-  reintroduce the duplicated orchestration.
+  is a source revert. A runtime toggle would require keeping the old inline
+  orchestration and the new controller in the tree indefinitely, which is the
+  duplication the contract tests exist to remove. The phase is
+  behavior-preserving and fully test-covered, so a revert is the complete
+  rollback. The maintainer accepted this deviation on 2026-09-25. If a runtime
+  toggle is wanted later, it is its own scoped change and must not reintroduce
+  the duplicated orchestration.
+- **Checkpoint and merge evidence.** Commit `b0b4103` (`refactor: add phase 2
+  renderer-neutral application contracts`) was pushed to `phase-2-contracts` and
+  merged as pull request #51. Pull-request run `36172422237` passed all nine
+  jobs: Lint, Typecheck, Unit Tests, Web Build and Bundle, Browser Smoke
+  (Chromium Matrix), and all four representative compatibility lanes
+  (`pr-linux-chromium`, `pr-linux-firefox`, `pr-macos-webkit`,
+  `pr-windows-edge`). PR #51 merged as `7fa042b`. Main CI run `36173015528`
+  then passed the same nine jobs, and GitHub Pages deployment run
+  `36173015515` succeeded; the deployed URL returned HTTP 200 with the expected
+  `Knowledge Dungeon` document title. The compatibility lanes continue to
+  describe GitHub-hosted runner images as emulated, representative, and
+  synthetic; no new browser, host, device, or assistive-technology claim was
+  made, and the physical-device gates remain assigned to the later phases.
+  Rollback is now `git revert 7fa042b`, or a reset to the Phase 1A checkpoint
+  `d69579c`. Four untracked local files, `.opencode/ocv-debug.log`,
+  `.opencode/opencode.json`, `.opencode/tui.json`, and
+  `.opencode/viz-skin.json`, are session tool and plugin configuration and were
+  deliberately excluded from the commit; the tracked `.opencode/agents/*.md`
+  specialist definitions remain in the repository.
 
 ### Exit criteria
 
