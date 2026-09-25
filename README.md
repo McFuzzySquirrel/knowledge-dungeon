@@ -166,17 +166,16 @@ authoritative plan. It added typed build-time flags, Linux/Chromium Playwright
 smoke coverage, axe and privacy-network scaffolding, intentional
 application/Node/Electron typechecking, CI jobs, and build metadata recording.
 
-Phase 1A, the cross-platform web compatibility rails, is implemented and is
-`blocked` pending required remote macOS, Windows, Edge, and release-candidate CI
-evidence. It adds a machine-readable support matrix, named Playwright projects for
-Chromium, Firefox, WebKit, and the Windows Edge channel, a bounded cross-engine
-suite that exercises one recorded production web artifact, and staged
-pull-request and scheduled release-candidate CI lanes. No renderer, storage,
-persistence, media, packaging, or application behavior changed, and no new
-dependency was added. The current Vitest suite is 38 files / 313 tests. Local
-Linux Chromium and Firefox evidence passes, and PR #49's four representative
-GitHub Actions lanes pass. The full eight-cell release-candidate matrix has not
-run from the default branch, so Phase 1A remains `blocked`, not `verified`.
+Phase 1A, the cross-platform web compatibility rails, is implemented and
+`verified` in the authoritative plan. It adds a machine-readable support matrix,
+named Playwright projects for Chromium, Firefox, WebKit, and the Windows Edge
+channel, a bounded cross-engine suite that exercises one recorded production web
+artifact, and staged pull-request and scheduled release-candidate CI lanes. No
+renderer, storage, persistence, media, packaging, or application behavior
+changed, and no new dependency was added. The current Vitest suite is 38 files /
+313 tests. The four representative PR lanes and the complete eight-cell
+release-candidate matrix pass on their declared hosts. Phase 1A is not `complete`
+until the maintainer explicitly accepts the checkpoint.
 
 ### Approved web support matrix
 
@@ -227,9 +226,9 @@ it ran on. No lane
 builds, signs, packages, launches, or downloads the Electron runtime. The
 `electron` package is still an unchanged dev dependency used by the deferred
 desktop path; the Phase 1A web jobs install with `npm ci --ignore-scripts`, which
-skips its postinstall runtime download. The Pages
-`/knowledge-dungeon/` deployment artifact is a later Phase 23 target and is not
-the `/` preview artifact these lanes test.
+skips its postinstall runtime download. The authorized Phase 1A merge refreshed
+the Pages `/knowledge-dungeon/` deployment, but these lanes test the `/` preview
+artifact; validating the deployed base path remains a Phase 23 target.
 
 ### Commands
 

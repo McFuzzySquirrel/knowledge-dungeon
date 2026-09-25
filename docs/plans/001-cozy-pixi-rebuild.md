@@ -706,7 +706,7 @@ Phase 24 Remove Phaser and legacy renderer
 | --- | --- | --- |
 | 0 | complete | Freeze behavior and legacy compatibility fixtures. |
 | 1 | complete | Add flags, browser tests, accessibility scaffolding, and quality rails. |
-| 1A | blocked | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
+| 1A | verified | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
 | 2 | not-started | Extract renderer-neutral application contracts. |
 | 3 | not-started | Build storage-v2 and migration infrastructure. |
 | 4 | not-started | Cut over storage behind a flag and add local attachments. |
@@ -905,7 +905,7 @@ Phase 1A.
 
 ## Phase 1A: Cross-Platform Web Compatibility Rails
 
-**Status:** blocked
+**Status:** verified
 **Objective:** Extend the verified Phase 1 quality rails across representative Linux, macOS, and Windows browser environments without changing the renderer, storage architecture, or learner data model.
 
 ### Prerequisites
@@ -964,12 +964,11 @@ npm run test:e2e -- --project=tablet-landscape
 
 Run the common gate.
 
-### Implemented design (status is `blocked` pending required remote lane evidence)
+### Implemented design (status is `verified`; acceptance is still required)
 
-The implementation records what Phase 1A delivers. Local implementation and
-verification are complete, but the phase remains blocked until the required
-remote macOS, Windows, Edge, and full release-candidate lanes run and record
-results against their shared artifacts.
+The implementation and all declared Phase 1A exit criteria are complete. The
+phase is `verified`, not `complete`: it advances to `complete` only after the
+maintainer explicitly accepts this checkpoint. Phase 2 has not started.
 
 - **Machine-readable matrix.** `tests/e2e/support-matrix.ts` is the single source
   for the approved web support dimensions. Host operating system, browser engine,
@@ -1051,9 +1050,10 @@ results against their shared artifacts.
   job does not depend on its workflow's build job, if any job other than the build
   job runs `build:web`, if a compatibility job uploads anything outside the
   allowlisted evidence path, or if a lane's host, project, or browser install
-  mapping is wrong. The Pages `/knowledge-dungeon/` deployment artifact is a later
-  Phase 23 target and is not the `/` preview artifact these lanes test. No lane
-  builds, signs, packages, launches, or downloads the Electron runtime. The
+  mapping is wrong. The authorized merge refreshed the Pages
+  `/knowledge-dungeon/` deployment, but these lanes test the `/` preview artifact;
+  validating the deployed base path remains a Phase 23 target. No lane builds,
+  signs, packages, launches, or downloads the Electron runtime. The
   `electron` package remains an unchanged dev dependency for the deferred desktop
   path, and the Phase 1A web jobs install with `npm ci --ignore-scripts`, which
   skips its postinstall runtime download.
@@ -1063,18 +1063,29 @@ results against their shared artifacts.
   check, one physical Windows desktop browser check, and one physical Linux desktop
   browser check. Phase 21 and Phase 23 must complete them before a release claim.
 
-### Known limitations at implementation time
+### Known limitations and evidence boundaries
 
-- Only the local Linux host was exercised. Linux/Chromium and Linux/Firefox
-  compatibility results were produced locally; the macOS/WebKit, Windows/Edge, and
-  all release-candidate lanes are defined but have not run on those hosts.
-- `compat-webkit` and `compat-edge` are approved for macOS and Windows only, so on a
-  local Linux host they are explicitly skipped and logged as not selected evidence
-  rather than reporting a pass. In CI, a host that does not match the approved lane
-  fails, and an unavailable browser build on an approved host fails the lane.
-- The four representative pull-request lanes passed in GitHub Actions run
-  `36151192587` on PR #49. The full eight-cell release-candidate workflow has
-  not run because its workflow file is not yet present on the default branch.
+- Automated evidence was collected on GitHub-hosted runner images. It is not
+  physical-device, ChromeOS, distribution, GPU, or assistive-technology
+  certification.
+- Playwright WebKit is engine evidence, not a Safari release, macOS version, or
+  iOS claim. The macOS Safari physical check remains a later manual gate.
+- The Edge lane is branded-channel evidence for Microsoft Edge
+  `154.0.4258.37` on the recorded Windows runner only. It is not evidence for
+  other Edge channels, hosts, or Chromium-based browsers.
+- The Windows Chromium lane recorded runner image `win25-vs2026`
+  `20260907.229.1`, while the Windows Firefox and Edge lanes recorded
+  `20260922.246.2`. The evidence preserves the actual difference; the
+  `windows-latest` label remains a mutable representative runner, not an
+  operating-system certification.
+- GitHub reported non-blocking Node.js 20 deprecation annotations for
+  `actions/checkout@v4`, `actions/setup-node@v4`, and artifact actions, plus the
+  announced `ubuntu-latest` migration beginning 2026-10-19. No Phase 1A job
+  failed for either condition. Updating those action/runtime pins is deferred
+  infrastructure maintenance rather than new phase scope.
+- The physical Chromebook, macOS Safari, touch-platform screen-reader, Windows
+  desktop, and Linux desktop checks remain assigned to the later accessibility,
+  performance, and cutover phases.
 
 ### Verification evidence
 
@@ -1117,20 +1128,34 @@ Recorded on 2026-09-25:
   WebSocket attempts, and classified the runner as emulated rather than physical.
   WebKit remained engine evidence rather than Safari certification, and the Edge
   user agent contained the expected branded Edge token.
+- PR #49 merged as `16a6234a0254eda9f2fa7bff6154bb98baa92694`. Main CI run
+  `36154945682` passed every lint, typecheck, unit, build, viewport, and
+  representative compatibility job. GitHub Pages deployment run `36154945457`
+  succeeded, and the deployed URL returned the expected `Knowledge Dungeon`
+  document title.
+- Manually dispatched release-candidate run `36155452532` on `main` passed the
+  shared-artifact build and all eight cells: Linux Chromium 153.0.8010.12 and
+  Firefox 155.0; macOS arm64 Chromium 153.0.8010.12, Firefox 155.0, and WebKit
+  26.6; Windows x64 Chromium 153.0.8010.12, Firefox 155.0, and Microsoft Edge
+  154.0.4258.37. Every cell verified and served the same production artifact
+  identity
+  `sha256-tree-v1:654e81ad08e0bd9e6b3e3ef7d45c4219d571a3917735e64d15f0d2e28db666bf`,
+  recorded default Phaser rendering with a non-zero canvas, no Pixi chunk, no
+  network-policy violations, and no WebSocket attempts.
 - Manifest integrity, failure-path privacy, and matrix/workflow contract tests
   passed within the full 313-test suite. The manifest checks cover modified,
   added, removed, renamed, malformed, duplicate, invalid-path, digest, count,
   entrypoint, missing-build, and symlink cases using isolated temporary data.
 - No migration, persistence, learner-data, renderer, visual, media, feature-flag,
   or application behavior changed. No dependency, Electron package/installer,
-  deployment, analytics, telemetry, or upload was introduced. Changes were
-  committed and pushed only as the explicitly authorized PR #49 checkpoint.
-- **Blocker:** the four representative PR compatibility lanes now pass, but the
-  full eight-cell release-candidate matrix has not run. The release workflow must
-  first exist on the default branch, then every cell must pass on its declared host,
-  record the same artifact identity within that workflow run, and upload sanitized
-  evidence. PR merge, default-branch workflow dispatch, and any resulting Pages
-  deployment still require explicit user authorization.
+  analytics, telemetry, or upload was introduced. Changes were committed and
+  pushed as the explicitly authorized PR #49 checkpoint; PR #49 then merged and
+  the explicitly authorized GitHub Pages deployment succeeded.
+- **Verification result:** all Phase 1A exit criteria pass. The four representative
+  PR lanes and all eight release-candidate cells passed on their declared hosts,
+  each complete CI run used and verified one shared production artifact, evidence
+  remained sanitized and synthetic-only, and no Electron package or installer was
+  required. Phase 1A is `verified` pending explicit maintainer acceptance.
 
 ### Exit criteria
 
