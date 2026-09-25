@@ -333,17 +333,17 @@ verified and accepted on 2026-09-25 and added typed feature-flag contracts,
 Linux/Chromium Playwright coverage, axe and privacy-network scaffolding,
 intentional application/Node/Electron typechecking, CI jobs, and build metadata
 recording. Phase 1A has implemented the staged cross-platform web compatibility
-rails described above. Local Linux Chromium and Firefox verification and PR #49's
-representative Linux Chromium, Linux Firefox, macOS WebKit, and Windows Edge lanes
-pass. The full release-candidate matrix has not run from the default branch, so
-its status in the authoritative plan is `blocked`, not `verified`.
+rails described above. Its representative PR lanes and complete eight-cell
+release-candidate matrix pass on their declared hosts against one recorded
+artifact per CI run. The maintainer accepted the verified checkpoint on
+2026-09-25, so its status in the authoritative plan is `complete`.
 
 The rebuild still does not implement renderer-neutral contracts, storage-v2,
 migrations, CC0 tooling, the full accessibility and responsive audit, PixiJS,
 performance/memory/offline hardening, production cutover, or Phaser removal. The
-macOS, Windows, and Edge lanes are defined but have not been executed on those
-hosts, and the physical-device gates are still manual work. Those later gates
-must not be treated as complete based on this ADR.
+automated macOS, Windows, and Edge lanes are runner evidence, while the
+physical-device, Safari, touch-platform, and screen-reader gates remain manual
+later work. Those later gates must not be treated as complete based on this ADR.
 
 ## Related Documents
 
