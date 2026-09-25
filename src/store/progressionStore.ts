@@ -10,9 +10,7 @@ import {
   awardRoomClearProgression,
   type RankTier,
   type EquippableLootItem,
-  type EquipSlot,
   type CrossSubjectProgress,
-  EQUIP_SLOTS,
   computeEquipBonuses,
   rollEquippableLoot,
   computeCrossSubjectProgress,
@@ -25,204 +23,112 @@ import {
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
 import type { FishEntry, FishRarity, FishCollection } from '@/core/fishing/fishingTypes';
 import { FISH_RARITY_XP_MULTIPLIER, FISH_CATALOG } from '@/core/fishing/fishingTypes';
-import { deserializeFishCollection, createFishId, addFishToCollection, countUniqueTypes } from '@/core/fishing/fishCollectionService';
+import { createFishId, addFishToCollection, countUniqueTypes } from '@/core/fishing/fishCollectionService';
+import {
+  makeDefaultSubjectProgression,
+  normalizeProgressionRecord,
+  toLegacyV3ProgressionRecord,
+  type CanonicalCollectedNote,
+  type CanonicalLootItem,
+  type CanonicalSubjectProgressionWriteShape,
+} from '@/core/progression/canonicalProgression';
 
-export interface LootItem {
-  id: string;
-  name: string;
-  description: string;
-  rarity: 'common' | 'rare' | 'epic';
-  acquiredAt: string;
-}
+export type LootItem = CanonicalLootItem;
+export type CollectedNoteEntry = CanonicalCollectedNote;
 
-export interface CollectedNoteEntry {
-  noteId: string;
-  dungeonId: string;
-  roomId: string;
-  topic: string;
-  floorLabel: string;
-  artifactPreview: string;
-  noteMarkdown: string;
-  artifactMarkdown: string;
-  collectedAt: string;
-}
-
-interface PersistedSubjectProgression {
-  xpTotal: number;
-  rank: RankTier;
-  badges: string[];
-  inventory: LootItem[];
-  equippedItems: EquippableLootItem[];
-  collectedNotes: CollectedNoteEntry[];
-  streakCount: number;
-  /** Phase 3c: subjects mastered count */
-  subjectsMastered: number;
-  roomsCleared: number;
-  reviewPasses: number;
-  artifacts: number;
-  bossesDefeated: number;
-  /** Fisher's Rest: fish caught in this subject */
-  fishCollection: FishEntry[];
-}
+/**
+ * Per-subject progression in the store is the canonical record.
+ *
+ * The two canonical-only fields (`subjectId`, `extraFields`) are optional, not
+ * merely omitted from the type: a record the store built itself (the default for
+ * a subject with nothing stored) genuinely has neither. Identity always comes
+ * from the `bySubject` map key, and preserved unknown fields live in
+ * `extraFields` until {@link savePersistedBySubject} flattens them back out.
+ */
+type PersistedSubjectProgression = CanonicalSubjectProgressionWriteShape;
 
 const REVIEW_PASS_XP = 6;
 
-interface PersistedProgressionV3 {
-  version: 3;
-  bySubject: Record<string, PersistedSubjectProgression>;
-  crossSubjectAchievements: string[];
+/**
+ * Identifier factory for a persisted record that is missing an id.
+ *
+ * Normalization lives in `src/core/progression/canonicalProgression.ts` and
+ * mints no ids of its own, so the `Math.random()` suffix the current store
+ * produces stays exactly here. The storage-v2 migration injects a seeded
+ * counter instead, which is what makes a migration run reproducible.
+ */
+function createPersistedId(prefix: 'loot' | 'gear'): string {
+  return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/**
+ * A subject with no stored progression gets the default record.
+ *
+ * The canonical-only fields (`subjectId`, `extraFields`) are absent, so a
+ * subject that has never been persisted cannot end up carrying a foreign
+ * identity in its record.
+ */
 function cloneDefaultSubjectProgression(): PersistedSubjectProgression {
-  return {
-    xpTotal: 0,
-    rank: 'Novice',
-    badges: [],
-    inventory: [],
-    equippedItems: [],
-    collectedNotes: [],
-    streakCount: 0,
-    subjectsMastered: 0,
-    roomsCleared: 0,
-    reviewPasses: 0,
-    artifacts: 0,
-    bossesDefeated: 0,
-    fishCollection: [],
-  };
-}
-
-function normalizeCollectedNotes(raw: unknown): CollectedNoteEntry[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
-    .map((entry) => ({
-      noteId: typeof entry.noteId === 'string' ? entry.noteId : '',
-      dungeonId: typeof entry.dungeonId === 'string' ? entry.dungeonId : '',
-      roomId: typeof entry.roomId === 'string' ? entry.roomId : '',
-      topic: typeof entry.topic === 'string' ? entry.topic : 'Collected note',
-      floorLabel: typeof entry.floorLabel === 'string' ? entry.floorLabel : 'Unknown floor',
-      artifactPreview: typeof entry.artifactPreview === 'string' ? entry.artifactPreview : '',
-      noteMarkdown: typeof entry.noteMarkdown === 'string' ? entry.noteMarkdown : '',
-      artifactMarkdown:
-        typeof entry.artifactMarkdown === 'string'
-          ? entry.artifactMarkdown
-          : typeof entry.artifactPreview === 'string'
-            ? entry.artifactPreview
-            : 'Artifact note collected.',
-      collectedAt: typeof entry.collectedAt === 'string' ? entry.collectedAt : new Date(0).toISOString(),
-    }))
-    .filter((entry) => entry.noteId.length > 0);
-}
-
-function normalizeInventory(raw: unknown): LootItem[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
-    .map((entry) => ({
-      id: typeof entry.id === 'string' ? entry.id : `loot-${Math.random().toString(36).slice(2, 8)}`,
-      name: typeof entry.name === 'string' ? entry.name : 'Unknown artifact',
-      description: typeof entry.description === 'string' ? entry.description : '',
-      rarity: entry.rarity === 'rare' || entry.rarity === 'epic' ? entry.rarity : 'common',
-      acquiredAt: typeof entry.acquiredAt === 'string' ? entry.acquiredAt : new Date(0).toISOString(),
-    }));
-}
-
-function normalizeSubjectProgression(raw: unknown): PersistedSubjectProgression {
-  if (typeof raw !== 'object' || raw === null) return cloneDefaultSubjectProgression();
-  const record = raw as Record<string, unknown>;
-  const xpTotal = typeof record.xpTotal === 'number' ? Math.max(0, Math.trunc(record.xpTotal)) : 0;
-  return {
-    xpTotal,
-    rank: assignRankTier(xpTotal),
-    badges: Array.isArray(record.badges)
-      ? record.badges.filter((badge): badge is string => typeof badge === 'string')
-      : [],
-    inventory: normalizeInventory(record.inventory),
-    equippedItems: normalizeEquippedItems(record.equippedItems),
-    collectedNotes: normalizeCollectedNotes(record.collectedNotes),
-    streakCount: typeof record.streakCount === 'number' ? Math.max(0, Math.trunc(record.streakCount)) : 0,
-    subjectsMastered: typeof record.subjectsMastered === 'number' ? Math.max(0, Math.trunc(record.subjectsMastered)) : 0,
-    roomsCleared: typeof record.roomsCleared === 'number' ? Math.max(0, Math.trunc(record.roomsCleared)) : 0,
-    reviewPasses: typeof record.reviewPasses === 'number' ? Math.max(0, Math.trunc(record.reviewPasses)) : 0,
-    artifacts: typeof record.artifacts === 'number' ? Math.max(0, Math.trunc(record.artifacts)) : 0,
-    bossesDefeated: typeof record.bossesDefeated === 'number' ? Math.max(0, Math.trunc(record.bossesDefeated)) : 0,
-    fishCollection: deserializeFishCollection(record.fishCollection),
-  };
-}
-
-function normalizeEquippedItems(raw: unknown): EquippableLootItem[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
-    .map((entry): EquippableLootItem => ({
-      id: typeof entry.id === 'string' ? entry.id : `gear-${Math.random().toString(36).slice(2, 8)}`,
-      name: typeof entry.name === 'string' ? entry.name : 'Unknown gear',
-      description: typeof entry.description === 'string' ? entry.description : '',
-      rarity: entry.rarity === 'rare' || entry.rarity === 'epic' ? entry.rarity : 'common',
-      acquiredAt: typeof entry.acquiredAt === 'string' ? entry.acquiredAt : new Date(0).toISOString(),
-      equipSlot: isValidEquipSlot(entry.equipSlot) ? entry.equipSlot : 'accessory',
-      qualityBonus: typeof entry.qualityBonus === 'number' ? entry.qualityBonus : undefined,
-      xpMultiplier: typeof entry.xpMultiplier === 'number' ? entry.xpMultiplier : undefined,
-      xpBonus: typeof entry.xpBonus === 'number' ? entry.xpBonus : undefined,
-      streakBonus: typeof entry.streakBonus === 'number' ? entry.streakBonus : undefined,
-      equipped: typeof entry.equipped === 'boolean' ? entry.equipped : false,
-    }));
-}
-
-function isValidEquipSlot(slot: unknown): slot is EquipSlot {
-  if (typeof slot !== 'string') return false;
-  return (EQUIP_SLOTS as readonly string[]).includes(slot);
+  return makeDefaultSubjectProgression();
 }
 
 function notesForSubject(notes: readonly CollectedNoteEntry[], subjectId: string): CollectedNoteEntry[] {
   return notes.filter((note) => note.dungeonId === subjectId);
 }
 
-function loadPersistedBySubject(): { bySubject: Record<string, PersistedSubjectProgression>; crossSubjectAchievements: string[] } {
+/**
+ * Hydrate the canonical progression from the current localStorage key.
+ *
+ * v1 flat, v2 by-subject, and v3 by-subject payloads all normalize through the
+ * one function in `src/core/progression/canonicalProgression.ts`. JSON parse
+ * failures and non-object payloads still yield empty in-memory state, exactly
+ * as before.
+ */
+function loadPersistedBySubject(): {
+  bySubject: Record<string, PersistedSubjectProgression>;
+  crossSubjectAchievements: string[];
+} {
   try {
     if (typeof localStorage === 'undefined') return { bySubject: {}, crossSubjectAchievements: [] };
     const raw = localStorage.getItem(STORAGE_KEYS.progression);
     if (!raw) return { bySubject: {}, crossSubjectAchievements: [] };
     const parsed = JSON.parse(raw) as unknown;
     if (typeof parsed !== 'object' || parsed === null) return { bySubject: {}, crossSubjectAchievements: [] };
-    const parsedRecord = parsed as Record<string, unknown>;
 
-    let crossSubjectAchievements: string[] = [];
-    if (parsedRecord.version === 3) {
-      crossSubjectAchievements = Array.isArray(parsedRecord.crossSubjectAchievements)
-        ? parsedRecord.crossSubjectAchievements.filter((a): a is string => typeof a === 'string')
-        : [];
-    }
-
-    if ((parsedRecord.version === 3 || parsedRecord.version === 2) && typeof parsedRecord.bySubject === 'object' && parsedRecord.bySubject !== null) {
-      const bySubjectRecord = parsedRecord.bySubject as Record<string, unknown>;
-      const normalized: Record<string, PersistedSubjectProgression> = {};
-      for (const [subjectId, subjectProgression] of Object.entries(bySubjectRecord)) {
-        normalized[subjectId] = normalizeSubjectProgression(subjectProgression);
-      }
-      return { bySubject: normalized, crossSubjectAchievements };
-    }
-
-    const legacy = normalizeSubjectProgression(parsedRecord);
-    const activeSubjectId = getActiveSubjectId();
-    const subjectId = activeSubjectId && activeSubjectId.trim().length > 0 ? activeSubjectId : '__legacy__';
-    return { bySubject: { [subjectId]: legacy }, crossSubjectAchievements };
+    const canonical = normalizeProgressionRecord(parsed, {
+      activeSubjectId: getActiveSubjectId(),
+      createId: createPersistedId,
+    });
+    return {
+      bySubject: canonical.bySubject,
+      crossSubjectAchievements: canonical.crossSubjectAchievements,
+    };
   } catch {
     return { bySubject: {}, crossSubjectAchievements: [] };
   }
 }
 
+/**
+ * Persist to the legacy `localStorage` key.
+ *
+ * This writes the **legacy v3 mirror format**, deliberately not the storage-v2
+ * canonical format. Phase 3 is not a storage cutover, and Phase 4 - not this
+ * phase - owns the mirror/dual-write contract, so the payload must stay exactly
+ * what the pre-phase build wrote: three envelope keys, thirteen record keys in
+ * the same order, and no canonical-only field. That is what makes Phase 3's
+ * rollback (revert the source) a no-op for data.
+ *
+ * Preserved unknown app-owned fields are flattened into their record, which is
+ * an additive superset the pre-phase reader ignores. Storage-v2 output uses
+ * `canonicalProgressionToRecord` / `serializeCanonicalProgression` instead.
+ */
 function savePersistedBySubject(
   bySubject: Record<string, PersistedSubjectProgression>,
   crossSubjectAchievements: string[],
 ): void {
   try {
     if (typeof localStorage !== 'undefined') {
-      const payload: PersistedProgressionV3 = {
-        version: 3,
-        bySubject,
-        crossSubjectAchievements,
-      };
+      const payload = toLegacyV3ProgressionRecord({ bySubject, crossSubjectAchievements });
       localStorage.setItem(STORAGE_KEYS.progression, JSON.stringify(payload));
     }
   } catch {

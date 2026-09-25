@@ -22,6 +22,47 @@ export interface FishEntry {
   subjectName: string;
   /** ISO-8601 timestamp of when the fish was caught. */
   caughtAt: string;
+  /**
+   * Canonical catalog identity, when the caller knows it.
+   *
+   * Optional so every existing producer and fixture still compiles; persisted
+   * collections that predate this field deserialize unchanged. Storage, backup,
+   * and migration use {@link CanonicalFishEntry}, where the identity is always
+   * resolved. See `toCanonicalFishEntry` for the resolution order.
+   */
+  catalogId?: string;
+}
+
+/** How a canonical catalog id was resolved from a persisted entry. */
+export type FishCatalogIdSource =
+  /** The entry already carried a `catalogId`. */
+  | 'catalog-id-field'
+  /** The entry id uses the `createFishId` shape `<catalogId>:<suffix>`. */
+  | 'entry-id-prefix'
+  /** The display name matched a catalog entry exactly. */
+  | 'catalog-name-match'
+  /** No catalog match; a deterministic slug of the display name was used. */
+  | 'name-slug'
+  /** No usable identity at all; the explicit unknown marker was used. */
+  | 'unknown';
+
+/** Marker used when no catalog identity can be resolved for an entry. */
+export const UNKNOWN_FISH_CATALOG_ID = 'unknown-fish';
+
+/**
+ * A fish entry with catalog identity always resolved.
+ *
+ * This is the only fish shape storage, backup, and migration code writes. The
+ * resolution is deterministic and never mints a random id, and it is idempotent:
+ * canonicalizing a canonical entry returns an equal entry.
+ *
+ * How an id was resolved is available from `resolveFishCatalogId` for
+ * diagnostics. It is deliberately **not** a field of the canonical entry,
+ * because a second canonicalization would then report a different source and the
+ * transform would stop being idempotent.
+ */
+export interface CanonicalFishEntry extends FishEntry {
+  catalogId: string;
 }
 
 /** A collection of caught fish entries. */

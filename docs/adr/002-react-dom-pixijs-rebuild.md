@@ -268,6 +268,119 @@ lint, typecheck, unit tests, web build, bundle checks, and the phase-specific
 browser, privacy, license, migration, accessibility, performance, and memory
 checks defined by the plan.
 
+## Phase 3 archive dependency selection
+
+This section records the Phase 3 library selections. It does not change Decisions
+1 through 7. The archive library is the `.kdbak` and `.kdsubject` ZIP container
+required by plan section 7.3; the IndexedDB shim is a test-only dependency.
+
+### Archive library: `fflate` (runtime dependency)
+
+- **Package and version:** `fflate` `0.8.3`, declared as `^0.8.3`.
+- **License:** `MIT` (SPDX `MIT`), in `node_modules/fflate/LICENSE`.
+  License URL: <https://github.com/101arrowz/fflate/blob/master/LICENSE>.
+- **Dependencies:** none. `package-lock.json` records no transitive packages for
+  it.
+- **Size, measured locally** with the repository's own bundler (`rolldown` 1.0.2,
+  `--format esm --minify`) against a stub importing only `zipSync` and `unzipSync`
+  from `fflate/browser`: **12,393 bytes raw and 6,035 bytes gzip**. The upstream
+  upper bound for the whole library is about 33 kB (about 12.5 kB gzip), so
+  tree-shaking removes roughly two thirds of that. The published "~8 kB" claim is
+  not the measured number here, so the measurement is recorded instead.
+- **Maintenance signal:** latest release 0.8.3 published 2026-07-20; repository
+  `101arrowz/fflate`; about 262 million npm downloads in the month before this
+  record. It is the default DEFLATE implementation in several large toolchains.
+- **Why it was selected:** it is the only candidate that satisfies every hard
+  requirement. It is stream-optional: `zipSync` and `unzipSync` take and return
+  `Uint8Array`, which is exactly the shape `.kdbak` and `.kdsubject` need for a
+  handful of small JSON documents and attachment blobs, with no `ReadableStream`,
+  `Response`, or `Blob` plumbing. It is pure JavaScript: a scan of the `esm`,
+  `umd`, and `lib` builds found no `eval`, no `new Function`, no WebAssembly, and
+  no `fetch`, so it introduces no CSP problem and no network call at import or run
+  time. It declares `sideEffects: false` and ships an `exports` map with
+  `browser` and `node` conditions, so the web build and the Vitest run resolve
+  deliberately instead of falling back to a Node built-in.
+- **Verified before selection:** a synchronous round trip of `manifest.json`,
+  `subject.json`, and an `attachments/blob.bin` `Uint8Array` produced byte-identical
+  JSON and binary output, and the same round trip plus a versioned IndexedDB open,
+  write, and read passed under this repository's own Vitest and `jsdom`
+  configuration.
+
+### Rejected alternatives
+
+- **`jszip` `3.10.2` (MIT OR GPL-3.0-or-later), rejected.** The dual-license
+  identifier is not the single clean permissive identifier this record requires,
+  and it drags in four runtime dependencies: `lie`, `pako`, `readable-stream`
+  (a 2.3.x polyfill from 2016), and `setimmediate`. Its browser bundle measured
+  97,303 bytes raw and 28,688 bytes gzip, roughly eight times the tree-shaken
+  `fflate` cost for a library with far more capability than Phase 3 needs. Decisive
+  finding: the shipped `dist/jszip.min.js` contains `new Function`, from the
+  bundled `setimmediate` string-callback shim, which fails the no-`new Function`
+  requirement and is a CSP liability. Rejected.
+- **`client-zip` `2.5.1` (MIT), rejected on function, not size.** It is genuinely
+  tiny, 6,370 bytes raw and 2,652 bytes gzip, dependency-free, and maintained
+  (published 2026-09-14, about 1.4 million monthly downloads), but it exports only
+  `downloadZip`, `makeZip`, and `predictLength`, and its README states it "does
+  *not* compress the files or unzip existing archives." It is write-only and
+  stream-only, returning a `Response` or a `ReadableStream`. Phase 3 needs to
+  *read* a `.kdbak` the learner picks from a local file, so `client-zip` would
+  require a second dependency for reading, or hand-rolled parsing, both of which the
+  plan forbids. It also cannot compress, so archives would be store-only, and its
+  ZIP64 output is documented as not readable by every ZIP reader. Rejected.
+
+### Known limitations of the selection
+
+- `fflate` is `0.x`. Caret pinning means a future `0.9.x` may change the API, so a
+  lockfile update must be reviewed rather than taken automatically.
+- Only the synchronous `zipSync` and `unzipSync` surface is selected. Streaming
+  compression is deliberately not used: Phase 3 archives are bounded local products,
+  and a blocking synchronous call on a very large attachment is the accepted cost.
+- `fflate` does not define an archive *format*. The `.kdbak` and `.kdsubject`
+  member layout, the `manifest.json` schema, the import semantics, and the
+  identifier remapping rules remain this application's responsibility and are
+  versioned separately from the library.
+- `fflate` does not defend against a hostile archive on its own. Zip-slip member
+  names, decompression-ratio limits, member-count limits, and total-bytes limits
+  must be enforced in the storage-v2 archive reader before any member is written.
+- Entry-point selection matters. The bare specifier resolves to `fflate`'s Node
+  entry under Vitest and to the browser entry in the web build, because the Node
+  ESM entry imports `node:module`. `fflate/browser` resolves to the browser build
+  in both environments and was verified to work in Node. Storage-v2 code under
+  `src/` should import the explicit subpath so the unit tests and the shipped
+  bundle exercise the same code.
+
+### IndexedDB test shim: `fake-indexeddb` (devDependency)
+
+- **Package and version:** `fake-indexeddb` `6.2.5`, declared as `^6.2.5`.
+- **License:** `Apache-2.0` (SPDX `Apache-2.0`). License URL:
+  <https://github.com/dolanmiu/fake-indexeddb/blob/master/LICENSE>.
+- **Dependencies:** none. It is a test-only shim and is never bundled.
+- **Maintenance signal:** latest release 6.2.5 published 2025-11-07; repository
+  `dolanmiu/fake-indexeddb`; about 22 million npm downloads in the month before this
+  record. Lower release cadence than the archive library, which is expected for a
+  spec-conformance shim; it is a mature and widely used reference implementation of
+  the IndexedDB API for test environments.
+- **Why it is needed:** the `jsdom` environment used by this repository implements
+  no IndexedDB, so storage-v2 repository and migration tests cannot run without an
+  in-memory implementation. The shim stays in `devDependencies` and must be
+  installed by test setup only; it must not be reachable from the application
+  graph.
+
+### Recorded measurement and scope notes
+
+- The new dependencies add no production bundle weight at this phase. Nothing
+  imports them yet, and they appear in no `dist` chunk. The build remained at 105
+  files and 4,107,377 bytes, matching the Phase 1 baseline exactly. When Phase 3
+  archive code first imports `fflate`, the expected cost is the tree-shaken
+  measurement recorded above, not the whole-library figure.
+- `npm audit` reported the same 24 advisories before and after the change. All
+  are in pre-existing packages such as `electron`, `electron-builder`, `vite`,
+  `vitest`, `multer`, and `tar`. Neither new package is named in the audit output,
+  and `npm audit fix` was deliberately not run.
+- `package.json` gained exactly one script, `test:migrations`, wired to
+  `vitest run tests/migrations`. No existing script or dependency was altered, and
+  no production default changed: Phaser and legacy storage remain the defaults.
+
 ## Consequences
 
 ### Positive

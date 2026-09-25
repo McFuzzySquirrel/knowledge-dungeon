@@ -5,6 +5,48 @@
 
 export const CURRENT_SCHEMA_VERSION = '1.1.0';
 
+/**
+ * Version identifiers are three separate contracts and must never be
+ * interchanged (plan section 12, rule 4):
+ *
+ * - the **subject schema version** below, which describes a subject snapshot;
+ * - the **storage generation version**, declared by the storage-v2 schema
+ *   module, which describes the shape of an IndexedDB generation;
+ * - the **data product format version** below, which describes a `.kdbak`,
+ *   `.kdsubject`, or `.kdtemplate` archive.
+ */
+export type SubjectSchemaVersion = typeof CURRENT_SCHEMA_VERSION;
+
+/** Which data product a versioned archive carries. */
+export type DataProductKind = 'kdbak' | 'kdsubject' | 'kdtemplate';
+
+/**
+ * Data product format versions, one per product. These describe the archive
+ * layout only; they are not subject schema versions and not storage generation
+ * versions. Phases 5-7 own the payloads and may bump these independently.
+ */
+export const DATA_PRODUCT_FORMAT_VERSIONS: Readonly<Record<DataProductKind, number>> = {
+  kdbak: 1,
+  kdsubject: 1,
+  kdtemplate: 1,
+};
+
+/**
+ * Manifest written as the first member of a `.kdbak` or `.kdsubject` archive.
+ *
+ * Deliberately carries counts, versions, and checksums only. It never carries a
+ * subject name, a topic, a note, a filename, or any other learner value.
+ */
+export interface DataProductManifest {
+  product: DataProductKind;
+  formatVersion: number;
+  subjectSchemaVersion: string;
+  createdAt: string;
+  memberCount: number;
+  totalBytes: number;
+  contentChecksum: string;
+}
+
 export const PHASE_STATES = [
   'SubjectCreated',
   'CreatorActive',
