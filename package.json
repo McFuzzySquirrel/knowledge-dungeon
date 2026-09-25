@@ -40,6 +40,7 @@
     "manifest": "node scripts/generate-sprite-manifest.mjs",
     "test": "vitest run",
     "test:contracts": "vitest run tests/contracts",
+    "test:migrations": "vitest run tests/migrations",
     "test:e2e": "npm run build:web && playwright test tests/e2e/currentBuild.spec.ts",
     "test:e2e:recorded": "playwright test tests/e2e/currentBuild.spec.ts",
     "test:e2e:compat": "npm run build:web && npm run record:web-artifact && playwright test tests/e2e/compatibility.spec.ts --project=compat-chromium --project=compat-firefox --project=compat-webkit --project=compat-edge",
@@ -48,6 +49,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
+    "fflate": "^0.8.3",
     "i18next": "^26.3.1",
     "i18next-browser-languagedetector": "^8.2.1",
     "multer": "^2.1.1",
@@ -74,6 +76,7 @@
     "electron": "^42.1.0",
     "electron-builder": "^26.8.1",
     "eslint": "^9.14.0",
+    "fake-indexeddb": "^6.2.5",
     "globals": "^15.12.0",
     "jsdom": "^29.1.1",
     "typescript": "^5.6.3",

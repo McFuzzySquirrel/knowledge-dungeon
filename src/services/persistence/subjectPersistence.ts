@@ -10,6 +10,8 @@
 
 import {
   CURRENT_SCHEMA_VERSION,
+  assertImportableSubjectSnapshot,
+  migrateSubjectSnapshot,
   type RoomAttachment,
   type SubjectSnapshot,
 } from '@/core/validation/persistence';
@@ -339,29 +341,18 @@ export async function resolveRoomAttachmentUrl(
 /**
  * Phase 4a: Migrate a v1.0.0 snapshot to v1.1.0.
  * Adds SM-2 defaults and tag index, bumps schema version.
+ *
+ * The transform itself now lives in `src/core/validation/persistence/subjectMigration.ts`
+ * so the storage-v2 migration runs the identical code. The `drop` policy is
+ * explicit here: the current importer rebuilds the top-level object as
+ * `{ dungeon, rooms }`, so a legacy top-level envelope is not preserved. The
+ * Phase 0 characterization test pins that. Storage-v2 passes `preserve`.
  */
 function migrateToV11(snapshot: SubjectSnapshot): SubjectSnapshot {
-  const migratedRooms: Record<string, typeof snapshot.rooms[string]> = {};
-  for (const [roomId, room] of Object.entries(snapshot.rooms)) {
-    migratedRooms[roomId] = {
-      ...room,
-      sm2QualityResponse: room.sm2QualityResponse ?? 3,
-      sm2EaseFactor: room.sm2EaseFactor ?? 2.5,
-      sm2IntervalDays: room.sm2IntervalDays ?? 1,
-      sm2NextReviewDate: room.sm2NextReviewDate ?? new Date().toISOString(),
-      sm2ConsecutiveCorrect: room.sm2ConsecutiveCorrect ?? 0,
-      tags: room.tags ?? [],
-    };
-  }
-  return {
-    dungeon: {
-      ...snapshot.dungeon,
-      schemaVersion: '1.1.0',
-      biome: snapshot.dungeon.biome,
-      tagIndex: snapshot.dungeon.tagIndex ?? {},
-    },
-    rooms: migratedRooms,
-  };
+  return migrateSubjectSnapshot(snapshot, {
+    nowIso: new Date().toISOString(),
+    unknownTopLevelFields: 'drop',
+  }).snapshot;
 }
 
 export function exportSubjectToJson(snapshot: SubjectSnapshot): string {
@@ -532,50 +523,13 @@ export function createSubjectFromTemplate(
   return { dungeon, rooms: newRooms } as unknown as SubjectSnapshot;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
 export function importSubjectFromJson(raw: string): SubjectSnapshot {
   const parsed = JSON.parse(raw) as unknown;
-  if (!isRecord(parsed) || !('dungeon' in parsed) || !('rooms' in parsed)) {
-    throw new Error('Invalid subject snapshot format');
-  }
-  const dungeon = parsed.dungeon;
-  const rooms = parsed.rooms;
-  if (!isRecord(dungeon) || !isRecord(rooms)) {
-    throw new Error('Invalid subject snapshot format');
-  }
-  if (typeof dungeon.schemaVersion !== 'string') {
-    throw new Error('Invalid subject snapshot format: missing schema version.');
-  }
-
-  const supportedVersions = ['1.0.0', '1.1.0'];
-  if (!supportedVersions.includes(dungeon.schemaVersion)) {
-    throw new Error(
-      `Unsupported subject schema version: ${dungeon.schemaVersion}. Expected ${CURRENT_SCHEMA_VERSION} or earlier.`,
-    );
-  }
-  if (
-    typeof dungeon.dungeonId !== 'string' ||
-    typeof dungeon.subjectName !== 'string' ||
-    !Array.isArray(dungeon.rooms)
-  ) {
-    throw new Error('Invalid subject snapshot format');
-  }
-
-  for (const roomSummary of dungeon.rooms) {
-    if (!isRecord(roomSummary) || typeof roomSummary.roomId !== 'string') {
-      throw new Error('Invalid subject snapshot format: room summary is malformed.');
-    }
-    const room = rooms[roomSummary.roomId];
-    if (!isRecord(room) || room.roomId !== roomSummary.roomId || !isRecord(room.validationState)) {
-      throw new Error(`Invalid subject snapshot format: missing room payload for "${roomSummary.roomId}".`);
-    }
-  }
+  // Structural validation lives in the shared, pure validator so the storage-v2
+  // migration applies exactly these rules. The thrown messages are unchanged:
+  // the Phase 0 characterization tests pin them.
+  const snapshot = assertImportableSubjectSnapshot(parsed);
 
   // Phase 4a: migrate from 1.0.0 to 1.1.0 - ensure SM-2 defaults exist on rooms
-  const migrated = dungeon.schemaVersion === '1.0.0' ? migrateToV11(parsed as unknown as SubjectSnapshot) : parsed;
-
-  return migrated as unknown as SubjectSnapshot;
+  return snapshot.dungeon.schemaVersion === '1.0.0' ? migrateToV11(snapshot) : snapshot;
 }

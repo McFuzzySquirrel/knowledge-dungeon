@@ -6,8 +6,17 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 /**
  * Files that must stay renderer-neutral. Nothing under these trees may reach for
  * a rendering engine, directly or transitively through a type.
+ *
+ * The storage-v2 persistence tree is included because plan section 3 of Phase 3
+ * declares it renderer-neutral, and that is a boundary worth enforcing
+ * mechanically rather than by convention: it is the tree the Phase 4 cutover
+ * makes reachable from the application.
  */
-const RENDERER_NEUTRAL_LAYERS = ['src/core/**/*.{ts,tsx}', 'src/application/**/*.{ts,tsx}'];
+const RENDERER_NEUTRAL_LAYERS = [
+  'src/core/**/*.{ts,tsx}',
+  'src/application/**/*.{ts,tsx}',
+  'src/services/persistence/v2/**/*.{ts,tsx}',
+];
 
 /**
  * Renderer packages and renderer trees that are forbidden inside the

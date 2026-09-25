@@ -708,7 +708,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 1 | complete | Add flags, browser tests, accessibility scaffolding, and quality rails. |
 | 1A | complete | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
 | 2 | complete | Extract renderer-neutral application contracts. |
-| 3 | not-started | Build storage-v2 and migration infrastructure. |
+| 3 | complete | Build storage-v2 and migration infrastructure. |
 | 4 | not-started | Cut over storage behind a flag and add local attachments. |
 | 5 | not-started | Deliver full-device backup and restore. |
 | 6 | not-started | Deliver individual subject backup and restore. |
@@ -1431,7 +1431,7 @@ Phases 3 and 9.
 
 ## Phase 3: Storage-v2 Repository Foundation
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Build IndexedDB storage and migration infrastructure without making it the default.
 
 ### Prerequisites
@@ -1498,9 +1498,369 @@ npm test -- tests/unit/fishCollectionService.test.ts
 - Legacy keys remain byte-for-byte untouched.
 - Progression and fish have one canonical representation.
 
-### Rollback
+### Verification evidence
 
-Disable the unreferenced storage-v2 implementation.
+Recorded on 2026-09-25. The status advanced from `verified` to `complete` on
+2026-09-25, when the maintainer accepted the verified checkpoint. Phase 4
+remains `not-started` and requires separate authorization.
+
+#### What was built
+
+- **Archive dependency.** `fflate` `^0.8.3` (MIT, zero dependencies) is the
+  runtime ZIP library; `fake-indexeddb` `^6.2.5` (Apache-2.0) is the test-only
+  IndexedDB shim, because `jsdom` implements no IndexedDB. The selection, the
+  measured size, the license URLs, and the rejected `jszip` and `client-zip`
+  candidates are recorded in the "Phase 3 archive dependency selection" section
+  of ADR `002`. `jszip` was rejected for a dual `MIT OR GPL-3.0-or-later`
+  identifier, four stale dependencies, ~8x the tree-shaken size, and a
+  `new Function` in its shipped bundle; `client-zip` is write-only and cannot
+  read a learner-picked archive.
+- **Storage-v2 tree**, `src/services/persistence/v2/` (~5.9k lines, unreferenced
+  by the app graph): `schema.ts` (store names, the three separate version
+  constants, report models), `database.ts` (open/upgrade, `meta` pointer, clock
+  and id injection), `repository.ts` (transactional stage/validate/activate/
+  rollback/prune), `validation.ts` (per-record validators plus relationship
+  checks with `error`/`warning` severity), `migrations.ts` (plan §7.2 sequence,
+  receipts, activation, rollback), `legacyReader.ts` (read-only, closed key
+  allowlist), `archive.ts` (`fflate/browser` with zip-slip, member, byte, and
+  ratio defenses), `checksum.ts` (canonical JSON plus pure-TypeScript SHA-256).
+- **Renderer-neutral core**: `src/core/validation/persistence/subjectValidation.ts`
+  and `subjectMigration.ts` (one transform, explicit unknown-field policy),
+  `src/core/progression/canonicalProgression.ts` (the single canonical
+  progression), `src/core/fishing/fishingContext.ts` (canonical fish entry and
+  explicit fishing context). `subjectPersistence.ts` and `progressionStore.ts`
+  were refactored onto these with no change to their exported API or observable
+  behavior.
+- **Legacy key allowlist**: 22 entries derived from the Phase 0 inventory,
+  exported as `LEGACY_STORAGE_KEY_ALLOWLIST`, with `LEGACY_KEY_EXCLUSIONS`
+  documenting three deliberate refusals — the test-only
+  `knowledge-dungeon:subjects:index` spelling, and the `kd-subject*` keys that
+  belong to `scripts/capture-screenshots.mjs` rather than production source.
+  The reader is structurally read-only: it takes a `ReadOnlyLegacyStorage` and
+  the tests trap every mutating `Storage` method.
+- **Migration report and external-only attachment report**: codes, counts,
+  severity, version identifiers, opaque ids, and checksums only. No filename,
+  URL, subject name, topic, or note appears in either.
+- **`npm run test:migrations`** was added as `vitest run tests/migrations`. The
+  suite is 12 files / 296 tests.
+
+#### Defects found in review and fixed before verification
+
+The implementation was reviewed twice by `qa-engineer` and once by the
+orchestrator, all against the actual diff and real execution rather than
+completion claims. Six defects were found and fixed:
+
+1. **The live legacy progression key received a wrong `subjectId`.**
+   `cloneDefaultSubjectProgression` returned a record carrying
+   `subjectId: '__legacy__'`, so every subject with no stored record was written
+   with a foreign id inside its own record. Confirmed by running the real store.
+2. **The default write path's persisted shape changed.** `savePersistedBySubject`
+   had begun serializing through the canonical serializer, so
+   `knowledge-dungeon:v1:progression` gained `kind`, `sourceVersion`,
+   `activeSubjectId`, `legacyBucketSubjectId`, and an `extraFields` wrapper. That
+   would have broken the phase's "source revert of unreferenced code" rollback
+   and encroached on Phase 4's dual-write deliverable. The legacy mirror now
+   writes the exact pre-phase v3 shape.
+3. **`sha256Hex` was not SHA-256 for input lengths ≡ 55 (mod 64).** The padding
+   expression added a spare 64-byte block, producing a valid digest of a
+   different message. An independent 0–200 byte sweep against `node:crypto`
+   diverged at 55, 119, and 183. This affected every record checksum, the
+   generation `contentChecksum`, receipt checksums, attachment `contentHash`,
+   and the session `eventId` — and would have invalidated the plan §7.3
+   `attachments/<sha256>` contract. **The gate was green anyway**: the boundary
+   test asserted only the `/^[0-9a-f]{64}$/` shape, and the Web Crypto
+   cross-check used four inputs that all dodged the broken lengths. Fixed to
+   `Math.ceil((len + 9) / 64) * 64`; an independent 0–1000 byte sweep is now
+   clean and the published NIST vectors for `""` and `"abc"` match.
+4. **The store and the migration did not produce one canonical progression.** The
+   migration passed `createId: () => 'migrated-unknown'`, which ignored the
+   prefix and collapsed every unidentified loot and gear item onto a single id.
+   The existing comparison test could not see this because it handed the
+   store's id factory to the migration's normalizer. Fixed to a prefix-honouring
+   per-run counter, with a test that compares the **persisted** migration records
+   to the store's own hydration for all six progression fixtures.
+5. **Five gates passed vacuously** and were repaired: a stage-order test compared
+   an exported constant to a copy of itself; a "no mutating storage method" test
+   handed the migration the trap storage so it never held the real
+   `localStorage`; a fixture constant aliased another constant; a
+   store↔migration comparison shared an id factory; and two tests named
+   "idempotently" each opened a second *fresh* database, which proves
+   determinism rather than idempotency.
+6. **`deleteRecords` over-reported `removed`**, adding `subjects.length` on top
+   of a count that already included it, so the value was inflated by the
+   generation's entire subject count and was non-zero for a no-op delete.
+
+Two further items from QA's list were fixed in the same pass: re-running a
+migration with an already-active `generationId` is now a no-op success rather
+than a false recovery report; an abandoned `staged` generation is reclaimed on
+the next run of the same migration; `putRecords`, `deleteRecords`, and
+`writeMigrationReceipt` commit data and the `meta` descriptor in one
+transaction; and a failure inside staging now reports `stage-records` instead of
+the previous stage.
+
+#### Declared default-behavior change requiring maintainer sign-off
+
+The legacy `knowledge-dungeon:v1:progression` write now **preserves unknown
+app-owned fields**, where the pre-phase build dropped them on every rewrite.
+This is additive and a pre-phase reader ignores the extra keys, but it is a real,
+permanent difference in the learner's progression file. It is required by plan
+§7.3 ("must preserve unknown app-owned fields") and by the known defect that
+current normalization drops unknown fields, so it is kept deliberately rather
+than reverted. QA measured it against a clean `git worktree` of the pre-phase
+`HEAD` across six scenarios: three are byte-identical (fresh subject, room clear,
+v2 hydration) and two differ **only** by the preserved fields
+(`legacyOnlyField`; `qaUnknownField` and `anotherUnknown`). A representative
+fresh-subject payload is byte-identical:
+`{"version":3,"bySubject":{"subject-qa-fresh":{"xpTotal":0,"rank":"Novice","badges":[],"inventory":[],"equippedItems":[],"collectedNotes":[],"streakCount":0,"subjectsMastered":0,"roomsCleared":0,"reviewPasses":0,"artifacts":0,"bossesDefeated":0,"fishCollection":[]}},"crossSubjectAchievements":[]}`.
+`tests/migrations/qaLegacyByteComparison.test.ts` pins all six cases.
+
+#### Commands run and results
+
+Pre-change baseline, then the phase gate, then an independent orchestrator
+re-run of the whole gate:
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | pass, 0 errors 0 warnings |
+| `npm run typecheck` | pass |
+| `npm test` | pass — 55 files / 744 tests (baseline 43 / 448) |
+| `npm run test:migrations` | pass — 12 files / 296 tests |
+| `npm test -- tests/unit/subjectPersistence.test.ts` | pass — 1 file / 4 tests |
+| `npm test -- tests/unit/fishCollectionService.test.ts` | pass — 1 file / 22 tests |
+| `npm test -- tests/contracts` | pass — 7 files / 155 tests |
+| `npm run build:web` | pass |
+| `npm run check:bundle-size` | pass — `Total dist size: 3.92 MB across 105 files` |
+| `npx playwright test tests/e2e/currentBuild.spec.ts` | pass — 12 tests across the four Chromium viewport projects |
+
+The orchestrator ran `lint`, `typecheck`, `test`, `test:migrations`, both focused
+suites, `build:web`, and `check:bundle-size` as one chain with exit code 0.
+
+#### Exit-criteria evidence
+
+- **Legacy fixtures migrate idempotently.** All six progression fixtures and all
+  five valid subject fixtures migrate. Re-running the same `generationId` after
+  activation is a no-op success that does not re-stage, does not steal the
+  pointer from a newer generation, and leaves records, descriptor, and receipt
+  byte-identical. Different-id and triple runs hold, and the previously active
+  generation is retained as `superseded`. The injected `generationId` and `now`
+  are the documented non-idempotent axes; with a fixed clock the generated ids
+  and payload bytes are stable. The generation `contentChecksum` is a function
+  of the injected clock rather than of the source data, because SM-2 defaults,
+  recovery capture times, preference timestamps, and assistance timestamps are
+  all stamped with it; the underlying legacy payload bytes are identical across
+  runs at different times. That is a disclosed limitation, not a data risk.
+- **A failed staged transaction leaves the active generation unchanged.** All six
+  repository-level failure points were injected independently, and each leaves
+  the `activeGeneration` pointer unflipped, **zero** records across all ten
+  generation-scoped stores (verified by raw `getAllKeys`, not through the
+  repository's own read API), an absent descriptor, a byte-identical previous
+  generation, and a subsequent migration that still succeeds. `stageGeneration`
+  is a single transaction spanning all eleven stores; QA mutation-proved the
+  assertion bites by splitting it back into two.
+- **Legacy keys remain byte-for-byte untouched.** A byte-exact comparison over
+  the real `window.localStorage` (every key, exact string, insertion order, and
+  absence of new keys) across a full migration, seeded with corrupt JSON, an
+  empty value, a surrogate-pair value, both quarantine families, a v1 flat
+  payload, and a ghost index entry. A storage that throws on every mutating
+  method, and a spy on the actual `Storage` object's `setItem`/`removeItem`/
+  `clear`, both record zero calls. Re-verified across a failed-then-successful
+  run that exercises the new discard write path.
+- **Progression and fish have one canonical representation.** The migration
+  persists exactly what the store hydrates for all six progression fixtures, with
+  generated ids that are prefix-correct and unique within a record. Fish catalog
+  identity survives deserialize → canonicalize → round trip; `resolveFishCatalogId`
+  was attacked with case-only names, surrounding and non-ASCII whitespace, a
+  `catalogId` that disagrees with the name, an id with no separator, a separator
+  at position 0, an empty name, names that slugify to empty, and an unknown fish,
+  and is deterministic and idempotent in every case. The legacy `FishEntry` stays
+  constructible without a `catalogId` so every existing producer and fixture is
+  unaffected.
+
+#### Gates confirmed beyond the exit criteria
+
+- **Privacy.** A distinctive synthetic marker was planted as the subject name,
+  room topic, note body, attachment filename, and alt text. It never appears in
+  `MigrationReport`, `externalOnlyAttachments`, `LegacyReadReport`,
+  `MigrationReceiptValue`, `GenerationDescriptor`, `ValidationProblem`,
+  `report.recovery`, or `validateGenerationRecords` output. Exact key sets are
+  asserted per report, not merely absence of the marker. Recorded limitation:
+  `StorageV2Error.details` accepts a string, so `toReport()` is safe because
+  every current call site passes only codes, counts, and ids — not because the
+  type prevents a future leak. A stricter code map is a Phase 4 hardening item.
+- **Renderer boundary.** The Phase 2 `no-restricted-imports` rule was extended to
+  `src/services/persistence/v2/**`. It was proven to bite twice with planted
+  probes (a `phaser` value import and a relative `../../../../game/createGame`),
+  both detected and then deleted, so the gate cannot be reported as vacuously
+  green. `src/core/{fishing,progression,validation}` import nothing from
+  `src/ui`, `src/store`, `src/services`, or `src/game`.
+- **Not in the app graph.** An independent breadth-first walk from
+  `src/main.tsx` (84 modules visited) reaches zero storage-v2 modules, and no
+  file under `src/` outside the v2 tree imports one. `fflate` is imported by
+  exactly one file, `archive.ts`, via the explicit `fflate/browser` subpath the
+  ADR records as necessary. The built `dist` contains zero occurrences of twelve
+  storage-v2 and `fflate` markers, including `discardStagedGeneration`,
+  `recomputeDescriptor`, and `mergeEnvelopes`. `DEFAULT_RUNTIME_CONFIG`
+  `storageRepository` is still `'legacy'` and the `vendor-phaser` chunk is still
+  emitted.
+- **Determinism.** Fake timers restricted to `Date`, a `Math.random` spy, and a
+  `fetch` stub that throws all record zero consultations across a full migration;
+  moving the system clock 32 years between two runs produced byte-identical
+  records; a static scan of all nine modules found no clock, randomness, or
+  network use. Note for future maintainers: `vi.useFakeTimers()` **without**
+  `toFake: ['Date']` deadlocks any test touching `fake-indexeddb`.
+- **Hostile archives.** Independently attacked with zip-slip (`../`, `a/../../`,
+  a deep traversal) on both write and a raw-`fflate`-built archive, absolute and
+  UNC and drive-letter paths, backslash separators in three spellings, control
+  characters, an over-long path, `.`, an empty name, duplicates, five
+  `Object.prototype` names, member-count overflow, a 4 MiB ratio bomb rejected
+  three ways, zero-length and non-UTF-8 members, six truncation fractions, random
+  bytes, and a bare end-of-central-directory record. Every hostile input is
+  rejected with a typed error, and a two-member archive whose second member
+  escapes the root yields no partial extraction.
+- **E2E unchanged.** The 12-test current-build suite still passes across
+  `desktop-chromium`, `chromebook`, `tablet`, and `tablet-landscape`, including
+  the non-zero Phaser canvas assertion, the static-only network assertion, and
+  the axe WCAG 2.2 AA scan with the single pre-existing Welcome contrast
+  exception still the only allowed serious finding. No new network, upload,
+  analytics, or telemetry path was introduced.
+
+#### Performance and bundle result
+
+`dist` is **4,111,129 bytes across 105 files**, against the 4,107,377-byte Phase
+2 baseline: **+3,752 bytes (+0.09%)** with the file count unchanged. The delta is
+entirely in `index.js` (+2,463) and `index-legacy.js` (+1,289) and comes from
+the three new core modules the phase mandates — `canonicalProgression.ts`,
+`subjectValidation.ts`, and `subjectMigration.ts` — replacing the in-store
+normalizers. Tree-shaking is working: the storage-v2-only serializer and the
+migration half of the subject validator are provably absent from the bundle.
+This is a declared new baseline. It sits far below the plan §10.2 raw `dist`
+ceiling of 12 MB and far below the 300 KB gzip Welcome budget (the `index` chunk
+is 97.57 kB gzip), and the figure is a **pre-cutover** measurement, not a
+prediction of Phase 4, where the v2 tree and `fflate` enter the app graph for
+the first time. Accessibility, memory, and offline results are unchanged: this
+phase adds no user-facing surface, so the Phase 1 and Phase 1A gates remain the
+evidence.
+
+#### Checkpoint and merge evidence
+
+Recorded on 2026-09-26. The phase was committed and pushed as the explicitly
+authorized checkpoint, opened as pull request #52, and reviewed again by CI.
+
+- Commit `4241a4f` (`feat: add phase 3 storage-v2 repository foundation`) was
+  pushed to `phase-3-storage-v2`. 36 files, +14,384 / −238, working tree clean.
+  `main` was deliberately not written to, because the lint, typecheck, unit,
+  build, viewport, and compatibility gates live on pull requests in this
+  repository.
+- **Pull-request run `36188860682` failed Unit Tests on 5 tests in
+  `tests/migrations/qaHardening.test.ts` and `tests/migrations/qaRoundTwo.test.ts`,
+  all with `TypeError: Failed to execute 'digest' on 'SubtleCrypto': 2nd
+  argument is not instance of ArrayBuffer, Buffer, TypedArray, or DataView`.**
+  Lint and Typecheck passed. This was a **test-helper** defect, not a
+  production defect: the helpers passed `bytes.buffer.slice(...)` to
+  `crypto.subtle.digest`.
+- **Root cause, reproduced rather than assumed.** CI pins **Node 20** in
+  `.github/workflows/ci.yml` while local development runs Node 22. Under jsdom
+  the test realm and Node's crypto realm differ, so `.buffer.slice(...)`
+  produces a cross-realm `ArrayBuffer`. Node 20's `SubtleCrypto` validates its
+  argument with an `instanceof` chain and rejects it; Node 22 accepts the same
+  value. A `node:vm` probe run under both runtimes confirmed exactly that
+  divergence, which is why the suite was green locally and red only in CI.
+- **Fix:** the helpers now pass `new Uint8Array(bytes)`, which copies the
+  view's elements into the current realm, is accepted on Node 20 and Node 22
+  and in every browser, and preserves the slice semantics the "hashes a
+  `Uint8Array` view over its own slice" test depends on. No production code
+  changed. Both call sites and the reference comment were updated; the
+  comment now names the Node 20 versus Node 22 divergence rather than
+  describing it loosely.
+- **Evidence the fix works on the failing runtime:** the full 55-file / 744-test
+  suite was re-run under `node@20` and passed, having failed there before the
+  change, and also passes under the local Node 22.
+- **Environment caveat carried forward:** every local gate in this phase ran on
+  Node 22.22.2, but CI runs Node 20. The two runtimes differ in at least one
+  place that mattered here. A green local gate is therefore not by itself
+  evidence of a green CI run, and any future phase that depends on a Node
+  built-in, Web Crypto, or a cross-realm object type must be verified under
+  Node 20 as well. This is a tooling and verification gap, not a product one.
+- The phase was not merged on a red run. The full result, including the CI
+  outcome of the follow-up commit, is recorded below once the pull request
+  settles.
+
+#### Known limitations and evidence boundaries
+
+- All storage-v2 tests run on `fake-indexeddb` under `jsdom`. Real-browser
+  IndexedDB transaction semantics, cross-tab concurrent migration,
+  `versionchange`/`blocked` upgrade behavior, quota exhaustion during staging,
+  and per-origin `localStorage` key ordering are all unverified. `fake-indexeddb`
+  is single-threaded and more forgiving about transaction auto-commit than
+  Chrome, Firefox, or WebKit. `pruneGenerations` issues `store.delete()` inside a
+  `getAllKeys` `onsuccess` handler, which is the spec-correct pattern but is not
+  browser-verified. These need Playwright evidence against the real build.
+- Automated evidence is Linux with Playwright Chromium across the four existing
+  viewport projects. No new browser, host, device, or assistive-technology claim
+  is made, and the physical-device gates stay assigned to Phases 21 and 23.
+- `archive.ts` is a codec only. It does not define the `.kdbak` or `.kdsubject`
+  member layout, the `manifest.json` schema, import semantics, or identifier
+  remapping; `DataProductManifest` is declared but unused. Phases 5–7 own those.
+- The `attachments` store uses `meta:` / `blob:` record-id prefixes in one store
+  rather than a second store, because the plan fixes the store list.
+- **Deferred to Phase 4** (found, recorded, deliberately not fixed here):
+  migration-report problems tagged `severity: 'error'` do not block activation,
+  so either the severity naming or the blocking rule is misleading;
+  `ProgressionRecordValue` writes one record per subject and copies the full
+  `crossSubjectAchievements` array into each; `onStage` and
+  `forceValidationFailure` are test seams living in production code paths;
+  `discardStagedGeneration` has no "abandoned orphan" concept and its status
+  check is not in the same transaction as its deletes, which is safe single-tab
+  and unsafe cross-tab; the same-`generationId` no-op can report `migrated` with
+  `activated: false` for a generation that is still only `staged`, so a caller
+  reading only `status` could conclude a device is migrated when its data is
+  unreachable; `stageGeneration` only upserts, so a direct repository caller
+  re-staging with a subset leaves a stale record (the migration discards first,
+  so the migration path is unaffected); `describeUnsafeArchivePath('.')` accepts
+  the extraction root; `writeArchive` reports an `Object.prototype` member name
+  as a duplicate (use `Object.hasOwn`); legitimate ZIP directory entries such as
+  `attachments/` are rejected as `empty-segment`, so a `.kdbak` written by
+  another tool would fail to import; `progressionSourceVersions` is hard-coded to
+  `1` regardless of record count; the per-subject `ProgressionRecordValue` is
+  not a fixed point of the canonical normalizer, and
+  `validateProgressionRecord`'s normalizer call discards its result;
+  `LegacyKeyReport.keyId` embeds the subject id for dynamic key families, which
+  is clean in `MigrationReport` today but would leak a subject name in a
+  log-safe report if a `dungeonId` were ever slug-derived from a subject title;
+  and `subjectPersistence.migrateToV11` now takes one `nowIso` for the document
+  where the pre-phase code re-read the clock per room.
+- No migration was run against real learner data and no learner data exists
+  anywhere in the new code, fixtures, reports, or tests. Every fixture is
+  synthetic and self-describing; the only URL is the reserved `example.invalid`
+  host.
+- No user-facing behavior, route, or rendered markup changed. The one declared
+  exception is the unknown-field preservation described above.
+
+#### Files
+
+Created: `src/services/persistence/v2/{schema,database,repository,validation,migrations,legacyReader,archive,checksum}.ts`,
+`src/core/validation/persistence/{subjectValidation,subjectMigration}.ts`,
+`src/core/progression/canonicalProgression.ts`, `src/core/fishing/fishingContext.ts`,
+`tests/migrations/` (12 files + a support helper).
+Modified: `src/services/persistence/subjectPersistence.ts`,
+`src/store/progressionStore.ts`, `src/core/fishing/{fishingTypes,fishCollectionService}.ts`,
+`src/core/validation/persistence/{index,types}.ts`, `eslint.config.js`,
+`package.json`, `package-lock.json`, `docs/adr/002-react-dom-pixijs-rebuild.md`.
+Test-only additions: `fflate` and `fake-indexeddb` dependencies, and the
+`test:migrations` script.
+
+#### Rollback
+
+Disable the unreferenced storage-v2 implementation. Nothing in the app graph
+imports `src/services/persistence/v2/**`, so the rollback is a source revert of
+`schema.ts`, `database.ts`, `repository.ts`, `validation.ts`, `migrations.ts`,
+`legacyReader.ts`, `archive.ts`, and `checksum.ts`, the
+`tests/migrations/` suite, and the `test:migrations` script. The three
+renderer-neutral core modules and the two behavior-preserving refactors stay: the
+live legacy key keeps the pre-phase v3 shape, `VITE_STORAGE_REPOSITORY` remains
+`'legacy'`, and no data is touched. Reverting the core modules as well would
+return `subjectPersistence.ts` and `progressionStore.ts` to their pre-phase
+in-file normalizers, which is the complete rollback for the whole phase.
 
 ### Unlocks
 
