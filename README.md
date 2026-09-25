@@ -167,15 +167,15 @@ smoke coverage, axe and privacy-network scaffolding, intentional
 application/Node/Electron typechecking, CI jobs, and build metadata recording.
 
 Phase 1A, the cross-platform web compatibility rails, is implemented and
-`verified` in the authoritative plan. It adds a machine-readable support matrix,
+`complete` in the authoritative plan. It adds a machine-readable support matrix,
 named Playwright projects for Chromium, Firefox, WebKit, and the Windows Edge
 channel, a bounded cross-engine suite that exercises one recorded production web
 artifact, and staged pull-request and scheduled release-candidate CI lanes. No
 renderer, storage, persistence, media, packaging, or application behavior
 changed, and no new dependency was added. The current Vitest suite is 38 files /
 313 tests. The four representative PR lanes and the complete eight-cell
-release-candidate matrix pass on their declared hosts. Phase 1A is not `complete`
-until the maintainer explicitly accepts the checkpoint.
+release-candidate matrix pass on their declared hosts. The maintainer accepted
+the verified Phase 1A checkpoint on 2026-09-25.
 
 ### Approved web support matrix
 

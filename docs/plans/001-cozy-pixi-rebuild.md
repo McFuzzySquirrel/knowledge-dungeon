@@ -706,7 +706,7 @@ Phase 24 Remove Phaser and legacy renderer
 | --- | --- | --- |
 | 0 | complete | Freeze behavior and legacy compatibility fixtures. |
 | 1 | complete | Add flags, browser tests, accessibility scaffolding, and quality rails. |
-| 1A | verified | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
+| 1A | complete | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
 | 2 | not-started | Extract renderer-neutral application contracts. |
 | 3 | not-started | Build storage-v2 and migration infrastructure. |
 | 4 | not-started | Cut over storage behind a flag and add local attachments. |
@@ -905,7 +905,7 @@ Phase 1A.
 
 ## Phase 1A: Cross-Platform Web Compatibility Rails
 
-**Status:** verified
+**Status:** complete
 **Objective:** Extend the verified Phase 1 quality rails across representative Linux, macOS, and Windows browser environments without changing the renderer, storage architecture, or learner data model.
 
 ### Prerequisites
@@ -964,11 +964,11 @@ npm run test:e2e -- --project=tablet-landscape
 
 Run the common gate.
 
-### Implemented design (status is `verified`; acceptance is still required)
+### Implemented design (status is `complete`)
 
-The implementation and all declared Phase 1A exit criteria are complete. The
-phase is `verified`, not `complete`: it advances to `complete` only after the
-maintainer explicitly accepts this checkpoint. Phase 2 has not started.
+The implementation and all declared Phase 1A exit criteria passed. The maintainer
+explicitly accepted the verified checkpoint on 2026-09-25, so Phase 1A is
+`complete`. Phase 2 remains `not-started` and requires separate authorization.
 
 - **Machine-readable matrix.** `tests/e2e/support-matrix.ts` is the single source
   for the approved web support dimensions. Host operating system, browser engine,
@@ -1155,7 +1155,8 @@ Recorded on 2026-09-25:
   PR lanes and all eight release-candidate cells passed on their declared hosts,
   each complete CI run used and verified one shared production artifact, evidence
   remained sanitized and synthetic-only, and no Electron package or installer was
-  required. Phase 1A is `verified` pending explicit maintainer acceptance.
+  required. The maintainer accepted the verified checkpoint on 2026-09-25, so
+  Phase 1A is `complete`.
 
 ### Exit criteria
 

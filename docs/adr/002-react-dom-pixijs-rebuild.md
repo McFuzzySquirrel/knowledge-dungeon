@@ -335,8 +335,8 @@ intentional application/Node/Electron typechecking, CI jobs, and build metadata
 recording. Phase 1A has implemented the staged cross-platform web compatibility
 rails described above. Its representative PR lanes and complete eight-cell
 release-candidate matrix pass on their declared hosts against one recorded
-artifact per CI run. Its status in the authoritative plan is `verified`; it is
-not `complete` until the maintainer explicitly accepts the checkpoint.
+artifact per CI run. The maintainer accepted the verified checkpoint on
+2026-09-25, so its status in the authoritative plan is `complete`.
 
 The rebuild still does not implement renderer-neutral contracts, storage-v2,
 migrations, CC0 tooling, the full accessibility and responsive audit, PixiJS,
