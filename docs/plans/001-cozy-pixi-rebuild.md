@@ -1072,7 +1072,9 @@ results against their shared artifacts.
   local Linux host they are explicitly skipped and logged as not selected evidence
   rather than reporting a pass. In CI, a host that does not match the approved lane
   fails, and an unavailable browser build on an approved host fails the lane.
-- No CI workflow has been executed yet, so no remote runner evidence exists.
+- The four representative pull-request lanes passed in GitHub Actions run
+  `36151192587` on PR #49. The full eight-cell release-candidate workflow has
+  not run because its workflow file is not yet present on the default branch.
 
 ### Verification evidence
 
@@ -1103,19 +1105,32 @@ Recorded on 2026-09-25:
   static-network violations, no WebSocket attempts, a non-zero Phaser WebGL
   canvas, the Phaser chunk observed, and no Pixi chunk. One known legacy Google
   Font stylesheet request was blocked and recorded only as a sanitized category.
+- GitHub Actions PR run `36151192587` for PR #49 passed lint, typecheck, unit tests,
+  web build/bundle, the preserved Chromium viewport suite, and all four required
+  representative compatibility lanes. Sanitized evidence recorded:
+  Linux x64 on Ubuntu 24 with Chromium 153.0.8010.12; Linux x64 with Firefox
+  155.0; macOS arm64 on the macOS 26 runner image with Playwright WebKit 26.6;
+  and Windows x64 on the Windows runner image with Microsoft Edge 154.0.4258.37.
+  Every lane verified and served the same production artifact identity
+  `sha256-tree-v1:5322e2e0b1908a770334f1356c2207ec9160c1c93da096b38e56376dd3e8bc69`,
+  observed the default Phaser renderer, recorded no network-policy violations or
+  WebSocket attempts, and classified the runner as emulated rather than physical.
+  WebKit remained engine evidence rather than Safari certification, and the Edge
+  user agent contained the expected branded Edge token.
 - Manifest integrity, failure-path privacy, and matrix/workflow contract tests
   passed within the full 313-test suite. The manifest checks cover modified,
   added, removed, renamed, malformed, duplicate, invalid-path, digest, count,
   entrypoint, missing-build, and symlink cases using isolated temporary data.
 - No migration, persistence, learner-data, renderer, visual, media, feature-flag,
   or application behavior changed. No dependency, Electron package/installer,
-  commit, push, deployment, analytics, telemetry, or upload was introduced.
-- **Blocker:** no required remote CI lane has run. Passing the local implementation
-  and common gates cannot satisfy the Phase 1A exit criteria until the four PR
-  compatibility lanes and all eight release-candidate lanes pass on their declared
-  hosts, record the same artifact identity within each complete workflow run, and
-  upload their sanitized evidence. Commit and push authorization is still required
-  before those workflows can execute.
+  deployment, analytics, telemetry, or upload was introduced. Changes were
+  committed and pushed only as the explicitly authorized PR #49 checkpoint.
+- **Blocker:** the four representative PR compatibility lanes now pass, but the
+  full eight-cell release-candidate matrix has not run. The release workflow must
+  first exist on the default branch, then every cell must pass on its declared host,
+  record the same artifact identity within that workflow run, and upload sanitized
+  evidence. PR merge, default-branch workflow dispatch, and any resulting Pages
+  deployment still require explicit user authorization.
 
 ### Exit criteria
 

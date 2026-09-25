@@ -174,8 +174,9 @@ suite that exercises one recorded production web artifact, and staged
 pull-request and scheduled release-candidate CI lanes. No renderer, storage,
 persistence, media, packaging, or application behavior changed, and no new
 dependency was added. The current Vitest suite is 38 files / 313 tests. Local
-Linux Chromium and Firefox evidence passes, but no GitHub Actions workflow has
-run yet, so Phase 1A is not `verified`.
+Linux Chromium and Firefox evidence passes, and PR #49's four representative
+GitHub Actions lanes pass. The full eight-cell release-candidate matrix has not
+run from the default branch, so Phase 1A remains `blocked`, not `verified`.
 
 ### Approved web support matrix
 

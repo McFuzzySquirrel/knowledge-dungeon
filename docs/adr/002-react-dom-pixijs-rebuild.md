@@ -333,8 +333,9 @@ verified and accepted on 2026-09-25 and added typed feature-flag contracts,
 Linux/Chromium Playwright coverage, axe and privacy-network scaffolding,
 intentional application/Node/Electron typechecking, CI jobs, and build metadata
 recording. Phase 1A has implemented the staged cross-platform web compatibility
-rails described above. Local Linux Chromium and Firefox verification passes, but
-required remote macOS, Windows, Edge, and release-candidate lanes have not run;
+rails described above. Local Linux Chromium and Firefox verification and PR #49's
+representative Linux Chromium, Linux Firefox, macOS WebKit, and Windows Edge lanes
+pass. The full release-candidate matrix has not run from the default branch, so
 its status in the authoritative plan is `blocked`, not `verified`.
 
 The rebuild still does not implement renderer-neutral contracts, storage-v2,
