@@ -1,0 +1,19 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-invalid-missing-schema-version",
+  "dungeon": {
+    "dungeonId": "subject-phase0-invalid-schema-missing",
+    "subjectName": "Synthetic Invalid Missing Schema Subject",
+    "rooms": [
+      {
+        "roomId": "room-phase0-invalid-schema-missing-root"
+      }
+    ]
+  },
+  "rooms": {
+    "room-phase0-invalid-schema-missing-root": {
+      "roomId": "room-phase0-invalid-schema-missing-root",
+      "validationState": {}
+    }
+  }
+}

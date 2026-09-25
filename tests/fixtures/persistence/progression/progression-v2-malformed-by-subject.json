@@ -1,0 +1,12 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "progression-v2-malformed-by-subject",
+  "version": 2,
+  "bySubject": null,
+  "xpTotal": 325,
+  "rank": "Novice",
+  "badges": [
+    "synthetic-v2-fallback-badge"
+  ],
+  "v2MalformedField": "current-loader-falls-back-to-flat-normalization"
+}

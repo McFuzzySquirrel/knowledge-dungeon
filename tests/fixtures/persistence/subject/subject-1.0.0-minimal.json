@@ -1,0 +1,23 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-1.0.0-minimal",
+  "dungeon": {
+    "schemaVersion": "1.0.0",
+    "dungeonId": "subject-phase0-v100-minimal",
+    "subjectName": "Synthetic Phase 0 Minimal Subject",
+    "rootRoomId": "room-phase0-v100-minimal-root",
+    "rooms": [
+      {
+        "roomId": "room-phase0-v100-minimal-root",
+        "topic": "Synthetic Root Topic",
+        "status": "Created"
+      }
+    ]
+  },
+  "rooms": {
+    "room-phase0-v100-minimal-root": {
+      "roomId": "room-phase0-v100-minimal-root",
+      "validationState": {}
+    }
+  }
+}

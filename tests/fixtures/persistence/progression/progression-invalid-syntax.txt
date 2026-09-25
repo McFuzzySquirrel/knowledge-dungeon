@@ -1,0 +1,1 @@
+{"fixtureFormat":"knowledge-dungeon-phase-0-synthetic","fixtureVersion":"progression-invalid-syntax","version":3,"bySubject":{

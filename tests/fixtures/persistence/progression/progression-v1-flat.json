@@ -1,0 +1,44 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "progression-v1-flat",
+  "xpTotal": 315,
+  "rank": "Novice",
+  "badges": [
+    "synthetic-v1-badge",
+    7,
+    null
+  ],
+  "inventory": [
+    {
+      "id": "loot-phase0-v1-synthetic",
+      "name": "Synthetic Legacy Relic",
+      "description": "A synthetic item used only for compatibility characterization.",
+      "rarity": "rare",
+      "acquiredAt": "2026-02-01T03:04:05.000Z"
+    }
+  ],
+  "collectedNotes": [
+    {
+      "noteId": "subject-phase0-v1:room-phase0-v1-root",
+      "dungeonId": "subject-phase0-v1",
+      "roomId": "room-phase0-v1-root",
+      "topic": "Synthetic V1 Topic",
+      "floorLabel": "Synthetic Floor",
+      "artifactPreview": "Synthetic preview",
+      "noteMarkdown": "Synthetic note",
+      "artifactMarkdown": "Synthetic artifact",
+      "collectedAt": "2026-02-01T04:00:00.000Z"
+    }
+  ],
+  "fishCollection": [
+    {
+      "id": "fish-phase0-v1-synthetic",
+      "name": "Synthetic V1 Fish",
+      "rarity": "common",
+      "subjectId": "subject-phase0-v1",
+      "subjectName": "Synthetic V1 Subject",
+      "caughtAt": "2026-02-01T05:00:00.000Z"
+    }
+  ],
+  "legacyOnlyField": "ignored-by-current-normalizer"
+}

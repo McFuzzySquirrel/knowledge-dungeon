@@ -1,0 +1,152 @@
+{
+  "fixtureFormat": "knowledge-dungeon-phase-0-synthetic",
+  "fixtureVersion": "subject-1.1.0-full-unknown-fields",
+  "unknownTopLevelField": {
+    "marker": "preserve-this-synthetic-top-level-field"
+  },
+  "dungeon": {
+    "schemaVersion": "1.1.0",
+    "dungeonId": "subject-phase0-v110-full",
+    "subjectName": "Synthetic Phase 0 Full 1.1 Subject",
+    "createdAt": "2026-01-04T03:04:05.000Z",
+    "updatedAt": "2026-01-04T03:09:05.000Z",
+    "phaseState": "ArchaeologistActive",
+    "rootRoomId": "room-phase0-v110-full-root",
+    "rooms": [
+      {
+        "roomId": "room-phase0-v110-full-root",
+        "topic": "Synthetic Root Topic",
+        "status": "ArtifactCollected"
+      },
+      {
+        "roomId": "room-phase0-v110-full-branch",
+        "topic": "Synthetic Branch Topic",
+        "status": "ArtifactCollected"
+      }
+    ],
+    "edges": [
+      {
+        "fromRoomId": "room-phase0-v110-full-root",
+        "toRoomId": "room-phase0-v110-full-branch",
+        "relationType": "subtopic",
+        "createdAt": "2026-01-04T03:04:05.000Z",
+        "createdByPhase": "Creator",
+        "fixtureEdgeField": "preserve-this-synthetic-edge-field"
+      },
+      {
+        "fromRoomId": "room-phase0-v110-full-branch",
+        "toRoomId": "room-phase0-v110-full-root",
+        "relationType": "related",
+        "createdAt": "2026-01-04T03:05:05.000Z",
+        "createdByPhase": "Scribe"
+      }
+    ],
+    "progression": {
+      "xpTotal": 372,
+      "rank": "Scholar",
+      "badges": ["synthetic-v11-badge"],
+      "fishCollection": [
+        {
+          "id": "fish-phase0-synthetic-v11-1",
+          "name": "Synthetic Rare Fish",
+          "rarity": "rare",
+          "subjectId": "subject-phase0-v110-full",
+          "subjectName": "Synthetic Phase 0 Full 1.1 Subject",
+          "caughtAt": "2026-01-04T04:00:00.000Z"
+        }
+      ],
+      "fixtureProgressionField": "preserve-this-synthetic-progression-field"
+    },
+    "biome": "crystal-caverns",
+    "tagIndex": {
+      "synthetic-tag": [
+        "room-phase0-v110-full-root",
+        "room-phase0-v110-full-branch"
+      ]
+    },
+    "fixtureDungeonField": "preserve-this-synthetic-dungeon-field"
+  },
+  "rooms": {
+    "room-phase0-v110-full-root": {
+      "roomId": "room-phase0-v110-full-root",
+      "topic": "Synthetic Root Topic",
+      "createdAt": "2026-01-04T03:04:05.000Z",
+      "updatedAt": "2026-01-04T03:06:05.000Z",
+      "state": "ArtifactCollected",
+      "notePath": "rooms/room-phase0-v110-full-root/notes.md",
+      "artifactPath": "rooms/room-phase0-v110-full-root/artifact.md",
+      "noteText": "Summary\nSynthetic root note for current schema.\n\nKey Points\n- Current field retained.\n\nRecall Question\nWhat is retained?",
+      "artifactMarkdown": "# Synthetic Current Artifact\n\nSynthetic artifact text only.",
+      "validationState": {
+        "wordCount": 17,
+        "requiredSectionsPresent": true,
+        "manualConfirmed": true,
+        "criterionScores": {
+          "sectionCompleteness": 5,
+          "conceptTermCoverage": 5,
+          "linkReferences": 5,
+          "recallQuestionQuality": 5,
+          "clarityReadability": 5
+        },
+        "failedChecks": [],
+        "qualityBonus": 5,
+        "finalPass": true,
+        "fixtureValidationField": "preserve-this-synthetic-validation-field"
+      },
+      "reviewPassCount": 2,
+      "attachments": [
+        {
+          "attachmentId": "attachment-phase0-synthetic-local",
+          "sourceType": "local",
+          "fileName": "phase0-synthetic-local.svg",
+          "mimeType": "image/svg+xml",
+          "relativePath": "attachments/phase0-synthetic-local.svg",
+          "altText": "Synthetic local fixture image",
+          "addedAt": "2026-01-04T03:07:05.000Z",
+          "fixtureAttachmentField": "preserve-this-synthetic-attachment-field"
+        }
+      ],
+      "sm2QualityResponse": 4,
+      "sm2EaseFactor": 2.6,
+      "sm2IntervalDays": 8,
+      "sm2NextReviewDate": "2026-01-12T03:04:05.000Z",
+      "sm2ConsecutiveCorrect": 3,
+      "tags": ["synthetic-tag"],
+      "fixtureRoomField": "preserve-this-synthetic-room-field"
+    },
+    "room-phase0-v110-full-branch": {
+      "roomId": "room-phase0-v110-full-branch",
+      "topic": "Synthetic Branch Topic",
+      "createdAt": "2026-01-04T03:04:05.000Z",
+      "updatedAt": "2026-01-04T03:08:05.000Z",
+      "state": "ArtifactCollected",
+      "notePath": "rooms/room-phase0-v110-full-branch/notes.md",
+      "artifactPath": "rooms/room-phase0-v110-full-branch/artifact.md",
+      "noteText": "Summary\nSynthetic branch note.\n\nKey Points\n- Branch retained.\n\nRecall Question\nWhat is a branch?",
+      "artifactMarkdown": "# Synthetic Branch Artifact\n\nSynthetic branch text only.",
+      "validationState": {
+        "wordCount": 14,
+        "requiredSectionsPresent": true,
+        "manualConfirmed": true,
+        "criterionScores": {
+          "sectionCompleteness": 5,
+          "conceptTermCoverage": 4,
+          "linkReferences": 4,
+          "recallQuestionQuality": 4,
+          "clarityReadability": 5
+        },
+        "failedChecks": [],
+        "qualityBonus": 4,
+        "finalPass": true
+      },
+      "reviewPassCount": 1,
+      "attachments": [],
+      "sm2QualityResponse": 3,
+      "sm2EaseFactor": 2.5,
+      "sm2IntervalDays": 3,
+      "sm2NextReviewDate": "2026-01-07T03:04:05.000Z",
+      "sm2ConsecutiveCorrect": 1,
+      "tags": ["synthetic-tag"]
+    }
+  }
+}

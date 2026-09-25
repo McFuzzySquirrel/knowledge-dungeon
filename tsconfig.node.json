@@ -3,10 +3,19 @@
     "composite": true,
     "noEmit": true,
     "skipLibCheck": true,
+    "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "allowSyntheticDefaultImports": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "eslint.config.js", "vitest.setup.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "eslint.config.js",
+    "vitest.setup.ts",
+    "src/config/runtimeConfig.ts",
+    "tests/e2e/compat-evidence.ts",
+    "tests/e2e/support-matrix.ts"
+  ]
 }

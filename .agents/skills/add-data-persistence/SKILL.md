@@ -1,173 +1,91 @@
 ---
 name: add-data-persistence
-description: >
-  Adds new data fields or entities to Knowledge Dungeon's persistence layer,
-  covering type definitions, store updates, save/load logic, backward
-  compatibility, and test coverage.
+description: Adds or migrates Knowledge Dungeon data across storage-v2 generations, IndexedDB repositories, local attachments, backup products, statistics, and backward-compatible subject schemas.
 ---
 
-# Skill: Add Data Persistence
+# Add Data Persistence
 
-Extends the persistence layer with new data fields or entities, ensuring they survive save/load cycles across both localStorage (web) and Electron filesystem (desktop) backends.
-
----
+Use this skill for any new persisted field, entity, migration, attachment, backup, statistics record, or assistance record.
 
 ## Process
 
-### Step 1: Define or Extend Types
+### 1. Define the contract
 
-Add the new fields to the appropriate type definition in `src/core/validation/persistence/types.ts`:
+Identify whether the data belongs in the subject snapshot, progression, sessions, preferences, shortcuts, assistance, attachments, custom sprites, recovery, or a product archive. Add a canonical type with a stable version and explicit ownership.
 
-```typescript
-export interface RoomMetadata {
-  // ... existing fields
-  /** New field - add JSDoc comment */
-  readonly newField?: string; // Optional = backward compatible
-}
-```
+Keep subject schema `1.1.0` compatibility separate from storage-generation and backup-product versions.
 
-Or create a new entity type if adding a completely new data category:
+### 2. Choose the repository boundary
 
-```typescript
-export interface NewEntity {
-  id: string;
-  subjectId: string;
-  // ... fields
-}
-```
+Use the storage-v2 repository for the redesigned application. It must support:
 
-**Important:** New fields should be optional (`?`) or have default values to maintain backward compatibility with existing saved data.
+- IndexedDB generations
+- An active-generation pointer
+- Explicit asynchronous hydration
+- Transactional writes
+- Checksums and validation
+- Migration receipts
+- Rollback generations
+- Legacy reads during the compatibility window
 
-### Step 2: Update Defaults
+Do not add a renderer import to persistence or domain code.
 
-Update the factory/defaults functions so the new field is initialized. Default values are set in three locations - update all that apply:
+### 3. Preserve compatibility
 
-1. **`src/core/validation/persistence/types.ts`** → `createDefaultRoomMetadata()` - per-room defaults
-2. **`src/core/graph/graphDomain.ts`** → `createRootDungeon()` - initial subject creation defaults
-3. **`src/store/subjectStore.ts`** → hydration/reconstruction logic - fallback when loading saved data
+Every migration must be:
 
-```typescript
-// In createDefaultRoomMetadata():
-export function createDefaultRoomMetadata(): RoomMetadata {
-  return {
-    // ... existing defaults
-    newField: 'default-value',
-  };
-}
-```
+- Versioned
+- Idempotent
+- Validated before activation
+- Non-destructive until an explicit cleanup phase
+- Covered by legacy fixtures
+- Safe to retry after interruption
 
-### Step 3: Update the Zustand Store
+Subject schema `1.0.0` data must migrate to `1.1.0`. Progression versions 1, 2, and 3 must normalize to one canonical representation. Preserve unknown app-owned fields and recovery records.
 
-Add the field to the relevant Zustand store in `src/store/`:
+### 4. Handle local attachments
 
-```typescript
-// In subjectStore.ts - add action to set the new field
-setNewField: (roomId: string, value: string) =>
-  set((state) => ({
-    rooms: {
-      ...state.rooms,
-      [roomId]: {
-        ...state.rooms[roomId],
-        newField: value,
-      },
-    },
-  })),
-```
+Store web image bytes in IndexedDB with checksums. Do not upload redesigned-app attachments to `/api/upload`. Preserve external URLs as external content and disclose when their bytes are not available for a lossless backup.
 
-For new entities, create a new slice in the store or a new sub-map.
+### 5. Keep writes idempotent
 
-### Step 4: Ensure Persistence Round-Trip
+Use stable event or entity IDs for rewards, fish catches, review passes, and statistics events. A retry, React StrictMode run, reload, or interrupted transaction must not duplicate progression.
 
-Verify that the new field survives save/load:
+### 6. Support data products
 
-1. The field is included in the `SubjectSnapshot` (the JSON that gets serialized)
-2. The `subjectStore` hydration logic restores the field on load
-3. The `createDefault*` function provides a fallback if the field is missing from old data
+When the active phase requires them, implement:
 
-```typescript
-// In the hydration/reconstruction function:
-const restored: RoomMetadata = {
-  ...createDefaultRoomMetadata(),
-  ...savedData,
-  // Explicit restoration for complex fields:
-  newField: savedData.newField ?? 'default-value',
-};
-```
+- Full-device `.kdbak` backup with all available app-owned state and attachments
+- Subject `.kdsubject` backup with associated learner state
+- Blank `.kdtemplate` with graph structure only and fresh IDs
 
-### Step 5: Test the Persistence Round-Trip
+Imports stage a new generation, validate completely, and never partially overwrite the active generation. Require an explicit copy or replace policy for collisions.
 
-Add or update tests in `tests/unit/subjectPersistence.test.ts`:
+### 7. Test the lifecycle
 
-```typescript
-it('persists and restores newField', () => {
-  const subject = createTestSubject();
-  subject.rooms['room-1'].newField = 'test-value';
-  persistence.save(subject);
-  const loaded = persistence.load(subject.id);
-  expect(loaded.rooms['room-1'].newField).toBe('test-value');
-});
+Add tests for:
 
-it('defaults newField for legacy data', () => {
-  const legacyData = { /* minimal subject without newField */ };
-  persistence.import(legacyData);
-  const loaded = persistence.load(legacyData.id);
-  expect(loaded.rooms['room-1'].newField).toBe('default-value');
-});
-```
-
-### Step 6: Update Data Integrity Checks
-
-If the field has validation requirements, add checks in the appropriate location:
-
-- **Per-room validation** → `src/core/graph/graphDomain.ts` → `validateRoom()` function
-- **Subject-wide validation** → `src/services/persistence/subjectPersistence.ts` → `validateSubjectSnapshot()` function
-- **Store-level guard** → `src/store/subjectStore.ts` → setter action before calling `set()`
-
-```typescript
-// Example: per-room validation in validateRoom()
-if (room.newField !== undefined && room.newField.length > 100) {
-  return { valid: false, error: 'newField exceeds maximum length (100 chars)' };
-}
-```
-
----
-
-## Output Format
-
-The persistence change should produce:
-- Updated type definitions with backward-compatible new fields
-- Updated Zustand store with setter actions
-- Save/load round-trip that includes the new data
-- Default value handling for legacy saved data
-- Unit tests for persistence and backward compatibility
-
----
+- Save and reload
+- Legacy defaulting
+- Migration success and failure
+- Transaction rollback
+- Attachment checksum and external-only handling
+- Full, subject, and template round trips
+- Corrupt archive rejection
+- Copy and replace ID behavior
+- Statistics and assistance restoration
+- Browser and legacy compatibility paths
 
 ## Validation
 
-- [ ] `npm run typecheck` - no type errors
-- [ ] `npm run lint` - no lint errors
-- [ ] `npm test -- --run` - existing tests pass + new tests pass
-- [ ] Manual test: create subject → add data → refresh page → verify data restored
-- [ ] Manual test: import legacy JSON (without new field) → verify default value applied
-- [ ] If Electron: test save/load in desktop build
+Run the active phase's migration and data tests plus:
 
----
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build:web
+npm run check:bundle-size
+```
 
-## Gotchas
-
-- localStorage has a ~5–10MB limit - if the new field stores large data (e.g., base64 images), use the attachment system instead of inline storage
-- The `SubjectSnapshot` JSON is the persistence contract - adding a field to `RoomMetadata` will automatically include it in the snapshot if the store is serialized correctly
-- Legacy data WITHOUT the new field MUST still load without errors - always use `??` default or optional chaining
-- If the new field needs to be indexed or searchable, add it to the subject index in `subjectPersistence.ts`
-- The Electron filesystem backend saves the entire `SubjectSnapshot` as a single JSON file - no special handling needed for new fields
-- If a new field MUST be present (not optional), you need a data migration. Add a version check in `subjectPersistence.ts` that detects the old schema version and applies the migration on load. Never delete old fields - soft-deprecate with `@deprecated` JSDoc tags
-
----
-
-## Reference
-
-See [docs/PRD.md](../../../docs/PRD.md) for the full specification:
-- **Section 8.13** - Data persistence requirements (DP-01 through DP-07)
-- **Section 10 - Data Integrity & Error Recovery** (DR-01 through DR-07)
-- **Section 8.1** - Subject management (SM-01 through SM-07, import/export)
+Verify no automatic upload, analytics, telemetry, or remote configuration is introduced.
