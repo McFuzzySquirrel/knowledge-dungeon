@@ -343,9 +343,11 @@ describe('staged pull-request compatibility lanes (ci.yml)', () => {
     expect(occurrences(ciWorkflow, SHARED_ARTIFACT_UPLOAD_STEP)).toBe(1);
 
     expectLaneJobConsumesSharedArtifact('browser-smoke', browserSmokeText(), BUILD_JOB_ID);
+    const compatibilityJob = ciJobs.get('compatibility-pr') ?? '';
+    expect(compatibilityJob).toContain('runs-on: ${{ matrix.runs_on }}');
     expectLaneJobConsumesSharedArtifact(
       'compatibility-pr',
-      ciJobs.get('compatibility-pr'),
+      compatibilityJob,
       BUILD_JOB_ID,
     );
 
