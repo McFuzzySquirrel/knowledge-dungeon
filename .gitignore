@@ -16,3 +16,10 @@ data/
 # Allow source-code data files (but keep runtime data/ excluded)
 !src/data/
 public/assets/sprite-manifest.json
+
+# Local opencode tool and plugin config is session-specific, not project files.
+# Only the top level is ignored: the specialist definitions in
+# .opencode/agents/ are tracked project files and must stay in the repository.
+.opencode/*.json
+.opencode/*.jsonc
+.opencode/*.log
