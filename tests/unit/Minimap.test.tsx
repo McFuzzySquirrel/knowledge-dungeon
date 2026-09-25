@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { Minimap } from '@/ui/components/Minimap';
-import type { DungeonMap } from '@/game/systems/dungeonTypes';
+import type { DungeonMap } from '@/core/layout/dungeonTypes';
 
 const dungeonMap: DungeonMap = {
   seed: 'test-seed',

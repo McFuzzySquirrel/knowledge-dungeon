@@ -5,6 +5,47 @@
  */
 import { create } from 'zustand';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
+import type {
+  StudyFlowPhase,
+  StudyFlowQuestStep,
+  StudyFlowScreen,
+} from '@/application/studyFlow';
+
+/**
+ * Compile-time drift guard: the renderer-neutral mirrors of the session unions in
+ * `src/application/studyFlow.ts` (the application layer must not import the
+ * store) have to stay exactly in sync with the types below.
+ *
+ * `AssertTrue<T extends true>` makes the constraint real: when either side of a
+ * mirrored pair gains or loses a member the inline conditional below resolves to
+ * `false`, which does not satisfy the constraint, so `npm run typecheck` fails
+ * here. A plain alias whose body resolved to `never` would be a legal declaration
+ * and enforce nothing. Each conditional is written inline (not through a generic
+ * helper) so TypeScript resolves it at the declaration site instead of deferring
+ * it, which would reject the correct-parity case too.
+ */
+type AssertTrue<T extends true> = T;
+export type SessionUnionParity = AssertTrue<
+  [StudyFlowPhase] extends [GamePhase]
+    ? [GamePhase] extends [StudyFlowPhase]
+      ? true
+      : false
+    : false
+> &
+  AssertTrue<
+    [StudyFlowScreen] extends [AppScreen]
+      ? [AppScreen] extends [StudyFlowScreen]
+        ? true
+        : false
+      : false
+  > &
+  AssertTrue<
+    [StudyFlowQuestStep] extends [QuestStep]
+      ? [QuestStep] extends [StudyFlowQuestStep]
+        ? true
+        : false
+      : false
+  >;
 
 export type GamePhase = 'creator' | 'scribe' | 'archaeologist';
 export type AppScreen = 'welcome' | 'village' | 'game';

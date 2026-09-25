@@ -4,11 +4,11 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
-import { createVillageGame } from '@/game/createVillageGame';
-import type { VillageSceneEvents } from '@/game/scenes/VillageScene';
-import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots, getFishingPondPortalMap } from '@/data/villageLayout';
+import { createVillageGame, type PhaserVillageRenderer, type VillageSceneEvents } from '@/game/createVillageGame';
+import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
 import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
-import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
+import type { FishingWorldModel, VillageWorldModel } from '@/application/contracts/world';
+import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/core/biomes';
 import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 import { GAME_GUIDE_MARKDOWN } from '@/data/gameGuide';
@@ -18,10 +18,16 @@ import { computeSessionStats } from '@/services/sessionTracker';
 import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
 import { SettingsModal } from '@/ui/components/SettingsModal';
 import { FishingRecallModal } from '@/ui/components/FishingRecallModal';
-import { pullRecallQuestion, getClearedRooms } from '@/game/systems/fishingMechanics';
+import { pullRecallQuestion, getClearedRooms } from '@/core/fishing/fishingMechanics';
 import type { SelfCheckPrompt } from '@/core/review/types';
-import type { FishRarity } from '@/game/systems/fishingTypes';
+import type { FishRarity } from '@/core/fishing/fishingTypes';
 import { FishStandPanel } from '@/ui/components/FishStandPanel';
+import {
+  createStudyFlowController,
+  type StudyFlowController,
+  type StudyFlowFishCaught,
+  type StudyFlowVillageInfoPanel,
+} from '@/application/studyFlow';
 
 interface SubjectSummary {
   id: string;
@@ -53,15 +59,10 @@ export function VillageScreen(): JSX.Element {
   const sessionStats = useMemo(() => computeSessionStats(), []);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const gameRef = useRef<Phaser.Game | null>(null);
-  const sceneRef = useRef<VillageSceneHandle | null>(null);
+  const rendererRef = useRef<PhaserVillageRenderer | null>(null);
 
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
-  const [infoPanel, setInfoPanel] = useState<{
-    type: 'dungeon' | 'keeper' | 'guild' | 'training' | 'trophy' | 'signpost' | 'waysign' | 'quest-board' | 'library' | 'workshop' | 'fountain' | 'fishing-pond' | 'fish-stand';
-    structureId: string;
-    subject?: SubjectSummary;
-  } | null>(null);
+  const [infoPanel, setInfoPanel] = useState<StudyFlowVillageInfoPanel | null>(null);
   const [keeperDialogue, setKeeperDialogue] = useState<string | null>(null);
   const [, setKeeperDialogueIndex] = useState(0);
   const [activeNpcId, setActiveNpcId] = useState<string | null>(null);
@@ -127,54 +128,6 @@ export function VillageScreen(): JSX.Element {
     }
     prevInfoPanelTypeRef.current = infoPanel?.type ?? null;
   }, [infoPanel, fishingHintVisible]);
-
-  const handleStartFishing = useCallback((pondId: string) => {
-    const game = gameRef.current;
-    if (!game) return;
-    setInfoPanel(null);
-    setFishCaughtData(null);
-    setShowRecallModal(false);
-    setRecallQuestionData(null);
-
-    // Compute hasClearedRooms for the nearest dungeon portal
-    const pondPortalMap = getFishingPondPortalMap();
-    const nearestPortal = pondPortalMap[pondId];
-    let hasClearedRooms = true; // default: allow fishing
-
-    if (nearestPortal) {
-      const slots = getDungeonPortalSlots();
-      const slotIndex = slots.findIndex(
-        (s) => s.gridX === nearestPortal.gridX && s.gridY === nearestPortal.gridY,
-      );
-      if (slotIndex >= 0) {
-        const currentSubjects = subjectsRef.current;
-        if (slotIndex < currentSubjects.length) {
-          hasClearedRooms = currentSubjects[slotIndex].clearedRoomCount > 0;
-        }
-      }
-    }
-
-    game.scene.getScene('VillageScene')?.scene.sleep();
-    game.scene.start('FishingScene', {
-      callbacks: {
-        onFishCaught: (data: { fishName: string; rarity: string; catalogId: string; description: string }) => {
-          setFishCaughtData(data);
-        },
-        onReturnToVillage: () => {
-          setTimeout(() => {
-            const g = gameRef.current;
-            if (g) {
-              g.scene.stop('FishingScene');
-              g.scene.getScene('VillageScene')?.scene.wake();
-            }
-          }, 0);
-        },
-        onReady: () => {},
-      },
-      playerClass: selectedClass ?? 'scholar',
-      hasClearedRooms,
-    });
-  }, [selectedClass]);
 
   const addFishToCollection = useProgressionStore((s) => s.addFish);
 
@@ -292,13 +245,144 @@ export function VillageScreen(): JSX.Element {
     }));
   }, [subjects]);
 
-  // Ref-based callbacks: Phaser captures the ref, always reads fresh values
+  // Ref-based callbacks: the world captures the ref, always reads fresh values
   const subjectsRef = useRef(subjects);
   subjectsRef.current = subjects;
-  const selectedClassRef = useRef(selectedClass);
-  selectedClassRef.current = selectedClass;
   const dynamicStructuresRef = useRef(dynamicStructures);
   dynamicStructuresRef.current = dynamicStructures;
+
+  // The shared renderer-neutral learning flow. Every dependency below reads
+  // live state through a ref or a store getter, so the controller is created
+  // once and the scene callbacks below always see fresh village content.
+  const flowRef = useRef<StudyFlowController | null>(null);
+  if (flowRef.current === null) {
+    flowRef.current = createStudyFlowController({
+      store: {
+        getSnapshot: () => useSubjectStore.getState().snapshot,
+        getPhase: () => useSessionStore.getState().phase,
+        persistActiveSubjectId: () => {},
+        setFocusedRoomId: (roomId) => {
+          useSessionStore.getState().setFocusedRoomId(roomId);
+        },
+        setActiveSubjectId: (subjectId) => {
+          useSessionStore.getState().setActiveSubjectId(subjectId);
+        },
+        setActiveScreen: (screen) => {
+          useSessionStore.getState().setActiveScreen(screen);
+        },
+        openNoteEditor: (roomId) => {
+          useSessionStore.getState().openNoteEditor(roomId);
+        },
+        closeMapView: () => {
+          useSessionStore.getState().closeMapView();
+        },
+        cancelTeleportMode: () => {
+          useSessionStore.getState().cancelTeleportMode();
+        },
+        setMobileHudOpen: (open) => {
+          useSessionStore.getState().setMobileHudOpen(open);
+        },
+        setProgressionActiveSubject: (subjectId) => {
+          useProgressionStore.getState().setActiveSubject(subjectId);
+        },
+        collectArtifactNote: (entry) =>
+          useProgressionStore.getState().collectArtifactNote(entry),
+        awardReviewPass: () => useProgressionStore.getState().awardReviewPass(),
+        awardBadge: (badgeId) => {
+          useProgressionStore.getState().awardBadge(badgeId);
+        },
+        readProgressionBadges: () => useProgressionStore.getState().badges,
+        recordReviewPass: (roomId) => useSubjectStore.getState().recordReviewPass(roomId),
+      },
+      renderer: {
+        setFloorVisibility: () => {},
+        teleportToRoom: () => {},
+      },
+      teleport: {
+        remainingMs: () => 0,
+        markConsumed: () => {},
+      },
+      dungeonUi: {
+        pushToast: () => {},
+        requestRoomPanelTab: () => {},
+        setInfoPanelOpen: () => {},
+        isInfoPanelOpen: () => false,
+        clearNpcDialog: () => {},
+        openJournalForCollectedNote: () => {},
+        getCurrentFloorId: () => null,
+        setCurrentFloorId: () => {},
+      },
+      village: {
+        content: {
+          getDynamicStructures: () => dynamicStructuresRef.current,
+        },
+        store: {
+          getSelectedClass: () => useSessionStore.getState().selectedClass,
+          getVillageSubjects: () => subjectsRef.current,
+          loadSubject: (subjectId) => useSubjectStore.getState().loadSubject(subjectId),
+          importSubjectSnapshot: (snapshot) =>
+            useSubjectStore.getState().importSnapshot(snapshot),
+          setActiveSubjectId: (subjectId) => {
+            useSessionStore.getState().setActiveSubjectId(subjectId);
+          },
+          setProgressionActiveSubject: (subjectId) => {
+            useProgressionStore.getState().setActiveSubject(subjectId);
+          },
+          setActiveScreen: (screen) => {
+            useSessionStore.getState().setActiveScreen(screen);
+          },
+          setPhase: (phase) => {
+            useSessionStore.getState().setPhase(phase);
+          },
+          setSelectedClass: (playerClass) => {
+            useSessionStore.getState().setSelectedClass(playerClass);
+          },
+          setQuestStep: (step) => {
+            useSessionStore.getState().setQuestStep(step);
+          },
+          advanceQuestStep: () => {
+            useSessionStore.getState().advanceQuestStep();
+          },
+        },
+        ui: {
+          setInfoPanel,
+          setWelcomeMessage,
+          setCreateOpen,
+          setMakeItYoursOpen,
+          setShowStats,
+          setFishCaught: (data: StudyFlowFishCaught | null) => setFishCaughtData(data),
+          prepareFishingSession: () => {
+            setInfoPanel(null);
+            setFishCaughtData(null);
+            setShowRecallModal(false);
+            setRecallQuestionData(null);
+          },
+        },
+        fishing: {
+          isMounted: () => rendererRef.current !== null,
+          enter: ({ playerClass, hasClearedRooms, onFishCaught, onReturnToVillage, onReady }) => {
+            const renderer = rendererRef.current;
+            if (!renderer) return;
+            // One explicit subject context for the whole session, so catch
+            // resolution and persistence cannot disagree about the subject.
+            const world: FishingWorldModel = {
+              kind: 'fishing',
+              // The flow resolves this from the session store, so it is one of
+              // the three archetypes; the port types it loosely as a string.
+              playerClass: playerClass as PlayerClassId,
+              hasClearedRooms,
+              subjectId: useProgressionStore.getState().activeSubjectId,
+            };
+            renderer.fishing().enter(world, { onFishCaught, onReturnToVillage, onReady });
+          },
+          exit: () => {
+            rendererRef.current?.fishing().returnToVillage();
+          },
+        },
+      },
+    });
+  }
+  const flow = flowRef.current;
 
   const callbacksRef = useRef<VillageSceneEvents>({
     onStructureApproached: () => {},
@@ -314,98 +398,9 @@ export function VillageScreen(): JSX.Element {
   // Keep callbacks ref in sync with latest React state
   useEffect(() => {
     const cb: VillageSceneEvents = {
-      onStructureApproached: (structureId) => {
-        const struct = [...VILLAGE_MAP.structures, ...dynamicStructuresRef.current]
-          .find((s) => s.id === structureId);
-        if (!struct) return;
-        const sType = struct.type;
-        if (sType === 'portal-icon') {
-          const subj = subjectsRef.current.find((s) => s.id === struct.subjectId);
-          setInfoPanel({ type: 'dungeon', structureId, subject: subj });
-        } else if (sType === 'keeper-tower') {
-          setInfoPanel({ type: 'quest-board', structureId });
-        } else if (sType === 'guild-hall') {
-          setInfoPanel({ type: 'guild', structureId });
-        } else if (sType === 'training-gate') {
-          setInfoPanel({ type: 'training', structureId });
-        } else if (sType === 'trophy-hall') {
-          setInfoPanel({ type: 'trophy', structureId });
-        } else if (sType === 'signpost' || sType === 'waysign') {
-          setInfoPanel({ type: 'signpost', structureId });
-          if (structureId === 'sign-entrance') {
-            setWelcomeMessage('Welcome to the Dungeon Village! Explore the buildings, meet the Keeper, and step through a portal to begin your studies.');
-          }
-        } else if (sType === 'library') {
-          setInfoPanel({ type: 'library', structureId });
-        } else if (sType === 'workshop') {
-          setInfoPanel({ type: 'workshop', structureId });
-        } else if (sType === 'fountain') {
-          setInfoPanel({ type: 'fountain', structureId });
-        } else if (sType === 'fishing-pond') {
-          setInfoPanel({ type: 'fishing-pond', structureId });
-        } else if (sType === 'fish-stand') {
-          setInfoPanel({ type: 'fish-stand', structureId });
-        }
-      },
-      onStructureLeft: (structureId) => {
-        setInfoPanel(null);
-        if (structureId === 'sign-entrance') {
-          setWelcomeMessage(null);
-        }
-      },
-      onStructureInteract: (structureId) => {
-        const struct = [...VILLAGE_MAP.structures, ...dynamicStructuresRef.current]
-          .find((s) => s.id === structureId);
-        if (!struct) return;
-        const sType = struct.type;
-        if (sType === 'portal-icon' && struct.subjectId) {
-          const session = useSessionStore.getState();
-          session.setPhase('scribe');
-          session.setSelectedClass(selectedClassRef.current || 'scholar');
-          const subjStore = useSubjectStore.getState();
-          void subjStore.loadSubject(struct.subjectId).then((loaded) => {
-            if (loaded) {
-              session.setActiveSubjectId(loaded.dungeon.dungeonId);
-              useProgressionStore.getState().setActiveSubject(loaded.dungeon.dungeonId);
-              session.setActiveScreen('game');
-            }
-          });
-        } else if (sType === 'keeper-tower') {
-          setInfoPanel({ type: 'quest-board', structureId });
-        } else if (sType === 'guild-hall') {
-          setCreateOpen(true);
-          useSessionStore.getState().advanceQuestStep();
-        } else if (sType === 'training-gate') {
-          const tutorial = createTutorialSubject();
-          const session = useSessionStore.getState();
-          const subjStore = useSubjectStore.getState();
-          void subjStore.importSnapshot(tutorial).then(() => {
-            session.setPhase('scribe');
-            session.setSelectedClass('scholar');
-            session.setQuestStep('enter-dungeon');
-            return subjStore.loadSubject(TUTORIAL_SUBJECT_ID).then((loaded) => {
-              if (loaded) {
-                session.setActiveSubjectId(loaded.dungeon.dungeonId);
-                session.setActiveScreen('game');
-              }
-            });
-          });
-        } else if (sType === 'trophy-hall') {
-          setInfoPanel({ type: 'trophy', structureId });
-        } else if (sType === 'signpost' || sType === 'waysign') {
-          setInfoPanel({ type: 'signpost', structureId });
-        } else if (sType === 'library') {
-          setInfoPanel({ type: 'library', structureId });
-        } else if (sType === 'workshop') {
-          setMakeItYoursOpen(true);
-        } else if (sType === 'fountain') {
-          setShowStats(true);
-        } else if (sType === 'fishing-pond') {
-          handleStartFishing(structureId);
-        } else if (sType === 'fish-stand') {
-          setInfoPanel({ type: 'fish-stand', structureId });
-        }
-      },
+      onStructureApproached: (structureId) => flow.structureApproached(structureId),
+      onStructureLeft: (structureId) => flow.structureLeft(structureId),
+      onStructureInteract: (structureId) => flow.structureInteract(structureId),
       onNpcApproached: (npcId) => {
         const npc = VILLAGE_MAP.npcs.find((n) => n.id === npcId);
         if (!npc) return;
@@ -463,18 +458,17 @@ export function VillageScreen(): JSX.Element {
         setNpcDialogPos({ x: pos.clientX, y: pos.clientY });
       },
       onReady: () => {
-        if (gameRef.current) {
-          sceneRef.current = gameRef.current.scene.getScene('VillageScene') as unknown as VillageSceneHandle;
+        if (rendererRef.current) {
           setVillageReady(true);
         }
       },
     };
     Object.assign(callbacksRef.current, cb);
-  }, [subjects, dynamicStructures, selectedClass]);
+  }, [flow, subjects, dynamicStructures, selectedClass]);
 
-  // Mount Phaser game once - it reads from callbacksRef
+  // Mount the village world once - it reads from callbacksRef
   useEffect(() => {
-    if (!containerRef.current || gameRef.current) return;
+    if (!containerRef.current || rendererRef.current) return;
     const ref = callbacksRef;
     let spawnGridX: number | null = null;
     let spawnGridY: number | null = null;
@@ -487,8 +481,16 @@ export function VillageScreen(): JSX.Element {
         localStorage.removeItem('kd-village-spawn');
       }
     } catch { /* ignore */ }
-    const game = createVillageGame({
+    // The renderer-neutral model of the world this screen presents. The
+    // adapter turns it into engine calls at mount time.
+    const world: VillageWorldModel = {
+      kind: 'village',
+      structures: dynamicStructures,
+      playerClass: selectedClass,
+    };
+    const renderer = createVillageGame({
       parent: containerRef.current,
+      world,
       callbacks: {
         onStructureApproached: (id) => ref.current.onStructureApproached(id),
         onStructureLeft: (id) => ref.current.onStructureLeft(id),
@@ -499,39 +501,33 @@ export function VillageScreen(): JSX.Element {
         onNpcDialogPosition: (p) => ref.current.onNpcDialogPosition?.(p),
         onReady: () => ref.current.onReady(),
       },
-      dynamicStructures: dynamicStructures.length > 0 ? dynamicStructures : undefined,
-      playerClass: selectedClass ?? 'scholar',
-      spawnGridX,
-      spawnGridY,
+      spawn: { gridX: spawnGridX, gridY: spawnGridY },
     });
-    gameRef.current = game;
-    game.events.once('ready', () => {
-      sceneRef.current = game.scene.getScene('VillageScene') as unknown as VillageSceneHandle;
-      setVillageReady(true);
-    });
+    rendererRef.current = renderer;
+    const stopWaitingForReady = renderer.onReady(() => setVillageReady(true));
+    renderer.mount();
     return () => {
-      game.destroy(true);
-      gameRef.current = null;
-      sceneRef.current = null;
+      stopWaitingForReady();
+      renderer.unmount();
+      rendererRef.current = null;
     };
   }, []);
 
-  // Restart the village scene when the user saves custom sprites and clicks "Apply Changes"
+  // Restart the village world when the user saves custom sprites and clicks "Apply Changes"
   useEffect(() => {
     if (sceneRestartCounter === 0) return;
-    if (!gameRef.current) return;
+    if (!rendererRef.current) return;
     setVillageReady(false);
-    import('@/services/customSprites').then(({ revokeAllBlobUrls }) => revokeAllBlobUrls());
-    const scene = gameRef.current.scene.getScene('VillageScene');
-    if (scene) scene.scene.restart();
+    // The adapter revokes the old blob URLs and restarts the scene in place.
+    rendererRef.current.restart();
   }, [sceneRestartCounter]);
 
-  // Sync scene state whenever the scene is ready OR the data changes
+  // Sync world state whenever the world is ready OR the data changes
   useEffect(() => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    scene.setDynamicStructures(dynamicStructures);
-    scene.setPlayerClass(selectedClass ?? 'scholar');
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    renderer.setDynamicStructures(dynamicStructures);
+    renderer.setPlayerClass(selectedClass);
   }, [villageReady, dynamicStructures, selectedClass]);
 
   // Show welcome message on village entry
@@ -660,13 +656,12 @@ export function VillageScreen(): JSX.Element {
 
       <div className="village-game-area">
         <div className="village-canvas" ref={containerRef} />
-        <CompassOverlay sceneRef={sceneRef} />
+        <CompassOverlay rendererRef={rendererRef} />
         <button type="button" className="touch-interact-btn"
           aria-label="Interact" style={{ zIndex: 150 }}
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           onClick={() => {
-            const s = sceneRef.current;
-            if (s?.triggerInteract) s.triggerInteract();
+            rendererRef.current?.triggerInteract();
           }}>
           ⚔
         </button>
@@ -1051,7 +1046,7 @@ export function VillageScreen(): JSX.Element {
             <button
               type="button"
               className="village-enter-btn"
-              onClick={() => handleStartFishing(infoPanel.structureId)}
+              onClick={() => flow.enterFishing(infoPanel.structureId)}
             >
               Cast Line
             </button>
@@ -1304,32 +1299,19 @@ export function VillageScreen(): JSX.Element {
   );
 }
 
-/* VillageScene methods that the React layer calls */
-interface VillageSceneHandle {
-  lastPoi: { name: string; angle: number; distance: number };
-  setDynamicStructures: (structures: VillageStructure[]) => void;
-  setPlayerClass: (cls: string) => void;
-  triggerInteract: () => void;
-}
-
-/* ── React compass overlay reads lastPoi from the Phaser scene ─────────── */
-function CompassOverlay({ sceneRef }: { sceneRef: React.MutableRefObject<VillageSceneHandle | null> }): JSX.Element {
+/* ── React compass overlay reads the current POI from the world renderer ── */
+function CompassOverlay({ rendererRef }: { rendererRef: React.MutableRefObject<PhaserVillageRenderer | null> }): JSX.Element {
   const [poi, setPoi] = useState<{ name: string; angle: number; distance: number } | null>(null);
 
   useEffect(() => {
     let frame: number;
     const poll = () => {
-      const scene = sceneRef.current;
-      if (scene?.lastPoi && scene.lastPoi.distance < 1e9) {
-        setPoi({ name: scene.lastPoi.name, angle: scene.lastPoi.angle, distance: scene.lastPoi.distance });
-      } else {
-        setPoi(null);
-      }
+      setPoi(rendererRef.current?.readPoi() ?? null);
       frame = requestAnimationFrame(poll);
     };
     frame = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(frame);
-  }, [sceneRef]);
+  }, [rendererRef]);
 
   if (!poi || poi.distance < 96) return <></>;
 

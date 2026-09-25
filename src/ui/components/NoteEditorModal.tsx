@@ -10,7 +10,7 @@ import {
 import type { QualityScoreKey } from '@/core/validation/persistence';
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
 import { deriveGraphHierarchy } from '@/core/graph';
-import { isBossFloor } from '@/game/systems/bossRooms';
+import { isBossFloor } from '@/core/layout/bossRooms';
 import { isElectronAvailable } from '@/services/electronBridge';
 import { ToastStack } from '@/ui/components/ToastStack';
 import { Markdown } from '@/ui/utils/markdown';

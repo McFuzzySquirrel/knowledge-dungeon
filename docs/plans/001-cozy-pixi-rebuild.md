@@ -707,7 +707,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 0 | complete | Freeze behavior and legacy compatibility fixtures. |
 | 1 | complete | Add flags, browser tests, accessibility scaffolding, and quality rails. |
 | 1A | complete | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
-| 2 | not-started | Extract renderer-neutral application contracts. |
+| 2 | complete | Extract renderer-neutral application contracts. |
 | 3 | not-started | Build storage-v2 and migration infrastructure. |
 | 4 | not-started | Cut over storage behind a flag and add local attachments. |
 | 5 | not-started | Deliver full-device backup and restore. |
@@ -1179,7 +1179,7 @@ Phase 2.
 
 ## Phase 2: Renderer-Neutral Application Contracts
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Move learning-flow orchestration out of `GameScreen`, `VillageScreen`, and Phaser scenes.
 
 ### Prerequisites
@@ -1232,6 +1232,152 @@ Run the common gate plus:
 npm run test:contracts
 npm run test:e2e
 ```
+
+### Known limitations and evidence boundaries
+
+- This is a refactor and contract phase. It produced no new runtime behavior, so
+  it adds no new device, accessibility, performance, privacy, or license gate
+  of its own; the preserved Phase 1 and Phase 1A gates remain the evidence.
+- Automated evidence was collected on Linux with Playwright Chromium across
+  the four existing viewport projects. It is not physical-device, macOS,
+  Windows, WebKit, Edge, GPU, or assistive-technology evidence, and no new
+  compatibility claim is made here.
+- Renderer neutral is proven mechanically for `src/core/` and
+  `src/application/`, and for `src/ui/`, which now names no engine type. The
+  Phaser scenes still reach outward into `@/ui/utils/editableElement`,
+  `@/services/customSprites`, and `@/services/audioManager`; that coupling is
+  pre-existing and is not a core or application layer import.
+- Archetype content (`PLAYER_CLASSES`, `getPlayerSpritePath`) is still declared
+  in `src/game/systems/playerClasses.ts` and imported by the UI and the session
+  store. It imports no renderer, so the boundary rule is satisfied, but the
+  `PlayerClassId` union is mirrored into the contract with a compile-time
+  parity guard rather than being moved.
+- `FishingWorldModel.subjectId` is carried but not yet authoritative;
+  `handleKeepFish` still resolves the subject from progression-store key order.
+- `createWorldEventSink` is part of the contract but is not yet adopted by the
+  Phaser host, which calls the projected scene callbacks directly.
+- The adapter filenames contain the string `phaser`, so the existing
+  `manualChunks` rule (`id.includes('phaser')`) routes them into the
+  `vendor-phaser` chunk. That is why the index chunk fell from 438.30 kB to
+  341.83 kB while the Phaser chunk rose from 1,199.71 kB to 1,303.19 kB. It is
+  harmless while Phaser is the eagerly loaded default, and Phase 9 should
+  revisit the chunk rule when a second renderer exists.
+
+### Verification evidence
+
+Recorded on 2026-09-25:
+
+- The pre-change baseline passed `npm run lint`, `npm run typecheck`, 38 Vitest
+  files / 313 tests, `npm run build:web`, `npm run check:bundle-size` at
+  4,093,638 bytes across 105 files, and all 12 Phase 1 browser tests.
+- The Phase 2 common gate passed after implementation: `npm run lint`,
+  `npm run typecheck`, `npm test` with 43 files / 448 tests, `npm run
+  build:web`, and `npm run check:bundle-size` at 3.92 MB across 105 files. The
+  exact production total is 4,107,377 bytes, a +13,739-byte (+0.34%) delta
+  against the 4,093,638-byte baseline, with the file count unchanged. The
+  `vendor-phaser` chunk is still emitted.
+- `npm run test:contracts` passed 7 files / 155 tests, up from the 2 files /
+  20 tests the script inherited. `npm run test:e2e` passed all 12 preserved
+  tests across `desktop-chromium` (1440x900), `chromebook` (1366x768),
+  `tablet` (834x1112 portrait), and `tablet-landscape` (1112x834 landscape),
+  including the real-Phaser-canvas and static-only-network assertions and the
+  axe WCAG 2.2 AA scan. The single recorded pre-existing Welcome contrast
+  exception remained the only allowed serious finding; no new serious or
+  critical violation was introduced.
+- **Exit criterion 1 — no Phaser or Pixi imports in core or application.**
+  `rg -n "from '(phaser|pixi\.js)|@pixi/|from '@/game/" src/core src/application`
+  returns no matches. `eslint.config.js` now carries a
+  `no-restricted-imports` boundary block for `src/core/**` and
+  `src/application/**` forbidding `phaser`, `phaser/**`, `pixi.js`,
+  `pixi.js/**`, `@pixi/*`, `@pixi/**`, `@/game`, `@/game/*`, `@/game/**`,
+  `**/../game`, and `**/../game/**`, including type-only imports. The rule was
+  proven to fire for a value import, a type-only import, and a nested `.tsx`
+  probe in both layers before the probes were deleted, and the resolved ESLint
+  config for `src/game/**`, `src/ui/**`, `src/store/**`, `src/services/**`,
+  `tests/**`, and the JS block is unchanged. A non-lint test gate in
+  `tests/contracts/phase-2-import-boundary.test.ts` fails independently of
+  ESLint and carries a positive control proving its detector works.
+- **Exit criterion 2 — user-visible behavior unchanged.** The learning flow
+  moved out of `GameScreen` and `VillageScreen` into
+  `src/application/studyFlow.ts` with every side effect injected; `createGame`
+  and `createVillageGame` now return a renderer adapter instead of a
+  `Phaser.Game`. Rendered markup, class names, aria labels, toast copy, scene
+  options, input, camera, art, and timing are unchanged. 135 new contract
+  tests pin the extracted behavior against the pre-refactor code, including the
+  verbatim toast strings, the floor-change fallbacks, the teleport cooldown
+  gate, the return-to-village ordering, every village structure route, and the
+  fishing mount guard. Manual Chromium checks against the preview build drove
+  the real dungeon canvas, a floor change through the map view, the village
+  compass and fishing-pond panel, and a full fishing round trip with no page or
+  console errors.
+- **Exit criterion 3 — Phaser replaceable solely through an adapter.** The
+  neutral contract lives in `src/application/contracts/`
+  (`world.ts`, `events.ts`, `commands.ts`, `renderer.ts`), the three world
+  models and the `WorldRenderer` lifecycle plus the dungeon, village, and
+  fishing capability ports are bound by `src/game/adapters/`, and every
+  `Phaser.*` token in `src/` is now inside `src/game/**`.
+  `rg -n "from 'phaser'|@pixi/" src/ui` returns no matches. A future Pixi host
+  would add adapter modules beside the Phaser ones and swap the two
+  `createGame*` seams. The `onReady` readiness subscription the screens use is
+  an adapter addition beyond the published `WorldRenderer.isReady()` poll; if
+  a Pixi host needs it, the contract should absorb it.
+- **Deliverable: single subject activation.** `src/application/subjectActivation.ts`
+  is the only implementation; `useLoadSubjectFlow` is a thin wrapper, and the
+  two village paths that previously inlined `loadSubject` plus separate store
+  writes now route through it. The training-gate path now also sets the
+  progression active subject at activation time where it previously relied on a
+  `GameScreen` mount effect; the value, the persisted result, and the resulting
+  user-visible state are identical because the write is the same id and
+  idempotent. `App.tsx` boot hydration is a deliberate load-then-clear and was
+  not converted.
+- **Deliverable: compatibility re-exports.** `src/game/systems/dungeonGenerator.ts`,
+  `dungeonTypes.ts`, `bossRooms.ts`, `fishingTypes.ts`, and `fishingMechanics.ts`
+  remain as `export *` shims onto their `src/core` originals, asserted by
+  identity rather than by re-reading values. The moved modules are
+  byte-equivalent to `HEAD` apart from import paths and header comments, and the
+  biome split leaves the palette, seed string, tile size, and draw order intact
+  so a generated floor texture stays pixel-identical.
+- **Renderer-neutral domain code relocated.** Dungeon layout moved to
+  `src/core/layout/`, fishing catalog, mechanics, and collection to
+  `src/core/fishing/`, and the biome data to `src/core/biomes/`; the Phaser
+  drawing of `ensureBiomeFloorTexture` stayed on the renderer side.
+- Two review findings were returned to the implementer and fixed before
+  verification. The compile-time parity guards originally resolved to `never`,
+  which is a legal declaration and enforced nothing; they now use a
+  constrained `AssertTrue<...>` form and fail `tsc` at the guard itself. The
+  fishing enter path originally cleared village UI state before the
+  world-mounted guard; the guard now runs first, restoring the pre-refactor
+  behavior for both the Phaser structure branch and the Cast Line button.
+- One defect was found by the contract-test gate and fixed: three first-party
+  scene imports still resolved the moved modules through the compatibility
+  shims instead of `src/core`. The import-path-only change is behavior-neutral.
+- No migration, storage, schema, or legacy key was touched; legacy keys remain
+  byte-for-byte unmodified. No dependency was added. No analytics, telemetry,
+  upload, sync, or new network call was introduced, and the e2e static-network
+  assertion still passes. No learner data appears in any fixture, test, log, or
+  new file: every Phase 2 test fixture is synthetic and self-describing, and the
+  only URL used is the reserved `example.invalid` host. No new image,
+  animation, sound, music, or font was added, so the CC0 media gate is not
+  triggered in this phase. Nothing was committed, pushed, or deployed; the
+  changes are an uncommitted worktree on `main` at Phase 1A checkpoint
+  `d69579c`.
+- **Verification result:** all three Phase 2 exit criteria pass. The renderer
+  boundary is mechanically enforced and proven to bite, the extracted
+  behavior is pinned by 135 new contract tests plus the preserved 313 unit
+  tests, and Phaser is now reachable only through `src/game/adapters/` and the
+  two `createGame*` seams. The maintainer accepted the verified checkpoint and
+  the rollback deviation on 2026-09-25, so Phase 2 is `complete`.
+- **Rollback deviation, accepted.** The written rollback says "disable
+  the new controller and return to the current screen orchestration." No
+  runtime flag was added, so the controller is unconditional and the rollback
+  is a source revert to the Phase 1A checkpoint `d69579c`. A runtime toggle
+  would require keeping the old inline orchestration and the new controller in
+  the tree indefinitely, which is the duplication the contract tests exist to
+  remove. The phase is behavior-preserving and fully test-covered, so a revert
+  is the complete rollback; a dirty worktree with no commit is the whole
+  restore surface. The maintainer accepted this deviation on 2026-09-25. If a
+  runtime toggle is wanted later, it is its own scoped change and must not
+  reintroduce the duplicated orchestration.
 
 ### Exit criteria
 

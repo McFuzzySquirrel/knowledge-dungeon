@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type JSX } from 'react';
 import { useProgressionStore } from '@/store/progressionStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
-import { FISH_CATALOG } from '@/game/systems/fishingTypes';
-import type { FishEntry } from '@/game/systems/fishingTypes';
+import { FISH_CATALOG } from '@/core/fishing/fishingTypes';
+import type { FishEntry } from '@/core/fishing/fishingTypes';
 import { listSubjectIds } from '@/services/persistence/subjectPersistence';
 
 interface FishStandPanelProps {

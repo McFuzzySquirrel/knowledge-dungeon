@@ -1,10 +1,11 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { GameScreen } from '@/ui/screens/GameScreen';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
+import type { FloorVisibilityModel } from '@/application/contracts/world';
 
 interface NpcDialogPayload {
   roomId: string;
@@ -18,28 +19,45 @@ interface CapturedCallbacks {
   onInteract?: (roomId: string) => void;
 }
 
+/**
+ * Stand-in for the Phaser scene handle the adapter drives. The adapter is
+ * mocked out, so these spies record exactly what the screen asked the world
+ * to do.
+ */
 interface MockScene {
-  setArtifactRooms: ReturnType<typeof vi.fn>;
-  setCollectedArtifactRooms: ReturnType<typeof vi.fn>;
-  setReviewedArtifactRooms: ReturnType<typeof vi.fn>;
-  setImageRooms: ReturnType<typeof vi.fn>;
-  setFloorVisibility: ReturnType<typeof vi.fn>;
-  teleportToRoom: ReturnType<typeof vi.fn>;
-  triggerInteract: ReturnType<typeof vi.fn>;
-  setRoomOverlayStates: ReturnType<typeof vi.fn>;
+  setArtifactRooms: Mock<(roomIds: readonly string[], visible: boolean) => void>;
+  setCollectedArtifactRooms: Mock<(roomIds: readonly string[]) => void>;
+  setReviewedArtifactRooms: Mock<(roomIds: readonly string[]) => void>;
+  setImageRooms: Mock<(roomIds: readonly string[]) => void>;
+  setFloorVisibility: Mock<(visibility: FloorVisibilityModel) => void>;
+  teleportToRoom: Mock<(roomId: string) => void>;
+  triggerInteract: Mock<() => void>;
+  setRoomOverlayStates: Mock<(states: Record<string, string>) => void>;
 }
 
-interface MockGame {
-  events: {
-    once: (_event: string, cb: () => void) => void;
-  };
-  scene: {
-    getScene: () => MockScene;
-  };
-  destroy: ReturnType<typeof vi.fn>;
+/**
+ * The renderer seam `@/game/createGame` now hands back: the neutral
+ * `WorldRenderer` lifecycle, the neutral dungeon capabilities, and one
+ * readiness subscription. The capabilities delegate to `fakeScene` so the
+ * assertions below still observe what the screen asked the world to do.
+ */
+interface MockRenderer {
+  mount: () => void;
+  unmount: () => void;
+  isReady: () => boolean;
+  restart: () => void;
+  onReady: (listener: () => void) => () => void;
+  setArtifactRooms: (roomIds: readonly string[], visible: boolean) => void;
+  setCollectedArtifactRooms: (roomIds: readonly string[]) => void;
+  setReviewedArtifactRooms: (roomIds: readonly string[]) => void;
+  setImageRooms: (roomIds: readonly string[]) => void;
+  setFloorVisibility: (visibility: FloorVisibilityModel) => void;
+  teleportToRoom: (roomId: string) => void;
+  triggerInteract: () => void;
+  setRoomOverlayStates: (states: Record<string, string>) => void;
 }
 
-const createGameMock = vi.fn<(options: Record<string, unknown>) => MockGame>();
+const createGameMock = vi.fn<(options: Record<string, unknown>) => MockRenderer>();
 let capturedCallbacks: CapturedCallbacks | null = null;
 let fakeScene: MockScene;
 const roomPanelProps = vi.fn<
@@ -53,7 +71,7 @@ vi.mock('@/game/createGame', () => ({
   },
 }));
 
-vi.mock('@/game/systems/dungeonGenerator', () => ({
+vi.mock('@/core/layout/dungeonGenerator', () => ({
   generateDungeonMap: () => ({
     tileSize: 32,
     bounds: { minX: 0, minY: 0, maxX: 20, maxY: 20 },
@@ -136,6 +154,44 @@ vi.mock('@/services/persistence/subjectPersistence', async () => {
   };
 });
 
+/**
+ * Build a mock for the renderer seam. `mount()` flushes the readiness
+ * listeners the way the real adapter does when the engine's ready event
+ * lands, so the screen takes exactly the same code path it takes live.
+ */
+function createMockRenderer(): MockRenderer {
+  let mounted = false;
+  let readyListeners: (() => void)[] = [];
+  return {
+    mount: () => {
+      mounted = true;
+      const listeners = readyListeners;
+      readyListeners = [];
+      for (const listener of listeners) listener();
+    },
+    unmount: () => {
+      mounted = false;
+      readyListeners = [];
+    },
+    isReady: () => mounted,
+    restart: vi.fn(),
+    onReady: (listener: () => void) => {
+      readyListeners.push(listener);
+      return () => {
+        readyListeners = readyListeners.filter((entry) => entry !== listener);
+      };
+    },
+    setArtifactRooms: (roomIds, visible) => fakeScene.setArtifactRooms(roomIds, visible),
+    setCollectedArtifactRooms: (roomIds) => fakeScene.setCollectedArtifactRooms(roomIds),
+    setReviewedArtifactRooms: (roomIds) => fakeScene.setReviewedArtifactRooms(roomIds),
+    setImageRooms: (roomIds) => fakeScene.setImageRooms(roomIds),
+    setFloorVisibility: (visibility) => fakeScene.setFloorVisibility(visibility),
+    teleportToRoom: (roomId) => fakeScene.teleportToRoom(roomId),
+    triggerInteract: () => fakeScene.triggerInteract(),
+    setRoomOverlayStates: (states) => fakeScene.setRoomOverlayStates(states),
+  };
+}
+
 function makeSnapshot(): SubjectSnapshot {
   return {
     dungeon: {
@@ -190,25 +246,17 @@ describe('GameScreen NPC dialog callbacks', () => {
     roomPanelProps.mockReset();
 
     fakeScene = {
-      setArtifactRooms: vi.fn(),
-      setCollectedArtifactRooms: vi.fn(),
-      setReviewedArtifactRooms: vi.fn(),
-      setImageRooms: vi.fn(),
-      setRoomOverlayStates: vi.fn(),
-      setFloorVisibility: vi.fn(),
-      teleportToRoom: vi.fn(),
-      triggerInteract: vi.fn(),
+      setArtifactRooms: vi.fn<(roomIds: readonly string[], visible: boolean) => void>(),
+      setCollectedArtifactRooms: vi.fn<(roomIds: readonly string[]) => void>(),
+      setReviewedArtifactRooms: vi.fn<(roomIds: readonly string[]) => void>(),
+      setImageRooms: vi.fn<(roomIds: readonly string[]) => void>(),
+      setRoomOverlayStates: vi.fn<(states: Record<string, string>) => void>(),
+      setFloorVisibility: vi.fn<(visibility: FloorVisibilityModel) => void>(),
+      teleportToRoom: vi.fn<(roomId: string) => void>(),
+      triggerInteract: vi.fn<() => void>(),
     };
 
-    createGameMock.mockReturnValue({
-      events: {
-        once: (_event: string, cb: () => void) => cb(),
-      },
-      scene: {
-        getScene: () => fakeScene,
-      },
-      destroy: vi.fn(),
-    });
+    createGameMock.mockReturnValue(createMockRenderer());
 
     useSubjectStore.setState({ snapshot: makeSnapshot(), lastError: null });
     useSessionStore.setState({

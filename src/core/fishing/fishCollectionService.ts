@@ -6,7 +6,7 @@
  * All functions are pure; state management is handled by the progression store.
  */
 
-import type { FishEntry, FishCollection, FishRarity } from '@/game/systems/fishingTypes';
+import type { FishEntry, FishCollection, FishRarity } from './fishingTypes';
 
 /**
  * Create a unique fish entry id from catalog id and timestamp.

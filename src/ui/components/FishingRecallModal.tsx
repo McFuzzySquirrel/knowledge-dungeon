@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { FishRarity } from '@/game/systems/fishingTypes';
+import type { FishRarity } from '@/core/fishing/fishingTypes';
 import type { SelfCheckPrompt } from '@/core/review/types';
 
 export interface FishingRecallModalProps {

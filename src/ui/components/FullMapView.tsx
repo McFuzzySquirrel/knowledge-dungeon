@@ -15,7 +15,7 @@ import {
   isReachableViaSubtopics,
 } from '@/core/graph';
 import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistence';
-import type { DungeonMap } from '@/game/systems/dungeonTypes';
+import type { DungeonMap } from '@/core/layout/dungeonTypes';
 import type { GamePhase } from '@/store/sessionStore';
 import type { ColorTheme } from '@/store/preferencesStore';
 import { useSubjectStore } from '@/store/subjectStore';

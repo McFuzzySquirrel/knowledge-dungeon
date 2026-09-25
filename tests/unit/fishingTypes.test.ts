@@ -3,7 +3,7 @@ import {
   FISH_CATALOG,
   FISH_RARITY_WEIGHTS,
   FISH_RARITY_XP_MULTIPLIER,
-} from '@/game/systems/fishingTypes';
+} from '@/core/fishing/fishingTypes';
 
 describe('fishingTypes', () => {
   describe('FISH_CATALOG', () => {

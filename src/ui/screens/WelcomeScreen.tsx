@@ -20,7 +20,7 @@ import {
 import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
-import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/game/systems/proceduralTextures';
+import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/core/biomes';
 
 const PHASES: { id: GamePhase; title: string; description: string }[] = [
   {

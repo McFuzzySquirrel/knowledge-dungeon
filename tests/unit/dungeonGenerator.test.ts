@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { generateDungeonMap } from '@/game/systems/dungeonGenerator';
+import { generateDungeonMap } from '@/core/layout/dungeonGenerator';
 import type {
   DungeonCorridor,
   DungeonDoor,
   DungeonMap,
   DungeonRoom,
-} from '@/game/systems/dungeonGenerator';
+} from '@/core/layout/dungeonGenerator';
 import { addLinkedRooms, createRootDungeon } from '@/core/graph';
 
 const NOW = '2026-01-01T00:00:00.000Z';

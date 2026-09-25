@@ -2,22 +2,43 @@ import Phaser from 'phaser';
 import { VILLAGE_MAP, type VillageStructure } from '@/data/villageLayout';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 import { type PlayerClassId, type PlayerDirection, getPlayerSpritePath } from '@/game/systems/playerClasses';
+import type {
+  WorldEventHandler,
+  WorldEventPayload,
+  WorldEventPayloadField,
+} from '@/application/contracts/events';
+
+/**
+ * Renderer adapter for the village world.
+ *
+ * Every callback is derived from the renderer-neutral event contract in
+ * `src/application/contracts/events.ts`, so the Phaser host and a future PixiJS
+ * host emit the same payloads. The public callback shape is unchanged.
+ */
+export type VillageSceneEvents = {
+  onStructureApproached: (
+    structureId: WorldEventPayloadField<'village:structure-approached', 'structureId'>,
+  ) => void;
+  onStructureLeft: (
+    structureId: WorldEventPayloadField<'village:structure-left', 'structureId'>,
+  ) => void;
+  onStructureInteract: (
+    structureId: WorldEventPayloadField<'village:structure-interact', 'structureId'>,
+  ) => void;
+  onNpcApproached: (npcId: WorldEventPayloadField<'village:npc-approached', 'npcId'>) => void;
+  onNpcLeft: (npcId: WorldEventPayloadField<'village:npc-left', 'npcId'>) => void;
+  onNpcInteract: (npcId: WorldEventPayloadField<'village:npc-interact', 'npcId'>) => void;
+  onNpcDialogPosition?: WorldEventHandler<'village:npc-dialog-position'>;
+  onReady: WorldEventHandler<'village:ready'>;
+};
+
+/** Payload of `village:npc-dialog-position`. */
+export type VillageNpcDialogAnchor = WorldEventPayload<'village:npc-dialog-position'>;
 
 const PLAYER_SPEED = 120;
 const NPC_SPEED = 45;
 const INTERACT_RADIUS = 32;
 const STRUCTURE_APPROACH_RADIUS = 48;
-
-export interface VillageSceneEvents {
-  onStructureApproached: (structureId: string) => void;
-  onStructureLeft: (structureId: string) => void;
-  onStructureInteract: (structureId: string) => void;
-  onNpcApproached: (npcId: string) => void;
-  onNpcLeft: (npcId: string) => void;
-  onNpcInteract: (npcId: string) => void;
-  onNpcDialogPosition?: (payload: { npcId: string; clientX: number; clientY: number }) => void;
-  onReady: () => void;
-}
 
 const SPRITE_PATHS = {
   ground: 'sprites/village/ground-tile.svg',

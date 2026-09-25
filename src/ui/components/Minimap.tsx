@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { DungeonMap } from '@/game/systems/dungeonTypes';
+import type { DungeonMap } from '@/core/layout/dungeonTypes';
 import type { ColorTheme } from '@/store/preferencesStore';
 
 interface MinimapProps {
