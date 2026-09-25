@@ -120,12 +120,17 @@ describe('FishStandPanel', () => {
 
     render(<FishStandPanel onClose={vi.fn()} />);
 
+    // "(Deleted Subject)" only appears once the resolved id list has been
+    // committed to the DOM, so wait for the rendered output. Waiting on the
+    // mock call alone is a race: the effect calls listSubjectIds, then resolves
+    // it and re-renders in a later task. A slower CI runner lost that race and
+    // reported a missing "(Deleted Subject)". This mirrors the wait used by the
+    // "renders fish cards" test above.
     await waitFor(() => {
-      expect(mockListSubjectIds).toHaveBeenCalled();
+      expect(screen.getByText('(Deleted Subject)')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Moss Carp')).toBeInTheDocument();
-    expect(screen.getByText('(Deleted Subject)')).toBeInTheDocument();
   });
 
   it('shows completion banner when all 8 fish types are caught', async () => {

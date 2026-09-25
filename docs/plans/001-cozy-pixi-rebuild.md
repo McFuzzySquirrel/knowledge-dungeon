@@ -1395,6 +1395,23 @@ Recorded on 2026-09-25:
   `.opencode/viz-skin.json`, are session tool and plugin configuration and were
   deliberately excluded from the commit; the tracked `.opencode/agents/*.md`
   specialist definitions remain in the repository.
+- **Post-merge CI defect, found and fixed.** The first main-branch run after the
+  merge, `36174106655`, failed Unit Tests on
+  `tests/unit/FishStandPanel.test.tsx` with a missing `(Deleted Subject)` node.
+  The cause is a pre-existing race, not the phase change: that test waited for
+  `listSubjectIds` to have been **called** and then asserted synchronously on
+  text that only appears after the promise resolves and the component
+  re-renders. A slower runner lost that window. It is reproducible by deferring
+  the mocked resolution by a few milliseconds and does not reproduce locally,
+  which is why it passed pull-request run `36172422237` and the earlier main
+  runs. The test now waits for the rendered output, matching the wait the
+  sibling test in the same file already used; both original assertions are
+  preserved and no assertion was weakened. The fix was verified to hold under
+  the same deferral that reproduced the failure, and the full 448-test suite
+  passed three consecutive local runs. The same anti-pattern remains in the
+  file's empty-state test, where it is currently not reachable because that
+  branch renders before the load resolves; it is a follow-up candidate, not a
+  failure.
 
 ### Exit criteria
 
