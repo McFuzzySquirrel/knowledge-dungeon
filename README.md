@@ -239,11 +239,15 @@ npm run test:e2e:compat         # build, record the artifact identity, run the 4
 npm run test:e2e:compat:recorded# preview-only compatibility suite (CI: uses the shared artifact)
 npm run test:e2e:storage        # build the FLAGGED storage-v2 artifact, record it, run the storage-v2 lane
 npm run test:e2e:storage:recorded # preview-only storage-v2 lane (CI: uses the flagged artifact)
+npm run test:e2e:data-products:full # build the flagged artifact with Phase 5 products on, record it, run the restore lane
+npm run test:e2e:data-products # preview-only fresh-profile restore lane
+npm run test:e2e:data-products:recorded # identical; the name CI uses
 npm run record:web-artifact     # record the SHA-256 identity of the current dist tree
 npm run verify:web-artifact     # fail if dist differs from the recorded artifact
 npm run test:contracts          # renderer-neutral application contract gate (tests/contracts)
 npm run test:migrations         # storage-v2 migration gate (tests/migrations)
 npm run test:privacy            # source-level and unit-level privacy gate (tests/privacy)
+npm run test:data               # data-product gate: .kdbak export/import, corruption, privacy (tests/data)
 npm run test:node20             # run the whole Vitest suite under the CI Node major
 ```
 
@@ -290,6 +294,128 @@ The lane writes its sanitized evidence into the same allowlisted evidence root a
 the compatibility lanes, with a `storage-v2-chromium--<test>.json` file name.
 Records contain counts, categories, and booleans only, and the project records no
 trace, screenshot, or video.
+
+### The data-product gate (`npm run test:data`)
+
+`tests/data/` holds the gates for the `.kdbak` full-device backup product, the
+`.kdsubject` subject backup, and the `.kdtemplate` template. Nine files, one per
+requirement:
+
+| File | What it holds |
+| --- | --- |
+| `populatedStateRoundTrip.test.ts` | A populated storage-v2 state exports and restores with semantic equality, field by field, and the comparator is proven able to fail |
+| `attachmentBytesRoundTrip.test.ts` | Every available attachment byte and custom sprite body survives, hashed by three independent SHA-256 implementations, and identical payloads collapse to one content-addressed member |
+| `corruptArchiveIsolation.test.ts` | Fifteen corrupt archives are refused, and the active generation, every record, and the legacy `localStorage` key set are byte-for-byte unchanged, with a good import still working afterwards |
+| `externalOnlyDisclosure.test.ts` | An attachment whose bytes are not on the device is disclosed as external-only with no fabricated hash, and does not fail the import |
+| `manifestContract.test.ts` | The manifest's exact key set, its member-path rules, and its three separate version fields - with a positive control proving a conflation is caught |
+| `localDownloadOnly.test.ts` | No module reachable from `src/main.tsx` can upload, share, mail, submit, or navigate a backup anywhere, proven by this gate's own import-graph walk and a planted probe |
+| `memberPathSafety.test.ts` | Zip-slip, absolute, backslash, traversal, `Object.prototype`, and `__proto__` member names are refused on write and on read, and a legitimate member named `toString` is not mistaken for a duplicate |
+| `phase5FlagDefault.test.ts` | `VITE_DATA_PRODUCTS_V2` defaults to `false`, is owned by Phase 5, and the default build cannot reach the product |
+| `suiteIntegrity.test.ts` | The suite accounts for itself: wiring, non-vacuity floors, registered-reproduction count, and a privacy scan of its own sources |
+
+Shared fixtures and helpers live in `tests/data/support/`. The suite is inside the
+default Vitest include glob, exactly as `tests/contracts`, `tests/migrations`, and
+`tests/privacy` are, so `npm test` covers it too.
+
+**Registered reproductions.** The product does not exist yet, so the assertions
+that need it are registered as `it.fails`. They stay green today and turn **red**
+the moment the interface they name is implemented, which is the signal to move them
+out of `it.fails` rather than to delete them. Each one names the module it waits on
+(`src/services/persistence/products/fullDeviceBackup.ts` and
+`archiveValidation.ts`, the plan's Phase 5 expected files) and the accepted export
+names, all of which are declared in
+[`tests/data/support/productInterface.ts`](./tests/data/support/productInterface.ts).
+`suiteIntegrity.test.ts` counts them, so one cannot be added or removed silently.
+
+**Non-vacuity.** Every gate here names real counts, real key sets, or real content,
+and each has a control that can fail:
+
+- the round-trip comparator is fed a document with one field and one record removed
+  and must report exactly those two differences;
+- the device fingerprint is moved by a deliberate single-field mutation before any
+  "nothing changed" assertion is trusted;
+- the audited ZIP reader is shown accepting a good archive first, so "every
+  corruption was rejected" cannot mean "everything was rejected";
+- the manifest's version-separation rule is checked against a manifest that really
+  does conflate the three versions, because the two numeric fields both equal `1`
+  today and value comparison cannot detect a conflation;
+- the import-graph walker plants a probe inside `src/` and requires it to produce
+  the expected findings, then deletes it and requires the tree to be unchanged.
+
+### The fresh-profile restore lane (Phase 5)
+
+Phase 5's deliverable is a fresh-profile restore test, and its exit criterion is a
+round trip of a **populated storage-v2 state** - which the default build cannot
+produce, because it never opens storage-v2. So the lane previews the **same flagged
+artifact** the Phase 4 lane previews, and asserts in a **second, freshly created
+browser context** that the state comes back.
+
+- `playwright.data-products.config.ts` owns the lane, with one project bound to
+  `tests/e2e/dataProductsRestore.spec.ts`. It is a separate config from both
+  `playwright.config.ts` and `playwright.storage-v2.config.ts` so the three release
+  paths stay disjoint and neither existing config is widened.
+- It previews an existing `dist` on its own port (43179, distinct from
+  `preview:e2e`'s 43173) and never builds or records anything. The artifact it needs
+  has **both** `VITE_STORAGE_REPOSITORY=v2` and `VITE_DATA_PRODUCTS_V2=true`, so use
+  the convenience script:
+  ```bash
+  npm run test:e2e:data-products:full   # build the flagged artifact with products on, record it, run the lane
+  ```
+  or, to drive the steps yourself:
+  ```bash
+  npm run build:storage-v2-data-products
+  npm run record:web-artifact:storage-v2
+  npm run test:e2e:data-products
+  ```
+  `build:storage-v2-data-products` is the Phase 4 flagged build with one extra flag
+  value in the environment, set by
+  [`scripts/build-flagged-data-products.mjs`](./scripts/build-flagged-data-products.mjs).
+  `VITE_STORAGE_REPOSITORY` still comes only from `.env.storage-v2`, so the Phase 4
+  lane's own product-free build (`npm run test:e2e:storage`) stays available and the
+  two phases remain independently verifiable. The flag travels in a script rather
+  than an inline `VAR=value vite build` because that assignment is a POSIX shell
+  construct that silently does nothing on Windows.
+- **Freshness is proven, not assumed.** The restore context is created from the
+  browser with no `storageState`, and the origin is inspected on a same-origin
+  *non-application* URL **before** the application has run, recording the
+  `localStorage` key count and key list, the IndexedDB database list, and the
+  storage-v2 object-store list. It is inspected again after the application has
+  loaded, and the difference between the two readings is what the application did
+  to a profile it found empty. The one key the application writes on its own
+  initiative - the i18next language detector's `knowledge-dungeon:locale` - is
+  counted separately from content keys.
+- The restore test is a **registered interface**: it drives the Data Center, its
+  full-backup tab, the local-download control, the file inspection, and the
+  explicit destructive confirmation, using the plan's own vocabulary. When a
+  control is absent it throws a `RegisteredInterface` naming the missing interface,
+  so a red run reads as "the product is not implemented yet" rather than as a
+  locator timeout. The archive under test is the one the product's own export
+  wrote, handed to the fresh profile through the real file input; the lane does not
+  synthesise an archive and does not stub the application.
+- `.github/workflows/ci.yml` runs it as a **gating step** inside the existing
+  `storage-v2-browser` job, so the flagged artifact is built exactly once and
+  `web-build` remains the single production build, record, and upload point. That
+  job builds with `build:storage-v2-data-products` - one superset artifact for both
+  flagged lanes - and the step carries **no** `continue-on-error`, because the
+  product is landed and the lane is the phase's acceptance evidence.
+- The lane asserts three things a positional or "did the id change" check cannot.
+  A `.kdbak` state document is canonical JSON and `canonicalJsonStringify` sorts keys
+  at every depth, so a restored room map enumerates in **sorted-key order**; rooms
+  are therefore addressed by id, and the lane asserts both the room **count** and
+  the room-id **set** so a dropped room cannot pass. Retention is proved by reading
+  the target's prior generation **back by id** after the restore, and by planting a
+  sentinel record in it beforehand - a fresh profile's first-run generation is empty,
+  and an empty generation that has been *deleted* is indistinguishable from an empty
+  generation that is intact.
+- [`tests/e2e/data-products-lane.ts`](./tests/e2e/data-products-lane.ts) is the
+  machine-readable lane declaration, and
+  [`tests/e2e/data-products-lane.test.ts`](./tests/e2e/data-products-lane.test.ts)
+  fails if the declaration, the Playwright project, the package scripts, the CI
+  step, or the storage contract it reads from the browser drift apart.
+- Written evidence is sanitized on the Phase 4 pattern: counts, categories, and
+  booleans only, with no header, query string, fragment, body, credential, hostname,
+  or private URL. The project records no trace, screenshot, or video, and the CI job
+  still uploads only the allowlisted `artifacts/compatibility-evidence` directory.
 
 ### Verifying under the CI Node major
 
@@ -653,6 +779,7 @@ npm run lint
 npm run typecheck
 npm run test              # vitest --run
 npm run test:privacy      # privacy gate; see "Commands" above
+npm run test:data         # data-product gate; see "Commands" above
 npm run test:node20       # the same suite under the CI Node major; see "Verifying under the CI Node major"
 npm run build:web         # production web bundle
 npm run start             # production server (serves dist/ + image upload API)

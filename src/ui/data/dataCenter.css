@@ -1,0 +1,544 @@
+/*
+ * Phase 5: the Data Center's own visual language.
+ *
+ * Scoped, additive, and warm. Every selector is rooted at `.kd-data-center` or at
+ * the dialog layer the Data Center renders inside itself, so nothing here can
+ * reach the rest of the application, and the whole file is only ever fetched
+ * with the chunk that mounts the Data Center - which a build with
+ * `VITE_DATA_PRODUCTS_V2=false` never loads.
+ *
+ * The language is the plan's: one warm storybook surface, cream paper and sepia
+ * ink, an amber accent, moss for something that worked and clay for something
+ * that did not. It is deliberately *not* the Night / Arcade / Aurora
+ * presentation Phase 8 replaces wholesale; it is the Data Center's own, and it
+ * does not depend on any of the three themes being selected.
+ *
+ * ## Contrast, measured rather than hoped for
+ *
+ * Every pair below was computed, not eyeballed, and the unit suite recomputes
+ * them from this file so a colour edit cannot quietly fail the gate:
+ *
+ *   sepia ink            #2f2418 on card #fdf8ee  14.31:1   text
+ *   soft sepia           #55452f on card #fdf8ee   8.71:1   text
+ *   soft sepia           #55452f on paper #f6efe1  8.05:1   text
+ *   amber button         #fff8ec on #6b3f0e        8.49:1   text
+ *   moss                 #3f5d2a on card #fdf8ee   7.06:1   text
+ *   clay                 #8a2f1c on card #fdf8ee   7.92:1   text
+ *   strong rule          #8a6f3c on card #fdf8ee   4.49:1   control boundary
+ *   focus ring           #7a4a12 on card #fdf8ee   7.05:1   non-text
+ *
+ * `--kd-line` (#b9a37c, 2.31:1) is used only for decoration that carries no
+ * meaning - a hairline between two paragraphs. Anything a learner has to *see in
+ * order to operate* uses `--kd-line-strong`, which clears 3:1.
+ *
+ * ## No colour-only signalling
+ *
+ * Nothing here changes meaning through colour alone. Every state that has a
+ * colour also has a word in the text and a glyph in `.kd-marker` /
+ * `.kd-outcome-marker`, and the glyph is marked `aria-hidden` so it is not read
+ * twice.
+ *
+ * ## Touch and zoom
+ *
+ * Every control is at least 44 by 44 CSS pixels, laid out with wrapping flex and
+ * no fixed widths, so a 320-pixel viewport and a 200% zoom both work by
+ * construction rather than by a media query that happens to cover the sizes
+ * someone tried. The one media query here is for the dialog's own padding.
+ *
+ * ## Reduced motion
+ *
+ * Two rules, because either one alone has a hole. The media query covers a
+ * browser with scripting unavailable; the attribute covers a learner who changes
+ * the preference while the Data Center is open, which the stylesheet alone would
+ * not notice until the next reload.
+ */
+
+.kd-data-center {
+  --kd-paper: #f6efe1;
+  --kd-card: #fdf8ee;
+  --kd-ink: #2f2418;
+  --kd-ink-soft: #55452f;
+  --kd-line: #b9a37c;
+  --kd-line-strong: #8a6f3c;
+  --kd-accent: #6b3f0e;
+  --kd-accent-ink: #fff8ec;
+  --kd-focus: #7a4a12;
+  --kd-moss: #3f5d2a;
+  --kd-clay: #8a2f1c;
+
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--kd-line-strong);
+  border-radius: 14px;
+  background: var(--kd-paper);
+  color: var(--kd-ink);
+  /* A system stack, per plan section 2.4: no new font dependency. */
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.55;
+}
+
+.kd-data-center *,
+.kd-data-center *::before,
+.kd-data-center *::after {
+  box-sizing: border-box;
+}
+
+.kd-data-center .kd-heading {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-subheading {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-lede,
+.kd-data-center p {
+  margin: 0;
+  color: var(--kd-ink-soft);
+}
+
+.kd-data-center .kd-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--kd-line);
+  border-radius: 12px;
+  background: var(--kd-card);
+}
+
+.kd-data-center .kd-bullets {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  color: var(--kd-ink-soft);
+}
+
+.kd-data-center .kd-bullets li {
+  /* Long words must wrap rather than force a horizontal scrollbar at 320px. */
+  overflow-wrap: anywhere;
+}
+
+.kd-data-center .kd-mono {
+  font-family: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', monospace;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A note on the doubled class in the selectors below.
+ *
+ * The Data Center is mounted inside the existing shell, and the shell's stylesheet
+ * ends with `:root[data-graphics='rpg'] button` - a pseudo-class, an attribute and
+ * an element, which is (0,2,1) and therefore outranks a plain two-class selector
+ * like `.kd-data-center .kd-button` at (0,2,0). Measured in Chromium against the
+ * real build, that rule was the one painting the buttons: the Data Center's own
+ * cream surface, amber primary, and clay danger were all being replaced by the
+ * shell's gradient, border colour and text colour.
+ *
+ * Repeating the class takes these rules to (0,3,0) and puts the Data Center's own
+ * language back in charge of its own controls. The alternative - editing the shell
+ * stylesheet - is not this component's to do, and a component that cannot survive
+ * its host's cascade is not a component.
+ */
+
+/* ── Tabs ───────────────────────────────────────────────────────────────── */
+
+.kd-data-center .kd-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kd-data-center .kd-tab.kd-tab {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--kd-line-strong);
+  border-radius: 999px;
+  background: var(--kd-card);
+  color: var(--kd-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kd-data-center .kd-tab.kd-tab[aria-selected='true'] {
+  background: var(--kd-accent);
+  border-color: var(--kd-accent);
+  color: var(--kd-accent-ink);
+}
+
+.kd-data-center .kd-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.kd-data-center .kd-panel:focus-visible {
+  outline: 3px solid var(--kd-focus);
+  outline-offset: 2px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.kd-data-center .kd-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.kd-data-center .kd-button.kd-button {
+  /* The 44 by 44 CSS-pixel minimum, on every control, in one place. */
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 18px;
+  border: 1px solid var(--kd-line-strong);
+  border-radius: 10px;
+  background: var(--kd-card);
+  color: var(--kd-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.kd-data-center .kd-button.kd-button:hover:not(:disabled) {
+  background: #f2e6cf;
+}
+
+.kd-data-center .kd-button.kd-button--primary {
+  background: var(--kd-accent);
+  border-color: var(--kd-accent);
+  color: var(--kd-accent-ink);
+}
+
+.kd-data-center .kd-button.kd-button--primary:hover:not(:disabled) {
+  background: #57330b;
+}
+
+.kd-data-center .kd-button.kd-button--danger {
+  background: var(--kd-clay);
+  border-color: var(--kd-clay);
+  color: #fff6f2;
+}
+
+.kd-data-center .kd-button.kd-button--danger:hover:not(:disabled) {
+  background: #6f2617;
+}
+
+.kd-data-center .kd-button.kd-button--quiet {
+  background: transparent;
+  border-color: var(--kd-line-strong);
+  font-weight: 500;
+}
+
+.kd-data-center .kd-button.kd-button:disabled {
+  /* Disabled is a state, so it is stated: dimmed *and* not-allowed, and never
+     dimmed into looking available. */
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.kd-data-center .kd-button.kd-button:focus-visible,
+.kd-data-center .kd-tab.kd-tab:focus-visible,
+.kd-data-center .kd-panel:focus-visible,
+.kd-data-center .kd-technical summary:focus-visible {
+  outline: 3px solid var(--kd-focus);
+  outline-offset: 2px;
+}
+
+/* ── Status and problems ────────────────────────────────────────────────── */
+
+.kd-data-center .kd-status {
+  min-height: 1.55em;
+  color: var(--kd-ink-soft);
+}
+
+.kd-data-center .kd-status:empty {
+  min-height: 0;
+}
+
+.kd-data-center .kd-problem {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--kd-clay);
+  border-left-width: 6px;
+  border-radius: 8px;
+  background: #fdf1ec;
+  color: var(--kd-clay);
+  font-weight: 600;
+}
+
+.kd-data-center .kd-problem-block {
+  display: grid;
+  gap: 8px;
+}
+
+.kd-data-center .kd-marker {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+/* ── The preview ────────────────────────────────────────────────────────── */
+
+.kd-data-center .kd-preview {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--kd-line-strong);
+  border-radius: 12px;
+  background: var(--kd-card);
+}
+
+.kd-data-center .kd-preview-heading {
+  margin: 0;
+  font-size: 15px;
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-preview-subheading {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-preview-file,
+.kd-data-center .kd-preview-note {
+  color: var(--kd-ink-soft);
+}
+
+.kd-data-center .kd-preview-block {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kd-line);
+}
+
+.kd-data-center .kd-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 2px 16px;
+  margin: 0;
+}
+
+.kd-data-center .kd-counts-row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px dotted var(--kd-line);
+}
+
+.kd-data-center .kd-counts-label {
+  color: var(--kd-ink-soft);
+}
+
+.kd-data-center .kd-counts-value {
+  margin: 0;
+  color: var(--kd-ink);
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.kd-data-center .kd-disclosure {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+
+.kd-data-center .kd-disclosure-item {
+  display: grid;
+  gap: 2px;
+}
+
+.kd-data-center .kd-disclosure-name {
+  font-weight: 600;
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-disclosure-reason {
+  color: var(--kd-ink-soft);
+}
+
+/* ── The outcome ────────────────────────────────────────────────────────── */
+
+.kd-data-center .kd-outcome {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--kd-line-strong);
+  border-left-width: 6px;
+  border-radius: 12px;
+  background: var(--kd-card);
+}
+
+.kd-data-center .kd-outcome--problem {
+  border-left-color: var(--kd-clay);
+}
+
+.kd-data-center .kd-outcome-heading {
+  margin: 0;
+  font-size: 15px;
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-outcome-verdict {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  font-weight: 700;
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-outcome--problem .kd-outcome-verdict {
+  color: var(--kd-clay);
+}
+
+.kd-data-center .kd-outcome:not(.kd-outcome--problem) .kd-outcome-verdict {
+  color: var(--kd-moss);
+}
+
+.kd-data-center .kd-outcome-marker {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.kd-data-center .kd-outcome-list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  color: var(--kd-ink-soft);
+}
+
+.kd-data-center .kd-outcome-list li {
+  overflow-wrap: anywhere;
+}
+
+/* ── Technical details ──────────────────────────────────────────────────── */
+
+.kd-data-center .kd-technical {
+  border: 1px solid var(--kd-line);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.kd-data-center .kd-technical summary {
+  min-height: 32px;
+  padding: 6px 2px;
+  color: var(--kd-ink-soft);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.kd-data-center .kd-technical[open] summary {
+  margin-bottom: 6px;
+}
+
+/* ── The confirmation dialog ────────────────────────────────────────────── */
+
+.kd-data-center .kd-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(47, 36, 24, 0.55);
+}
+
+.kd-data-center .kd-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 18px;
+  border: 2px solid var(--kd-line-strong);
+  border-radius: 14px;
+  background: var(--kd-card);
+  color: var(--kd-ink);
+  box-shadow: 0 18px 40px rgba(47, 36, 24, 0.35);
+  animation: kd-dialog-in 140ms ease-out;
+}
+
+.kd-data-center .kd-dialog:focus-visible {
+  outline: 3px solid var(--kd-focus);
+  outline-offset: 2px;
+}
+
+.kd-data-center .kd-dialog-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.kd-data-center .kd-dialog-line {
+  margin: 0;
+  color: var(--kd-ink-soft);
+}
+
+@keyframes kd-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 30rem) {
+  .kd-data-center {
+    padding: 12px;
+  }
+
+  .kd-data-center .kd-block,
+  .kd-data-center .kd-preview,
+  .kd-data-center .kd-outcome {
+    padding: 12px;
+  }
+
+  .kd-data-center .kd-button {
+    /* Full width at this size, so a thumb lands on the label and not beside it. */
+    width: 100%;
+  }
+}
+
+/*
+ * Reduced motion, twice on purpose. The media query is the rule that holds with
+ * scripting unavailable; the attribute is the rule that holds when a learner
+ * changes the preference while the Data Center is open, which a stylesheet alone
+ * would not notice until the next reload. `DataCenter` sets it from
+ * `matchMedia('(prefers-reduced-motion: reduce)')`.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .kd-data-center,
+  .kd-data-center * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.kd-data-center[data-kd-motion='reduced'],
+.kd-data-center[data-kd-motion='reduced'] * {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}

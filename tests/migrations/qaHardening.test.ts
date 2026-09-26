@@ -47,6 +47,16 @@ import {
 const ROOT = process.cwd();
 const SRC = join(ROOT, 'src');
 const V2_DIR = join(SRC, 'services', 'persistence', 'v2');
+/**
+ * The data-product tree Phase 5 added.
+ *
+ * It is in the same position relative to storage-v2 as the v2 tree is: it is the
+ * product's own implementation, it legitimately depends on the storage-v2
+ * implementation, and it is *not* in the application graph. The scans below
+ * therefore exclude it the way they exclude the v2 tree - and compensate with an
+ * explicit assertion that nothing outside it reaches it.
+ */
+const PRODUCTS_DIR = join(SRC, 'services', 'persistence', 'products');
 const encoder = new TextEncoder();
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
@@ -118,6 +128,18 @@ const STORAGE_V2_SEAMS: ReadonlyMap<string, string> = new Map([
   [extensionless(join(SRC, 'store', 'shortcutStore.ts')), 'dual-writes the legacy mirror'],
   [extensionless(join(SRC, 'store', 'preferencesStore.ts')), 'shares the persisted-state shape'],
   [extensionless(join(SRC, 'services', 'sessionTracker.ts')), 'dual-writes the legacy mirror'],
+  // Phase 5. The full-device backup product reads a generation through the
+  // repository and verifies archive members through the audited ZIP codec; it is
+  // the product's own tree and is not in the application graph, which
+  // `no module outside the product tree reaches it` below now asserts.
+  [
+    extensionless(join(PRODUCTS_DIR, 'fullDeviceBackup.ts')),
+    'the full-device backup product: reads a generation, stages a restore',
+  ],
+  [
+    extensionless(join(PRODUCTS_DIR, 'archiveValidation.ts')),
+    'the archive validator: reads and verifies .kdbak members',
+  ],
 ]);
 
 /**
@@ -142,19 +164,100 @@ function storageV2SeamOffenders(files: readonly string[]): string[] {
   return offenders;
 }
 
-function readSpecifiers(file: string): string[] {
+/**
+ * How one module reached a specifier.
+ *
+ * - `value` - a static `import`/`export ... from`, or a `require`. The binding
+ *   exists at runtime, so the target's code is in the graph.
+ * - `side-effect` - `import './x'` with no bindings. Still a real edge.
+ * - `dynamic` - `import('./x')`. A real edge, and the reason a lazily imported
+ *   product is not in the entry chunk.
+ * - `type-only` - `import type ... from './x'`, or `export type ... from './x'`.
+ *   **Erased at build.** There is no binding and no runtime edge at all, so a
+ *   type-only import cannot open a database, cannot be reached by a learner
+ *   action, and cannot put a byte in a bundle.
+ *
+ * The distinction is only meaningful if `type-only` requires the *whole* clause
+ * to be types. `import { type A, type B } from './x'` is deliberately **not**
+ * type-only: a mixed clause still has no value binding, but `import { A, type B }`
+ * does, and treating the two alike would hide a real edge behind a type annotation.
+ */
+type SpecifierEdgeKind = 'value' | 'side-effect' | 'dynamic' | 'type-only';
+
+interface SpecifierEdge {
+  readonly specifier: string;
+  readonly kind: SpecifierEdgeKind;
+}
+
+/**
+ * One pattern for every edge form, so the classification cannot disagree with the
+ * extraction: a second, overlapping pattern for the same statement is how a
+ * type-only import would end up counted twice - once as erased, once as real.
+ *
+ * Order matters. The `import(` form is matched before the side-effect form so
+ * `import(` is never mistaken for `import` followed by a string.
+ */
+const SPECIFIER_EDGE =
+  /\b(?:import|export)\s+(?:(?<typeOnly>type)\s+)?[^;'"]*?\bfrom\s*['"](?<from>[^'"]+)['"]|\bimport\s*\(\s*['"](?<dynamic>[^'"]+)['"]\s*\)|\bimport\s*['"](?<sideEffect>[^'"]+)['"]|\brequire\s*\(\s*['"](?<required>[^'"]+)['"]\s*\)/g;
+
+function readSpecifierEdges(file: string): SpecifierEdge[] {
   const source = readFileSync(file, 'utf8');
-  const patterns = [
-    /\bfrom\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-  ];
-  const specifiers: string[] = [];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) specifiers.push(match[1]!);
+  const edges: SpecifierEdge[] = [];
+  for (const match of source.matchAll(SPECIFIER_EDGE)) {
+    const groups = match.groups ?? {};
+    if (groups.from !== undefined) {
+      edges.push({ specifier: groups.from, kind: groups.typeOnly !== undefined ? 'type-only' : 'value' });
+      continue;
+    }
+    if (groups.dynamic !== undefined) {
+      edges.push({ specifier: groups.dynamic, kind: 'dynamic' });
+      continue;
+    }
+    if (groups.sideEffect !== undefined) {
+      edges.push({ specifier: groups.sideEffect, kind: 'side-effect' });
+      continue;
+    }
+    if (groups.required !== undefined) {
+      edges.push({ specifier: groups.required, kind: 'value' });
+    }
   }
-  return specifiers;
+  return edges;
+}
+
+/**
+ * Every specifier a module references, in source order.
+ *
+ * Deliberately kind-blind: traversal wants to know what a module *names*, while
+ * the opening-module rule below needs to know what it *reaches*. The two answers
+ * differ for exactly one form of edge, and each caller states which one it wants.
+ */
+function readSpecifiers(file: string): string[] {
+  return readSpecifierEdges(file).map((edge) => edge.specifier);
+}
+
+/**
+ * The storage-v2 modules a module imports **for real**.
+ *
+ * This is the predicate the opening-module rule turns on, and the one Phase 5
+ * corrected: an `import type { StorageV2Repository } from '.../v2/repository'` is
+ * erased before the bundle exists, so recording the importer as someone who can
+ * open a database was simply wrong. It is the *rule* that was wrong, not the
+ * product, and moving the product's type import to a module that is not an
+ * opening module would have hidden the defect rather than fixed it.
+ *
+ * Every other form of edge is a real one and is still recorded: a value import, a
+ * side-effect import, a dynamic `import()`, and a `require()`.
+ */
+function directStorageV2Imports(file: string, edges: readonly SpecifierEdge[]): Set<string> {
+  const direct = new Set<string>();
+  for (const edge of edges) {
+    if (edge.kind === 'type-only') continue;
+    const target = resolveFirstParty(file, edge.specifier);
+    if (!target) continue;
+    const resolved = extensionless(target);
+    if (ALL_STORAGE_V2_MODULES.includes(resolved)) direct.add(resolved);
+  }
+  return direct;
 }
 
 function resolveFirstParty(file: string, specifier: string): string | null {
@@ -237,23 +340,37 @@ describe('QA hostile archives', () => {
     expectArchiveError('ARCHIVE_MALFORMED', () => writeArchive(files));
   });
 
-  it('treats an Object.prototype member name as a duplicate (misleading reason)', () => {
-    // `file.path in zippable` consults Object.prototype, so `toString`,
-    // `constructor`, and `__proto__` are reported as duplicates even though
-    // they are not. The rejection is safe; the reason code is wrong.
-    for (const path of ['toString', 'constructor', '__proto__', 'hasOwnProperty']) {
-      expectArchiveError('ARCHIVE_MALFORMED', () =>
-        writeArchive([{ path, bytes: encoder.encode('{}') }]),
-      );
+  it('does not treat an Object.prototype member name as a duplicate', () => {
+    // HISTORY. This measured the Phase 3 defect this file recorded: the writer
+    // asked `file.path in zippable`, which consults `Object.prototype`, so
+    // `toString`, `constructor` and `__proto__` were all reported as duplicates
+    // even though none of them is one. The rejection was safe; the reason was
+    // wrong, and a product that could not write a member another tool had written
+    // was not interoperable. Phase 5 implemented the recorded follow-up: the check
+    // is `Object.hasOwn`.
+    //
+    // Every `Object.prototype` name except `__proto__` is an ordinary string and
+    // now round-trips.
+    for (const path of ['toString', 'constructor', 'hasOwnProperty', 'valueOf']) {
+      const bytes = writeArchive([{ path, bytes: encoder.encode('{}') }]);
+      expect(readArchive(bytes).map((member) => member.path), path).toEqual([path]);
     }
-    // The details record says "duplicate-member" for a name that is not one.
+    // `__proto__` is the one name fflate cannot represent at all: it normalizes
+    // member names into a plain object and enumerates it, so assigning that name
+    // changes the prototype and the member is dropped from the archive that comes
+    // back. It is refused with its own reason rather than dropped in silence, and
+    // it is refused as an unsafe *path* so a caller can tell it from a duplicate.
     let details: Record<string, unknown> = {};
+    let code: string | null = null;
     try {
-      writeArchive([{ path: 'toString', bytes: encoder.encode('{}') }]);
+      writeArchive([{ path: '__proto__', bytes: encoder.encode('{}') }]);
     } catch (error) {
+      code = (error as { code: string }).code;
       details = (error as { details: Record<string, unknown> }).details;
     }
-    expect(details.reason).toBe('duplicate-member');
+    expect(code).toBe('ARCHIVE_UNSAFE_PATH');
+    expect(details.reason).toBe('prototype-member-name');
+    expect(details.reason).not.toBe('duplicate-member');
   });
 
   it('refuses an oversized member count before decompressing anything', () => {
@@ -737,9 +854,25 @@ const ALL_STORAGE_V2_MODULES = [...STORAGE_V2_MODULES, ...STORAGE_V2_PHASE_4_MOD
  * the one boundary that owns repository selection, so there is exactly one place
  * in the application that knows storage-v2 exists.
  */
-const STORAGE_V2_OPENING_MODULES = ['database', 'repository', 'migrations', 'archive'].map((name) =>
+const STORAGE_V2_OPENING_MODULES = ['database', 'repository', 'migrations'].map((name) =>
   extensionless(join(V2_DIR, `${name}.ts`)),
 );
+
+/**
+ * The ZIP codec, which Phase 3 listed here and Phase 5 removed.
+ *
+ * `archive` was on this list because it was heavyweight and nothing referenced it,
+ * not because it can open or mutate a database - which is what the list documents
+ * itself as being for. It cannot: its only imports are `fflate/browser` and the
+ * schema module, and a test below asserts that mechanically, so the removal is
+ * falsifiable rather than a convenience.
+ *
+ * Its reachability is still governed, by a rule that fits it better and is
+ * *stronger* than what it replaced: see `the ZIP codec is imported by the data
+ * product only` below, which pins the exact set of importers and requires that
+ * none of them is a static edge from the application graph.
+ */
+const ARCHIVE_CODEC_MODULE = extensionless(join(V2_DIR, 'archive.ts'));
 
 /** The single file allowed to import the opening modules. */
 const STORAGE_V2_ENTRY_POINT = extensionless(join(SRC, 'application', 'bootstrap.ts'));
@@ -749,12 +882,21 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
     for (const modulePath of ALL_STORAGE_V2_MODULES) expect(existsSync(`${modulePath}.ts`)).toBe(true);
   });
 
-  it('a graph walk from src/main.tsx reaches storage-v2 only through the one entry point', () => {
-    const entry = join(SRC, 'main.tsx');
-    expect(existsSync(entry)).toBe(true);
-
+  /**
+   * Walk the first-party graph from one entry, recording who imports each
+   * storage-v2 module **for real**.
+   *
+   * Extracted from the test below so the rule it applies can be driven directly
+   * by a planted fixture, which is the only way to prove the rule distinguishes
+   * a type-only edge from a real one rather than merely accepting whatever the
+   * repository happens to contain.
+   */
+  function walkFrom(entryFile: string): {
+    seen: Set<string>;
+    directImporters: Map<string, string[]>;
+  } {
     const seen = new Set<string>();
-    const queue: string[] = [extensionless(entry)];
+    const queue: string[] = [extensionless(entryFile)];
     const directImporters = new Map<string, string[]>();
 
     while (queue.length > 0) {
@@ -763,8 +905,12 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
       seen.add(current);
       if (!existsSync(`${current}.ts`) && !existsSync(`${current}.tsx`)) continue;
       const file = existsSync(`${current}.ts`) ? `${current}.ts` : `${current}.tsx`;
-      for (const specifier of readSpecifiers(file)) {
-        const target = resolveFirstParty(file, specifier);
+      const edges = readSpecifierEdges(file);
+      // Computed once per module, and the same set the recording consults, so the
+      // classification under test is the classification in force.
+      const direct = directStorageV2Imports(file, edges);
+      for (const edge of edges) {
+        const target = resolveFirstParty(file, edge.specifier);
         if (!target) continue;
         const resolved = STORAGE_V2_MODULES.includes(extensionless(target))
           ? extensionless(target)
@@ -773,6 +919,7 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
             : null;
         if (!resolved) continue;
         if (ALL_STORAGE_V2_MODULES.includes(resolved)) {
+          if (!direct.has(resolved)) continue;
           const importers = directImporters.get(resolved) ?? [];
           importers.push(relative(ROOT, file));
           directImporters.set(resolved, importers);
@@ -781,6 +928,96 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
         queue.push(resolved);
       }
     }
+    return { seen, directImporters };
+  }
+
+  it('a type-only import of an opening module is not a direct importer, and a value import still is', () => {
+    // Phase 5 correction, with the distinction pinned from both sides.
+    //
+    // The rule this test exists for says that only the one bootstrap entry point
+    // may import a database-opening module for real. Before the correction the
+    // walker's specifier extraction counted `import type { StorageV2Repository }
+    // from '.../v2/repository'` as such an import, so a module that only *named* the
+    // repository's type was reported as able to open a database. It cannot: the
+    // clause is erased at build.
+    //
+    // The fix is deliberately narrow. Only the opening-module recording ignores
+    // type-only edges. A static **value** import of an opening module is still
+    // recorded, and the static-import rule for the non-opening modules is
+    // untouched, because those rules are about different things: one is "only one
+    // place can open a database", the other is "only declared seams may name
+    // storage-v2 at all".
+    const planted = testOwnedDirectory('__qa_edge_probe__');
+    mkdirSync(planted, { recursive: true });
+    const typeOnly = join(planted, 'type-only.ts');
+    const value = join(planted, 'value.ts');
+    const entry = join(planted, 'entry.ts');
+    try {
+      writeFileSync(
+        typeOnly,
+        [
+          "import type { StorageV2Repository } from '@/services/persistence/v2/repository';",
+          'export type Handle = StorageV2Repository;',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      writeFileSync(
+        value,
+        [
+          "import { openStorageV2Repository } from '@/services/persistence/v2/repository';",
+          'export const open = openStorageV2Repository;',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      writeFileSync(entry, "export * from './type-only';\nexport * from './value';\n", 'utf8');
+
+      // The extraction sees both, and classifies them differently. Without this the
+      // walk could pass for the wrong reason - a scanner that found no edges at all
+      // also records no importer.
+      expect(readSpecifierEdges(typeOnly).map((edge) => edge.kind)).toEqual(['type-only']);
+      expect(readSpecifierEdges(value).map((edge) => edge.kind)).toEqual(['value']);
+      expect(readSpecifiers(typeOnly)).toEqual(['@/services/persistence/v2/repository']);
+      expect(readSpecifiers(value)).toEqual(['@/services/persistence/v2/repository']);
+
+      // The rule, end to end, through the real walk.
+      const { directImporters } = walkFrom(entry);
+      const opening = extensionless(join(V2_DIR, 'repository.ts'));
+      const importers = (directImporters.get(opening) ?? []).sort();
+      expect(importers).toEqual([relative(ROOT, value)]);
+      expect(importers).not.toContain(relative(ROOT, typeOnly));
+
+      // ...and the seam rule is unchanged by any of this: it counts every edge,
+      // type-only included, because "may this file name storage-v2 at all" is a
+      // different question from "may this file open a database".
+      expect(storageV2SeamOffenders([typeOnly])).toEqual([relative(ROOT, typeOnly)]);
+      expect(storageV2SeamOffenders([value])).toEqual([relative(ROOT, value)]);
+
+      // A mixed clause is a real edge even though part of it is types, so a type
+      // annotation is not a way through the rule.
+      const mixed = join(planted, 'mixed.ts');
+      writeFileSync(
+        mixed,
+        [
+          "import { type StorageV2Repository, checksumValue } from '@/services/persistence/v2/repository';",
+          'export const digest = checksumValue;',
+          'export type Handle = StorageV2Repository;',
+          '',
+        ].join('\n'),
+        'utf8',
+      );
+      expect(readSpecifierEdges(mixed).map((edge) => edge.kind)).toEqual(['value']);
+      expect(storageV2SeamOffenders([mixed])).toEqual([relative(ROOT, mixed)]);
+    } finally {
+      rmSync(planted, { recursive: true, force: true });
+    }
+  });
+
+  it('a graph walk from src/main.tsx reaches storage-v2 only through the one entry point', () => {
+    const entry = join(SRC, 'main.tsx');
+    expect(existsSync(entry)).toBe(true);
+    const { seen, directImporters } = walkFrom(entry);
 
     // The walk must have actually walked something.
     expect(seen.size).toBeGreaterThan(20);
@@ -804,6 +1041,74 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
       );
       expect(importers.filter((file) => file !== entryPoint), opening).toEqual([]);
     }
+  });
+
+  it('the ZIP codec cannot open a database, so it is not an opening module', () => {
+    // The claim that justifies removing `archive` from
+    // `STORAGE_V2_OPENING_MODULES`, asserted rather than asserted-in-prose. A
+    // module that imported the database, or anything that opens one, would fail
+    // here and would have to go back on the list.
+    const source = readFileSync(`${ARCHIVE_CODEC_MODULE}.ts`, 'utf8');
+    const specifiers = readSpecifiers(`${ARCHIVE_CODEC_MODULE}.ts`);
+    for (const specifier of specifiers) {
+      const target = resolveFirstParty(`${ARCHIVE_CODEC_MODULE}.ts`, specifier);
+      const name = target ? extensionless(target).split('/').pop() : null;
+      expect(['database', 'repository', 'migrations', 'repositorySelection'], name ?? '').not.toContain(
+        name ?? '',
+      );
+    }
+    // It also has no indexedDB access of its own, which is the mechanism the
+    // list is really about.
+    expect(source).not.toMatch(/indexedDB|IDBDatabase|openStorageV2Repository/);
+  });
+
+  it('the ZIP codec is imported by the data product only, and never eagerly', () => {
+    // Replaces the `archive` entry in `STORAGE_V2_OPENING_MODULES`, with a rule
+    // that is narrower and stricter than the one it replaces.
+    //
+    // The old rule allowed exactly one outside importer: the bootstrap entry point
+    // - and `bootstrap.ts` does not import the codec at all, so in practice it
+    // allowed none. Phase 5 gives the codec a legitimate importer, the data
+    // product that has to write and read `.kdbak` members, and the new rule pins
+    // the *exact* set rather than "at most one": the two product modules, nothing
+    // else, and no static edge from the application graph.
+    const importers: string[] = [];
+    for (const file of scannableSourceFiles(SRC)) {
+      if (isInside(V2_DIR, file)) continue;
+      if (directStorageV2Imports(file, readSpecifierEdges(file)).has(ARCHIVE_CODEC_MODULE)) {
+        importers.push(relative(ROOT, file));
+      }
+    }
+    expect(importers.sort()).toEqual([
+      'src/services/persistence/products/archiveValidation.ts',
+      'src/services/persistence/products/fullDeviceBackup.ts',
+    ]);
+
+    // And the laziness half, asserted here too rather than only in the Phase 5
+    // flag gate: neither product module is reached by a static import from the
+    // application graph, so the codec cannot reach the entry chunk that way
+    // either.
+    for (const importer of importers) {
+      const file = join(ROOT, importer);
+      for (const edge of readSpecifierEdges(file)) {
+        const target = resolveFirstParty(file, edge.specifier);
+        if (!target || extensionless(target) !== ARCHIVE_CODEC_MODULE) continue;
+        expect(edge.kind, importer).toBe('value');
+      }
+    }
+    const eager = scannableSourceFiles(SRC).filter(
+      (file) =>
+        !isInside(PRODUCTS_DIR, file) &&
+        readSpecifierEdges(file).some(
+          (edge) =>
+            (edge.kind === 'value' || edge.kind === 'side-effect') &&
+            (() => {
+              const target = resolveFirstParty(file, edge.specifier);
+              return target !== null && extensionless(target) === ARCHIVE_CODEC_MODULE;
+            })(),
+        ),
+    );
+    expect(eager.map((file) => relative(ROOT, file))).toEqual([]);
   });
 
   it('the only importers of storage-v2 outside the v2 tree are the declared seams', () => {
@@ -839,6 +1144,13 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
     const offenders: string[] = [];
     for (const file of scannableSourceFiles(SRC)) {
       if (isInside(V2_DIR, file)) continue;
+      // Phase 5. The data-product tree depends on the storage-v2 implementation in
+      // exactly the way the v2 tree depends on itself: it is the product's own
+      // code, and it is not reachable from the application. Excluding it here is
+      // therefore not an exemption but the same boundary the next test enforces -
+      // nothing outside the product tree reaches it, and nothing in the
+      // application graph reaches it at all.
+      if (isInside(PRODUCTS_DIR, file)) continue;
       const source = readFileSync(file, 'utf8');
       // A static import statement begins a line with `import` and is not a
       // dynamic `import(`; a multi-line import is captured by continuing until the
@@ -850,6 +1162,32 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
         const target = extensionless(resolved);
         const name = target.split('/').pop() as string;
         if (isInside(V2_DIR, resolved) && implementationModules.includes(name)) {
+          offenders.push(`${relative(ROOT, file)} -> ${specifier}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('no module outside the data-product tree statically imports a product module', () => {
+    // The compensating assertion for the exclusion above, and the same rule one
+    // level up: the product is an implementation tree, so only something that is
+    // itself a product may reach into it. A Data Center that statically imported
+    // the product would put the ZIP codec in the entry chunk, which is exactly
+    // what `VITE_DATA_PRODUCTS_V2=false` is supposed to prevent.
+    const productModules = new Set(
+      listSourceFiles(PRODUCTS_DIR).map((file) => extensionless(file)),
+    );
+    expect(productModules.size).toBeGreaterThan(0);
+    const offenders: string[] = [];
+    for (const file of scannableSourceFiles(SRC)) {
+      if (isInside(PRODUCTS_DIR, file) || isInside(V2_DIR, file)) continue;
+      const source = readFileSync(file, 'utf8');
+      for (const match of source.matchAll(/(?:^|\n)\s*import\s(?!type\s)([^;]*?from\s*)?['"]([^'"]+)['"]/g)) {
+        const specifier = match[2] as string;
+        const resolved = resolveFirstParty(file, specifier);
+        if (!resolved) continue;
+        if (productModules.has(extensionless(resolved))) {
           offenders.push(`${relative(ROOT, file)} -> ${specifier}`);
         }
       }

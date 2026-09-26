@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ChangeEvent, type JSX } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type JSX,
+} from 'react';
 import { CURRENT_SCHEMA_VERSION } from '@/core/validation/persistence';
 import { useSessionStore, type GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
@@ -19,8 +25,27 @@ import {
 } from '@/services/persistence/subjectPersistence';
 import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
+import { runtimeConfig } from '@/config/featureFlags';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/core/biomes';
+
+/**
+ * Whether this build has the Phase 5 data products at all.
+ *
+ * `VITE_DATA_PRODUCTS_V2` defaults to `false`, so on a default build every branch
+ * below that mentions `dataProductsEnabled` is dead and the Data tab renders
+ * exactly the markup it rendered before the Data Center existed.
+ */
+const dataProductsEnabled = runtimeConfig.dataProductsV2;
+
+/**
+ * The Data Center's component type, reached through a type-position `import()`.
+ *
+ * A type-position `import()` is erased by TypeScript and produces no runtime
+ * import, so naming the component's type costs the default build nothing while
+ * still type-checking the props the Data tab passes it.
+ */
+type DataCenterComponent = typeof import('@/ui/data/DataCenter')['DataCenter'];
 
 const PHASES: { id: GamePhase; title: string; description: string }[] = [
   {
@@ -118,6 +143,8 @@ export function WelcomeScreen(): JSX.Element {
   const [selectedBiome, setSelectedBiome] = useState<FloorBiomeId>(FLOOR_BIOME_IDS[0]);
   const webImportInputRef = useRef<HTMLInputElement | null>(null);
   const templateImportInputRef = useRef<HTMLInputElement | null>(null);
+  const subjectsTabRef = useRef<HTMLButtonElement | null>(null);
+  const [DataCenterScreen, setDataCenterScreen] = useState<DataCenterComponent | null>(null);
   const env = getElectronEnvironmentLabel();
   const electronAvailable = isElectronAvailable();
   const selectedPhaseLabel = PHASES.find((phaseDef) => phaseDef.id === phase)?.title ?? phase;
@@ -171,6 +198,24 @@ export function WelcomeScreen(): JSX.Element {
     setLoadingExisting(false);
   }
 
+  /**
+   * The Data Center restored a backup, so show what it restored.
+   *
+   * The subject list is reloaded from storage and the Create / Load tab is
+   * selected, because a learner who has just restored a backup wants to see the
+   * subjects in it. The Data Center's own report is not lost by this: the Welcome
+   * panels stay mounted, so switching back to the Data tab shows the report
+   * again. Focus is moved to the tab that is now showing, so a keyboard or screen
+   * reader user is not left with focus inside a panel that just became hidden.
+   */
+  function handleDeviceDataRestored() {
+    void (async () => {
+      await refreshExistingSubjects();
+      setActiveTab('subjects');
+      subjectsTabRef.current?.focus();
+    })();
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function loadExisting() {
@@ -192,6 +237,20 @@ export function WelcomeScreen(): JSX.Element {
       cancelled = true;
     };
   }, [snapshot]);
+
+  useEffect(() => {
+    if (dataProductsEnabled) {
+      let cancelled = false;
+      void (async () => {
+        const module = await import('@/ui/data/DataCenter');
+        if (!cancelled) setDataCenterScreen(() => module.DataCenter);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    return undefined;
+  }, []);
 
   async function handleStartTutorial() {
     const subject = createTutorialSubject();
@@ -484,6 +543,7 @@ export function WelcomeScreen(): JSX.Element {
               <button
                 type="button"
                 role="tab"
+                ref={subjectsTabRef}
                 aria-selected={activeTab === 'subjects'}
                 aria-controls="welcome-panel-subjects"
                 onKeyDown={(event) => handleTabKeyDown(event, 'subjects')}
@@ -748,6 +808,26 @@ export function WelcomeScreen(): JSX.Element {
         aria-label="Data management"
         hidden={activeTab !== 'data'}
       >
+        {/*
+          Phase 5: the Data Center *replaces* the legacy admin panel in a build
+          that opts into the data products, and is absent from every other build.
+
+          The two are alternatives rather than additions on purpose. They are two
+          answers to the same question - "how do I move my data" - and the fresh
+          profile restore lane drives this panel and requires it to present
+          exactly one file picker, so two import surfaces side by side would be
+          both ambiguous and untestable. A build with the flag off renders the
+          markup below byte for byte as it did before the Data Center existed,
+          and the flag is a build-time value, so the plan's Phase 5 rollback is
+          still "turn the flag off".
+        */}
+        {dataProductsEnabled ? (
+          DataCenterScreen === null ? (
+            <p className="room-help-text">Loading the Data Center…</p>
+          ) : (
+            <DataCenterScreen onRestored={handleDeviceDataRestored} />
+          )
+        ) : (
         <section>
           <h2>Admin</h2>
           <p>
@@ -890,6 +970,7 @@ export function WelcomeScreen(): JSX.Element {
             backup cannot include them.
           </p>
         </section>
+        )}
       </section>
     </div>
 
@@ -952,6 +1033,20 @@ export function WelcomeScreen(): JSX.Element {
               onClick={() => { localStorage.removeItem('kd-village-spawn'); setActiveScreen('village'); }}
             >
               Continue to Village
+            </button>
+          ) : null}
+          {/*
+            The Data Center's own way in. It is in the sidebar rather than inside
+            the Data tab so that it is reachable from wherever a learner is on
+            this screen, and so that pressing it both selects the Data tab and
+            shows what is on it - one control, one destination, no second click.
+
+            Phase 5: rendered only when the data-products flag is on, so the
+            default build's sidebar is unchanged.
+          */}
+          {dataProductsEnabled ? (
+            <button type="button" className="ghost" onClick={() => setActiveTab('data')}>
+              Open Data Center
             </button>
           ) : null}
         </div>

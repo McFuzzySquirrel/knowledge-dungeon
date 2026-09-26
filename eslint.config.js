@@ -16,6 +16,12 @@ const RENDERER_NEUTRAL_LAYERS = [
   'src/core/**/*.{ts,tsx}',
   'src/application/**/*.{ts,tsx}',
   'src/services/persistence/v2/**/*.{ts,tsx}',
+  // The data-product tree (Phase 5 onward) writes and reads archives for the
+  // storage-v2 model above, so it is renderer-neutral for the same reason. It is
+  // listed here rather than left to convention because it is the tree a Data
+  // Center will import, and a product module reaching for an engine would put
+  // rendering inside the backup path.
+  'src/services/persistence/products/**/*.{ts,tsx}',
 ];
 
 /**
