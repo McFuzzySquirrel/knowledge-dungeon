@@ -18,8 +18,19 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative } from 'node:path';
 
 import {
   exportFullDeviceBackup,
@@ -41,6 +52,12 @@ import {
   otherGenerationLabel,
   type VerifierDevice,
 } from './support/device';
+// The lane's own declaration and the lane's own evidence path builder, so the
+// records this test builds cannot drift from the records the lane really writes.
+// Both modules are dependency-free declarations; importing them pulls in no
+// Playwright, no network, and no lane.
+import { DATA_PRODUCTS_LANE } from '../e2e/data-products-lane';
+import { evidenceRelativePath } from '../e2e/compat-evidence';
 
 const devices: VerifierDevice[] = [];
 const EXTERNAL_URL = VERIFIER_MARKERS.externalUrl;
@@ -81,6 +98,231 @@ function learnerMarkers(): string[] {
 function opaqueIdentifiers(): string[] {
   return [SUBJECT.unicode, 'room-verifier-phase0-root', 'att-verifier-external'];
 }
+
+// ── The evidence scanner, and the evidence it scans ─────────────────────────
+
+/**
+ * One finding from one evidence record.
+ *
+ * Three kinds, and only three, because three are the properties the lane claims:
+ * a sanitized record carries counts, categories, digests, and booleans, and never
+ * a learner value, a host other than the reserved one, or a machine-local path.
+ */
+interface EvidenceFinding {
+  readonly kind: 'learner-marker' | 'unsanitized-url' | 'absolute-home-path';
+  /** A code-shaped label. Never the offending text, so a finding is safe to print. */
+  readonly detail: string;
+}
+
+/** The only hosts this repository is permitted to name in sanitized evidence. */
+const RESERVED_EVIDENCE_HOSTS: readonly string[] = ['example.invalid', 'pictures.example.invalid'];
+
+/**
+ * The predicate. One function, used by every scan in this file, so the negative
+ * controls and the positive assertions cannot drift apart.
+ */
+function scanEvidenceText(text: string): EvidenceFinding[] {
+  const findings: EvidenceFinding[] = [];
+  for (const marker of learnerMarkers()) {
+    if (text.includes(marker)) {
+      findings.push({ kind: 'learner-marker', detail: `marker-${findings.length}` });
+    }
+  }
+  for (const url of text.match(/https?:\/\/[^\s"'`)\\]+/g) ?? []) {
+    const host = /^https?:\/\/([^/]+)/.exec(url)?.[1] ?? '';
+    if (!RESERVED_EVIDENCE_HOSTS.includes(host)) {
+      findings.push({ kind: 'unsanitized-url', detail: `host-length-${host.length}` });
+    }
+  }
+  for (const path of text.match(/\/(?:home|Users)\/[A-Za-z0-9._-]+/g) ?? []) {
+    findings.push({ kind: 'absolute-home-path', detail: `path-segments-${path.split('/').length}` });
+  }
+  return findings;
+}
+
+/** Every file under a root, in a stable order, without following a directory twice. */
+function evidenceFiles(root: string): string[] {
+  const out: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory).sort()) {
+      const full = join(directory, entry);
+      if (statSync(full).isDirectory()) walk(full);
+      else out.push(full);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+function countEvidenceFiles(root: string): number {
+  return evidenceFiles(root).length;
+}
+
+/** Files that exist at walk time but cannot be read, e.g. a concurrent lane write. */
+function unreadableEvidenceFiles(root: string): number {
+  let unreadable = 0;
+  for (const file of evidenceFiles(root)) {
+    try {
+      readFileSync(file, 'utf8');
+    } catch {
+      unreadable += 1;
+    }
+  }
+  return unreadable;
+}
+
+function scanEvidenceTree(root: string): EvidenceFinding[] {
+  const findings: EvidenceFinding[] = [];
+  for (const file of evidenceFiles(root)) {
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      // Reported by `unreadableEvidenceFiles`, not silently dropped here.
+      continue;
+    }
+    for (const finding of scanEvidenceText(text)) {
+      findings.push({ ...finding, detail: `${relative(root, file).replace(/\\/g, '/')}:${finding.detail}` });
+    }
+  }
+  return findings;
+}
+
+/** Whether `git check-ignore` says a path is ignored. The mechanism, not a guess. */
+function gitignoreMatches(path: string): boolean {
+  try {
+    execFileSync('git', ['check-ignore', '-q', '--', path], { cwd: process.cwd(), stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Evidence at the lane's own declared shape ──────────────────────────────
+
+/** A record shaped exactly like the lane's, with a mutable tail for the controls. */
+type EvidenceRecord = Record<string, unknown> & {
+  sourceProfile: Record<string, unknown>;
+  host: Record<string, unknown>;
+  artifact: Record<string, unknown>;
+};
+
+const PINNED_RUN_ID = 'verifier-00000000000000-0';
+const PINNED_INSTANT = '2026-01-04T03:04:05.000Z';
+const PINNED_TEST_TITLE = 'a populated device exports a backup that restores into the fresh profile';
+/** Several titles, so the scan covers a run directory with more than one record. */
+const EVIDENCE_TEST_TITLES: readonly string[] = [
+  PINNED_TEST_TITLE,
+  'a second browser context starts from an empty profile, and the observation proves it',
+  'a backup never becomes a request: no upload, no share, no non-static request',
+];
+
+/**
+ * One sanitized evidence record, built from the lane's own declaration.
+ *
+ * Every lane-level value is read from `DATA_PRODUCTS_LANE` and the file layout
+ * from `evidenceRelativePath`, so this cannot become a second, weaker shape: if
+ * the lane's declaration changes, these records change with it. The host block is
+ * pinned rather than taken from `os`, because the claim under test is about what
+ * the lane is *allowed* to write, not about any one machine - and a pinned block
+ * keeps the assertion identical on a developer machine and on CI.
+ */
+function buildLaneEvidenceRecord(testTitle: string = PINNED_TEST_TITLE): EvidenceRecord {
+  return {
+    schemaVersion: DATA_PRODUCTS_LANE.schemaVersion,
+    suite: DATA_PRODUCTS_LANE.suite,
+    runId: PINNED_RUN_ID,
+    runStartedAt: PINNED_INSTANT,
+    hostExecution: 'ci',
+    project: DATA_PRODUCTS_LANE.project,
+    testTitle,
+    lane: {
+      buildMode: DATA_PRODUCTS_LANE.buildMode,
+      flag: DATA_PRODUCTS_LANE.flag,
+      flagValue: DATA_PRODUCTS_LANE.flagValue,
+      storageRepository: DATA_PRODUCTS_LANE.storageRepository,
+      worldRenderer: DATA_PRODUCTS_LANE.worldRenderer,
+      dataProductsV2: DATA_PRODUCTS_LANE.dataProductsV2,
+      manifestPath: DATA_PRODUCTS_LANE.manifestPath,
+      sharesArtifactWith: DATA_PRODUCTS_LANE.sharesArtifactWith,
+      declaredViewport: DATA_PRODUCTS_LANE.viewport,
+      evidenceClass: DATA_PRODUCTS_LANE.evidenceClass,
+    },
+    host: {
+      platform: 'linux',
+      arch: 'x64',
+      release: '6.1.0-verifier',
+      ci: true,
+      runnerImage: { os: null, version: null },
+    },
+    artifact: {
+      verificationStatus: 'verified',
+      verificationCode: 'artifact-identity-verified',
+      treeSha256: hashOf(bytesOf('verifier-tree')),
+      fileCount: 132,
+      totalBytes: 4_460_358,
+      recordedEntrypointSha256: hashOf(bytesOf('verifier-entry-recorded')),
+      servedEntrypointSha256: hashOf(bytesOf('verifier-entry-served')),
+      servedEntrypointMatchesRecorded: true,
+      servedStatus: 200,
+      buildNode: 'v22.0.0',
+      sharesIdentityWithPhase4Lane: true,
+    },
+    sourceProfile: {
+      seededKeyCount: 6,
+      subjectCount: 1,
+      activeGenerationIsSafeIdentifier: true,
+      receiptCount: 1,
+      externalOnlyAttachmentCount: 2,
+      progressionContainsSeededXp: true,
+    },
+    freshness: {
+      contextCreatedWithoutStorageState: true,
+      observedBeforeApplicationKeyCount: 0,
+      observedBeforeApplicationDatabaseCount: 0,
+      observedBeforeApplicationStorageObjectStoreCount: 0,
+      observedAfterApplicationKeyCount: 1,
+      observedAfterApplicationDatabaseCount: 1,
+      observedAfterApplicationStorageObjectStoreCount: 11,
+      appInitiativeKeyCount: 1,
+      noContentKeysBeforeApplication: true,
+      noStorageDatabaseBeforeApplication: true,
+      probeCreatedNoDatabase: true,
+      initialGenerationIsEmpty: true,
+    },
+    restore: {
+      exportControlFound: true,
+      downloadStarted: true,
+      downloadByteLength: 2_094,
+      importControlFound: true,
+      activated: true,
+      previousGenerationRetained: true,
+    },
+    network: {
+      totalRequests: 9,
+      staticRequests: 9,
+      nonStaticRequests: 0,
+      blockedExternalRequests: 0,
+      violations: 0,
+      webSockets: { total: 0, opened: 0, violations: 0 },
+    },
+    failure: null,
+  };
+}
+
+/**
+ * The record's top-level keys must be exactly the lane's.
+ *
+ * Read out of the lane's own interface declaration, so this is a drift gate and
+ * not a copy: if the lane adds or removes a field, this fails and points at the
+ * field, rather than the two shapes quietly diverging.
+ */
+const LANE_RECORD_KEYS: readonly string[] = (() => {
+  const source = readFileSync(join(process.cwd(), 'tests/e2e/dataProductsRestore.spec.ts'), 'utf8');
+  const body = /interface RestoreLaneEvidence \{([\s\S]*?)\n\}/.exec(source)?.[1] ?? '';
+  return [...body.matchAll(/^ {2}readonly ([A-Za-z0-9]+)[?]?:/gm)].map((match) => match[1] as string);
+})();
+
 
 describe('V6: the markers really are in the state document', () => {
   let exported: FullDeviceExportResult;
@@ -266,34 +508,169 @@ describe('V6: nothing outside state.json carries a learner value', () => {
     }
   });
 
-  it('the allowlisted evidence root holds no learner value and no unsanitized URL', () => {
+  it('NEGATIVE CONTROL: the evidence scanner reports each of the three violations', () => {
+    // A scanner that finds nothing is the failure mode this section exists to
+    // remove, so it is proved capable of all three findings *before* it is trusted
+    // with the positive claim. Each control is a record built by the same builder
+    // the clean record uses, carrying exactly one violation, so the only thing
+    // that differs between a caught record and a clean one is the violation.
+    const controls: ReadonlyArray<{
+      readonly name: string;
+      readonly kind: EvidenceFinding['kind'];
+      readonly carry: (record: EvidenceRecord) => void;
+    }> = [
+      {
+        name: 'a subject name',
+        kind: 'learner-marker',
+        carry: (record) => {
+          (record.sourceProfile as { subjectName: string }).subjectName = VERIFIER_MARKERS.subjectName;
+        },
+      },
+      {
+        name: 'a non-reserved host',
+        kind: 'unsanitized-url',
+        carry: (record) => {
+          (record.host as { runnerImage: { os: string | null } }).runnerImage.os =
+            'https://images.example.com/not-reserved.png';
+        },
+      },
+      {
+        name: 'an absolute home path',
+        kind: 'absolute-home-path',
+        carry: (record) => {
+          (record.artifact as { buildNode: string | null }).buildNode = '/home/someone/.nvm/versions/node/v22.0.0';
+        },
+      },
+    ];
+
+    for (const control of controls) {
+      const record = buildLaneEvidenceRecord();
+      control.carry(record);
+      const findings = scanEvidenceText(JSON.stringify(record, null, 2));
+      expect(
+        findings.map((finding) => finding.kind),
+        `a record carrying ${control.name} was not reported`,
+      ).toContain(control.kind);
+    }
+
+    // ...and the same scanner, on the same builder's untouched record, reports
+    // nothing. Without this the three controls above would only prove that the
+    // scanner can be made to complain, not that the clean record is clean.
+    expect(scanEvidenceText(JSON.stringify(buildLaneEvidenceRecord(), null, 2))).toEqual([]);
+  });
+
+  it('evidence written to the lane\'s own declared shape carries no learner value', () => {
+    // HISTORY. This assertion used to walk `artifacts/compatibility-evidence` on
+    // disk and require it to be non-empty, which is a gate defect and not a
+    // property of the product: `artifacts/` is gitignored, so on a fresh CI
+    // checkout the directory does not exist (the unit-tests job runs *before* the
+    // job that produces evidence), and the test could only be green on a machine
+    // where someone had previously run an e2e lane. It therefore failed in the
+    // one environment where the property matters and passed in the one where the
+    // data was irrelevant.
+    //
+    // The property is now verified from evidence this test builds itself, at the
+    // lane's own declared record shape and the lane's own on-disk layout, so it
+    // runs identically on a developer machine, on CI, and on a clean checkout.
+    const root = mkdtempSync(join(tmpdir(), 'kd-phase5-evidence-'));
+    try {
+      // The drift gate first: if the lane's record shape has moved, the scan below
+      // would be scanning a shape that no longer exists, which is exactly the kind
+      // of green that means nothing.
+      expect(
+        LANE_RECORD_KEYS.length,
+        "the lane's RestoreLaneEvidence keys could not be read from the spec",
+      ).toBeGreaterThan(5);
+      expect(
+        Object.keys(buildLaneEvidenceRecord()).sort(),
+        "this test's evidence record has drifted from the lane's declared shape",
+      ).toEqual([...LANE_RECORD_KEYS].sort());
+
+      const written: string[] = [];
+      for (const title of EVIDENCE_TEST_TITLES) {
+        const record = buildLaneEvidenceRecord(title);
+        // `evidenceRelativePath` is the lane's own function, so the temporary tree
+        // is laid out exactly as the real allowlisted root is: one sanitized run
+        // directory, one sanitized `<project>--<test>.json` file per test.
+        // Not named `relative`: that would shadow the `node:path` import used two
+        // lines below to prove the path is the real allowlisted one.
+        const laneRelativePath = evidenceRelativePath({
+          runId: PINNED_RUN_ID,
+          project: DATA_PRODUCTS_LANE.project,
+          testTitle: title,
+        });
+        const absolute = join(root, laneRelativePath);
+        mkdirSync(dirname(absolute), { recursive: true });
+        writeFileSync(absolute, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+        written.push(absolute);
+      }
+
+      // The temporary tree really is the allowlisted root's shape, which is what
+      // makes "records at the allowlisted location are clean" the claim being made.
+      expect(written.length, 'no evidence was written to scan').toBeGreaterThan(0);
+      for (const file of written) {
+        expect(
+          relative(process.cwd(), file).replace(/\\/g, '/').includes('compatibility-evidence/'),
+          file,
+        ).toBe(true);
+      }
+
+      const findings = scanEvidenceTree(root);
+      expect(findings, `the evidence this test built is not clean: ${JSON.stringify(findings)}`).toEqual([]);
+      expect(findings.length).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      // Removed, not merely unreferenced: a leftover tree in the OS temp directory
+      // would make a second run scan the first run's leftovers.
+      expect(existsSync(root)).toBe(false);
+    }
+  });
+
+  it('the allowlisted evidence root on this machine is clean, or absent because it is gitignored', () => {
     // The *allowlisted* root, which is the only thing CI uploads. The Playwright
     // HTML report is a bundled application on local disk and is deliberately not
     // in the allowlist; a separate assertion below proves that.
+    //
+    // Absent is a legitimate and expected state, and this test does not own the
+    // directory, so no count is demanded. It is not silent either: the count is
+    // reported on every run, and the *reason* absence is expected is asserted
+    // below - `artifacts/` is gitignored, so a clean checkout has none. That turns
+    // "there was nothing to scan" from an unexamined pass into a stated fact.
     const root = join(process.cwd(), 'artifacts', 'compatibility-evidence');
-    const files: string[] = [];
-    const walk = (directory: string): void => {
-      for (const entry of readdirSync(directory)) {
-        const full = join(directory, entry);
-        if (statSync(full).isDirectory()) walk(full);
-        else files.push(full);
-      }
-    };
-    if (statSync(root, { throwIfNoEntry: false })?.isDirectory()) walk(root);
-    expect(files.length, 'no compatibility evidence was found to scan').toBeGreaterThan(0);
-    for (const file of files) {
-      const text = readFileSync(file, 'utf8');
-      for (const marker of learnerMarkers()) {
-        expect(text.includes(marker), `${file} leaked ${marker}`).toBe(false);
-      }
-      // No host at all, and no absolute path: the only host this repository names
-      // anywhere in evidence is the reserved `example.invalid`.
-      const urls = text.match(/https?:\/\/[^\s"'`)]+/g) ?? [];
-      for (const url of urls) {
-        expect(url, `${file} names ${url}`).toMatch(/^https?:\/\/(example\.invalid|pictures\.example\.invalid)/);
-      }
-      expect(/\/(home|Users)\/[A-Za-z0-9._-]+/.test(text), `${file} names a home path`).toBe(false);
-    }
+    const present = statSync(root, { throwIfNoEntry: false })?.isDirectory() === true;
+    const findings = present ? scanEvidenceTree(root) : [];
+    const filesFound = present ? countEvidenceFiles(root) : 0;
+    const unreadable = present ? unreadableEvidenceFiles(root) : 0;
+
+    // Visible in the run output, in both states, and the distinction is explicit.
+    //
+    // `process.stdout.write` rather than `console.info`: this repository's Vitest
+    // reporter suppresses passing `console` output, so a `console` line would
+    // satisfy the letter of "report it" while showing a reader of a green CI run
+    // nothing at all. Verified with a probe: `console.info` is swallowed,
+    // `process.stdout.write` is not.
+    process.stdout.write(
+      `[phase5-verifier] evidence-root-scan: present=${String(present)} filesFound=${filesFound} ` +
+        `unreadable=${unreadable} findings=${findings.length}\n`,
+    );
+    expect(
+      findings,
+      `the allowlisted evidence root is not clean: ${JSON.stringify(findings)} (present=${String(present)}, ` +
+        `filesFound=${filesFound}, unreadable=${unreadable})`,
+    ).toEqual([]);
+    // Complete accounting: every file found was either read or reported unreadable.
+    // A file that vanished under a concurrent lane run is not a finding, but it is
+    // counted so a reader can tell "scanned 40 records" from "skipped 12".
+    expect(unreadable).toBeLessThanOrEqual(filesFound);
+    expect(findings.length).toBeLessThanOrEqual(Math.max(0, filesFound - unreadable));
+
+    // ...and the reason absence is expected, asserted rather than assumed. This is
+    // what makes an empty real-directory scan a *proved* fact instead of a
+    // silently degraded gate.
+    expect(
+      gitignoreMatches('artifacts'),
+      '`artifacts` is no longer gitignored, so its absence is no longer the expected default',
+    ).toBe(true);
   });
 
   it('the CI upload allowlist is the evidence root only, and excludes the report and results directories', () => {
