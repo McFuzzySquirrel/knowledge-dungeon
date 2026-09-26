@@ -873,9 +873,21 @@ export function WelcomeScreen(): JSX.Element {
             </p>
           ) : null}
           <p className="room-help-text" style={{ marginTop: 16 }}>
-            🔒 <strong>Privacy:</strong> All your data is stored{' '}
-            {electronAvailable ? 'on your local machine' : 'in your browser (localStorage)'} and is
-            never sent to any server. Nothing leaves your device.
+            🔒 <strong>Privacy:</strong> Notes, subjects, and settings are stored{' '}
+            {electronAvailable ? 'on your local machine' : 'in your browser on this device'}.{' '}
+            {/*
+              The image sentence is branch-specific, because the sentence that was
+              here named IndexedDB unconditionally. On the desktop build the `+ Local`
+              control calls `electronKnowledgeBridge.addRoomLocalAttachment` and the
+              native host writes the file to disk, so naming IndexedDB there is false.
+              A privacy notice has to be true on every branch it can render, not only
+              the one the web build takes. The web branch's wording is unchanged.
+            */}
+            {electronAvailable
+              ? 'Images you add are written to this device’s disk by the desktop app and are not uploaded anywhere.'
+              : 'Images you add are saved on this device in IndexedDB and are not uploaded anywhere.'}{' '}
+            Links to external images stay links: the app cannot download their bytes, so a
+            backup cannot include them.
           </p>
         </section>
       </section>

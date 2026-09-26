@@ -54,7 +54,13 @@ type ProgressionStoreModule = typeof import('@/store/progressionStore');
 
 async function loadStore(): Promise<ProgressionStoreModule> {
   vi.resetModules();
-  return import('@/store/progressionStore');
+  const mod = await import('@/store/progressionStore');
+  // Phase 4: hydration is an explicit step owned by the application bootstrap,
+  // not a module-load side effect. These two calls are exactly what the
+  // bootstrap performs for the legacy repository, so the characterization
+  // below still exercises the real hydration path with its assertions intact.
+  mod.useProgressionStore.getState().hydrateProgression(mod.readPersistedProgressionPayload());
+  return mod;
 }
 
 function readRawProgression(): string {

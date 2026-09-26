@@ -237,8 +237,14 @@ npm run test:e2e                # build, then run the Phase 1 current-build suit
 npm run test:e2e:recorded       # preview-only current-build suite (CI: uses the shared artifact)
 npm run test:e2e:compat         # build, record the artifact identity, run the 4 compat projects
 npm run test:e2e:compat:recorded# preview-only compatibility suite (CI: uses the shared artifact)
+npm run test:e2e:storage        # build the FLAGGED storage-v2 artifact, record it, run the storage-v2 lane
+npm run test:e2e:storage:recorded # preview-only storage-v2 lane (CI: uses the flagged artifact)
 npm run record:web-artifact     # record the SHA-256 identity of the current dist tree
 npm run verify:web-artifact     # fail if dist differs from the recorded artifact
+npm run test:contracts          # renderer-neutral application contract gate (tests/contracts)
+npm run test:migrations         # storage-v2 migration gate (tests/migrations)
+npm run test:privacy            # source-level and unit-level privacy gate (tests/privacy)
+npm run test:node20             # run the whole Vitest suite under the CI Node major
 ```
 
 `npm run test:e2e` and `npm run test:e2e:compat` are separate suites. Each
@@ -246,6 +252,62 @@ Playwright project is bound to exactly one spec file, so the current-build suite
 is never multiplied across the compatibility projects. Playwright itself only ever
 previews an existing `dist` tree; the build and record steps belong to the package
 scripts and the CI build job, so no suite can decide for itself whether to rebuild.
+
+### The storage-v2 flagged-build lane (Phase 4)
+
+A real legacy migration, a real IndexedDB transaction, and a real device-local
+attachment cannot be observed on the default build, because the default build
+never opens storage-v2: the production default is Phaser with
+`VITE_STORAGE_REPOSITORY=legacy`. So one lane builds a **second, explicitly
+flagged** artifact and runs one spec against it.
+
+- `playwright.storage-v2.config.ts` owns the lane. It is a separate config from
+  `playwright.config.ts`, whose projects are generated from the approved support
+  matrix, so `npm run test:e2e` and `npm run test:e2e:compat` cannot pick this
+  spec up and the current-build suite is not multiplied across a new project.
+- The build flag travels in [`.env.storage-v2`](./.env.storage-v2) and is applied
+  with `vite build --mode storage-v2`, so no shell-specific environment
+  assignment is needed and `npm run build:web` is untouched. The rollback for the
+  whole lane is deleting that file and the three scripts that use it.
+- Its recorded identity goes to
+  `artifacts/web-artifact-manifest-storage-v2.json`, **not** the shared
+  `artifacts/web-artifact-manifest.json`. A flagged build can never overwrite or
+  be mistaken for the recorded production artifact.
+- `npm run test:e2e:storage` replaces `dist/`, exactly as the other
+  build-then-preview scripts do. Do not run two Playwright invocations against the
+  same worktree at once; both use the fixed `preview:e2e` port.
+- `.github/workflows/ci.yml` runs the lane in one `storage-v2-browser` job on
+  Linux/Chromium. It is the only deliberately separate build in a CI run, it
+  builds and records its own artifact, and `web-build` remains the single build,
+  record, and upload point for the production artifact.
+- [`tests/e2e/storage-v2-lane.ts`](./tests/e2e/storage-v2-lane.ts) is the
+  machine-readable lane declaration, and
+  [`tests/e2e/storage-v2-lane.test.ts`](./tests/e2e/storage-v2-lane.test.ts)
+  fails if the lane declaration, the Playwright project, the package scripts, the
+  CI job, or the storage-v2 constants it reads from the browser drift apart.
+
+The lane writes its sanitized evidence into the same allowlisted evidence root as
+the compatibility lanes, with a `storage-v2-chromium--<test>.json` file name.
+Records contain counts, categories, and booleans only, and the project records no
+trace, screenshot, or video.
+
+### Verifying under the CI Node major
+
+`.github/workflows/ci.yml` pins **Node 20** while local development may run a
+newer major. Phase 3 shipped a real CI-only failure from that gap: under jsdom the
+test realm and Node's crypto realm differ, so a cross-realm `ArrayBuffer` is
+accepted by Node 22 and rejected by Node 20. A green local run is therefore not by
+itself evidence of a green CI run.
+
+```bash
+npm run test:node20   # npx node@20 + the local Vitest binary, no reinstall
+```
+
+This is a **local convenience, not a replacement for CI**: it reuses whatever is
+already in `node_modules`, needs network access the first time to fetch the Node
+20 binary, and does not reproduce the runner image, the browser matrix, or any
+other job. Run it whenever a change touches a Node built-in, Web Crypto, a typed
+array, or any other cross-realm object.
 
 ### Lane selection and failure behavior
 
@@ -590,6 +652,8 @@ Other useful scripts:
 npm run lint
 npm run typecheck
 npm run test              # vitest --run
+npm run test:privacy      # privacy gate; see "Commands" above
+npm run test:node20       # the same suite under the CI Node major; see "Verifying under the CI Node major"
 npm run build:web         # production web bundle
 npm run start             # production server (serves dist/ + image upload API)
 npm run check:bundle-size # bundle-size guard used in CI

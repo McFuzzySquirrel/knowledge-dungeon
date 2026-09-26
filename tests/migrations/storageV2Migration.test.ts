@@ -14,7 +14,11 @@ import {
   createDeterministicIdFactory,
   fixedClock,
 } from '@/services/persistence/v2/database';
-import { openStorageV2Repository, type StorageV2Repository } from '@/services/persistence/v2/repository';
+import {
+  openStorageV2Repository,
+  type StageFailurePoint,
+  type StorageV2Repository,
+} from '@/services/persistence/v2/repository';
 import {
   MIGRATION_STAGES,
   buildMigratedRecords,
@@ -24,7 +28,8 @@ import {
 } from '@/services/persistence/v2/migrations';
 import { readLegacyAppState, type ReadOnlyLegacyStorage } from '@/services/persistence/v2/legacyReader';
 import { isImportableSubjectSnapshot } from '@/core/validation/persistence';
-import { STORAGE_KEYS } from '@/services/persistence/subjectPersistence';
+import { STORAGE_KEYS, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
+import { selectStorageV2Repository } from '@/services/persistence/v2/repositorySelection';
 import {
   CANONICAL_SUBJECT_SCHEMA_VERSION,
   LEGACY_MIGRATION_ID,
@@ -130,6 +135,22 @@ function seedLegacyState(options: { progressionFixture?: string } = {}): void {
   // A key the app does not own, to prove the reader leaves it alone too.
   storage.setItem('knowledge-dungeon:subjects:index', '["must-not-be-read"]');
   storage.setItem('unrelated-third-party-key', 'leave-me-alone');
+}
+
+/** The all-zero record counts a run that moved nothing must report. */
+function zeroRecordCounts(): Record<string, number> {
+  return {
+    subjects: 0,
+    progression: 0,
+    sessions: 0,
+    preferences: 0,
+    shortcuts: 0,
+    assistance: 0,
+    attachments: 0,
+    attachmentBlobs: 0,
+    customSprites: 0,
+    recovery: 0,
+  };
 }
 
 function migrateOptions(
@@ -337,14 +358,20 @@ describe('storage-v2 repository foundations', () => {
     const before = await canonicalSnapshot(repo);
 
     await expect(
-      repo.stageGeneration({
-        generationId: GENERATION_ID,
-        source: 'legacy-migration',
-        records: { subjects: [{ subjectId: 'subject-x', schemaVersion: CANONICAL_SUBJECT_SCHEMA_VERSION, snapshot: JSON.parse(V11_SUBJECT) as SubjectRecordValue['snapshot'], createdAt: MIGRATION_NOW, updatedAt: MIGRATION_NOW }] },
-        onStage: (point) => {
-          if (point === 'after-progression') throw new Error('synthetic mid-write failure');
+      repo.stageGeneration(
+        {
+          generationId: GENERATION_ID,
+          source: 'legacy-migration',
+          records: { subjects: [{ subjectId: 'subject-x', schemaVersion: CANONICAL_SUBJECT_SCHEMA_VERSION, snapshot: JSON.parse(V11_SUBJECT) as SubjectRecordValue['snapshot'], createdAt: MIGRATION_NOW, updatedAt: MIGRATION_NOW }] },
         },
-      }),
+        // Failure injection is an injected collaborator, not a member of the
+        // generation's content contract.
+        {
+          onStage: (point: StageFailurePoint) => {
+            if (point === 'after-progression') throw new Error('synthetic mid-write failure');
+          },
+        },
+      ),
     ).rejects.toSatisfy((error: unknown) => isStorageV2Error(error));
 
     expect(await repo.readGeneration(GENERATION_ID)).toBeNull();
@@ -524,7 +551,12 @@ describe('legacy fixtures migrate idempotently', () => {
       expect(built.problems.length, fixture).toBeGreaterThan(0);
       for (const problem of built.problems) {
         expect(Object.keys(problem).sort(), fixture).toEqual(['code', 'count', 'scope', 'severity']);
-        expect(problem.severity, fixture).toBe('error');
+        // `warning`, not `error`: `severity` is the activation rule, and this
+        // problem describes a SOURCE record the transform declined to carry. It
+        // is not in the staged generation, so there is nothing for generation
+        // validation to refuse, and the run discloses the count instead. Phase 4
+        // made the name and the blocking rule agree; see MIGRATION_BLOCKING_POLICY.
+        expect(problem.severity, fixture).toBe('warning');
       }
     }
   });
@@ -537,6 +569,168 @@ describe('legacy fixtures migrate idempotently', () => {
     expect(outcome.stagedGenerationId).toBeNull();
     expect(await repo.listGenerations()).toEqual([]);
     expect(await repo.readActiveGenerationId()).toBeNull();
+  });
+
+  // ── A first-time learner is not a device with data to migrate ──
+  //
+  // `knowledge-dungeon:locale` is written by the i18next language detector on a
+  // brand-new device, before the learner has created anything. The reader used
+  // to treat it as source data, so a device whose only app-owned key was its
+  // locale staged a generation, activated it, wrote a receipt, and reported
+  // `migrated` with `recordCounts: { preferences: 1, assistance: 1 }` - telling a
+  // learner their data had been moved, and reporting "0 subjects" as a success.
+  // A screen cannot fix that: the report is wrong, and a receipt claims a
+  // migration that moved nothing.
+  it('reports a locale-only device as no-source-data, staging nothing and claiming nothing', async () => {
+    window.localStorage.setItem('knowledge-dungeon:locale', 'en');
+    const repo = await repositoryFor('locale-only');
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+
+    expect(outcome.report.status).toBe('no-source-data');
+    // Nothing staged, no receipt, and no activation claim of any kind.
+    expect(outcome.stagedGenerationId).toBeNull();
+    expect(outcome.records).toBeNull();
+    expect(outcome.report.activated).toBe(false);
+    expect(outcome.report.receiptId).toBeNull();
+    expect(outcome.report.recordCounts).toEqual(zeroRecordCounts());
+    expect(await repo.listGenerations()).toEqual([]);
+    expect(await repo.listMigrationReceipts()).toEqual([]);
+    // The pointer never moved, so the learner's existing storage is still the
+    // authoritative one and nothing has to be rolled back.
+    expect(await repo.readActiveGenerationId()).toBeNull();
+    // The report is still honest about what it found: the key is there, it is
+    // just not data.
+    expect(outcome.report.legacyKeys.present).toBe(1);
+    // And it did not touch the key it read.
+    expect(window.localStorage.getItem('knowledge-dungeon:locale')).toBe('en');
+  });
+
+  it('reports a UI-marker-only device as no-source-data', async () => {
+    // Quest step, village spawn, the touch and fishing hints, the onboarding
+    // marker, the export reminder, and the tooltip list: every one of them is a
+    // one-time UI marker the app writes for the learner.
+    window.localStorage.setItem('kd-quest-step', 'synthetic-quest-step');
+    window.localStorage.setItem('kd-village-spawn', JSON.stringify({ gridX: 1, gridY: 2 }));
+    window.localStorage.setItem('knowledge-dungeon:ui:touch-hint:v1', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:fishing-hint:v1', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:onboarding:gameplay-loop:v1', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:export-reminder:lastNudge', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:tooltips:v1', JSON.stringify({ seen: ['a'] }));
+    const repo = await repositoryFor('ui-markers-only');
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+
+    expect(outcome.report.status).toBe('no-source-data');
+    expect(outcome.report.activated).toBe(false);
+    expect(await repo.listGenerations()).toEqual([]);
+    expect(await repo.listMigrationReceipts()).toEqual([]);
+    expect(await repo.readActiveGenerationId()).toBeNull();
+    expect(outcome.report.legacyKeys.present).toBe(7);
+  });
+
+  // Decided rather than incidental: a sprite-pack blob is a *bundle list* the app
+  // materialises, and a device can hold it having created no subject and no
+  // custom sprite. Carrying it would stage a generation for a device with nothing
+  // in it, which is the defect this whole block is about. It is a marker.
+  it('reports a sprite-pack-only device as no-source-data, because a pack list is not a sprite', async () => {
+    window.localStorage.setItem(
+      'knowledge-dungeon:custom-sprites:packs',
+      JSON.stringify({ packs: [], activePack: null }),
+    );
+    const repo = await repositoryFor('packs-only');
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+
+    expect(outcome.report.status).toBe('no-source-data');
+    expect(await repo.listGenerations()).toEqual([]);
+    expect(await repo.listMigrationReceipts()).toEqual([]);
+    // And the blob is still where the device put it, so a later migration that
+    // does have content carries it then.
+    expect(window.localStorage.getItem('knowledge-dungeon:custom-sprites:packs')).not.toBeNull();
+  });
+
+  it('still reports a one-subject device as migrated, and keeps the subject', async () => {
+    // The guard against over-correcting. "No learner content" must not drift into
+    // "not much learner content": a single subject with no progression, no
+    // sessions, and no preferences is a real learner who has done the thing, and
+    // their `migrated` contract is unchanged.
+    const subjectId = 'subject-phase0-v110-full';
+    window.localStorage.setItem('knowledge-dungeon:v1:subjects', JSON.stringify([subjectId]));
+    window.localStorage.setItem(`knowledge-dungeon:v1:subject:${subjectId}`, V11_FULL_SUBJECT);
+    const repo = await repositoryFor('one-subject');
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+
+    expect(outcome.report.status).toBe('migrated');
+    expect(outcome.report.activated).toBe(true);
+    expect(outcome.report.recordCounts.subjects).toBe(1);
+    expect(outcome.report.problems.every((problem) => problem.severity === 'warning')).toBe(true);
+    expect(await repo.readActiveGenerationId()).toBe(GENERATION_ID);
+    expect(await repo.readRecords(GENERATION_ID)).toMatchObject({
+      records: { subjects: [{ recordId: subjectId }] },
+    });
+    expect(await repo.listMigrationReceipts()).toHaveLength(1);
+  });
+
+  it('migrates a subject plus a locale, and carries the locale into the preferences record', async () => {
+    // The marker is only a marker when it is the *only* thing on the device. A
+    // learner who created a subject and read the app in French gets both: the
+    // subject migrated, and their language is not silently dropped on the way.
+    const subjectId = 'subject-phase0-v110-full';
+    window.localStorage.setItem('knowledge-dungeon:v1:subjects', JSON.stringify([subjectId]));
+    window.localStorage.setItem(`knowledge-dungeon:v1:subject:${subjectId}`, V11_FULL_SUBJECT);
+    window.localStorage.setItem('knowledge-dungeon:locale', 'fr');
+    const repo = await repositoryFor('subject-and-locale');
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+
+    expect(outcome.report.status).toBe('migrated');
+    expect(outcome.report.recordCounts.subjects).toBe(1);
+    const records = (await repo.readRecords(GENERATION_ID)).records;
+    // The locale is a preferences record whose value is the language tag itself.
+    const locales = records.preferences
+      .map((record) => record.value as { preferenceId: string; value: unknown })
+      .filter((preference) => preference.preferenceId === 'locale');
+    expect(
+      locales.map((preference) => preference.value),
+      'the locale is carried, not dropped',
+    ).toEqual(['fr']);
+  });
+
+  it('creates the initial generation on the first real write after no-source-data', async () => {
+    // The consequence that matters for a first-time learner: reporting
+    // `no-source-data` must not leave them without somewhere to write. The
+    // migration is supposed to leave the device exactly as it found it, with the
+    // first write creating the initial generation through `ensureInitialGeneration`.
+    window.localStorage.setItem('knowledge-dungeon:locale', 'en');
+    const repo = await repositoryFor('first-write');
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+    expect(outcome.report.status).toBe('no-source-data');
+    expect(await repo.readActiveGenerationId()).toBeNull();
+
+    // The learner's first action: create a subject.
+    selectStorageV2Repository(repo);
+    const saved = await saveSubjectSnapshot(
+      'subject-first-write',
+      JSON.parse(V11_FULL_SUBJECT) as never,
+    );
+    expect(saved.success).toBe(true);
+
+    // A generation exists, is active, and holds what they just did - so the
+    // no-source-data outcome cost them nothing and the first action was not lost.
+    const active = await repo.readActiveGenerationId();
+    expect(active).not.toBeNull();
+    expect((await repo.readRecords(active as string)).records.subjects.map((r) => r.recordId)).toEqual([
+      'subject-first-write',
+    ]);
+    // And it is a real generation in the registry, not a hidden one.
+    expect((await repo.listGenerations()).map((entry) => entry.generationId)).toContain(active);
+    // A second run of the migration is still a no-op, not a duplicate.
+    const second = await migrateLegacyState(migrateOptions(repo));
+    expect(second.report.status).toBe('migrated');
+    expect((await repo.readRecords(active as string)).records.subjects).toHaveLength(1);
   });
 
   it('preserves unknown top-level, dungeon, and room fields in the migrated snapshot', async () => {
@@ -585,6 +779,76 @@ describe('legacy fixtures migrate idempotently', () => {
 
     // The legacy snapshot is byte-for-byte unchanged.
     expect(snapshotLocalStorage().entries()).toEqual(before.entries());
+  });
+
+  // Regression: `buildRecordEnvelopes` used to key `customSprites` by
+  // `spritePath` alone, so the three legacy kinds for one path collapsed onto two
+  // primary keys while the descriptor still counted three - a `count-mismatch`
+  // that refused activation for the whole device. This is the multi-kind fixture.
+  it('carries every custom-sprite kind for one path as its own record', async () => {
+    const repo = await repositoryFor('multi-kind-sprites');
+    window.localStorage.setItem('knowledge-dungeon:custom-sprites:override:village/tree.svg', '<svg id="override"/>');
+    window.localStorage.setItem('knowledge-dungeon:custom-sprites:anim:village/tree.svg', '<svg id="anim"/>');
+    window.localStorage.setItem('knowledge-dungeon:custom-sprites:originals:village/tree.svg', '<svg id="original"/>');
+    seedLegacyState();
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+    expect(outcome.report.status, JSON.stringify(outcome.report.problems)).toBe('migrated');
+
+    const active = await repo.readActiveGenerationId();
+    const records = (await repo.readRecords(active as string)).records;
+    const tree = (records.customSprites ?? []).filter((record) => record.value.spritePath === 'village/tree.svg');
+    expect(
+      tree.map((record) => record.value.kind).sort(),
+      'each kind is its own record, none collapsed away',
+    ).toEqual(['anim', 'original', 'override']);
+    // Every one is readable back as what it claims to be, which is the property
+    // the collapse broke: two records shared a primary key, so one was unreadable.
+    for (const record of tree) {
+      expect(record.recordId).toContain(record.value.kind);
+    }
+    // And the declared count is the stored count, in both directions, so the
+    // activation check that refused this device is satisfied.
+    const validation = await repo.validateGeneration(active as string);
+    expect(validation.ok, JSON.stringify(validation.problems)).toBe(true);
+    expect(validation.countDeltas.customSprites).toBe(0);
+  });
+
+  // Regression: the migration used to carry a payload the subject index did not
+  // name as a `subjects` record, so the flagged build showed a subject a rollback
+  // build could not open. The index is the application's own subject list.
+  it('preserves a payload the subject index does not name, without offering it as a subject', async () => {
+    const repo = await repositoryFor('unindexed-subject');
+    seedLegacyState();
+    const raw = window.localStorage.getItem('knowledge-dungeon:v1:subject:subject-phase0-v110-full');
+    expect(raw).not.toBeNull();
+    window.localStorage.setItem('knowledge-dungeon:v1:subject:subject-not-in-the-index', raw as string);
+
+    const outcome = await migrateLegacyState(migrateOptions(repo));
+    const active = await repo.readActiveGenerationId();
+    const records = (await repo.readRecords(active as string)).records;
+
+    // Not a subject, so the two repositories agree on the subject set.
+    expect((records.subjects ?? []).map((record) => record.recordId)).not.toContain(
+      'subject-not-in-the-index',
+    );
+    // And not lost: the bytes are preserved verbatim in the generation's own
+    // recovery store, and disclosed rather than dropped silently.
+    const preserved = (records.recovery ?? []).find(
+      (record) => record.value.subjectId === 'subject-not-in-the-index',
+    );
+    expect(preserved?.value.kind).toBe('unindexed-subject');
+    expect(preserved?.value.raw).toBe(raw);
+    expect(
+      outcome.report.problems.some((problem) => problem.code === 'unindexed-subject-payload'),
+    ).toBe(true);
+    // And the legacy key itself is untouched, so the payload is still where the
+    // device put it.
+    expect(window.localStorage.getItem('knowledge-dungeon:v1:subject:subject-not-in-the-index')).toBe(raw);
+
+    const validation = await repo.validateGeneration(active as string);
+    expect(validation.ok, JSON.stringify(validation.problems)).toBe(true);
+    expect(validation.countDeltas.recovery).toBe(0);
   });
 
   it('reports external-only attachments without a filename or URL', async () => {

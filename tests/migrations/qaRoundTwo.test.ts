@@ -737,10 +737,13 @@ describe('R2 attack: the same-generationId no-op path', () => {
     expect(outcome.report.recovery?.code).toBe('GENERATION_ALREADY_ACTIVE');
   });
 
-  it('is a no-op success when the generation is staged WITH its receipt', async () => {
-    // A staged generation that already carries this migration's receipt: the
-    // short-circuit fires and reports `migrated` with `activated: false`, and
-    // the generation is left `staged`. It is then never activated.
+  it('is NOT a no-op success when the generation is staged WITH its receipt', async () => {
+    // A staged generation that already carries this migration's receipt is the
+    // one state that used to be reported as `migrated` with `activated: false`
+    // while the generation stayed `staged` - records on disk that no reader can
+    // reach, with a `status` that told a caller the device was migrated. It is no
+    // longer a no-op: the generation is discarded and migrated again, so
+    // `migrated` always means reachable-or-superseded.
     seedLegacy();
     const repo = await repoFor('noop-staged-with-receipt');
     await repo.stageGeneration({ generationId: GEN, source: 'legacy-migration', records: { subjects: [subject('subject-r2-x')] } });
@@ -764,12 +767,19 @@ describe('R2 attack: the same-generationId no-op path', () => {
 
     const outcome = await migrateLegacyState(migrateOptions(repo));
     expect(outcome.report.status).toBe('migrated');
-    expect(outcome.report.activated).toBe(false);
-    // The generation is STILL staged and the pointer was never flipped. A
-    // caller that reads `status: 'migrated'` and `activated: false` has no
-    // signal that the data is still invisible.
-    expect((await repo.readGeneration(GEN))?.descriptor?.status).toBe('staged');
-    expect(await repo.readActiveGenerationId()).toBeNull();
+    // The pointer now names the generation, so the data is actually reachable.
+    expect(outcome.report.activated).toBe(true);
+    expect(await repo.readActiveGenerationId()).toBe(GEN);
+    expect((await repo.readGeneration(GEN))?.descriptor?.status).toBe('active');
+    // The stale subject from the abandoned attempt is gone: the generation holds
+    // exactly what the migration derives from the legacy device.
+    const subjects = (await repo.readRecords(GEN)).records.subjects.map(
+      (entry) => (entry.value as { subjectId: string }).subjectId,
+    );
+    expect(subjects).not.toContain('subject-r2-x');
+    expect(subjects.length).toBeGreaterThan(0);
+    // And the generation validates, so `migrated` is not merely a status change.
+    expect((await repo.validateGeneration(GEN)).ok).toBe(true);
   });
 
   it('the discarded-then-restaged path leaves a VALID generation', async () => {

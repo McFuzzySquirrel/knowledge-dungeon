@@ -408,6 +408,18 @@ export interface LegacyAppState {
   activeSubjectId: string | null;
   /** Subject ids in the declared order, then any key-only subjects, sorted. */
   subjectIds: string[];
+  /**
+   * The ids `knowledge-dungeon:v1:subjects` names, in declared order.
+   *
+   * `subjectIds` is the union of the index and the key family, so it cannot say
+   * which ids a learner can actually open. The index is the application's own
+   * subject list, so the migration uses this set to decide which payloads become
+   * `subjects` records and which are preserved as recovery records instead.
+   *
+   * Optional so a hand-built state keeps its Phase 3 behaviour: absent means
+   * "every subject is indexed", never "no subject is indexed".
+   */
+  indexedSubjectIds?: readonly string[];
   subjects: LegacySubjectPayload[];
   progressionRaw: string | null;
   sessionsRaw: string | null;
@@ -739,6 +751,11 @@ export function readLegacyAppState(options: ReadLegacyAppStateOptions = {}): Leg
   return {
     activeSubjectId: declaredSubjectId !== null && declaredSubjectId.length > 0 ? declaredSubjectId : null,
     subjectIds: orderedIds,
+    // Only enforced when the device actually has the index. A device with no
+    // index key has no list to enforce, so its payloads keep the Phase 3
+    // behaviour of every parsed subject being carried; an index that is present
+    // and names fewer ids than there are payloads is the case this exists for.
+    ...(raws.has('subject-index') ? { indexedSubjectIds: indexIds } : {}),
     subjects,
     progressionRaw,
     sessionsRaw: rawString(raws, 'sessions'),
@@ -774,17 +791,134 @@ export function readLegacyAppState(options: ReadLegacyAppStateOptions = {}): Leg
   };
 }
 
-/** True when the app state has nothing worth migrating. */
-export function isEmptyLegacyAppState(state: LegacyAppState): boolean {
+/**
+ * The documented default shortcut bindings.
+ *
+ * Declared here so the reader can tell a device that merely loaded the app from
+ * one where a learner rebound a key. A stored shortcuts payload is learner
+ * content only when it *differs* from these defaults; a payload identical to them
+ * is the app's own defaults round-tripping through storage, which is the same
+ * situation as a locale: a key that exists without the learner having done
+ * anything.
+ *
+ * `tests/migrations/legacyReader.test.ts` pins this table against
+ * `DEFAULT_SHORTCUTS` in the store, so the two declarations cannot drift.
+ */
+export const DEFAULT_SHORTCUT_KEYS: Readonly<Record<string, string>> = {
+  'shortcuts.toggleHelp': '/',
+  'shortcuts.toggleMap': 'm',
+  'shortcuts.toggleInfoPanel': 'i',
+};
+
+/**
+ * True when the device holds shortcuts that differ from the documented defaults.
+ *
+ * A payload that is absent, or that is exactly the defaults, is the app's own
+ * defaults round-tripping through storage - the same situation as a locale: a
+ * key that exists without the learner having done anything. A payload naming a
+ * binding this build does not know, naming only some of them, binding one to a
+ * different key, repeating one, or failing to parse is a learner's choice, and is
+ * content.
+ */
+function hasNonDefaultShortcuts(shortcutsRaw: string | null): boolean {
+  if (shortcutsRaw === null) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(shortcutsRaw) as unknown;
+  } catch {
+    return true;
+  }
+  if (!Array.isArray(parsed)) return true;
+  const seen = new Set<string>();
+  for (const entry of parsed) {
+    if (!isRecord(entry)) return true;
+    const labelKey = entry.labelKey;
+    const key = entry.key;
+    if (typeof labelKey !== 'string' || typeof key !== 'string') return true;
+    if (DEFAULT_SHORTCUT_KEYS[labelKey] !== key) return true;
+    if (seen.has(labelKey)) return true;
+    seen.add(labelKey);
+  }
+  // A subset is not "the defaults": the missing bindings would hydrate as absent
+  // rather than as their default key.
+  return seen.size !== Object.keys(DEFAULT_SHORTCUT_KEYS).length;
+}
+
+/**
+ * True when the device holds no learner content, whether or not it holds
+ * app-owned keys.
+ *
+ * This is the question the migration actually asks, and it is not
+ * {@link isEmptyLegacyAppState}'s question. Two different situations used to look
+ * like one:
+ *
+ * - **No keys at all.** Nothing to read, nothing to migrate.
+ * - **Markers only.** `knowledge-dungeon:locale` is written by the i18next
+ *   language detector on a brand-new device before the learner has done anything,
+ *   and the quest step, village spawn, and the `knowledge-dungeon:ui:*` family are
+ *   one-time UI markers. A device whose only app-owned key is its locale is a
+ *   first-time learner, and migrating it staged a generation, activated it, wrote
+ *   a receipt, and reported `migrated` for zero subjects - telling a learner their
+ *   data had been moved when there was none.
+ *
+ * The rule is *who wrote it without being asked*. A key the application writes on
+ * its own initiative is a marker: a locale, a UI marker, a quest or spawn
+ * position, the sprite-pack blob. A key only a learner's action writes is content:
+ * subjects, progression, sessions, the declared session key, preferences,
+ * shortcuts that differ from the defaults, and custom-sprite
+ * overrides/anims/originals. Recovery records are content too - they are the
+ * learner's own bytes, quarantined.
+ *
+ * Two deliberate calls, because "is this content" is a judgement:
+ *
+ * - **Preferences count as content.** `knowledge-dungeon:session:preferences` is
+ *   written only by the three preference setters, so its presence means a learner
+ *   deliberately chose a theme. That is not a subject, but it is a decision, and
+ *   carrying it is strictly safer than leaving it behind. The locale is the
+ *   opposite case: something the app wrote for the learner.
+ * - **The sprite-pack blob does not.** `knowledge-dungeon:custom-sprites:packs`
+ *   is a bundle list the app materialises, and a device can hold it with no
+ *   subject and no custom sprite. It is a marker, and a marker-only device has
+ *   nothing to migrate.
+ */
+export function hasNoLearnerContent(state: LegacyAppState): boolean {
   return (
     state.subjects.length === 0 &&
     state.progressionRaw === null &&
     state.sessionsRaw === null &&
     state.declaredSessionRaw === null &&
+    // A learner-chosen theme, as distinct from a locale the app wrote.
     state.preferencesRaw === null &&
-    state.shortcutsRaw === null &&
-    state.locale === null &&
+    !hasNonDefaultShortcuts(state.shortcutsRaw) &&
+    // Only the three per-sprite families. `spritePacksRaw` is the bundle list and
+    // is a marker, decided above.
     state.customSprites.length === 0 &&
     state.recovery.length === 0
   );
+}
+
+/**
+ * Everything the reader classified as a marker, sorted, for a report or a screen.
+ *
+ * Sorted so a caller rendering or asserting the list sees one stable order
+ * rather than the allowlist's declaration order.
+ */
+export function legacyMarkerKeys(state: LegacyAppState): string[] {
+  const markers: string[] = [];
+  if (state.locale !== null) markers.push('locale');
+  if (state.questStep !== null) markers.push('quest-step');
+  if (state.villageSpawn !== null) markers.push('village-spawn');
+  if (state.spritePacksRaw !== null) markers.push('custom-sprite-packs');
+  if (state.activeSubjectId !== null) markers.push('active-subject');
+  // `uiMarkers` carries an entry for every declared UI-marker key, `null` when the
+  // key is absent, so only a non-null value is a marker the device holds.
+  for (const [keyId, value] of Object.entries(state.uiMarkers)) {
+    if (value !== null) markers.push(keyId);
+  }
+  return markers.sort();
+}
+
+/** True when the app state has nothing at all: no app-owned key of any kind. */
+export function isEmptyLegacyAppState(state: LegacyAppState): boolean {
+  return hasNoLearnerContent(state) && legacyMarkerKeys(state).length === 0;
 }

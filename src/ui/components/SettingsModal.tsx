@@ -47,7 +47,8 @@ const SETTINGS_TABS: TabDef[] = [
 export function SettingsModal({ currentTheme, onThemeChange, onClose }: SettingsModalProps): JSX.Element {
   const { t } = useTranslation();
   const shortcuts = useShortcutStore((s) => s.shortcuts);
-  const setShortcutKey = useShortcutStore((s) => s.setShortcutKey);
+  // Identity-based, so a rebind cannot depend on where a binding sits in the list.
+  const setShortcutForAction = useShortcutStore((s) => s.setShortcutForAction);
   const resetShortcuts = useShortcutStore((s) => s.resetShortcuts);
   const [activeTab, setActiveTab] = useState<SettingsTab>('theme');
   const [editingShortcutIndex, setEditingShortcutIndex] = useState<number | null>(null);
@@ -58,7 +59,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
     void i18n.changeLanguage(lang);
   }
 
-  function handleShortcutKeyDown(e: React.KeyboardEvent<HTMLInputElement>, index: number): void {
+  function handleShortcutKeyDown(e: React.KeyboardEvent<HTMLInputElement>, labelKey: string): void {
     e.preventDefault();
     e.stopPropagation();
     // Capture the key and set it
@@ -71,7 +72,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
         setEditingShortcutIndex(null);
         return;
       }
-      setShortcutKey(index, e.key);
+      setShortcutForAction(labelKey, e.key);
       setEditingShortcutIndex(null);
     }
   }
@@ -90,7 +91,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
             <input
               className="shortcut-key-input"
               autoFocus
-              onKeyDown={(e) => handleShortcutKeyDown(e, index)}
+              onKeyDown={(e) => handleShortcutKeyDown(e, shortcut.labelKey)}
               onBlur={() => setEditingShortcutIndex(null)}
               placeholder="Press a key"
               aria-label={`Press a new key for ${shortcut.label}`}

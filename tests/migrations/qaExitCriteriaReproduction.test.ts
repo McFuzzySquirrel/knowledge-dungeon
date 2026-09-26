@@ -569,7 +569,8 @@ describe('QA exit criterion 2: a failed staged transaction leaves the active gen
               { kind: 'corrupt' as const, subjectId: 'subject-qa-fail', raw: QA_MARKER, capturedAt: NOW_A },
             ],
           } as never,
-          onStage: (p) => {
+        }, {
+          onStage: (p: StageFailurePoint) => {
             if (p === point) throw new Error(`qa-injected failure at ${p}`);
           },
         }),
@@ -712,14 +713,18 @@ describe('QA exit criterion 2: a failed staged transaction leaves the active gen
     const repo = await repoFor('hook-omission');
     const repo2 = await repoFor('hook-omission-2');
     const seen: string[] = [];
-    await repo2.stageGeneration({
-      generationId: GEN_2,
-      source: 'legacy-migration',
-      records: {},
-      onStage: (point) => {
-        if (point === 'after-sessions') throw new Error('qa-injected');
+    await repo2.stageGeneration(
+      {
+        generationId: GEN_2,
+        source: 'legacy-migration',
+        records: {},
       },
-    }).catch(() => undefined);
+      {
+        onStage: (point: StageFailurePoint) => {
+          if (point === 'after-sessions') throw new Error('qa-injected');
+        },
+      },
+    ).catch(() => undefined);
     // A migration-level run over the same repository still reports the pointer
     // it found, and no hook fired for the failed stage.
     const outcome = await migrateLegacyState(

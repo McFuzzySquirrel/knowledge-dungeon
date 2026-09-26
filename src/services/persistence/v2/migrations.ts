@@ -60,7 +60,7 @@ import {
   type GenerationRecordValues,
   type ValidationProblem,
 } from './validation';
-import { isEmptyLegacyAppState, readLegacyAppState, type LegacyAppState, type ReadOnlyLegacyStorage } from './legacyReader';
+import { hasNoLearnerContent, readLegacyAppState, type LegacyAppState, type ReadOnlyLegacyStorage } from './legacyReader';
 
 /**
  * Points in the migration where a failure can be injected by a test.
@@ -88,6 +88,44 @@ export const MIGRATION_STAGES: readonly MigrationStage[] = [
   'activate',
 ];
 
+/**
+ * The injected collaborator a test uses to fail a run at a chosen point.
+ *
+ * Failure injection is a *dependency*, not a property of the migration: it is a
+ * separate object the caller passes, the production value is
+ * {@link NO_MIGRATION_SEAMS}, and the application's entry point
+ * (`migrateLegacyStateForApplication` in the application bootstrap) drops any
+ * injected instance before calling in. Nothing in `src/ui`, `src/store`, or
+ * `src/main.tsx` can reach a seam by passing an option.
+ */
+export interface MigrationSeams {
+  /**
+   * Called as the migration enters each stage; throwing aborts the run and
+   * produces a `recovery-required` report.
+   */
+  onStage?: (stage: MigrationStage) => void;
+  /** Fail validation after the generation is staged, to exercise recovery. */
+  forceValidationFailure?: boolean;
+}
+
+/** The production value: no failure injection at all. */
+export const NO_MIGRATION_SEAMS: MigrationSeams = Object.freeze({});
+
+/**
+ * Flatten the retained per-stage hooks into the injected collaborator.
+ *
+ * `onStage` and `forceValidationFailure` stay as direct option members because
+ * the Phase 3 verification suites bind them there; they are normalized into the
+ * collaborator here, and from this point on only the collaborator is read.
+ */
+function resolveMigrationSeams(options: MigrateLegacyStateOptions): MigrationSeams {
+  const injected: MigrationSeams = options.seams ?? {};
+  const onStage = injected.onStage ?? options.onStage;
+  const forceValidationFailure = injected.forceValidationFailure ?? options.forceValidationFailure;
+  if (onStage === undefined && forceValidationFailure === undefined) return NO_MIGRATION_SEAMS;
+  return { ...(onStage ? { onStage } : {}), ...(forceValidationFailure ? { forceValidationFailure } : {}) };
+}
+
 export interface MigrateLegacyStateOptions {
   repository: StorageV2Repository;
   /**
@@ -106,13 +144,18 @@ export interface MigrateLegacyStateOptions {
   storage?: ReadOnlyLegacyStorage;
   /** Pre-read legacy state. When supplied, `storage` is not consulted. */
   legacyState?: LegacyAppState;
+  /** Injected test collaborator. Normalized into the run's failure points. */
+  seams?: MigrationSeams;
   /**
-   * Force a validation failure after the generation is staged, to exercise the
-   * recovery path. A test seam.
+   * Retained flat alias for {@link MigrationSeams.onStage}, bound by the Phase 3
+   * verification suites. The application never sets it.
+   */
+  onStage?: (stage: MigrationStage) => void;
+  /**
+   * Retained flat alias for {@link MigrationSeams.forceValidationFailure}. The
+   * application never sets it.
    */
   forceValidationFailure?: boolean;
-  /** Test seam: called at each stage; throwing aborts the migration. */
-  onStage?: (stage: MigrationStage) => void;
 }
 
 export interface MigrationOutcome {
@@ -163,6 +206,17 @@ function toCounts(records: GenerationRecords): MigrationCounts {
  * Pure: no storage access, no clock beyond the injected `now`, no randomness.
  * A subject that fails validation is reported as a problem and skipped rather
  * than written, so an unreadable subject cannot corrupt the generation.
+ *
+ * **Every problem raised here is a `warning`, and that is not a downgrade.**
+ * `ValidationSeverity` is the activation rule: `error` means activation was
+ * refused, `warning` means the condition was disclosed and the run continued.
+ * These problems describe records in the *source* that this transform declined to
+ * carry; by construction none of them is in the staged generation, so there is
+ * nothing for generation validation to refuse, and refusing to activate the whole
+ * device because one payload is corrupt would be a worse outcome than migrating
+ * the rest and disclosing the count. The rule is declared once as
+ * `MIGRATION_BLOCKING_POLICY` in `./migrationState`, and the activation path
+ * below still refuses on any `error` from `validateGeneration`.
  */
 export function buildMigratedRecords(
   state: LegacyAppState,
@@ -193,17 +247,37 @@ export function buildMigratedRecords(
 
   const subjects: SubjectRecordValue[] = [];
   const attachmentMetadata: AttachmentMetadataRecordValue[] = [];
+  // A payload the subject index does not name is preserved here instead of in
+  // `subjects`, so the generation never loses bytes the device still holds while
+  // its subject set stays equal to the one this build can open.
+  const unindexedSubjects: RecoveryRecordValue[] = [];
+  const indexedIds = state.indexedSubjectIds === undefined ? null : new Set(state.indexedSubjectIds);
 
   for (const subject of state.subjects) {
+    if (indexedIds !== null && !indexedIds.has(subject.subjectId)) {
+      unindexedSubjects.push({
+        kind: 'unindexed-subject',
+        subjectId: subject.subjectId,
+        raw: subject.raw,
+        capturedAt: options.now,
+      });
+      problems.push({
+        code: 'unindexed-subject-payload',
+        scope: 'subject',
+        count: 1,
+        severity: 'warning',
+      });
+      continue;
+    }
     if (subject.parsed === null) {
-      problems.push({ code: 'not-an-object', scope: 'subject', count: 1, severity: 'error' });
+      problems.push({ code: 'not-an-object', scope: 'subject', count: 1, severity: 'warning' });
       continue;
     }
     // A payload the current importer rejects is not migrated; a payload the
     // importer accepts is always carried, with its shallower structural findings
     // disclosed as warnings. Dropping an openable subject would be destructive.
     if (!isImportableSubjectSnapshot(subject.parsed)) {
-      problems.push({ code: 'not-an-object', scope: 'subject', count: 1, severity: 'error' });
+      problems.push({ code: 'not-an-object', scope: 'subject', count: 1, severity: 'warning' });
       continue;
     }
     for (const problem of validateSubjectSnapshot(subject.parsed).problems) {
@@ -232,7 +306,7 @@ export function buildMigratedRecords(
     // Re-staging an identical payload must not duplicate a record.
     const existingIndex = subjects.findIndex((entry) => entry.subjectId === subjectId);
     if (existingIndex >= 0) {
-      problems.push({ code: 'duplicate-identifier', scope: 'subject', count: 1, severity: 'error' });
+      problems.push({ code: 'duplicate-identifier', scope: 'subject', count: 1, severity: 'warning' });
       subjects[existingIndex] = record;
     } else {
       subjects.push(record);
@@ -247,7 +321,7 @@ export function buildMigratedRecords(
       const attachments = room?.attachments ?? [];
       for (const attachment of attachments) {
         if (seenAttachmentIds.has(attachment.attachmentId)) {
-          problems.push({ code: 'duplicate-identifier', scope: 'attachment', count: 1, severity: 'error' });
+          problems.push({ code: 'duplicate-identifier', scope: 'attachment', count: 1, severity: 'warning' });
           continue;
         }
         seenAttachmentIds.add(attachment.attachmentId);
@@ -279,6 +353,11 @@ export function buildMigratedRecords(
           reason,
           sourceType: isExternal ? 'external' : 'local',
         });
+        // `externalOnly` is the detailed per-attachment disclosure; this is its
+        // summary line, so a reader who only reads the problem list still sees
+        // that a record was carried without its bytes. A disclosure, never a
+        // block: the metadata is honest and the generation is consistent.
+        problems.push({ code: 'stored-without-bytes', scope: 'attachment', count: 1, severity: 'warning' });
       }
     }
   }
@@ -290,7 +369,7 @@ export function buildMigratedRecords(
     try {
       parsed = JSON.parse(state.progressionRaw) as unknown;
     } catch {
-      problems.push({ code: 'not-an-object', scope: 'progression', count: 1, severity: 'error' });
+      problems.push({ code: 'not-an-object', scope: 'progression', count: 1, severity: 'warning' });
     }
     if (parsed !== null) {
       const canonical: CanonicalProgression = normalizeProgressionRecord(parsed, {
@@ -321,17 +400,20 @@ export function buildMigratedRecords(
         const seen = new Set<string>();
         for (const raw of parsed) {
           if (!isRecord(raw) || typeof raw.sessionId !== 'string') {
-            problems.push({ code: 'wrong-type', scope: 'session', count: 1, severity: 'error' });
+            problems.push({ code: 'wrong-type', scope: 'session', count: 1, severity: 'warning' });
             continue;
           }
           if (seen.has(raw.sessionId)) {
-            problems.push({ code: 'duplicate-identifier', scope: 'session', count: 1, severity: 'error' });
+            problems.push({ code: 'duplicate-identifier', scope: 'session', count: 1, severity: 'warning' });
             continue;
           }
           seen.add(raw.sessionId);
           sessions.push({
             sessionId: raw.sessionId,
             subjectId: typeof raw.subjectId === 'string' ? raw.subjectId : '',
+            // The name the legacy session record holds, so a session for a
+            // subject with no carried record hydrates the same name here.
+            ...(typeof raw.subjectName === 'string' ? { subjectName: raw.subjectName } : {}),
             startedAt: typeof raw.startedAt === 'string' ? raw.startedAt : options.now,
             endedAt: typeof raw.endedAt === 'string' ? raw.endedAt : null,
             roomsVisited: Array.isArray(raw.roomsVisited)
@@ -346,10 +428,10 @@ export function buildMigratedRecords(
           });
         }
       } else {
-        problems.push({ code: 'unexpected-json-shape', scope: 'session', count: 1, severity: 'error' });
+        problems.push({ code: 'unexpected-json-shape', scope: 'session', count: 1, severity: 'warning' });
       }
     } catch {
-      problems.push({ code: 'not-an-object', scope: 'session', count: 1, severity: 'error' });
+      problems.push({ code: 'not-an-object', scope: 'session', count: 1, severity: 'warning' });
     }
   }
 
@@ -373,7 +455,7 @@ export function buildMigratedRecords(
       if (Array.isArray(parsed)) {
         for (const raw of parsed) {
           if (!isRecord(raw) || typeof raw.key !== 'string') {
-            problems.push({ code: 'wrong-type', scope: 'shortcut', count: 1, severity: 'error' });
+            problems.push({ code: 'wrong-type', scope: 'shortcut', count: 1, severity: 'warning' });
             continue;
           }
           shortcuts.push({
@@ -385,10 +467,10 @@ export function buildMigratedRecords(
           });
         }
       } else {
-        problems.push({ code: 'unexpected-json-shape', scope: 'shortcut', count: 1, severity: 'error' });
+        problems.push({ code: 'unexpected-json-shape', scope: 'shortcut', count: 1, severity: 'warning' });
       }
     } catch {
-      problems.push({ code: 'not-an-object', scope: 'shortcut', count: 1, severity: 'error' });
+      problems.push({ code: 'not-an-object', scope: 'shortcut', count: 1, severity: 'warning' });
     }
   }
 
@@ -441,6 +523,9 @@ export function buildMigratedRecords(
     raw: entry.raw,
     capturedAt: options.now,
   }));
+  // After the quarantined records, so a reader walking them sees the
+  // device's own recovery data before the migration's own.
+  recovery.push(...unindexedSubjects);
 
   return {
     records: { subjects, progression, sessions, preferences, shortcuts, assistance, attachmentMetadata, customSprites, recovery },
@@ -473,6 +558,7 @@ export async function migrateLegacyState(
   options: MigrateLegacyStateOptions,
 ): Promise<MigrationOutcome> {
   const { repository, generationId, now, clock } = options;
+  const seams = resolveMigrationSeams(options);
   const createdAt = clock.now();
   const empty = emptyCounts();
 
@@ -501,7 +587,8 @@ export async function migrateLegacyState(
     recovery: null,
   };
 
-  const point = options.onStage;
+  const point = seams.onStage;
+  const forceValidationFailure = seams.forceValidationFailure === true;
   let state: LegacyAppState;
   let records: GenerationRecords | null = null;
   let previousActiveGenerationId: string | null = null;
@@ -519,7 +606,16 @@ export async function migrateLegacyState(
     report.legacyKeys = { ...state.report.totals };
     enter('read-legacy');
 
-    if (isEmptyLegacyAppState(state)) {
+    if (hasNoLearnerContent(state)) {
+      // Nothing to migrate, even though the device holds app-owned keys. A
+      // first-time learner's device holds their locale, and maybe a quest step or
+      // a UI marker, and that is not data: staging a generation for it would
+      // write a receipt and report `activated` for zero subjects, telling a
+      // learner their data was moved when there was none.
+      //
+      // Honest in what it leaves behind: nothing staged, no receipt, the pointer
+      // never moved, and the legacy keys still authoritative. The first real
+      // write creates the initial generation through `ensureInitialGeneration`.
       report.status = 'no-source-data';
       return { report, stagedGenerationId: null, records: null };
     }
@@ -546,10 +642,18 @@ export async function migrateLegacyState(
     // generation - it says so in the descriptor's `source` and in a receipt - so
     // the only correct action is nothing. The generation may since have been
     // superseded by a later phase, which is not this migration's business.
+    //
+    // One case is deliberately NOT a no-op: a generation that is still only
+    // `staged`. That is what a run that failed after its stage commit (or after
+    // its receipt write) leaves behind - real records that no reader can reach -
+    // and reporting `migrated` for it would tell a caller reading only `status`
+    // that the device is migrated when its data is not. It is discarded and
+    // migrated again, so `migrated` always means reachable-or-superseded.
     const existing = await repository.readGeneration(generationId);
     const existingReceipts = existing ? await repository.listMigrationReceipts(generationId) : [];
     const alreadyMigrated =
       existing?.descriptor?.source === 'legacy-migration' &&
+      existing.descriptor.status !== 'staged' &&
       existingReceipts.some((receipt) => receipt.migrationId === LEGACY_MIGRATION_ID);
     if (existing !== null && alreadyMigrated) {
       report.stagedGenerationId = generationId;
@@ -565,13 +669,14 @@ export async function migrateLegacyState(
       return { report, stagedGenerationId: generationId, records };
     }
 
-    // A generation left `staged` by a run that failed after its stage commit is
-    // abandoned, not resumable: `stageGeneration` only upserts, so re-staging
-    // over it could leave a stale record behind. Discard it and stage cleanly.
-    // Only `staged` is discarded: an `active` or `superseded` generation that
-    // carries no receipt is legitimate rollback data that must be preserved.
-    if (existing?.descriptor?.status === 'staged') {
-      await repository.discardStagedGeneration(generationId);
+    // Anything unusable at this id is reclaimed before re-staging: a `staged`
+    // generation (abandoned, or left behind by an activation that failed), and
+    // orphan records that a registry entry no longer describes. Only `staged` and
+    // orphans are reclaimed - an `active` or `superseded` generation is
+    // legitimate rollback data that must be preserved, and the refusal for one is
+    // left to `stageGeneration` below so it is reported as a staging failure.
+    if (existing !== null) {
+      await repository.discardAbandonedGeneration(generationId);
     }
 
     enter('stage-records');
@@ -588,10 +693,13 @@ export async function migrateLegacyState(
     report.recordCounts = toCounts(stagedRecords.records);
 
     // ── Step 4: compare record counts, relationships, and checksums ──
-    if (options.forceValidationFailure) {
+    // The stage is entered *before* the forced failure, so a validation failure
+    // reports the stage that failed rather than the one that ran before it. The
+    // same rule the Phase 3 review applied to a failure inside staging.
+    enter('validate');
+    if (forceValidationFailure) {
       throw new StorageV2Error('VALIDATION_FAILED', { stage: 'validate', problemCount: 1 });
     }
-    enter('validate');
     const validation = await repository.validateGeneration(generationId);
     if (!validation.ok) {
       report.problems = [

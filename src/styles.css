@@ -1090,7 +1090,9 @@ textarea {
   gap: 10px;
   padding: 10px 12px;
   background: var(--bg-panel-soft);
-  border: 1px solid var(--border-soft);
+  /* Same reason as the panel frame: `--border-soft` reaches 1.19:1 against
+     `--bg-panel-soft` in the default theme, `--text-muted` reaches 3.90:1. */
+  border: 1px solid var(--text-muted);
   border-radius: 8px;
 }
 
@@ -5553,4 +5555,257 @@ textarea.game-input:focus {
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.5;
+}
+
+/* ── Phase 4: storage-move state surface ──────────────────────────────────
+   Uses the existing semantic custom properties only. This phase lands before the
+   Cozy design system (plan phase 8), so it introduces no new token: the surface
+   is painted from --bg-panel, --text-primary, --text-secondary, --border-soft,
+   --accent, --good, --bad and --control-*, which every theme already defines.
+
+   Two properties do the responsive work, and both are load-bearing rather than
+   cosmetic:
+     * `min-width: 0` on the flexible child, so a long unbroken code token can
+       shrink instead of forcing the flex container wider than the viewport;
+     * `overflow-wrap: anywhere` on diagnostic text, so a code-shaped token wraps
+       instead of introducing a horizontal scrollbar at 320 CSS pixels or at
+       200% zoom.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.migration-panel,
+.migration-dialog {
+  box-sizing: border-box;
+  /* Body text, not --text-title: --text-title is defined once on :root and is
+     not redefined per theme, so it does not meet 4.5:1 on the light theme. */
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.migration-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 16px;
+  width: 100%;
+  max-width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-panel);
+  /* `--text-muted`, not the `--border-soft` the rest of this application uses for
+     a panel frame. `--bg-panel` sits at 1.12:1 against `--bg-deep` and
+     `--border-soft` reaches only 1.35:1 against it in the default theme, so a
+     `--border-soft` frame would leave this notice's boundary below the 3:1 that
+     plan 10.1 requires for non-text contrast. `--text-muted` measures
+     4.43:1 / 4.69:1 / 6.86:1 / 6.92:1 against `--bg-panel` across the four
+     themes. */
+  border: 1px solid var(--text-muted);
+  /* The tone border is a supplement, not the signal: `migration-status` states
+     the same thing in words, so no state is signalled by colour alone. */
+  border-inline-start: 4px solid var(--accent);
+}
+
+.migration-panel--success {
+  border-inline-start-color: var(--good);
+}
+
+.migration-panel--attention {
+  border-inline-start-color: var(--accent);
+}
+
+.migration-panel--problem {
+  border-inline-start-color: var(--bad);
+}
+
+.migration-backdrop {
+  /* Above the vignette (999) and the screen fade (998), below the skip link
+     (10000), which must stay reachable while a dialog is open. */
+  z-index: 1000;
+  animation: migrationBackdropFade 160ms ease-out;
+}
+
+@keyframes migrationBackdropFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.migration-dialog {
+  width: min(620px, 100%);
+}
+
+.migration-body {
+  /* `min-width: 0` is what lets a long diagnostic token wrap instead of widening
+     the flex row past the viewport. */
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.migration-status {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.migration-glyph {
+  display: inline-block;
+  min-width: 1.1em;
+  margin-inline-end: 6px;
+  text-align: center;
+}
+
+.migration-heading {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.migration-subheading {
+  margin: 10px 0 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.migration-copy p {
+  margin: 0 0 6px;
+}
+
+.migration-copy p:last-child {
+  margin-bottom: 0;
+}
+
+.migration-tally {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.migration-step {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.migration-disclosure {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--bg-panel-soft);
+  /* Same reason as the panel frame: `--border-soft` reaches 1.19:1 against
+     `--bg-panel-soft` in the default theme, `--text-muted` reaches 3.90:1. */
+  border: 1px solid var(--text-muted);
+  border-radius: 8px;
+}
+
+.migration-reasons,
+.migration-diagnostics {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+}
+
+.migration-review-note,
+.migration-pending {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+}
+
+.migration-diagnostics {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.migration-diagnostics-line {
+  overflow-wrap: anywhere;
+}
+
+.migration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex: 0 0 auto;
+}
+
+/* Plan 10.1: 44 by 44 CSS pixels minimum. Declared on the one class every control
+   in this surface uses, so a new button cannot opt out by being added elsewhere.
+   The dismiss control is a text button rather than an icon for the same reason. */
+.migration-action {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 16px;
+  font-size: 13px;
+}
+
+.migration-panel > .migration-actions {
+  margin-top: 0;
+  align-self: flex-start;
+}
+
+.migration-progress {
+  position: relative;
+  flex: 1 1 100%;
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 3px;
+  background: var(--control-bg);
+  overflow: hidden;
+}
+
+/* The fill is `--accent` on a `--control-bg` track: 6.71:1 / 3.96:1 / 8.74:1 /
+   10.20:1 across the four themes, and the bar is always paired with the step
+   sentence above it, so it is a supplement rather than the only signal. */
+.migration-progress::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 40%;
+  background: var(--accent);
+  animation: migrationProgressSlide 1200ms linear infinite;
+}
+
+@keyframes migrationProgressSlide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+/* Reduced motion: the indeterminate bar becomes a full-width static bar, the
+   backdrop stops fading, and the dialog stops the shared 250ms slide-and-scale
+   that every `.modal` in this application plays. Nothing in this surface conveys
+   meaning through movement alone, so removing the movement removes no
+   information - and the scale in that keyframe shrinks a 44px control to 42.24px
+   while it runs, which is a target-size regression this surface should not
+   inherit. */
+@media (prefers-reduced-motion: reduce) {
+  .migration-backdrop {
+    animation: none;
+  }
+
+  .migration-dialog {
+    animation: none;
+  }
+
+  .migration-progress::after {
+    animation: none;
+    inline-size: 100%;
+    opacity: 0.6;
+  }
+}
+
+@media (max-width: 360px) {
+  .migration-panel,
+  .migration-dialog {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .migration-actions {
+    gap: 8px;
+  }
+
+  .migration-action {
+    /* Grow to the full row rather than shrink below the 44px minimum. */
+    flex: 1 1 100%;
+  }
 }

@@ -59,6 +59,7 @@ import { checksumOfChecksums, checksumValue } from './checksum';
 import {
   attachmentBlobRecordId,
   attachmentMetadataRecordId,
+  customSpriteRecordId,
   countGenerationRecords,
   emptyGenerationRecordValues,
   validateGenerationRecords,
@@ -84,7 +85,11 @@ export interface StorageV2Repository {
   readGeneration(generationId: string): Promise<GenerationSnapshot | null>;
   readActiveGenerationId(): Promise<string | null>;
   readActiveGeneration(): Promise<GenerationSnapshot | null>;
-  stageGeneration(input: StageGenerationInput): Promise<StageGenerationResult>;
+  stageGeneration(
+    input: StageGenerationInput,
+    seams?: StagingSeams,
+  ): Promise<StageGenerationResult>;
+
   validateGeneration(generationId: string): Promise<GenerationValidationReport>;
   activateGeneration(generationId: string): Promise<ActivationResult>;
   rollbackToGeneration(generationId: string): Promise<ActivationResult>;
@@ -94,14 +99,42 @@ export interface StorageV2Repository {
    *
    * The recovery path for a run that failed after its stage commit. Refuses to
    * touch an `active` or `superseded` generation.
+   *
+   * The status check and the deletes happen in **one** transaction, so a second
+   * tab cannot activate a generation between the read and the delete.
    */
   discardStagedGeneration(generationId: string): Promise<boolean>;
+  /**
+   * Discard whatever is unusable at `generationId`, including records with no
+   * descriptor at all.
+   *
+   * {@link discardStagedGeneration} only handles a generation whose registry entry
+   * still says `staged`. A run that died between its data write and its
+   * descriptor write leaves *orphan records*: real records under a generation id
+   * that no registry entry describes and the pointer does not name. This method
+   * recognises them and removes them, and refuses to touch anything the pointer
+   * owns.
+   */
+  discardAbandonedGeneration(generationId: string): Promise<AbandonedGenerationOutcome>;
   readRecords(generationId: string): Promise<GenerationSnapshot>;
   putRecords(generationId: string, records: Partial<GenerationRecordValues>): Promise<PutRecordsResult>;
   deleteRecords(generationId: string, targets: DeleteRecordsTarget): Promise<DeleteRecordsResult>;
   writeMigrationReceipt(receipt: MigrationReceiptValue): Promise<void>;
   listMigrationReceipts(generationId?: string): Promise<MigrationReceiptValue[]>;
 }
+
+/** What {@link StorageV2Repository.discardAbandonedGeneration} did, and why. */
+export type AbandonedGenerationOutcome =
+  /** A `staged` generation and all of its records were removed. */
+  | 'discarded-staged'
+  /** Orphan records with no descriptor were removed. */
+  | 'removed-orphan-records'
+  /** Nothing was there. */
+  | 'nothing-to-discard'
+  /** The registry entry says `active` or `superseded`; live data was kept. */
+  | 'retained-live-generation'
+  /** The pointer names this generation id; nothing was touched. */
+  | 'refused-pointer-owns-generation';
 
 export interface GenerationSnapshot {
   generationId: string;
@@ -118,13 +151,23 @@ export interface StageGenerationInput {
   /** The generation this one descends from; retained for rollback. */
   parentGenerationId?: string | null;
   records: Partial<GenerationRecordValues>;
-  /**
-   * Test seam for failure injection. Called at a named point inside the staging
-   * transaction; throwing aborts the transaction and nothing is committed.
-   * Never wired to anything in production.
-   */
+}
+
+/**
+ * Injected failure points inside the staging transaction.
+ *
+ * A test collaborator, not a property of the data: `StageGenerationInput` is the
+ * generation's *content* contract, and the failure points are not content. The
+ * production call sites pass nothing, so there is no seam for application code to
+ * reach through {@link StageGenerationInput}.
+ */
+export interface StagingSeams {
+  /** Called at a named point; throwing aborts the transaction. */
   onStage?: (point: StageFailurePoint) => void;
 }
+
+/** The production value: no failure points at all. */
+export const NO_STAGING_SEAMS: StagingSeams = Object.freeze({});
 
 /** Points inside the staging transaction where a failure can be injected. */
 export type StageFailurePoint =
@@ -248,8 +291,10 @@ export function buildRecordEnvelopes(
     attachmentBlobs: (input.attachmentBlobs ?? base.attachmentBlobs).map((value) =>
       envelope(generationId, attachmentBlobRecordId(value.attachmentId), value, updatedAt),
     ),
+    // Keyed by (kind, spritePath): a sprite has up to three records and keying by
+    // the path alone silently collapsed them. See `customSpriteRecordId`.
     customSprites: (input.customSprites ?? base.customSprites).map((value) =>
-      envelope(generationId, value.spritePath, value, updatedAt),
+      envelope(generationId, customSpriteRecordId(value.spritePath, value.kind), value, updatedAt),
     ),
     recovery: (input.recovery ?? base.recovery).map((value) =>
       envelope(generationId, `${value.kind}:${value.subjectId}`, value, updatedAt),
@@ -590,7 +635,10 @@ class Repository implements StorageV2Repository {
     return this.readGeneration(activeId);
   }
 
-  async stageGeneration(input: StageGenerationInput): Promise<StageGenerationResult> {
+  async stageGeneration(
+    input: StageGenerationInput,
+    seams: StagingSeams = NO_STAGING_SEAMS,
+  ): Promise<StageGenerationResult> {
     if (input.generationId.trim().length === 0) {
       throw new StorageV2Error('RECORD_INVALID', { field: 'generationId' });
     }
@@ -614,7 +662,7 @@ class Repository implements StorageV2Repository {
       contentChecksum: computeStoreChecksums(records).meta,
     };
 
-    const point = input.onStage;
+    const point = seams.onStage;
     await this.writeTransaction(allStoreNames(), 'stage', (tx) => {
       putAll(tx, 'subjects', records.subjects);
       point?.('after-subjects');
@@ -769,15 +817,7 @@ class Repository implements StorageV2Repository {
         // The keys are read and deleted inside the same transaction, from the
         // request's own success handler, so the transaction is still active and
         // a record written between two passes cannot survive a prune.
-        for (const storeName of allStoreNames()) {
-          if (storeName === 'meta') continue;
-          const request = tx.objectStore(storeName).index('byGeneration').getAllKeys(generationId);
-          request.onsuccess = () => {
-            const store = tx.objectStore(storeName);
-            for (const key of request.result) store.delete(key);
-          };
-        }
-        tx.objectStore('meta').delete([generationId, generationMetaKey(generationId)]);
+        deleteGenerationRecords(tx, generationId);
       });
       removed.push(generationId);
     }
@@ -896,30 +936,114 @@ class Repository implements StorageV2Repository {
    * the same id start from a clean slate. Refuses to touch an `active` or
    * `superseded` generation, so this can never destroy live or rollback data.
    *
+   * **The status read and every delete share one transaction.** A separate read
+   * pass would leave a window in which a second tab could activate the
+   * generation, after which this method would delete the live data. Reading the
+   * descriptor from inside the write transaction and issuing the deletes from
+   * that request's own success handler keeps the transaction active, so the guard
+   * and the deletes are one atomic step.
+   *
    * Returns `true` when a staged generation was removed.
    */
   async discardStagedGeneration(generationId: string): Promise<boolean> {
-    const descriptor = await this.readMeta<GenerationDescriptor>(generationMetaKey(generationId));
-    if (!descriptor) return false;
-    if (descriptor.status !== 'staged') {
+    const outcome = await this.discardWithinOneTransaction(generationId);
+    if (outcome === 'discarded-staged') return true;
+    if (outcome === 'retained-live-generation') {
+      const descriptor = await this.readMeta<GenerationDescriptor>(generationMetaKey(generationId));
       throw new StorageV2Error('GENERATION_NOT_STAGGED', {
         generationId,
-        status: descriptor.status,
+        status: descriptor?.status ?? 'unknown',
       });
     }
+    if (outcome === 'refused-pointer-owns-generation') {
+      throw new StorageV2Error('GENERATION_ALREADY_ACTIVE', { generationId });
+    }
+    return false;
+  }
 
+  /**
+   * Discard whatever is unusable at `generationId`.
+   *
+   * The richer, non-throwing form of {@link discardStagedGeneration}: it also
+   * recognises **orphan records** - records stored under a generation id that no
+   * registry entry describes - and removes them, because
+   * `stageGeneration` can be interrupted between its data write and its
+   * descriptor write by a browser that reclaims the connection. An orphan cannot
+   * be read by any reader (the pointer and the registry both name nothing), so it
+   * is dead weight that would otherwise make a re-stage see stale records.
+   *
+   * A generation id the *pointer* names is never touched, descriptor or no
+   * descriptor: the pointer is the one thing that makes a generation reachable.
+   */
+  async discardAbandonedGeneration(generationId: string): Promise<AbandonedGenerationOutcome> {
+    const outcome = await this.discardWithinOneTransaction(generationId);
+    if (outcome !== 'nothing-to-discard') return outcome;
+    // No registry entry and the pointer does not own it. Whether any record is
+    // actually there is the last question before a delete is safe.
+    const records = await this.collectRecords(generationId);
+    if (countEnvelopes(records) === 0) return 'nothing-to-discard';
     await this.writeTransaction(allStoreNames(), 'discard', (tx) => {
-      for (const storeName of allStoreNames()) {
-        if (storeName === 'meta') continue;
-        const request = tx.objectStore(storeName).index('byGeneration').getAllKeys(generationId);
-        request.onsuccess = () => {
-          const store = tx.objectStore(storeName);
-          for (const key of request.result) store.delete(key);
-        };
-      }
-      tx.objectStore('meta').delete([generationId, generationMetaKey(generationId)]);
+      deleteGenerationRecords(tx, generationId);
     });
-    return true;
+    return 'removed-orphan-records';
+  }
+
+  /**
+   * One transaction that reads the descriptor, decides, and deletes.
+   *
+   * Everything the decision needs is read inside the transaction, so a concurrent
+   * activation in another tab either happens before this read (and is refused) or
+   * after this commit - never between them. Every delete is issued from the
+   * decision request's own success handler, which keeps the transaction active.
+   */
+  private async discardWithinOneTransaction(
+    generationId: string,
+  ): Promise<AbandonedGenerationOutcome> {
+    const tx = this.db.transaction(allStoreNames() as unknown as string[], 'readwrite');
+    const done = transactionToPromise(tx);
+    let outcome: AbandonedGenerationOutcome = 'nothing-to-discard';
+
+    const descriptorRequest = tx
+      .objectStore('meta')
+      .index('byKey')
+      .get(generationMetaKey(generationId)) as IDBRequest<
+      MetaRecordEnvelope<GenerationDescriptor> | undefined
+    >;
+    descriptorRequest.onsuccess = () => {
+      const descriptor = descriptorRequest.result?.value;
+      if (descriptor !== undefined) {
+        // A registry entry is the authority on whether this generation is live.
+        // `active` and `superseded` are both rollback data, so neither is touched,
+        // and the caller learns which one it was.
+        if (descriptor.status !== 'staged') {
+          outcome = 'retained-live-generation';
+          return;
+        }
+        outcome = 'discarded-staged';
+        deleteGenerationRecords(tx, generationId);
+        return;
+      }
+      // No registry entry. Whether that is safe depends on the pointer, which is
+      // read inside this same transaction so the check cannot be raced.
+      const pointerRequest = tx
+        .objectStore('meta')
+        .index('byKey')
+        .get(ACTIVE_GENERATION_META_KEY) as IDBRequest<
+        MetaRecordEnvelope<ActiveGenerationPointer> | undefined
+      >;
+      pointerRequest.onsuccess = () => {
+        if (pointerRequest.result?.value?.activeGeneration === generationId) {
+          outcome = 'refused-pointer-owns-generation';
+        }
+      };
+    };
+
+    try {
+      await done;
+    } catch (error) {
+      throw toStorageV2Error(error, 'TRANSACTION_ABORTED', { stage: 'discard' });
+    }
+    return outcome;
   }
 
   /** Write a migration receipt into the generation it describes. */
@@ -968,6 +1092,27 @@ function putAll<TValue>(
   for (const record of records) {
     store.put(record);
   }
+}
+
+/**
+ * Remove every record of one generation, plus its registry entry.
+ *
+ * The keys are read and deleted inside the caller's transaction, from each
+ * request's own success handler, so the transaction is still active and a record
+ * written between two passes cannot survive.
+ */
+function deleteGenerationRecords(tx: IDBTransaction, generationId: string): void {
+  for (const storeName of allStoreNames()) {
+    // `meta` is keyed by a logical name and holds the registry entry, which is
+    // deleted by key below; it has no `byGeneration` index.
+    if (storeName === 'meta') continue;
+    const keysRequest = tx.objectStore(storeName).index('byGeneration').getAllKeys(generationId);
+    keysRequest.onsuccess = () => {
+      const store = tx.objectStore(storeName);
+      for (const key of keysRequest.result) store.delete(key);
+    };
+  }
+  tx.objectStore('meta').delete([generationId, generationMetaKey(generationId)]);
 }
 
 /**

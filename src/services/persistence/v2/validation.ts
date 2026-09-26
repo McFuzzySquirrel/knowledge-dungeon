@@ -73,7 +73,8 @@ export type ValidationCode =
   | 'stored-without-bytes'
   | 'receipt-generation-mismatch'
   | 'count-mismatch'
-  | 'relationship-invalid';
+  | 'relationship-invalid'
+  | 'unindexed-subject-payload';
 
 /**
  * How serious a finding is.
@@ -464,7 +465,7 @@ export function validateRecoveryRecord(value: RecoveryRecordValue): ValidationRe
     collector.add('not-an-object', 'recovery');
     return collector.build();
   }
-  if (record.kind !== 'backup' && record.kind !== 'corrupt') {
+  if (record.kind !== 'backup' && record.kind !== 'corrupt' && record.kind !== 'unindexed-subject') {
     collector.add('unsupported-version', 'recovery');
   }
   requireString(collector, record, 'subjectId', 'recovery');
@@ -575,6 +576,37 @@ export function attachmentMetadataRecordId(attachmentId: string): string {
 
 export function attachmentBlobRecordId(attachmentId: string): string {
   return `${ATTACHMENT_BLOB_ID_PREFIX}${attachmentId}`;
+}
+
+/** Record-id prefix for a custom sprite's record, which is kind-qualified. */
+export const CUSTOM_SPRITE_KIND_PREFIX = 'kind:';
+
+/**
+ * Record id for one custom-sprite record.
+ *
+ * A sprite has up to three records - an `override`, an `anim`, and the
+ * `original` it overrides - and the legacy device keeps them under three
+ * *different* keys that share one sprite path
+ * (`knowledge-dungeon:custom-sprites:{override,anim,originals}:<path>`). Keying
+ * the store by `spritePath` alone therefore collapsed three records onto one
+ * primary key: the descriptor's `recordCounts.customSprites` counted the
+ * pre-collapse array, `validateGeneration` refused with `count-mismatch` /
+ * `severity: 'error'`, and every device with custom sprite data failed to
+ * migrate at all.
+ *
+ * The identity of a record is therefore `(kind, spritePath)`, and
+ * {@link CustomSpriteRecordValue.spritePath} stays the sprite's own path so every
+ * consumer that thinks in sprites - a renderer, a backup manifest, the settings
+ * list - keeps addressing the sprite rather than the record.
+ *
+ * Every caller that addresses a record by id must use this function, so the key
+ * is defined once. It is deliberately a *stable* function: a record written by an
+ * earlier build under the old, path-only key stays readable through
+ * `readRecords`, which still carries it, and a re-stage under the new key
+ * supersedes it.
+ */
+export function customSpriteRecordId(spritePath: string, kind: CustomSpriteRecordValue['kind']): string {
+  return `${CUSTOM_SPRITE_KIND_PREFIX}${kind}:${spritePath}`;
 }
 
 export function emptyGenerationRecords(): GenerationRecords {

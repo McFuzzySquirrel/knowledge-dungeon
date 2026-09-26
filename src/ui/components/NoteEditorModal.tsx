@@ -25,18 +25,16 @@ import {
   renderHighlightHtml,
 } from '@/ui/utils/markdownHighlight';
 
-async function uploadFile(file: File): Promise<string | null> {
-  const formData = new FormData();
-  formData.append('file', file);
-  try {
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    if (!res.ok) return null;
-    const data: { url?: string } = await res.json() as { url?: string };
-    return data.url ?? null;
-  } catch {
-    return null;
-  }
-}
+/**
+ * A picked image is stored on this device, never uploaded.
+ *
+ * Plan section 2.3: web image attachments live in IndexedDB and the redesigned
+ * application no longer posts them to `/api/upload`. There is no `fetch`, no
+ * `FormData`, and no request of any kind in this file: `addDeviceLocalAttachment`
+ * writes the bytes to the device-local attachment store and the room gains a
+ * `local` attachment that resolves back to them, so the preview survives a
+ * reload.
+ */
 
 const CRITERION_LABELS: Record<QualityScoreKey, string> = {
   sectionCompleteness: 'Required sections',
@@ -71,6 +69,7 @@ export function NoteEditorModal(): JSX.Element | null {
   const snapshot = useSubjectStore((s) => s.snapshot);
   const submitNote = useSubjectStore((s) => s.submitNote);
   const addLocalAttachment = useSubjectStore((s) => s.addLocalAttachment);
+  const addDeviceLocalAttachment = useSubjectStore((s) => s.addDeviceLocalAttachment);
   const addExternalAttachment = useSubjectStore((s) => s.addExternalAttachment);
   const removeAttachment = useSubjectStore((s) => s.removeAttachment);
   const resolveAttachmentUrl = useSubjectStore((s) => s.resolveAttachmentUrl);
@@ -204,19 +203,35 @@ export function NoteEditorModal(): JSX.Element | null {
     }
 
     let cancelled = false;
+    /** Object URLs this effect created, so the cleanup can release them. */
+    const created: string[] = [];
+    const revokeAll = (): void => {
+      for (const url of created.splice(0)) URL.revokeObjectURL(url);
+    };
+
     const localAttachments = room.attachments.filter((attachment) => attachment.sourceType === 'local');
     if (localAttachments.length === 0) {
       setAttachmentUrls({});
-      return;
+      return () => {
+        cancelled = true;
+        revokeAll();
+      };
     }
 
     void Promise.all(
       localAttachments.map(async (attachment) => {
         const resolved = await resolveAttachmentUrl(room.roomId, attachment.attachmentId);
+        // A device-local attachment resolves to an object URL this page created.
+        // It is released when the effect re-runs or the modal closes, so opening
+        // the image library repeatedly does not accumulate blobs in memory.
+        if (resolved !== null && resolved.startsWith('blob:')) created.push(resolved);
         return [attachment.attachmentId, resolved] as const;
       }),
     ).then((results) => {
-      if (cancelled) return;
+      if (cancelled) {
+        revokeAll();
+        return;
+      }
       setAttachmentUrls(
         Object.fromEntries(
           results.filter((entry): entry is readonly [string, string] => Boolean(entry[1])),
@@ -226,6 +241,7 @@ export function NoteEditorModal(): JSX.Element | null {
 
     return () => {
       cancelled = true;
+      revokeAll();
     };
   }, [isOpen, resolveAttachmentUrl, room]);
 
@@ -420,23 +436,17 @@ export function NoteEditorModal(): JSX.Element | null {
                         const file = e.target.files?.[0];
                         if (!file) return;
                         setIsSavingAttachment(true);
-                        uploadFile(file)
-                          .then((url) => {
-                            if (!url) {
-                              pushToast('error', 'Upload failed. Make sure the server is running.');
-                              return;
-                            }
-                            const absoluteUrl = new URL(url, window.location.origin).href;
-                            return addExternalAttachment(room.roomId, absoluteUrl);
-                          })
+                        // Device-local: the bytes go to IndexedDB on this device and
+                        // are never sent anywhere.
+                        addDeviceLocalAttachment(room.roomId, file)
                           .then((created) => {
                             if (!created) {
-                              pushToast('info', 'No image was added.');
+                              pushToast('error', 'The image could not be stored on this device.');
                               return;
                             }
-                            pushToast('info', 'Image uploaded and attached to room.');
+                            pushToast('info', 'Image saved on this device and attached to room.');
                           })
-                          .catch(() => pushToast('error', 'Upload failed.'))
+                          .catch(() => pushToast('error', 'The image could not be stored on this device.'))
                           .finally(() => {
                             setIsSavingAttachment(false);
                             e.target.value = '';
@@ -449,7 +459,7 @@ export function NoteEditorModal(): JSX.Element | null {
                       disabled={isSavingAttachment}
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      + Upload
+                      + Add image
                     </button>
                   </>
                 ) : null}
@@ -509,7 +519,7 @@ export function NoteEditorModal(): JSX.Element | null {
             )}
             {!isElectron ? (
               <p className="note-images-hint">
-                Local images: supported on Electron desktop or self-hosted builds. Not available on GitHub Pages.
+                Images you add are saved on this device and stay available offline.
               </p>
             ) : null}
             {room.attachments.length === 0 ? (

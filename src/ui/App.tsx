@@ -1,27 +1,30 @@
 import { useEffect, useState, type JSX } from 'react';
-import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { WelcomeScreen } from '@/ui/screens/WelcomeScreen';
 import { VillageScreen } from '@/ui/screens/VillageScreen';
 import { GameScreen } from '@/ui/screens/GameScreen';
+import { MigrationStateSurface, type MigrationAction } from '@/ui/components/MigrationStateSurface';
 import {
-  getActiveSubjectId,
-  listSubjectIds,
-} from '@/services/persistence/subjectPersistence';
-import { getStorageThreshold } from '@/services/errorRecovery';
+  bootstrapApplication,
+  pendingBootstrap,
+  type BootstrapResult,
+  type MigrationState,
+} from '@/application/bootstrap';
 
 export function App(): JSX.Element {
   const snapshot = useSubjectStore((state) => state.snapshot);
-  const loadSubject = useSubjectStore((state) => state.loadSubject);
   const selectedClass = useSessionStore((state) => state.selectedClass);
   const activeSubjectId = useSessionStore((state) => state.activeSubjectId);
   const activeScreen = useSessionStore((state) => state.activeScreen);
-  const setActiveSubjectId = useSessionStore((state) => state.setActiveSubjectId);
-  const setActiveScreen = useSessionStore((state) => state.setActiveScreen);
-  const setProgressionActiveSubject = useProgressionStore((state) => state.setActiveSubject);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [storageWarn, setStorageWarn] = useState<string | null>(null);
+  // `null` on the default build: the legacy repository never runs a migration, so
+  // the surface below renders nothing at all there.
+  const [migration, setMigration] = useState<MigrationState | null>(null);
+  // Non-null only for a state that offers `retry-migration`, so the surface can
+  // render a retry control it can actually honour.
+  const [retryMigration, setRetryMigration] = useState<MigrationAction | null>(null);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -43,37 +46,27 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
-    async function hydrate() {
-      const ids = await listSubjectIds();
-      const hasSome = ids.length > 0;
 
-      const active = getActiveSubjectId();
-      if (active && hasSome) {
-        const loaded = await loadSubject(active);
-        if (!cancelled && loaded) {
-          setActiveSubjectId(null);
-          setProgressionActiveSubject(null);
-        }
-      }
-      if (!cancelled) {
-        setBootstrapped(true);
-      }
+    // `main.tsx` starts the bootstrap before the first render, so in the real app
+    // this resolves against already-hydrated stores. Awaiting the same memoized
+    // promise here is what keeps `<App />` correct when it is rendered directly -
+    // a component test, or any other host - and it is why a StrictMode
+    // double-invoke cannot start a second migration.
+    const inFlight = pendingBootstrap() ?? bootstrapApplication();
+    void inFlight.then((result: BootstrapResult) => {
+      if (cancelled) return;
+      setBootstrapped(true);
+      setStorageWarn(result.storageWarning);
+      // Handed to the surface unchanged. The retry callable is non-null only for a
+      // state that offers a retry, so the offer and the capability stay in step.
+      setMigration(result.migration);
+      setRetryMigration(result.retryMigration);
+    });
 
-      // Phase 5: check storage threshold on boot
-      if (!cancelled) {
-        const threshold = getStorageThreshold();
-        if (threshold === 'critical') {
-          setStorageWarn('Storage space is critically low. Please export your data and remove unused subjects to prevent data loss.');
-        } else if (threshold === 'warn') {
-          setStorageWarn('Storage space is running low. Consider exporting your data for backup.');
-        }
-      }
-    }
-    void hydrate();
     return () => {
       cancelled = true;
     };
-  }, [loadSubject, setActiveSubjectId, setProgressionActiveSubject, setActiveScreen]);
+  }, []);
 
   if (!bootstrapped) {
     return (
@@ -86,6 +79,12 @@ export function App(): JSX.Element {
 
   return (
     <div id="app-main" role="main">
+      {/* Renders `null` unless the bootstrap produced a migration state worth
+          showing, so the default build's output is unchanged. Mounted before the
+          active screen so a notice reads first in the document order, and before
+          the storage-pressure banner so a migration notice outranks a warning
+          about a move that has not happened yet. */}
+      <MigrationStateSurface migration={migration} retryMigration={retryMigration} />
       {storageWarn && (
         <div className="storage-warning-banner" role="alert" aria-live="polite">
           <span>{storageWarn}</span>
