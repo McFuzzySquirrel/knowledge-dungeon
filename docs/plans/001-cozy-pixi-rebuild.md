@@ -710,7 +710,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 2 | complete | Extract renderer-neutral application contracts. |
 | 3 | complete | Build storage-v2 and migration infrastructure. |
 | 4 | complete | Cut over storage behind a flag and add local attachments. |
-| 5 | verified | Deliver full-device backup and restore. |
+| 5 | complete | Deliver full-device backup and restore. |
 | 6 | not-started | Deliver individual subject backup and restore. |
 | 7 | not-started | Deliver safe blank reusable templates. |
 | 8 | not-started | Establish Cozy design tokens and the CC0 media gate. |
@@ -2281,7 +2281,7 @@ Phases 5, 6, and 7.
 
 ## Phase 5: Full-Device Backup Product
 
-**Status:** verified
+**Status:** complete
 **Objective:** Deliver a lossless full-device backup and restore flow.
 
 ### Prerequisites
@@ -2339,8 +2339,9 @@ Run the common gate.
 
 ### Verification evidence
 
-Recorded on 2026-09-26. The status is `verified`; the maintainer's acceptance
-decides whether it advances to `complete`.
+Recorded on 2026-09-26. The status advanced from `verified` to `complete` on
+2026-09-26, when the maintainer accepted the verified checkpoint. Phase 6
+remains `not-started` and requires separate authorization.
 
 #### What was built
 
@@ -2429,6 +2430,63 @@ Three gates were edited in place by the implementer rather than only added to.
 Each carries an in-file `RAIL CHANGE` / `RAIL FIX` note, and QA judged every one
 **stronger or neutral**, naming the load-bearing assertion that survived in each
 case. QA found no weakened assertion anywhere in the phase.
+
+#### Checkpoint and merge evidence
+
+Recorded on 2026-09-26.
+
+- Commits `312c3b1` (the phase) and `c852d71` (a gate fix, below) were pushed to
+  `phase-5-data-products`, branched from the merged Phase 4 commit so its pull
+  request carried only Phase 5's 57 paths. PR #55 merged as `2a391e8`. Main CI run
+  `36248621822` passed all ten jobs, including the `Browser (Storage v2 Flagged
+  Build)` lane, and the Pages deployment run succeeded.
+- **Phase 4 merged first**, as PR #54, squash commit `0814113`, with all ten jobs
+  green on pull-request run `36222938056` and on main run `36244099937`. The
+  local `main` was then moved to the squashed commit and the Phase 5 branch
+  rebased onto it, because a squash leaves the pre-squash commit outside
+  `main`'s history and a Phase 5 branch based on it would have re-shown Phase
+  4's entire diff.
+- **The first pull-request run, `36244611639`, failed Unit Tests on exactly one
+  test** — and it was a gate defect, not a product defect. QA's
+  `tests/phase5/privacy.test.ts` scanned `artifacts/compatibility-evidence` and
+  asserted it held at least one file. `artifacts/` is gitignored, so a clean
+  checkout has no such directory, the walk found nothing, and the assertion
+  failed. The test had passed locally only because 71 directories of leftover
+  run output existed on the maintainer's machine, where it scanned 452 files
+  from unrelated runs; on CI, the environment that actually uploads evidence, it
+  scanned zero. It therefore **failed where it mattered and passed where it did
+  not**, which is the worst shape a privacy gate can have.
+- The fix, in `c852d71`, makes the always-running assertion verify the property
+  from evidence the test **builds itself**, to the lane's own declared record
+  shape read from `tests/e2e/data-products-lane.ts` and the path builder in
+  `tests/e2e/compat-evidence.ts`, written to a temporary tree laid out like the
+  real allowlisted root and removed in a `finally` that asserts the tree is
+  gone. A drift gate compares the record's key set for equality against the
+  lane's declared interface. Three negative controls mutate one field each and
+  require the scanner to report a learner marker, a non-reserved host, and an
+  absolute home path, each verified by mutation. The real-directory scan is kept
+  but demands no count, reports `present`/`filesFound`/`unreadable`/`findings` on
+  stdout every run, and asserts that absence is caused by the gitignore rule — so
+  "there was nothing to scan" became a stated fact with a stated cause instead
+  of an unexamined pass. No skip and no early return.
+- **This qualifies the phase's stability claim.** The three consecutive
+  byte-identical local `npm test` runs reported above were identical, but one of
+  the 103 files was green only because of untracked local state. The count is
+  now 103 files / **1422** tests, because one environment-dependent test became
+  three. The fix was verified under the failing condition: with `artifacts/`
+  moved aside the suite passes 103 / 1422 and reports `present=false
+  filesFound=0`; with it restored, `present=true filesFound=452`.
+- `tests/phase5/seam.test.ts` also reads `dist/` for two built-artifact
+  assertions, but guards with `existsSync` and demands no count, so it cannot
+  fail on a fresh checkout. Measured and deliberately left alone: fixing it would
+  mean building `dist` inside a unit test, and its property is already covered in
+  CI by `build:web`, `check:bundle-size` and `currentBuild.spec.ts`. Recorded as
+  a coverage note, not a false pass.
+- Every lane continues to classify its runner as emulated, representative, and
+  synthetic. No new browser, host, device, or assistive-technology claim was
+  made, and the physical-device gates remain assigned to Phases 21 and 23.
+- Rollback is now `git revert 2a391e8`, or a reset to the Phase 4 checkpoint
+  `0814113`.
 
 #### Commands run and results
 
