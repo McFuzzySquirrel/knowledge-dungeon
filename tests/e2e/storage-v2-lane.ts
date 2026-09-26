@@ -56,6 +56,23 @@ export const STORAGE_V2_FLAG_VALUE = 'v2';
 export const STORAGE_V2_BUILD_SCRIPT = 'build:storage-v2-flagged';
 
 /**
+ * The build script the `storage-v2-browser` CI job runs.
+ *
+ * Phase 5 added the fresh-profile restore lane, which previews the *same* flagged
+ * artifact and needs the Phase 5 owner flag on to exercise the product. The job
+ * therefore builds with `build:storage-v2-data-products`, which is this same
+ * `--mode storage-v2` build off the same `.env.storage-v2` with one extra flag value
+ * in the environment. Two consequences this declaration records:
+ *
+ * - The single-build property is unchanged: one artifact, built once, serves both
+ *   flagged lanes. A second job or a second build step would have broken it.
+ * - The product-free script stays the one `npm run test:e2e:storage` uses, so this
+ *   lane is still independently verifiable against an artifact with the data
+ *   products off.
+ */
+export const STORAGE_V2_CI_BUILD_SCRIPT = 'build:storage-v2-data-products';
+
+/**
  * Its own recorded identity, so the flagged artifact is never confused with the
  * shared production artifact recorded in `artifacts/web-artifact-manifest.json`.
  */

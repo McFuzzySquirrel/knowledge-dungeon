@@ -22,6 +22,7 @@ import {
 } from './support-matrix';
 import {
   STORAGE_V2_BUILD_SCRIPT,
+  STORAGE_V2_CI_BUILD_SCRIPT,
   STORAGE_V2_ENV_FILE,
   STORAGE_V2_LANE,
   STORAGE_V2_STORAGE_CONTRACT,
@@ -228,7 +229,16 @@ describe('Phase 4 storage-v2 CI lane (ci.yml)', () => {
     const body = job ?? '';
 
     expect(body).toContain('runs-on: ubuntu-latest');
-    expect(body).toContain(`npm run ${STORAGE_V2_BUILD_SCRIPT}`);
+    // The job builds the flagged artifact with the superset script: the same
+    // `--mode storage-v2` build off the same `.env.storage-v2`, plus Phase 5's owner
+    // flag, so one artifact serves both flagged lanes. The assertion still names a
+    // real script and still fails if the job stops building the artifact itself; it
+    // names the script the job actually runs, which is what `test:e2e:storage` on a
+    // developer machine and CI have in common.
+    expect(body).toContain(`npm run ${STORAGE_V2_CI_BUILD_SCRIPT}`);
+    // ...and the product-free script is never what CI builds, so the two phases stay
+    // independently verifiable.
+    expect(body).not.toContain(`npm run ${STORAGE_V2_BUILD_SCRIPT}\n`);
     expect(body).toContain('npm run record:web-artifact:storage-v2');
     expect(body).toContain('npm run verify:web-artifact:storage-v2');
     expect(body).toContain('npm run test:e2e:storage:recorded');

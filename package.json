@@ -29,6 +29,7 @@
     "package:electron:linux:full": "npm run build:electron && electron-builder --config electron-builder.config.js --linux",
     "check:bundle-size": "node scripts/check-bundle-size.mjs",
     "build:storage-v2-flagged": "npm run typecheck && vite build --mode storage-v2",
+    "build:storage-v2-data-products": "node scripts/build-flagged-data-products.mjs",
     "record:web-artifact:storage-v2": "node scripts/web-artifact-manifest.mjs write --out=artifacts/web-artifact-manifest-storage-v2.json",
     "verify:web-artifact:storage-v2": "node scripts/web-artifact-manifest.mjs verify --manifest=artifacts/web-artifact-manifest-storage-v2.json",
     "record:build-metadata": "node scripts/record-build-metadata.mjs --mode production",
@@ -38,6 +39,7 @@
     "electron": "npm run build:electron && electron .",
     "preview": "vite preview",
     "preview:e2e": "vite preview --host 127.0.0.1 --port 43173 --strictPort",
+    "preview:e2e:data-products": "vite preview --host 127.0.0.1 --port 43179 --strictPort",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "manifest": "node scripts/generate-sprite-manifest.mjs",
@@ -45,6 +47,7 @@
     "test:contracts": "vitest run tests/contracts",
     "test:migrations": "vitest run tests/migrations",
     "test:privacy": "vitest run tests/privacy",
+    "test:data": "vitest run tests/data",
     "test:node20": "npx -y node@20 node_modules/vitest/vitest.mjs run",
     "test:e2e": "npm run build:web && playwright test tests/e2e/currentBuild.spec.ts",
     "test:e2e:recorded": "playwright test tests/e2e/currentBuild.spec.ts",
@@ -52,6 +55,9 @@
     "test:e2e:compat:recorded": "playwright test tests/e2e/compatibility.spec.ts",
     "test:e2e:storage": "npm run build:storage-v2-flagged && npm run record:web-artifact:storage-v2 && playwright test --config=playwright.storage-v2.config.ts",
     "test:e2e:storage:recorded": "playwright test --config=playwright.storage-v2.config.ts",
+    "test:e2e:data-products": "playwright test --config=playwright.data-products.config.ts",
+    "test:e2e:data-products:full": "npm run build:storage-v2-data-products && npm run record:web-artifact:storage-v2 && playwright test --config=playwright.data-products.config.ts",
+    "test:e2e:data-products:recorded": "playwright test --config=playwright.data-products.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

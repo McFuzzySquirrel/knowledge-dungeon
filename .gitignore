@@ -15,6 +15,18 @@ data/
 
 # Allow source-code data files (but keep runtime data/ excluded)
 !src/data/
+# Same trap, same depth, same reason: `data/` matches a directory named `data` at
+# ANY depth, so `src/ui/data/` - the Phase 5 Data Center - would be untracked too.
+# The deliverable would pass every gate locally and CI would have no files to
+# build. `tests/unit/dataCenter.test.tsx` asserts this negation is present and
+# effective, so it cannot regress silently.
+!src/ui/data/
+# `data/` above is a bare pattern, so it matches a directory named `data` at ANY
+# depth - including `tests/data/`, which holds the Phase 5 data-product gate. Without
+# this negation the whole gate suite is untracked: `npm run test:data` passes
+# locally, and CI simply has no files to run. `tests/data/suiteIntegrity.test.ts`
+# asserts this negation is present and effective, so it cannot regress silently.
+!tests/data/
 public/assets/sprite-manifest.json
 
 # Local opencode tool and plugin config is session-specific, not project files.

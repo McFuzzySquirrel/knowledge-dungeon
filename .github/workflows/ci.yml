@@ -125,7 +125,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Phase 4 storage-v2 lane.
+  # Phase 4 storage-v2 lane, and the Phase 5 fresh-profile restore lane.
   #
   # This is the ONE deliberately separate build in a complete CI run, and it is
   # not a second production artifact:
@@ -134,6 +134,12 @@ jobs:
   #   which reads `.env.storage-v2`. The production default stays
   #   `VITE_STORAGE_REPOSITORY=legacy`, so `web-build` above remains the single
   #   build, record, and upload point for the production `web-artifact`.
+  # - The build is `build:storage-v2-data-products`, which is that same flagged
+  #   build with one extra flag value, `VITE_DATA_PRODUCTS_V2=true`, in the
+  #   environment. It is a strict superset, so one artifact serves both lanes and
+  #   the artifact is still built exactly once. `VITE_STORAGE_REPOSITORY` still
+  #   comes only from `.env.storage-v2`; see `scripts/build-flagged-data-products.mjs`
+  #   for why the owner flag is set in the environment rather than in that file.
   # - It records its identity to its OWN manifest file
   #   (`artifacts/web-artifact-manifest-storage-v2.json`), so a flagged build can
   #   never be mistaken for, or overwrite, the shared production artifact
@@ -157,8 +163,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Build the flagged storage-v2 artifact
-        run: npm run build:storage-v2-flagged
+      - name: Build the flagged storage-v2 artifact with the Phase 5 products on
+        run: npm run build:storage-v2-data-products
       - name: Record the flagged storage-v2 artifact identity
         run: npm run record:web-artifact:storage-v2
       - name: Verify the flagged storage-v2 artifact identity
@@ -173,6 +179,22 @@ jobs:
           npx playwright --version
       - name: Run the storage-v2 flagged-build lane
         run: npm run test:e2e:storage:recorded
+      # Phase 5 fresh-profile restore lane.
+      #
+      # It is a *step in this job*, not a job of its own, for one reason: the
+      # flagged artifact exists only here, and this job deliberately uploads
+      # evidence only. A separate job would have to build the artifact a second
+      # time, which is exactly the duplication this lane must avoid. Two steps keep
+      # one build, one Chromium install, and one upload, and leave `web-build` as
+      # the single production build, record, and upload point.
+      #
+      # The step gates. It gates because the product it exercises now exists and
+      # the lane is the phase's acceptance evidence for the fresh-profile restore
+      # deliverable; a `continue-on-error` here would turn a restore regression into
+      # a green run. `tests/e2e/data-products-lane.test.ts` asserts the step does
+      # NOT carry `continue-on-error`, so the exemption cannot creep back in.
+      - name: Run the fresh-profile data-product restore lane
+        run: npm run test:e2e:data-products:recorded
       - name: Upload sanitized storage-v2 evidence
         if: always()
         uses: actions/upload-artifact@v4

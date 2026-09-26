@@ -710,7 +710,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 2 | complete | Extract renderer-neutral application contracts. |
 | 3 | complete | Build storage-v2 and migration infrastructure. |
 | 4 | complete | Cut over storage behind a flag and add local attachments. |
-| 5 | not-started | Deliver full-device backup and restore. |
+| 5 | verified | Deliver full-device backup and restore. |
 | 6 | not-started | Deliver individual subject backup and restore. |
 | 7 | not-started | Deliver safe blank reusable templates. |
 | 8 | not-started | Establish Cozy design tokens and the CC0 media gate. |
@@ -2281,7 +2281,7 @@ Phases 5, 6, and 7.
 
 ## Phase 5: Full-Device Backup Product
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Deliver a lossless full-device backup and restore flow.
 
 ### Prerequisites
@@ -2337,9 +2337,300 @@ Run the common gate.
 - Corrupt archives never replace current data.
 - External-only images are disclosed.
 
-### Rollback
+### Verification evidence
 
-Hide the tab and disable import. The format is additive.
+Recorded on 2026-09-26. The status is `verified`; the maintainer's acceptance
+decides whether it advances to `complete`.
+
+#### What was built
+
+- **`.kdbak` export and import** in `src/services/persistence/products/fullDeviceBackup.ts`,
+  and a read-only `archiveValidation.ts` that every archive byte passes through
+  before anything is staged. The layout is the plan's §7.3 layout unchanged:
+  `manifest.json`, `state.json`, `attachments/<sha256>`, `custom-sprites/*`,
+  `recovery/*`. Every record value is carried **verbatim** — no normalization, no
+  re-derivation, no field-picking — so unknown app-owned fields survive at every
+  level. Attachment members are content-addressed, so two identical payloads
+  collapse to one.
+- **The manifest** is a closed twelve-key set at format version 1: `product`,
+  `formatVersion`, `storageGenerationFormatVersion`, `subjectSchemaVersion`,
+  `createdAt`, `memberCount`, `totalBytes`, `contentChecksum`, `recordCounts`,
+  `attachmentBytes`, `externalOnlyAttachments`, `members`. The three version
+  fields are separate contracts read from three different production constants
+  and each is refused on its own; `formatVersion` and `storageGenerationFormatVersion`
+  are integers and `subjectSchemaVersion` is a semver string, so one field
+  structurally cannot hold all three. `members[]` omits `manifest.json` because a
+  member cannot contain its own digest.
+- **The Data Center** in `src/ui/data/{DataCenter.tsx,ImportPreview.tsx,RecoveryStatus.tsx}`,
+  mounted from the existing Welcome `data` tab when `VITE_DATA_PRODUCTS_V2` is
+  true. Local download only: `Blob` → object URL → anchor → revoke.
+- **Verification rails**: `npm run test:data` (nine gates), a fresh-profile
+  restore Playwright lane with its own CI step, and `build:storage-v2-data-products`
+  so the owner flag reaches a flagged build without editing `.env.storage-v2`.
+
+#### Three decisions the implementer made that the orchestrator accepted
+
+1. **`keepPreviousGeneration` is a documented no-op; retention is unconditional.**
+   A boolean whose false value would mean "delete the generation I just replaced"
+   is a boolean with no safe false value. QA later confirmed retention holds across
+   three successive restores. The echoed field was corrected so it reports the
+   outcome rather than the request.
+2. **The importer adopts the archive's own `sourceGenerationId`** when the label is
+   free on the device, so the migration receipts the archive carries keep naming the
+   generation they belong to. When it is not free, a fresh label is minted. QA
+   verified eleven hostile labels — path traversal, absolute, drive letter,
+   4096 characters, emoji, RTL override, leading space — are never adopted and never
+   reach a member path.
+3. **No migration receipt is minted for a restore.** `MigrationReceiptValue` is
+   typed `fromStorage: 'legacy-localstorage'`, so a receipt claiming a legacy
+   migration would be untrue. The archive's receipts are restored and the mismatch
+   is disclosed rather than repaired, because recomputing them would forge a record
+   of a migration this device never performed.
+
+#### Defects found in review and fixed before verification
+
+Reviewed adversarially by `qa-engineer`, which added a nine-file, 104-test
+independent suite sharing no code with the phase's own rails, plus two browser
+measurement harnesses. The phase was **not** acceptable on its first pass.
+
+- **BLOCKER — a learner could take a backup they could never restore.** The
+  archive reader refused on the **total** migration problem count while reporting
+  the **blocking** count, so a record with warnings only threw an error whose
+  `problemCount` was `0`. A device holding `subject-1.1.0-minimal.json` — which the
+  current importer accepts and which `validateGeneration` reports `ok` with the
+  single warning `missing-phase-state` — exported successfully, and that archive
+  was then always refused. The reader and the importer, halves of one product,
+  disagreed about whether a warning is a refusal. Fixed to refuse only on blocking
+  problems, through the single declared policy (`MIGRATION_BLOCKING_POLICY` /
+  `isActivationBlocking`) rather than a locally re-derived rule, and the other
+  validators in the module were audited for the same mistake. The orchestrator
+  reproduced the exact scenario independently: `activated: true`, subject
+  restored.
+- **An `Object.prototype` key was adoptable as a database generation label.** The
+  member-name rule already refused those names; the generation-label rule did not.
+  With receipts present the restore then failed; with none, a generation named
+  `constructor` became the active pointer. The reader's own
+  `isPrototypeMemberName` now gates both requested and minted labels.
+- **The module's determinism claim was false.** fflate stamps each ZIP entry from
+  `Date.now()` at two-second resolution, so two exports of the same generation
+  under the same injected clock differed. The claim was made true by passing an
+  `mtime` derived from the injected clock, and the test proves it by asserting the
+  header's DOS word at dates the wall clock is not at, so it is not
+  load-sensitive.
+- **A repointed receipt still described the source device.** Now disclosed through
+  `migrationReceiptRepointed` and `receiptProvenanceNote`.
+- **A test-planting hole and a stale CI exemption** were closed in the same pass:
+  the planting exemption was narrowed from a directory to the exact planted file
+  list with fail-closed parsing, and the data-products CI step's
+  `continue-on-error: true` was removed with its now-false justification, and the
+  gate inverted to assert the **absence** of the exemption.
+
+Three gates were edited in place by the implementer rather than only added to.
+Each carries an in-file `RAIL CHANGE` / `RAIL FIX` note, and QA judged every one
+**stronger or neutral**, naming the load-bearing assertion that survived in each
+case. QA found no weakened assertion anywhere in the phase.
+
+#### Commands run and results
+
+The orchestrator ran the common gate, both phase-specific gates, the focused
+suite, and all three browser lanes independently, as one chain, with exit code 0.
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | pass, 0 errors 0 warnings |
+| `npm run typecheck` | pass |
+| `npm test` | pass — 103 files / 1420 tests, 0 failures (Phase 4 baseline 82 / 1121) |
+| `npm run test:data` | pass — 9 files / 99 tests |
+| `npm run test:privacy` | pass — 6 files / 34 tests |
+| `npm run test:migrations` | pass — 15 files / 373 tests |
+| `npm test -- tests/unit/subjectPersistence.test.ts` | pass — 1 file / 4 tests |
+| `npm run test:node20` | pass — 103 files / 1420 tests, identical to Node 22 |
+| `npm run build:web` | pass |
+| `npm run check:bundle-size` | pass — `Total dist size: 4.26 MB across 132 files` |
+| `npm run test:e2e` | pass — 12 tests across the four Chromium viewports |
+| `npm run test:e2e:storage` | pass — 9 tests on the flagged build |
+| `npm run test:e2e:data-products:full` | pass — 4 tests, fresh-profile restore |
+
+`npm test` was run **three consecutive times** and produced byte-identical
+results, which matters because this repository has twice been bitten by an
+intermittent gate. `tests/data/suiteIntegrity.test.ts` asserts that **no** live
+registered reproduction remains, so the 24 that shipped as `it.fails` are all now
+live assertions and none can be deleted to make a count true.
+
+#### Exit-criteria evidence
+
+- **A populated storage-v2 state exports and restores with semantic equality.**
+  A device nastier than the rails' own fixture — four subjects including one with
+  no rooms and one with exactly one, the Phase 0 unknown-fields fixture
+  re-identified, unicode and emoji in a name, topic, note and tag, unknown fields on
+  a record, the snapshot, the dungeon, an edge, a room, a validation state, a note,
+  an inventory item, a fish, an attachment, a sprite, a recovery record and a
+  session; attachments that share a payload, differ only in their last byte, are
+  256 KiB, are `external`-source with bytes, or declare a hash their bytes do not
+  satisfy; a sprite body that is not valid JSON; a recovery payload that does not
+  parse — round-trips with **zero field differences** across all nine record
+  stores. The comparator is proven able to fail, including on a single flipped byte
+  inside binary. Two carve-outs exist and both are disclosed: a record whose bytes
+  disagree with its declared hash, and an already-`external-only` record, both
+  become external-only with a null hash.
+- **All available attachment bytes and custom sprite data survive.** Five blobs
+  element by element with digests cross-checked against Node `crypto` and Web
+  Crypto, a 256 KiB payload byte-identical, and three sprite bodies byte-identical
+  including one that is not valid JSON and one full of member-name
+  metacharacters.
+- **Corrupt archives never replace current data.** The phase's rails cover fifteen
+  cases; QA wrote twelve more of its own, including five *consistently* corrupt
+  archives where every recomputable checksum was recomputed. Every one was refused
+  with a typed `StorageV2Error` and sanitized details, the device fingerprint —
+  pointer, every record value **and its bytes**, every descriptor, and the whole
+  ordered legacy `localStorage` — byte-identical, and a good import lands
+  afterwards. The fingerprint is proven able to move on a single edited field and
+  on a single flipped attachment byte.
+- **External-only images are disclosed.** An all-external archive, an orphan byte
+  member beside a disclosed record, and a disclosure histogram that disagrees with
+  the state: no fabricated hash anywhere, the import still succeeds, and the
+  disclosure reaches the learner in words — "Image 1 of 2", with a reason
+  sentence — carrying no digest, no id, no URL and no filename.
+
+#### Gates beyond the exit criteria
+
+- **No learner data in the manifest, member paths, errors, reports or evidence.**
+  A marker planted as subject name, room topic, note, attachment filename and alt
+  text appears in none of them. `state.json` necessarily contains learner data —
+  it is a backup — so the claim is scoped to the manifest, member paths, reports
+  and evidence, and stated that way.
+- **Default build genuinely unchanged.** `VITE_DATA_PRODUCTS_V2` defaults to
+  `false`; `tests/unit/defaultBuildRendering.test.tsx` is unmodified; the 12-test
+  default-build suite passes; and a browser probe against the default `dist` could
+  not find the Data Center control at all.
+- **Accessibility, measured independently by QA in Chromium.** Zero text-contrast
+  failures and zero non-text failures across all four themes, zero touch targets
+  under 44 px at 1280×900, 320×640 and 200 % zoom, no horizontal overflow in the
+  Data Center at 320 px, `prefers-reduced-motion` yielding zero animated elements
+  and `data-kd-motion="reduced"`, a focus indicator at 6.52:1 measured with a real
+  Tab press, and a dialog with `aria-modal`, `aria-labelledby` and
+  `aria-describedby` set, initial focus inside, 8/8 tab steps contained, Escape
+  closing, and focus restored to the opener. QA also **reproduced** the CSS
+  specificity defect the implementer reported and fixed — the shell's
+  `:root[data-graphics='rpg'] button` really did outrank the Data Center's own
+  rules, and the doubled class really does win.
+- **The destructive confirmation is provably load-bearing.** After a real archive
+  is read, the device's active generation is read, then every control outside the
+  dialog plus the dismiss button are pressed in turn, re-reading the pointer after
+  each — unchanged every time. The dialog's `onEscape` is `null` while a restore is
+  in flight, so it is genuinely not dismissible mid-operation.
+- **Retention is measured, not claimed.** The restore lane plants a sentinel record
+  in the target's prior generation through a real IndexedDB transaction, then
+  requires the prior descriptor to be found, its status to be `superseded`, its
+  sentinel present, and its record count unchanged. QA separately confirmed that
+  deleting a real retained generation makes every retention assertion fail.
+- **Node 20.** 103 files / 1420 tests, identical to Node 22. The `test:node20`
+  affordance added in Phase 4 paid for itself: a Phase 5 loop test failed under
+  Node 20 contention purely for want of a timeout budget, not a moved assertion.
+
+#### Performance and bundle result
+
+Raw `dist` is **4,463,882 bytes across 132 files**, against the Phase 4 baseline
+of 4,315,447 / 125: **+148,435 bytes (+3.4%)**, +7 files. All 7 are the Data
+Center's lazy chunks and their `-legacy-` twins.
+
+Welcome initial JS + CSS is **201,931 bytes gzip** excluding the eagerly loaded
+Phaser chunk, inside the 300 KB budget, and the pre-existing eager-Phaser breach
+recorded in Phase 4's evidence is unchanged.
+
+**The default build ships the Phase 5 product without ever loading it:** 72,238
+bytes raw / 23,553 gzip across 4 files, because the flag guard is a runtime `if`
+rather than a build-time `define`, so the bundler cannot prune the chunks. At run
+time the flag-off build executes none of it, and the product's own gate asserts the
+durable property — the product modules are **lazily reachable, never eagerly
+imported**, and no non-product module in the graph reaches the ZIP codec eagerly.
+The arithmetic is decisive against the plan's budgets: the chunks are 0.34 % of the
+raw `dist` ceiling and are not "initial" at all. Removing the bytes would need
+build-time dead-code elimination, which is a bundle decision for Phase 7 or 8.
+
+#### Known limitations and evidence boundaries
+
+- **A real screen reader was never used.** Every ARIA role, live region, accessible
+  name and focus behaviour is a DOM or `aria-*` measurement, and several were
+  measured in Chromium, but nothing here is VoiceOver, NVDA, or ChromeVox
+  evidence. The plan's manual device checks — a Chromebook with ChromeVox, an
+  iPad or Android touch-platform screen reader, a Windows desktop browser — remain
+  outstanding and stay assigned to Phases 21 and 23.
+- **No physical touch device, no real browser zoom, and Chromium only.** The 44 px
+  measurements are layout rectangles at emulated viewports, and 200 % is emulated
+  as a 640 CSS-pixel viewport. No Firefox, WebKit, or Edge. Contrast, target size
+  and focus were Chromium-only across four themes.
+- **Cross-tab and quota behaviour during a restore was not measured in a browser**;
+  the evidence there rests on `fake-indexeddb` and the two storage-v2 lane
+  patterns, and Phase 4's limitations on that shim all still apply.
+- **`npm run test:e2e:data-products` is preview-only** and only passes when `dist`
+  was last built by `build:storage-v2-data-products`; against a default `dist` it
+  fails with a missing-control timeout rather than saying the artifact is wrong.
+  Use the `:full` variant. QA agrees this is a real trap; a one-line assertion on
+  the recorded manifest's `dataProductsV2` would remove it and is a follow-up.
+- **CI no longer exercises the flagged build with `VITE_DATA_PRODUCTS_V2` off.**
+  One build per run means the data-products build is a superset of the storage-v2
+  build, so the Phase 4 lane's product-free property is now verified only by the
+  local `test:e2e:storage` script. Recorded as a real loss, traded for a single
+  build.
+- **The storage-v2 generation roll-up checksum does not cover attachment bytes** —
+  `canonicalJsonStringify` serializes an `ArrayBuffer` as `{}`. QA quantified the
+  consequence: two states with different attachment bytes **can** share a
+  `contentChecksum`. It **cannot** be used to make a restore accept the wrong bytes
+  (a member must hash to its own name, and a record is only given bytes through a
+  member named by its declared hash) or to refuse the right bytes (a record whose
+  declared hash names no member is disclosed, not refused). The archive boundary is
+  closed; the exposure is **silent in-device attachment-byte corruption** being
+  invisible to storage-v2's own validation. A Phase 4/22 hardening item.
+- **The export does not guard against being handed a `staged` generation.** It
+  succeeds, the archive is internally consistent, and it restores onto a device
+  that does not hold the label. The one wrong thing is that such an archive carries
+  a receipt with `status: 'activated'` for a migration that never activated.
+- **The active-subject pointer is carried in the archive and reported as
+  `restoredActiveSubjectId` but never applied**, and the UI says so in as many
+  words. No migration receipt is minted for a restore. Both are deliberate and both
+  are stated on screen.
+- **A pre-existing 200 % overflow in the Welcome shell** (the masthead at 685 px in
+  a 640 px viewport), separate from the Phase 4 record of a font-metric-dependent
+  320 px overflow. The Data Center itself never overflows. A Phase 21 responsive
+  follow-up.
+- **High-contrast / forced-colors mode is not handled** by the Data Center, which
+  relies on its own tokens rather than a forced-colours media query. A Phase 8
+  decision.
+- **Recorded follow-ups, deliberately not fixed:** the `.gitignore` bare `data/`
+  rule that silently made `tests/data/` and `src/ui/data/` untrackable (both fixed
+  with negations and both asserted by `git check-ignore`, so they cannot regress);
+  `scripts/build-flagged-data-products.mjs` is not typechecked; the retention probe
+  depends on a real record-id and index structure, so a storage-v2 schema change
+  would fail it with a retention error rather than a probe error; and the
+  `keepPreviousGeneration` field, though now truthful, still invites a caller to
+  believe the request is negotiable.
+- No learner data exists in any source, fixture, test, report, log, or evidence
+  file added by this phase. Every fixture is synthetic and self-describing; the
+  only URL host is the reserved `example.invalid`.
+
+#### Files
+
+Created: `src/services/persistence/products/{fullDeviceBackup,archiveValidation}.ts`,
+`src/ui/data/{DataCenter.tsx,ImportPreview.tsx,RecoveryStatus.tsx,dataCenter.css}`,
+`tests/data/` (9 gates + 11 support), `tests/unit/{dataCenter,fullDeviceBackupProduct}.test.tsx`,
+`tests/e2e/{dataProductsRestore.spec.ts,data-products-lane.ts,data-products-lane.test.ts}`,
+`playwright.data-products.config.ts`, `scripts/build-flagged-data-products.mjs`.
+Modified: `src/services/persistence/v2/archive.ts`, `src/ui/screens/WelcomeScreen.tsx`,
+`src/store/progressionStore.ts`'s consumer surfaces, `eslint.config.js`,
+`package.json`, `tsconfig.node.json`, `.gitignore`, `README.md`,
+`.github/workflows/ci.yml`, and ten pre-existing test files (Phase 4's
+`qaHardening`, Phase 4's `storage-v2-lane` pair, and six `tests/data/` rails plus
+`localDownloadOnly` and `suiteIntegrity`).
+
+#### Rollback
+
+Hide the tab and disable import; the format is additive. Concretely: with
+`VITE_DATA_PRODUCTS_V2=false` the Data Center never renders and the product's
+chunks are never fetched, the legacy import/export path is untouched, and no
+`.kdbak` is read or written. Because retention is unconditional, a device that has
+already restored a backup keeps its previous generation readable, so the rollback
+loses nothing.
 
 ### Unlocks
 
