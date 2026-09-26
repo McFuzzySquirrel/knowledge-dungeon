@@ -6,6 +6,27 @@
  * The Subject domain payloads (DungeonMetadata + RoomMetadata) are serialized
  * as JSON under deterministic keys mirroring the mindmap-dungeon filesystem
  * layout (`dungeon-data/<subject-id>/...`).
+ *
+ * ── Repository routing (Phase 4) ──
+ *
+ * The exported API is unchanged. What changed is where a read or a write lands,
+ * and only when `VITE_STORAGE_REPOSITORY=v2`:
+ *
+ * - `legacy` (the production default, and the rollback): every function behaves
+ *   exactly as it did before this phase, key for key and byte for byte. Nothing
+ *   in this file opens IndexedDB on that path.
+ * - `v2`: subject reads and writes go to the active storage-v2 generation, and
+ *   every successful write is **mirrored to the legacy key** so a rollback build
+ *   can still read the device. A mirror failure is recorded and reported through
+ *   `./v2/dualWrite` and never fails the write the learner asked for.
+ *
+ * The Electron bridge stays in front of both paths and is tried first, exactly as
+ * before, so Electron packaging compatibility is unaffected.
+ *
+ * The active-subject pointer (`knowledge-dungeon:v1:activeSubjectId`) is
+ * deliberately *not* routed: it is app-owned session state rather than
+ * generation data, it has to be readable synchronously while the stores hydrate,
+ * and a rollback build reads it from the same key.
  */
 
 import {
@@ -20,6 +41,23 @@ import {
   safeLocalStorageSet,
   quarantineCorruptData,
 } from '@/services/errorRecovery';
+import {
+  currentStorageV2Repository,
+  isStorageV2Selected,
+} from './v2/repositorySelection';
+import { recordDualWriteReport, writeThrough } from './v2/dualWrite';
+
+/**
+ * The storage-v2 record adapter is loaded lazily.
+ *
+ * With the flag off - the production default - this module never imports it, so
+ * the default artifact does not contain the storage-v2 implementation at all.
+ * Every call site below is already `async`, so the lazy load costs one extra
+ * microtask on a path that already awaits storage.
+ */
+async function storageV2Records(): Promise<typeof import('./v2/appRepository')> {
+  return import('./v2/appRepository');
+}
 
 const STORAGE_PREFIX = 'knowledge-dungeon:v1';
 
@@ -108,12 +146,31 @@ async function invokeBridge<T>(operation: () => Promise<T>, fallback: T): Promis
   }
 }
 
+/** The live storage-v2 repository, or `null` when the legacy repository is selected. */
+function storageV2(): ReturnType<typeof currentStorageV2Repository> {
+  return isStorageV2Selected() ? currentStorageV2Repository() : null;
+}
+
 export async function loadSubjectSnapshot(subjectId: string): Promise<SubjectSnapshot | null> {
   if (typeof window !== 'undefined' && window.electronKnowledgeBridge?.readSubject) {
     try {
       return await window.electronKnowledgeBridge.readSubject(subjectId);
     } catch {
       // fall through to localStorage
+    }
+  }
+
+  const repository = storageV2();
+  if (repository !== null) {
+    try {
+      const { readSubjectFromActiveGeneration } = await storageV2Records();
+      return await readSubjectFromActiveGeneration(repository, subjectId);
+    } catch (error) {
+      // A failed read is reported and reported honestly as "no snapshot", which
+      // is the same outcome a corrupt legacy payload produces.
+      recordDualWriteReport('subject.save', 'primary-failed', 'STORAGE_V2_WRITE_FAILED');
+      void error;
+      return null;
     }
   }
 
@@ -150,6 +207,31 @@ export async function saveSubjectSnapshot(
     }
   }
 
+  const repository = storageV2();
+  if (repository !== null) {
+    try {
+      // The storage-v2 write is primary; the legacy key is the rollback mirror.
+      // A mirror failure is recorded by `writeThrough` and does not fail the save.
+      const { writeSubjectToActiveGeneration } = await storageV2Records();
+      await writeThrough({
+        operation: 'subject.save',
+        primary: () => writeSubjectToActiveGeneration(repository, subjectId, snapshot, new Date().toISOString()),
+        mirror: () => {
+          const result = safeLocalStorageSet(existingKey, json);
+          if (!result.success) return false;
+          appendSubjectIndex(subjectId);
+          return true;
+        },
+      });
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save subject data.',
+      };
+    }
+  }
+
   const result = safeLocalStorageSet(existingKey, json);
   if (result.success) {
     appendSubjectIndex(subjectId);
@@ -163,6 +245,16 @@ export async function listSubjectIds(): Promise<string[]> {
       return await window.electronKnowledgeBridge.listSubjects();
     } catch {
       // fall through to localStorage
+    }
+  }
+  const repository = storageV2();
+  if (repository !== null) {
+    try {
+      const { readSubjectIdsFromActiveGeneration } = await storageV2Records();
+      return await readSubjectIdsFromActiveGeneration(repository);
+    } catch {
+      recordDualWriteReport('subject.index', 'primary-failed', 'STORAGE_V2_WRITE_FAILED');
+      return [];
     }
   }
   const raw = safeGet(STORAGE_KEYS.subjectIndex);
@@ -183,24 +275,56 @@ export async function deleteSubject(subjectId: string): Promise<void> {
       // fall through
     }
   }
+  const repository = storageV2();
+  if (repository !== null) {
+    try {
+      const { deleteSubjectFromActiveGeneration } = await storageV2Records();
+      await writeThrough({
+        operation: 'subject.delete',
+        primary: () => deleteSubjectFromActiveGeneration(repository, subjectId),
+        mirror: () => {
+          safeRemove(STORAGE_KEYS.subject(subjectId));
+          return rewriteSubjectIndex(subjectId);
+        },
+      });
+      return;
+    } catch (error) {
+      recordDualWriteReport('subject.delete', 'primary-failed', 'STORAGE_V2_WRITE_FAILED');
+      void error;
+      // Fall through to the legacy delete so a rollback build is never left
+      // holding a subject the current build considers deleted.
+    }
+  }
   safeRemove(STORAGE_KEYS.subject(subjectId));
-  const ids = (await listSubjectIds()).filter((id) => id !== subjectId);
-  safeSet(STORAGE_KEYS.subjectIndex, JSON.stringify(ids));
+  rewriteSubjectIndex(subjectId);
+}
+
+/**
+ * Write the legacy subject index without `subjectId`. `true` when it succeeded.
+ *
+ * Uses `safeLocalStorageSet` rather than the swallowing `safeSet` so a dual-write
+ * mirror can report a quota failure instead of pretending it landed.
+ */
+function rewriteSubjectIndex(subjectId: string): boolean {
+  const ids = readSubjectIndex(safeGet(STORAGE_KEYS.subjectIndex)).filter((id) => id !== subjectId);
+  return safeLocalStorageSet(STORAGE_KEYS.subjectIndex, JSON.stringify(ids)).success;
+}
+
+/** The ids the legacy subject index currently names. */
+function readSubjectIndex(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) return parsed.filter((id) => typeof id === 'string');
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 function appendSubjectIndex(subjectId: string): void {
   const raw = safeGet(STORAGE_KEYS.subjectIndex);
-  let ids: string[] = [];
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed)) {
-        ids = parsed.filter((id) => typeof id === 'string');
-      }
-    } catch {
-      ids = [];
-    }
-  }
+  const ids = readSubjectIndex(raw);
   if (!ids.includes(subjectId)) {
     ids.push(subjectId);
     safeSet(STORAGE_KEYS.subjectIndex, JSON.stringify(ids));
@@ -286,34 +410,51 @@ export async function addRoomExternalAttachment(
   }
   // Web build fallback: create the attachment locally without server-side mime validation.
   const normalized = url.trim();
-  try {
-    let pathname: string;
-    if (normalized.startsWith('/')) {
-      pathname = normalized;
-    } else {
-      const parsed = new URL(normalized);
-      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
-      pathname = parsed.pathname;
-    }
-    const fileName = pathname.split('/').pop() ?? 'image';
-    const altText = fileName.replace(/[_-]+/g, ' ').replace(/\.[a-z0-9]+$/i, '').trim();
-    const ext = fileName.includes('.') ? `.${fileName.split('.').pop()!.toLowerCase()}` : '';
-    const mimeType = MIME_BY_EXT[ext] ?? 'image/jpeg';
-    const attachmentId = `att-${typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`}`;
-    return {
-      attachmentId,
-      sourceType: 'external',
-      fileName,
-      mimeType,
-      externalUrl: normalized,
-      ...(altText.length > 0 ? { altText } : {}),
-      addedAt: new Date().toISOString(),
-    };
-  } catch {
-    return null;
+  let pathname: string;
+  if (normalized.startsWith('/')) {
+    pathname = normalized;
+  } else {
+    const parsed = new URL(normalized);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    pathname = parsed.pathname;
   }
+  const fileName = pathname.split('/').pop() ?? 'image';
+  const altText = fileName.replace(/[_-]+/g, ' ').replace(/\.[a-z0-9]+$/i, '').trim();
+  const ext = fileName.includes('.') ? `.${fileName.split('.').pop()!.toLowerCase()}` : '';
+  const mimeType = MIME_BY_EXT[ext] ?? 'image/jpeg';
+
+  // The link is also recorded as a device-local `external-only` attachment, so a
+  // later backup can state honestly that its bytes are not on this device rather
+  // than implying they were captured. It is never downloaded. If the device-local
+  // record cannot be written (no IndexedDB, quota), the attachment is still
+  // created and the failure is reported rather than swallowed.
+  let attachmentId = `att-${typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`}`;
+  try {
+    const { recordExternalAttachment } = await import('./v2/attachmentBytes');
+    const recorded = await recordExternalAttachment({
+      subjectId,
+      roomId,
+      externalUrl: normalized,
+      mimeType,
+      fileName,
+      ...(altText.length > 0 ? { altText } : {}),
+    });
+    attachmentId = recorded.attachmentId;
+  } catch {
+    recordDualWriteReport('attachment.bytes', 'mirror-failed', 'LEGACY_MIRROR_WRITE_FAILED');
+  }
+
+  return {
+    attachmentId,
+    sourceType: 'external',
+    fileName,
+    mimeType,
+    externalUrl: normalized,
+    ...(altText.length > 0 ? { altText } : {}),
+    addedAt: new Date().toISOString(),
+  };
 }
 
 export async function deleteRoomAttachment(

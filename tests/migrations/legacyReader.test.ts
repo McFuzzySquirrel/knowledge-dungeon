@@ -13,14 +13,18 @@ import {
   needsSubjectSchemaMigration,
 } from '@/core/validation/persistence/subjectMigration';
 import {
+  DEFAULT_SHORTCUT_KEYS,
   LEGACY_KEY_EXCLUSIONS,
   LEGACY_STORAGE_KEY_ALLOWLIST,
+  hasNoLearnerContent,
   isEmptyLegacyAppState,
+  legacyMarkerKeys,
   readLegacyAppState,
   resolveAllowlistedKeys,
   type LegacyAppState,
 } from '@/services/persistence/v2/legacyReader';
 import { buildMigratedRecords } from '@/services/persistence/v2/migrations';
+import { DEFAULT_SHORTCUTS } from '@/store/shortcutStore';
 import { FIXED_NOW, readSubjectFixture, resetStorageV2Environment, snapshotLocalStorage, toReadOnlyStorage } from './support/storageV2TestSupport';
 
 const MIGRATION_SUBJECT_ID = 'subject-phase0-v100-migration';
@@ -335,6 +339,165 @@ describe('legacy key allowlist', () => {
   });
 });
 
+describe('a first-time learner holds markers, not content', () => {
+  beforeEach(() => {
+    resetStorageV2Environment();
+  });
+
+  afterEach(() => {
+    resetStorageV2Environment();
+  });
+
+  function read(): LegacyAppState {
+    return readLegacyAppState({ storage: toReadOnlyStorage(snapshotLocalStorage()) });
+  }
+
+  it('a device whose only key is its locale has no learner content', () => {
+    // The defect: the i18next language detector writes this on a brand-new device
+    // before the learner has done anything, and the reader used to count it as
+    // source data - so a first-time learner was told their data was migrated.
+    window.localStorage.setItem('knowledge-dungeon:locale', 'en');
+    const state = read();
+
+    expect(hasNoLearnerContent(state)).toBe(true);
+    expect(legacyMarkerKeys(state)).toEqual(['locale']);
+    // Not *empty*: the key is there. That is the distinction this block is about.
+    expect(isEmptyLegacyAppState(state)).toBe(false);
+  });
+
+  it('every UI marker is a marker, and none of them is content', () => {
+    window.localStorage.setItem('kd-quest-step', 'synthetic-step');
+    window.localStorage.setItem('kd-village-spawn', '{"gridX":1,"gridY":2}');
+    window.localStorage.setItem('knowledge-dungeon:ui:touch-hint:v1', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:fishing-hint:v1', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:onboarding:gameplay-loop:v1', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:export-reminder:lastNudge', '1');
+    window.localStorage.setItem('knowledge-dungeon:ui:tooltips:v1', '{"seen":["a"]}');
+    const state = read();
+
+    expect(hasNoLearnerContent(state)).toBe(true);
+    expect(legacyMarkerKeys(state)).toEqual([
+      'quest-step',
+      'ui-export-reminder',
+      'ui-fishing-hint',
+      'ui-onboarding-gameplay-loop',
+      'ui-tooltips',
+      'ui-touch-hint',
+      'village-spawn',
+    ].sort());
+    expect(isEmptyLegacyAppState(state)).toBe(false);
+  });
+
+  it('a sprite-pack blob is a marker, so a device holding only one has no content', () => {
+    window.localStorage.setItem(
+      'knowledge-dungeon:custom-sprites:packs',
+      '{"packs":[],"activePack":null}',
+    );
+    const state = read();
+
+    expect(hasNoLearnerContent(state)).toBe(true);
+    expect(legacyMarkerKeys(state)).toEqual(['custom-sprite-packs']);
+  });
+
+  it('a locale plus markers is still no content', () => {
+    window.localStorage.setItem('knowledge-dungeon:locale', 'fr');
+    window.localStorage.setItem('kd-quest-step', 'synthetic-step');
+    window.localStorage.setItem('knowledge-dungeon:ui:touch-hint:v1', '1');
+    const state = read();
+
+    expect(hasNoLearnerContent(state)).toBe(true);
+  });
+
+  it('a genuinely empty device is both empty and content-free', () => {
+    const state = read();
+    expect(hasNoLearnerContent(state)).toBe(true);
+    expect(legacyMarkerKeys(state)).toEqual([]);
+    expect(isEmptyLegacyAppState(state)).toBe(true);
+  });
+
+  it('a single subject is content, however little else there is', () => {
+    window.localStorage.setItem('knowledge-dungeon:v1:subjects', JSON.stringify([MIGRATION_SUBJECT_ID]));
+    window.localStorage.setItem(
+      `knowledge-dungeon:v1:subject:${MIGRATION_SUBJECT_ID}`,
+      readSubjectFixture('subject-1.1.0-minimal.json'),
+    );
+    const state = read();
+
+    expect(hasNoLearnerContent(state)).toBe(false);
+    expect(isEmptyLegacyAppState(state)).toBe(false);
+  });
+
+  it('each kind of learner content is content on its own', () => {
+    // One device per kind, so a field dropped from the predicate cannot hide
+    // behind another field being present.
+    const cases: readonly [string, () => void][] = [
+      ['progression', () => window.localStorage.setItem('knowledge-dungeon:v1:progression', '{"version":3}')],
+      ['sessions', () => window.localStorage.setItem('knowledge-dungeon:v1:sessions', '[]')],
+      ['declared session', () => window.localStorage.setItem('knowledge-dungeon:v1:session', 'raw')],
+      ['preferences', () =>
+        window.localStorage.setItem('knowledge-dungeon:session:preferences', '{"colorTheme":"colorful"}')],
+      ['a rebound shortcut', () =>
+        window.localStorage.setItem(
+          'knowledge-dungeon:session:shortcuts',
+          JSON.stringify([
+            { labelKey: 'shortcuts.toggleHelp', key: '?' },
+            { labelKey: 'shortcuts.toggleMap', key: 'm' },
+            { labelKey: 'shortcuts.toggleInfoPanel', key: 'i' },
+          ]),
+        )],
+      ['a custom sprite override', () =>
+        window.localStorage.setItem('knowledge-dungeon:custom-sprites:override:village/tree.svg', '<svg/>')],
+      ['a recovery record', () =>
+        window.localStorage.setItem('knowledge-dungeon:corrupt:subject-gone', '{"dungeon":')],
+    ];
+    for (const [label, seed] of cases) {
+      resetStorageV2Environment();
+      seed();
+      expect(hasNoLearnerContent(read()), label).toBe(false);
+    }
+  });
+
+  it('shortcuts that are exactly the defaults are not learner content', () => {
+    // The store's defaults round-tripping through storage is a key that exists
+    // without the learner having done anything - the same situation as a locale.
+    window.localStorage.setItem(
+      'knowledge-dungeon:session:shortcuts',
+      JSON.stringify([
+        { labelKey: 'shortcuts.toggleHelp', key: '/' },
+        { labelKey: 'shortcuts.toggleMap', key: 'm' },
+        { labelKey: 'shortcuts.toggleInfoPanel', key: 'i' },
+      ]),
+    );
+    expect(hasNoLearnerContent(read())).toBe(true);
+
+    // A subset is not the defaults: the missing bindings would hydrate as absent.
+    resetStorageV2Environment();
+    window.localStorage.setItem(
+      'knowledge-dungeon:session:shortcuts',
+      JSON.stringify([{ labelKey: 'shortcuts.toggleHelp', key: '/' }]),
+    );
+    expect(hasNoLearnerContent(read())).toBe(false);
+
+    // A binding this build does not know is not the defaults either.
+    resetStorageV2Environment();
+    window.localStorage.setItem(
+      'knowledge-dungeon:session:shortcuts',
+      JSON.stringify([{ labelKey: 'shortcuts.fromTheFuture', key: 'z' }]),
+    );
+    expect(hasNoLearnerContent(read())).toBe(false);
+  });
+
+  it('the default shortcut table matches the store, so the two cannot drift', () => {
+    // `DEFAULT_SHORTCUT_KEYS` exists in the persistence layer so the reader can
+    // tell a rebound key from an untouched one, and the store declares the real
+    // defaults. Two declarations of one fact, so they are pinned to each other
+    // here rather than trusted.
+    const fromStore: Record<string, string> = {};
+    for (const binding of DEFAULT_SHORTCUTS) fromStore[binding.labelKey] = binding.defaultKey;
+    expect({ ...DEFAULT_SHORTCUT_KEYS }).toEqual(fromStore);
+  });
+});
+
 describe('subject 1.0.0 to 1.1.0 migration', () => {
   beforeEach(() => {
     resetStorageV2Environment();
@@ -502,7 +665,15 @@ describe('attachment external-only reporting', () => {
       'subject-synthetic-dup-a',
       'subject-synthetic-dup-b',
     ]);
-    expect(built.problems.some((problem) => problem.scope === 'attachment')).toBe(false);
+    // No `duplicate-identifier` finding: the dedupe is scoped per subject, so
+    // neither subject is reported. A `stored-without-bytes` disclosure may still
+    // be present - the legacy web build had no bytes to carry - and that is the
+    // `externalOnly` report below, not a dedupe failure.
+    expect(
+      built.problems.some(
+        (problem) => problem.scope === 'attachment' && problem.code === 'duplicate-identifier',
+      ),
+    ).toBe(false);
 
     const reported = built.externalOnly
       .filter((report) => report.attachmentId === 'att-shared-id')

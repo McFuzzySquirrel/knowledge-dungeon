@@ -21,10 +21,13 @@ import {
   type FishingBadgeId,
 } from '@/core/progression';
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
+import { writeThroughInBackground } from '@/services/persistence/v2/dualWrite';
+import { currentStorageV2Repository } from '@/services/persistence/v2/repositorySelection';
 import type { FishEntry, FishRarity, FishCollection } from '@/core/fishing/fishingTypes';
 import { FISH_RARITY_XP_MULTIPLIER, FISH_CATALOG } from '@/core/fishing/fishingTypes';
 import { createFishId, addFishToCollection, countUniqueTypes } from '@/core/fishing/fishCollectionService';
 import {
+  CANONICAL_PROGRESSION_VERSION,
   makeDefaultSubjectProgression,
   normalizeProgressionRecord,
   toLegacyV3ProgressionRecord,
@@ -84,27 +87,54 @@ function notesForSubject(notes: readonly CollectedNoteEntry[], subjectId: string
  * failures and non-object payloads still yield empty in-memory state, exactly
  * as before.
  */
-function loadPersistedBySubject(): {
+/**
+ * The one normalizer the store's reads and hydrations both go through.
+ *
+ * Exported so a test can exercise the resolution rules on a payload without
+ * touching the live store, and so the read and the hydration cannot drift: both
+ * call this.
+ */
+export function normalizePersistedProgression(
+  raw: unknown,
+  activeSubjectId: string | null,
+): {
   bySubject: Record<string, PersistedSubjectProgression>;
   crossSubjectAchievements: string[];
 } {
-  try {
-    if (typeof localStorage === 'undefined') return { bySubject: {}, crossSubjectAchievements: [] };
-    const raw = localStorage.getItem(STORAGE_KEYS.progression);
-    if (!raw) return { bySubject: {}, crossSubjectAchievements: [] };
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== 'object' || parsed === null) return { bySubject: {}, crossSubjectAchievements: [] };
+  const canonical = normalizeProgressionRecord(raw, {
+    activeSubjectId,
+    // The same identifier factory the legacy read uses, so a record missing an
+    // id hydrates the id it always did.
+    createId: createPersistedId,
+  });
+  return {
+    bySubject: canonical.bySubject as unknown as Record<string, PersistedSubjectProgression>,
+    crossSubjectAchievements: canonical.crossSubjectAchievements,
+  };
+}
 
-    const canonical = normalizeProgressionRecord(parsed, {
-      activeSubjectId: getActiveSubjectId(),
-      createId: createPersistedId,
-    });
+export function readPersistedProgressionPayload(): {
+  version: number;
+  bySubject: Record<string, PersistedSubjectProgression>;
+  crossSubjectAchievements: string[];
+} {
+  const empty = { version: CANONICAL_PROGRESSION_VERSION, bySubject: {}, crossSubjectAchievements: [] };
+  try {
+    if (typeof localStorage === 'undefined') return empty;
+    const raw = localStorage.getItem(STORAGE_KEYS.progression);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return empty;
+
+    // The version travels with the payload so hydrating it is idempotent: a
+    // canonical envelope handed back to the normalizer is recognised as the
+    // by-subject shape instead of being read as an unversioned v1 flat record.
     return {
-      bySubject: canonical.bySubject,
-      crossSubjectAchievements: canonical.crossSubjectAchievements,
+      version: CANONICAL_PROGRESSION_VERSION,
+      ...normalizePersistedProgression(parsed, getActiveSubjectId()),
     };
   } catch {
-    return { bySubject: {}, crossSubjectAchievements: [] };
+    return empty;
   }
 }
 
@@ -126,13 +156,64 @@ function savePersistedBySubject(
   bySubject: Record<string, PersistedSubjectProgression>,
   crossSubjectAchievements: string[],
 ): void {
+  // The legacy mirror keeps exactly the pre-phase payload, so a rollback build
+  // reads what it always read.
+  let payload: string;
+  try {
+    payload =
+      typeof localStorage === 'undefined'
+        ? ''
+        : JSON.stringify(toLegacyV3ProgressionRecord({ bySubject, crossSubjectAchievements }));
+  } catch {
+    return;
+  }
+
+  const repository = currentStorageV2Repository();
+  if (repository === null) {
+    if (payload !== '') writeProgressionMirror(payload);
+    return;
+  }
+  // Storage-v2 is the primary repository, so the generation is written first and
+  // the legacy key is the rollback mirror. The mirror runs only after the primary
+  // succeeded, so a failed write can never leave the legacy key ahead of the
+  // generation. A mirror failure is recorded and reported, and never fails the
+  // write the learner asked for.
+  //
+  // The generation write is asynchronous: a store action cannot await. The
+  // canonical envelope is the *whole* progression state, not one subject's slice,
+  // so the whole `bySubject` map is published and a replayed write is idempotent.
+  writeThroughInBackground({
+    operation: 'progression',
+    primary: () =>
+      import('@/services/persistence/v2/appRepository').then((records) =>
+        records.publishProgressionToActiveGeneration(
+          repository,
+          // The version is stamped here as well as inside the writer. That is
+          // deliberate redundancy, not an accident: the writer stamps it because
+          // its parameter is `unknown` and only it can guarantee the shape, and
+          // this call site stamps it because the payload really is the current
+          // shape and saying so here is what keeps the two from ever disagreeing
+          // about the contract. Omitting it here would still be correct; having it
+          // here is what documents the intent at the call site.
+          { version: CANONICAL_PROGRESSION_VERSION, bySubject, crossSubjectAchievements },
+          new Date().toISOString(),
+        ),
+      ),
+    mirror: () => writeProgressionMirror(payload),
+  });
+}
+
+/** Write the legacy mirror. Returns `false` when the storage refused it. */
+function writeProgressionMirror(payload: string): boolean {
   try {
     if (typeof localStorage !== 'undefined') {
-      const payload = toLegacyV3ProgressionRecord({ bySubject, crossSubjectAchievements });
-      localStorage.setItem(STORAGE_KEYS.progression, JSON.stringify(payload));
+      localStorage.setItem(STORAGE_KEYS.progression, payload);
     }
+    return true;
   } catch {
-    /* ignore */
+    // A quota or privacy-mode failure is a mirror failure, and `writeThrough`
+    // records it rather than letting the learner's write be reported as lost.
+    return false;
   }
 }
 
@@ -168,6 +249,18 @@ const LOOT_POOL: Omit<LootItem, 'id' | 'acquiredAt'>[] = [
 
 export interface ProgressionStoreState {
   activeSubjectId: string | null;
+  /**
+   * Apply a hydrated progression payload. Called once by the application
+   * bootstrap, before the first render, with whatever the selected repository
+   * produced. `null` resets to the documented defaults, which is what a device
+   * with no stored progression hydrates to.
+   *
+   * The payload is normalized here, not trusted. A storage-v2 generation and a
+   * legacy key reach this function as different documents of the same state, so
+   * the one normalizer is what makes the two repositories hydrate the same
+   * in-memory value instead of two shapes that happen to hold the same numbers.
+   */
+  hydrateProgression: (persisted: unknown) => void;
   bySubject: Record<string, PersistedSubjectProgression>;
   xpTotal: number;
   rank: RankTier;
@@ -234,7 +327,8 @@ export interface ProgressionStoreState {
   reset: () => void;
 }
 
-const { bySubject: initialBySubject, crossSubjectAchievements: initialCrossSubjectAchs } = loadPersistedBySubject();
+const { bySubject: initialBySubject, crossSubjectAchievements: initialCrossSubjectAchs } =
+  readPersistedProgressionPayload();
 const initialActiveSubject = getActiveSubjectId();
 const initialSubjectId =
   initialActiveSubject && initialActiveSubject.trim().length > 0
@@ -247,6 +341,40 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
   bySubject: initialBySubject,
   crossSubjectAchievements: initialCrossSubjectAchs,
   ...initialSubjectProgression,
+
+  hydrateProgression(persisted) {
+    // `null` means nothing is stored, or the read failed. It must hydrate to the
+    // documented empty state, not to a v1 flat record: the normalizer files an
+    // unversioned payload under a bucket, and inventing a zeroed record for a
+    // device that simply has no progression would show a learner a subject that
+    // is not there.
+    if (persisted === null || persisted === undefined) {
+      set({
+        activeSubjectId: get().activeSubjectId,
+        bySubject: {},
+        crossSubjectAchievements: [],
+        ...getSubjectProgression({}, get().activeSubjectId),
+      });
+      return;
+    }
+    // The active subject is resolved here, not read afterwards: an unversioned v1
+    // flat payload is *routed* by it, and the top-level totals are the active
+    // subject's. Hydrating before the subject is known would file a learner's
+    // whole history under `__legacy__` and show them zero XP, which is what the
+    // module-load initialization this replaces never did.
+    const stored = getActiveSubjectId();
+    const activeSubjectId = get().activeSubjectId ?? (stored && stored.trim().length > 0 ? stored : null);
+    const { bySubject, crossSubjectAchievements } = normalizePersistedProgression(
+      persisted,
+      activeSubjectId,
+    );
+    set({
+      activeSubjectId,
+      bySubject,
+      crossSubjectAchievements,
+      ...getSubjectProgression(bySubject, activeSubjectId),
+    });
+  },
 
   setActiveSubject(subjectId) {
     const normalizedSubjectId = subjectId && subjectId.trim().length > 0 ? subjectId : null;

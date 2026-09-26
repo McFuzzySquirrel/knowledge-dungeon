@@ -125,6 +125,64 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Phase 4 storage-v2 lane.
+  #
+  # This is the ONE deliberately separate build in a complete CI run, and it is
+  # not a second production artifact:
+  #
+  # - It builds with `VITE_STORAGE_REPOSITORY=v2` through `--mode storage-v2`,
+  #   which reads `.env.storage-v2`. The production default stays
+  #   `VITE_STORAGE_REPOSITORY=legacy`, so `web-build` above remains the single
+  #   build, record, and upload point for the production `web-artifact`.
+  # - It records its identity to its OWN manifest file
+  #   (`artifacts/web-artifact-manifest-storage-v2.json`), so a flagged build can
+  #   never be mistaken for, or overwrite, the shared production artifact
+  #   identity, and `browser-smoke` and `compatibility-pr` are unaffected.
+  # - It runs one representative host only (Linux/Chromium). A real IndexedDB
+  #   migration does not vary by engine the way rendering does, and keeping the
+  #   lane to one cell is what stops a pull request from paying for eight
+  #   browser installs. Cross-engine coverage of this spec stays a later,
+  #   separately authorized release-candidate decision.
+  # - It uploads only the allowlisted sanitized JSON evidence, never the
+  #   Playwright HTML report, a trace, a screenshot, or test results.
+  storage-v2-browser:
+    name: Browser (Storage v2 Flagged Build)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, unit-tests]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Build the flagged storage-v2 artifact
+        run: npm run build:storage-v2-flagged
+      - name: Record the flagged storage-v2 artifact identity
+        run: npm run record:web-artifact:storage-v2
+      - name: Verify the flagged storage-v2 artifact identity
+        run: npm run verify:web-artifact:storage-v2
+      - run: npx playwright install --with-deps chromium
+      - name: Record the runner image and toolchain
+        shell: bash
+        run: |
+          echo "runner image: ${ImageOS:-unavailable} ${ImageVersion:-unavailable}"
+          node --version
+          npm --version
+          npx playwright --version
+      - name: Run the storage-v2 flagged-build lane
+        run: npm run test:e2e:storage:recorded
+      - name: Upload sanitized storage-v2 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Allowlist: sanitized per-run JSON evidence only.
+          name: storage-v2-evidence
+          path: artifacts/compatibility-evidence
+          if-no-files-found: warn
+          retention-days: 14
+
   compatibility-pr:
     name: Compatibility PR ${{ matrix.id }}
     needs: [web-build]

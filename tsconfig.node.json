@@ -12,10 +12,12 @@
   "include": [
     "vite.config.ts",
     "playwright.config.ts",
+    "playwright.storage-v2.config.ts",
     "eslint.config.js",
     "vitest.setup.ts",
     "src/config/runtimeConfig.ts",
     "tests/e2e/compat-evidence.ts",
-    "tests/e2e/support-matrix.ts"
+    "tests/e2e/support-matrix.ts",
+    "tests/e2e/storage-v2-lane.ts"
   ]
 }

@@ -11,6 +11,17 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import {
+  PLANTING_MARKER_NAME,
+  TEST_OWNED_SOURCE_DIRECTORIES,
+  clearPlantingDeclarations,
+  isTestOwnedTransientPath,
+  livePlantedPaths,
+  plantingMarkerPath,
+  testOwnedDirectory,
+  writePlantingMarker,
+} from '../privacy/support/appGraph';
+
 import { zipSync, type Zippable } from 'fflate/browser';
 import {
   DEFAULT_ARCHIVE_LIMITS,
@@ -61,6 +72,74 @@ function listSourceFiles(dir: string): string[] {
     else if (/\.tsx?$/.test(entry) && !entry.endsWith('.d.ts')) files.push(full);
   }
   return files;
+}
+
+/**
+ * `src/` files a forbidden-import scan must judge, minus a *live* test planting.
+ *
+ * A test may plant a probe module inside `src/` - the privacy gate does, to prove
+ * its own detector is non-vacuous where production code lives - and while that
+ * probe exists a scan of `src/` sees it and reports it as a real offender. That is a
+ * cross-suite flake, not a finding.
+ *
+ * The exemption is deliberately narrow, and both halves of it matter:
+ *
+ * 1. The directory name must be one the privacy gate declares in
+ *    {@link TEST_OWNED_SOURCE_DIRECTORIES}, so the two gates agree by construction
+ *    and a real offender in a differently named directory is still scanned.
+ * 2. A {@link PLANTING_MARKER_NAME} must be present right now, so the exemption is
+ *    live-planting-scoped. A file left behind under that name after the planting
+ *    ended - committed, or abandoned by a crashed run - is scanned like any other
+ *    source file and is still reported.
+ *
+ * So this is not a prefix allowlist: nothing is exempt by name alone.
+ */
+function scannableSourceFiles(dir: string): string[] {
+  return listSourceFiles(dir).filter((file) => !isTestOwnedTransientPath(file));
+}
+
+/**
+ * Files outside the v2 tree that may name a storage-v2 module, and why.
+ *
+ * A permission list, not an equality check: the point is that each entry is
+ * justified, not that the set happens to be exactly what the scanner finds.
+ */
+const STORAGE_V2_SEAMS: ReadonlyMap<string, string> = new Map([
+  [extensionless(join(SRC, 'application', 'bootstrap.ts')), 'owns repository selection and the migration'],
+  [
+    extensionless(join(SRC, 'services', 'persistence', 'subjectPersistence.ts')),
+    'the persistence facade, routed by the selection',
+  ],
+  [
+    extensionless(join(SRC, 'services', 'persistence', 'deviceAttachments.ts')),
+    'the device-local attachment seam',
+  ],
+  [extensionless(join(SRC, 'store', 'progressionStore.ts')), 'dual-writes the legacy mirror'],
+  [extensionless(join(SRC, 'store', 'shortcutStore.ts')), 'dual-writes the legacy mirror'],
+  [extensionless(join(SRC, 'store', 'preferencesStore.ts')), 'shares the persisted-state shape'],
+  [extensionless(join(SRC, 'services', 'sessionTracker.ts')), 'dual-writes the legacy mirror'],
+]);
+
+/**
+ * The files in `files` that name a storage-v2 module without being a declared
+ * seam, as repo-relative paths.
+ *
+ * Takes the file list rather than reading `src/` itself, so a test can prove what
+ * the detector does with a specific path - including the paths a live test
+ * planting adds - instead of only observing the aggregate.
+ */
+function storageV2SeamOffenders(files: readonly string[]): string[] {
+  const offenders: string[] = [];
+  for (const file of files) {
+    if (isInside(V2_DIR, file)) continue;
+    let importsStorageV2 = false;
+    for (const specifier of readSpecifiers(file)) {
+      const target = resolveFirstParty(file, specifier);
+      if (target && ALL_STORAGE_V2_MODULES.includes(extensionless(target))) importsStorageV2 = true;
+    }
+    if (importsStorageV2 && !STORAGE_V2_SEAMS.has(extensionless(file))) offenders.push(relative(ROOT, file));
+  }
+  return offenders;
 }
 
 function readSpecifiers(file: string): string[] {
@@ -536,7 +615,11 @@ describe('QA renderer import boundary covers src/services/persistence/v2/**', ()
   it('scans a non-trivial slice so a vacuous pass is impossible', () => {
     const v2Files = listSourceFiles(V2_DIR);
     const neutralFiles = RENDERER_NEUTRAL_DIRS.flatMap((dir) => listSourceFiles(dir));
-    expect(v2Files.length).toBe(8);
+    // Phase 4 added the repository selection, the dual-write reporter, the
+    // device-local attachment store, and the migration state model to this tree,
+    // so the count is 12 rather than Phase 3's 8. The point of the assertion is
+    // that the scan is non-trivial, so it is a floor, not a fixed number.
+    expect(v2Files.length).toBeGreaterThanOrEqual(12);
     expect(neutralFiles.length).toBeGreaterThan(40);
     expect(neutralFiles.flatMap((file) => readSpecifiers(file)).length).toBeGreaterThan(60);
     // The Phase 2 suite never looked at these files; assert they are new inputs.
@@ -620,6 +703,7 @@ describe('QA renderer import boundary covers src/services/persistence/v2/**', ()
 
 // ── App graph ──────────────────────────────────────────────────────────────
 
+/** The Phase 3 storage-v2 modules. */
 const STORAGE_V2_MODULES = [
   'database',
   'repository',
@@ -631,18 +715,47 @@ const STORAGE_V2_MODULES = [
   'checksum',
 ].map((name) => extensionless(join(V2_DIR, `${name}.ts`)));
 
-describe('QA no application module imports storage-v2', () => {
+/** The modules Phase 4 added to the storage-v2 tree. */
+const STORAGE_V2_PHASE_4_MODULES = [
+  'repositorySelection',
+  'dualWrite',
+  'attachmentBytes',
+  'migrationState',
+  'appState',
+  'appRepository',
+].map((name) => extensionless(join(V2_DIR, `${name}.ts`)));
+
+const ALL_STORAGE_V2_MODULES = [...STORAGE_V2_MODULES, ...STORAGE_V2_PHASE_4_MODULES];
+
+/**
+ * The modules that can actually open or mutate a storage-v2 database.
+ *
+ * Phase 3 asserted that *nothing* in the application imported these, which was
+ * correct then: storage-v2 was deliberately unreachable. Phase 4 is the phase
+ * that routes the persistence facade through it, so the invariant changes shape
+ * rather than disappearing - the heavyweight modules must be reachable ONLY from
+ * the one boundary that owns repository selection, so there is exactly one place
+ * in the application that knows storage-v2 exists.
+ */
+const STORAGE_V2_OPENING_MODULES = ['database', 'repository', 'migrations', 'archive'].map((name) =>
+  extensionless(join(V2_DIR, `${name}.ts`)),
+);
+
+/** The single file allowed to import the opening modules. */
+const STORAGE_V2_ENTRY_POINT = extensionless(join(SRC, 'application', 'bootstrap.ts'));
+
+describe('QA storage-v2 is reachable only through the selection boundary', () => {
   it('the forbidden module set resolves to real files', () => {
-    for (const modulePath of STORAGE_V2_MODULES) expect(existsSync(`${modulePath}.ts`)).toBe(true);
+    for (const modulePath of ALL_STORAGE_V2_MODULES) expect(existsSync(`${modulePath}.ts`)).toBe(true);
   });
 
-  it('a graph walk from src/main.tsx reaches no storage-v2 module', () => {
+  it('a graph walk from src/main.tsx reaches storage-v2 only through the one entry point', () => {
     const entry = join(SRC, 'main.tsx');
     expect(existsSync(entry)).toBe(true);
 
     const seen = new Set<string>();
     const queue: string[] = [extensionless(entry)];
-    const offenders: string[] = [];
+    const directImporters = new Map<string, string[]>();
 
     while (queue.length > 0) {
       const current = queue.pop()!;
@@ -659,8 +772,10 @@ describe('QA no application module imports storage-v2', () => {
             ? extensionless(target)
             : null;
         if (!resolved) continue;
-        if (STORAGE_V2_MODULES.includes(resolved)) {
-          offenders.push(`${relative(ROOT, file)} -> ${specifier}`);
+        if (ALL_STORAGE_V2_MODULES.includes(resolved)) {
+          const importers = directImporters.get(resolved) ?? [];
+          importers.push(relative(ROOT, file));
+          directImporters.set(resolved, importers);
           continue;
         }
         queue.push(resolved);
@@ -669,16 +784,72 @@ describe('QA no application module imports storage-v2', () => {
 
     // The walk must have actually walked something.
     expect(seen.size).toBeGreaterThan(20);
-    expect(offenders).toEqual([]);
+
+    // Every storage-v2 module the application reaches is one Phase 3 or Phase 4
+    // declared, and nothing else has crept in.
+    const reached = [...directImporters.keys()].sort();
+    expect(reached.filter((module) => !ALL_STORAGE_V2_MODULES.includes(module))).toEqual([]);
+
+    // The database-opening modules are reachable, which is the whole point of
+    // this phase, and never from anywhere but the one entry point. `repository`
+    // and `migrations` are imported by it directly; `database` and `archive` are
+    // reached only from inside the v2 tree, so the walk records no outside
+    // importer for them at all, which is the stronger position.
+    expect(reached).toContain(extensionless(join(V2_DIR, 'repository.ts')));
+    expect(reached).toContain(extensionless(join(V2_DIR, 'migrations.ts')));
+    const entryPoint = relative(ROOT, `${STORAGE_V2_ENTRY_POINT}.ts`);
+    for (const opening of STORAGE_V2_OPENING_MODULES) {
+      const importers = (directImporters.get(opening) ?? []).filter(
+        (file) => !isInside(V2_DIR, join(ROOT, file)),
+      );
+      expect(importers.filter((file) => file !== entryPoint), opening).toEqual([]);
+    }
   });
 
-  it('no module anywhere in src/ outside the v2 tree imports a v2 module', () => {
+  it('the only importers of storage-v2 outside the v2 tree are the declared seams', () => {
+    expect(storageV2SeamOffenders(scannableSourceFiles(SRC))).toEqual([]);
+    // ...and every allowlisted entry is really a file that still exists.
+    for (const key of STORAGE_V2_SEAMS.keys()) {
+      expect(existsSync(`${key}.ts`) || existsSync(`${key}.tsx`), key).toBe(true);
+    }
+  });
+
+  it('no module outside the v2 tree statically imports a storage-v2 implementation module', () => {
+    // The modules that carry the storage-v2 *implementation* - the database, the
+    // repository, the migration, the validators, the record adapter, the
+    // attachment-bytes store. Every one of them must be reached only through a
+    // dynamic `import(...)`, so the default artifact does not contain them at all
+    // and "the flag off writes nothing to storage-v2" is a property of the build
+    // rather than of a runtime check.
+    //
+    // `appState`, `dualWrite`, `repositorySelection`, `checksum` and `schema` are
+    // deliberately excluded: their own imports are type-only or tiny, so they cost
+    // the default build nothing to include.
+    const implementationModules = [
+      'database',
+      'repository',
+      'migrations',
+      'validation',
+      'legacyReader',
+      'appRepository',
+      'attachmentBytes',
+      'migrationState',
+      'archive',
+    ];
     const offenders: string[] = [];
-    for (const file of listSourceFiles(SRC)) {
+    for (const file of scannableSourceFiles(SRC)) {
       if (isInside(V2_DIR, file)) continue;
-      for (const specifier of readSpecifiers(file)) {
-        const target = resolveFirstParty(file, specifier);
-        if (target && STORAGE_V2_MODULES.includes(extensionless(target))) {
+      const source = readFileSync(file, 'utf8');
+      // A static import statement begins a line with `import` and is not a
+      // dynamic `import(`; a multi-line import is captured by continuing until the
+      // statement's closing quote.
+      for (const match of source.matchAll(/(?:^|\n)\s*import\s(?!type\s)([^;]*?from\s*)?['"]([^'"]+)['"]/g)) {
+        const specifier = match[2] as string;
+        const resolved = resolveFirstParty(file, specifier);
+        if (!resolved) continue;
+        const target = extensionless(resolved);
+        const name = target.split('/').pop() as string;
+        if (isInside(V2_DIR, resolved) && implementationModules.includes(name)) {
           offenders.push(`${relative(ROOT, file)} -> ${specifier}`);
         }
       }
@@ -686,9 +857,168 @@ describe('QA no application module imports storage-v2', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('the default build selects the legacy repository and holds no storage-v2 handle', async () => {
+    // The flag is the cutover control. This asserts the production default is
+    // still the safe one and that a module asking "which repository?" before the
+    // bootstrap runs gets the legacy answer rather than an unopened handle.
+    const { DEFAULT_RUNTIME_CONFIG, parseRuntimeConfig } = await import('@/config/runtimeConfig');
+    const selection = await import('@/services/persistence/v2/repositorySelection');
+
+    expect(DEFAULT_RUNTIME_CONFIG.storageRepository).toBe('legacy');
+    expect(parseRuntimeConfig({}).storageRepository).toBe('legacy');
+    expect(parseRuntimeConfig({ VITE_STORAGE_REPOSITORY: 'v2' }).storageRepository).toBe('v2');
+
+    selection.resetRepositorySelection();
+    expect(selection.currentRepositorySelection()).toBe('legacy');
+    expect(selection.currentStorageV2Repository()).toBeNull();
+    expect(selection.isStorageV2Selected()).toBe(false);
+  });
+});
+
+describe('QA the storage-v2 seam scan and a concurrent test planting', () => {
+  // The privacy gate plants a probe module inside `src/` while it proves its own
+  // detector is non-vacuous. This gate scans `src/` for forbidden imports, so
+  // without a rule the planted probe was reported as a real offender - a genuine
+  // cross-suite flake, reproducible by running the two files together.
+  //
+  // The rule is file-level and self-declaring: a scan skips exactly the paths a
+  // live planting declared, in a directory the planting gate itself declares. It is
+  // *not* "skip this directory". These five tests are what make the difference real
+  // rather than asserted in a comment - in particular the third, which is the hole
+  // a directory-wide exemption would have left open.
+  const PROBE_NAME = TEST_OWNED_SOURCE_DIRECTORIES[0] as string;
+  const PROBE_DIRECTORY = testOwnedDirectory(PROBE_NAME);
+  const OFFENDER_NAME = '__qa_offender_probe__';
+  const OFFENDER_DIRECTORY = testOwnedDirectory(OFFENDER_NAME);
+
+  /** A module that names a real storage-v2 module, so the detector must flag it. */
+  const OFFENDER_SOURCE = [
+    "import { checksumValue } from '@/services/persistence/v2/checksum';",
+    '',
+    'export function probe(value: unknown): string {',
+    '  return checksumValue(value);',
+    '}',
+    '',
+  ].join('\n');
+
+  /**
+   * Plant one module.
+   *
+   * `declared` is the list handed to the planting declaration, so a test can
+   * declare exactly the files it planted and leave anything else unmentioned.
+   */
+  function plant(
+    directoryName: string,
+    moduleName: string,
+    options: { marked: boolean; declared?: readonly string[] } = { marked: false },
+  ): string {
+    const directory = testOwnedDirectory(directoryName);
+    mkdirSync(directory, { recursive: true });
+    const file = join(directory, moduleName);
+    writeFileSync(file, OFFENDER_SOURCE, 'utf8');
+    if (options.marked) {
+      writePlantingMarker(
+        directoryName,
+        options.declared ?? [`src/${directoryName}/${moduleName}`],
+      );
+    }
+    return file;
+  }
+
+  function cleanup(): void {
+    for (const name of [PROBE_NAME, OFFENDER_NAME]) {
+      rmSync(testOwnedDirectory(name), { recursive: true, force: true });
+    }
+    clearPlantingDeclarations();
+  }
+
+  afterAll(() => {
+    cleanup();
+  });
+
+  it('reports the declared files of a live planting as nothing at all', () => {
+    // The flake, closed: the privacy gate's own probe shape, planted and declared,
+    // does not trip this gate.
+    cleanup();
+    const file = plant(PROBE_NAME, 'uploader.ts', { marked: true });
+    try {
+      expect(storageV2SeamOffenders(scannableSourceFiles(SRC))).toEqual([]);
+      // And the file really is there and really does name a storage-v2 module, so
+      // the empty result is the rule working and not a scan that found no files.
+      expect(existsSync(file)).toBe(true);
+      expect(readSpecifiers(file)).toContain('@/services/persistence/v2/checksum');
+      expect(storageV2SeamOffenders([file]), 'and the detector does flag it when scanned directly').toEqual([
+        relative(ROOT, file),
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('still reports a real offender left in the same directory once the planting is over', () => {
+    // No live declaration means no exemption, so a committed or abandoned file
+    // under the test-owned name is scanned like any other source file.
+    cleanup();
+    const file = plant(PROBE_NAME, 'left-behind.ts', { marked: false });
+    try {
+      expect(existsSync(plantingMarkerPath(PROBE_NAME))).toBe(false);
+      expect(storageV2SeamOffenders(scannableSourceFiles(SRC))).toEqual([relative(ROOT, file)]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('still reports a real offender in the same directory that the planting did not declare, while a planting is live', () => {
+    // The hole a directory-wide exemption leaves open, and the reason the
+    // declaration is a file list. A planting is in flight in this exact directory
+    // - a live marker, declared files present - and a file that planting never
+    // claimed still names a forbidden module. A directory-scoped skip would have
+    // hidden it.
+    cleanup();
+    const declared = plant(PROBE_NAME, 'uploader.ts', { marked: true });
+    const undeclared = join(PROBE_DIRECTORY, 'smuggled-in.ts');
+    writeFileSync(undeclared, OFFENDER_SOURCE, 'utf8');
+    try {
+      // The exemption is live and does cover the declared file...
+      expect(isTestOwnedTransientPath(declared)).toBe(true);
+      // ...and the undeclared file in the very same directory is not exempt.
+      expect(isTestOwnedTransientPath(undeclared)).toBe(false);
+      expect(storageV2SeamOffenders(scannableSourceFiles(SRC))).toEqual([relative(ROOT, undeclared)]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('still reports a real offender in a differently named test directory', () => {
+    // Nothing is exempt by shape: a directory that merely looks temporary, and is
+    // not declared by the gate that owns plantings, is scanned like any other - even
+    // if it carries a planting declaration of its own.
+    cleanup();
+    const file = plant(OFFENDER_NAME, 'offender.ts', { marked: true });
+    try {
+      expect(storageV2SeamOffenders(scannableSourceFiles(SRC))).toEqual([relative(ROOT, file)]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it('names the declaration a live planting needs, so the two gates cannot disagree', () => {
+    // The exemption is only meaningful if both gates use the same name and the same
+    // shape, so the shared declaration is asserted rather than assumed.
+    expect(TEST_OWNED_SOURCE_DIRECTORIES).toContain(PROBE_NAME);
+    expect(plantingMarkerPath(PROBE_NAME)).toBe(join(PROBE_DIRECTORY, PLANTING_MARKER_NAME));
+    expect(livePlantedPaths()).toEqual([]);
+    // A path outside every declared directory is never exempt, whatever exists on
+    // disk.
+    expect(isTestOwnedTransientPath(join(OFFENDER_DIRECTORY, 'offender.ts'))).toBe(false);
+    expect(isTestOwnedTransientPath(join(SRC, 'ui', 'App.tsx'))).toBe(false);
+  });
+});
+
+describe('QA the archive codec is the only fflate importer', () => {
   it('no application module imports fflate directly except archive.ts', () => {
     const offenders: string[] = [];
-    for (const file of listSourceFiles(SRC)) {
+    for (const file of scannableSourceFiles(SRC)) {
       if (file === join(V2_DIR, 'archive.ts')) continue;
       for (const specifier of readSpecifiers(file)) {
         if (specifier === 'fflate' || specifier.startsWith('fflate/')) {

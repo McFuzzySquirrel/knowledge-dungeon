@@ -85,8 +85,15 @@ async function hydrateStore(fixture: string, activeSubjectId: string | null): Pr
   if (activeSubjectId !== null) storage.setItem(ACTIVE_SUBJECT_KEY, activeSubjectId);
   storage.setItem(PROGRESSION_KEY, readProgressionFixture(fixture));
   vi.resetModules();
-  const { useProgressionStore } = await import('@/store/progressionStore');
-  const state = useProgressionStore.getState();
+  const storeModule = await import('@/store/progressionStore');
+  // Phase 4: hydration is an explicit step owned by the application bootstrap,
+  // not a module-load side effect. These two calls are exactly what the
+  // bootstrap performs for the legacy repository, so the characterization
+  // below still exercises the real hydration path with its assertions intact.
+  storeModule.useProgressionStore.getState().hydrateProgression(
+    storeModule.readPersistedProgressionPayload(),
+  );
+  const state = storeModule.useProgressionStore.getState();
   return { bySubject: state.bySubject, crossSubjectAchievements: state.crossSubjectAchievements };
 }
 

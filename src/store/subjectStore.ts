@@ -2,7 +2,13 @@
  * Subject store - owns the current SubjectSnapshot (DungeonMetadata + room
  * metadata indexed by roomId), exposing graph operations and note
  * submission. Persists every mutation through subjectPersistence so the
- * Electron fs bridge (when available) and localStorage stay in sync.
+ * Electron fs bridge (when available), the selected repository, and the legacy
+ * localStorage mirror stay in sync.
+ *
+ * Phase 4: `hydrateSnapshot` is the bootstrap's read-only entry point. It is
+ * deliberately *not* `loadSubject`: loading a subject used to write it straight
+ * back, which created a backup record and rewrote the legacy key on every boot.
+ * Hydration reads, and nothing else.
  */
 import { create } from 'zustand';
 import type {
@@ -36,6 +42,7 @@ import {
   saveSubjectSnapshot,
   setActiveSubjectId,
 } from '@/services/persistence/subjectPersistence';
+
 import {
   updateSm2State,
   clampQualityRating,
@@ -46,6 +53,11 @@ export interface SubjectState {
   snapshot: SubjectSnapshot | null;
   lastError: string | null;
   setSnapshot: (snapshot: SubjectSnapshot | null) => void;
+  /**
+   * Apply a snapshot read by the application bootstrap. Normalizes it the same
+   * way a loaded subject is normalized and never persists anything.
+   */
+  hydrateSnapshot: (snapshot: SubjectSnapshot | null) => void;
   initSubject: (input: { subjectName: string; rootTopic: string; biome?: string }) => Promise<SubjectSnapshot>;
   loadSubject: (subjectId: string) => Promise<SubjectSnapshot | null>;
   addChildRoom: (parentRoomId: string, topic: string) => Promise<void>;
@@ -60,6 +72,14 @@ export interface SubjectState {
   ) => Promise<NoteValidationOutput & { artifactMarkdown: string | null }>;
   recordReviewPass: (roomId: string, qualityRating?: number) => Promise<void>;
   addLocalAttachment: (roomId: string) => Promise<RoomAttachment | null>;
+  /**
+   * Store a picked image file's bytes on this device and attach it to a room.
+   *
+   * The web build's image path. No upload, no `/api/upload`, and no request of
+   * any kind: the bytes go to the device-local attachment store and the room
+   * gains a `local` attachment that resolves back to them.
+   */
+  addDeviceLocalAttachment: (roomId: string, file: Blob & { name?: string }) => Promise<RoomAttachment | null>;
   addExternalAttachment: (roomId: string, url: string) => Promise<RoomAttachment | null>;
   removeAttachment: (roomId: string, attachmentId: string) => Promise<void>;
   resolveAttachmentUrl: (roomId: string, attachmentId: string) => Promise<string | null>;
@@ -147,6 +167,10 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
   snapshot: null,
   lastError: null,
   setSnapshot: (snapshot) => set({ snapshot }),
+
+  hydrateSnapshot(snapshot) {
+    set({ snapshot: snapshot === null ? null : normalizeSnapshot(snapshot), lastError: null });
+  },
 
   async initSubject({ subjectName, rootTopic, biome }) {
     const dungeonId = generateId('subject');
@@ -443,6 +467,33 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     return attachment;
   },
 
+  async addDeviceLocalAttachment(roomId, file) {
+    const current = get().snapshot;
+    if (!current) return null;
+    const room = current.rooms[roomId];
+    if (!room) return null;
+
+    // The device-local attachment store is loaded lazily: a learner who never
+    // picks an image never pays for it.
+    const { addDeviceLocalRoomAttachment } = await import('@/services/persistence/deviceAttachments');
+    const attachment = await addDeviceLocalRoomAttachment({
+      subjectId: current.dungeon.dungeonId,
+      roomId,
+      file,
+    });
+    if (!attachment) return null;
+
+    const updatedRoom: RoomMetadata = {
+      ...room,
+      updatedAt: nowIso(),
+      attachments: [...room.attachments, attachment],
+    };
+    const next = withRooms(current, current.dungeon, [updatedRoom]);
+    set({ snapshot: next, lastError: null });
+    await persist(next);
+    return attachment;
+  },
+
   async addExternalAttachment(roomId, url) {
     const current = get().snapshot;
     if (!current) return null;
@@ -473,6 +524,11 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     if (!target) return;
 
     if (target.sourceType === 'local') {
+      // The device-local store is the byte source on the web build, so it is
+      // asked first; the Electron bridge is still consulted for a desktop
+      // install, which owns the file on disk.
+      const { removeDeviceLocalAttachment } = await import('@/services/persistence/deviceAttachments');
+      await removeDeviceLocalAttachment(attachmentId);
       await deleteRoomAttachment(current.dungeon.dungeonId, roomId, attachmentId);
     }
 
@@ -497,6 +553,12 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     if (attachment.sourceType === 'external') {
       return attachment.externalUrl ?? null;
     }
+    // A local attachment's bytes live on this device. Reading them is a local
+    // transaction; it is never a request, and an attachment whose bytes are not
+    // here reports `null` rather than reaching for a URL.
+    const { readDeviceLocalAttachmentUrl } = await import('@/services/persistence/deviceAttachments');
+    const deviceLocal = await readDeviceLocalAttachmentUrl(attachmentId);
+    if (deviceLocal !== null) return deviceLocal;
     return resolveRoomAttachmentUrl(current.dungeon.dungeonId, roomId, attachmentId);
   },
 

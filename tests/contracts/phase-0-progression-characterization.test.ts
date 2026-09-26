@@ -26,7 +26,13 @@ async function hydrate(
     window.localStorage.setItem(ACTIVE_SUBJECT_KEY, activeSubjectId);
   }
   window.localStorage.setItem(PROGRESSION_KEY, readFixture(fixtureName));
-  return loadProgressionStore();
+  const mod = await loadProgressionStore();
+  // Phase 4: hydration is an explicit step owned by the application bootstrap,
+  // not a module-load side effect. These two calls are exactly what the bootstrap
+  // performs for the legacy repository, so the characterization below still
+  // exercises the real hydration path with every assertion intact.
+  mod.useProgressionStore.getState().hydrateProgression(mod.readPersistedProgressionPayload());
+  return mod;
 }
 
 describe('Phase 0 progression hydration characterization', () => {

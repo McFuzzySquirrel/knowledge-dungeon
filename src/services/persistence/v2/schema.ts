@@ -191,6 +191,14 @@ export interface ProgressionRecordValue {
 export interface SessionRecordValue {
   sessionId: string;
   subjectId: string;
+  /**
+   * The subject name as it was when the session was written, preserved so a
+   * session for a subject that no longer has a `subjects` record - one the
+   * migration could not carry, or one the learner deleted - still hydrates the
+   * name the legacy session record holds. A live subject's current name always
+   * wins, so this is a fallback and never a second source of truth.
+   */
+  subjectName?: string;
   startedAt: string;
   endedAt: string | null;
   roomsVisited: string[];
@@ -271,8 +279,13 @@ export interface CustomSpriteRecordValue {
 }
 
 export interface RecoveryRecordValue {
-  /** `backup` or `corrupt`; matches the legacy key families. */
-  kind: 'backup' | 'corrupt';
+  /**
+   * `backup` or `corrupt` matches the legacy key families. `unindexed-subject`
+   * is a payload the subject index does not name: it is preserved here so the
+   * generation never loses bytes the device still holds, and it is not a
+   * `subjects` record because this build's own reader would not show it.
+   */
+  kind: 'backup' | 'corrupt' | 'unindexed-subject';
   subjectId: string;
   /** Raw legacy string, preserved byte-for-byte. Never parsed. */
   raw: string;
@@ -337,7 +350,25 @@ export interface ExternalOnlyAttachmentReport {
   sourceType: 'local' | 'external';
 }
 
+/**
+ * The outcome of a migration run.
+ *
+ * - `migrated` - the generation this run describes is either the one
+ *   `activeGeneration` names, or one a later generation has since superseded. It
+ *   never describes a generation that is still only `staged`: a staged
+ *   generation's records exist but nothing points at them, so reporting success
+ *   for one would tell a caller the device is migrated while its data is
+ *   unreachable. A run that finds its own generation left `staged` discards it
+ *   and migrates again.
+ * - `recovery-required` - a failure. The legacy generation is still authoritative
+ *   and `activeGeneration` was not flipped.
+ * - `no-source-data` - the device had nothing to migrate, so nothing was staged.
+ *
+ * The activation-blocking rule that produces these values is declared once, as
+ * `MIGRATION_BLOCKING_POLICY` in `./migrationState`.
+ */
 export type MigrationOutcomeStatus = 'migrated' | 'recovery-required' | 'no-source-data';
+
 
 export interface MigrationCounts {
   subjects: number;
@@ -378,7 +409,16 @@ export interface MigrationReport {
     externalOnly: number;
   };
   externalOnlyAttachments: ExternalOnlyAttachmentReport[];
-  /** Sanitized validation problems, code and count only. */
+  /**
+   * Sanitized validation problems, code and count only.
+   *
+   * `severity` is the activation rule, not a mood: `error` means activation was
+   * refused, `warning` means the condition was disclosed and the run continued.
+   * A record the migration could not read out of the source device is a
+   * `warning`, because it is never in the staged generation - there is nothing
+   * for generation validation to refuse - and the count is surfaced on the
+   * migration state screen instead.
+   */
   problems: ValidationProblem[];
   contentChecksum: string | null;
   receiptId: string | null;
@@ -427,27 +467,80 @@ export type StorageV2ErrorCode =
 /**
  * The only error type the storage-v2 modules throw.
  *
- * `message` is a fixed, sanitized string per code; `details` carries codes and
- * counts. Neither ever carries record contents.
+ * `message` is a fixed, sanitized string per code; `details` carries codes,
+ * counts, booleans, and opaque identifiers. Neither ever carries record
+ * contents, and the constructor *enforces* that rather than trusting the call
+ * site: a string detail that is not code-shaped is refused at construction, so a
+ * subject name, a room topic, a note, a filename, or a URL cannot reach
+ * {@link StorageV2Error.toReport} even by accident. See
+ * {@link isSanitizedDetailText}.
  */
 export class StorageV2Error extends Error {
   readonly code: StorageV2ErrorCode;
-  readonly details: Readonly<Record<string, string | number | boolean>>;
+  readonly details: Readonly<StorageV2ErrorDetails>;
 
   constructor(
     code: StorageV2ErrorCode,
-    details: Record<string, string | number | boolean> = {},
+    details: StorageV2ErrorDetails = {},
     message?: string,
   ) {
     super(message ?? `storage-v2 error: ${code}`);
+    assertSanitizedDetails(details);
     this.name = 'StorageV2Error';
     this.code = code;
     this.details = Object.freeze({ ...details });
   }
 
   /** Sanitized, log-safe projection. */
-  toReport(): { code: StorageV2ErrorCode; details: Record<string, string | number | boolean> } {
+  toReport(): { code: StorageV2ErrorCode; details: Readonly<StorageV2ErrorDetails> } {
     return { code: this.code, details: { ...this.details } };
+  }
+}
+
+/** The values a {@link StorageV2Error} detail may hold. */
+export type StorageV2ErrorDetailValue = string | number | boolean;
+
+/** A detail bag: codes, counts, booleans, and opaque identifiers only. */
+export type StorageV2ErrorDetails = Readonly<Record<string, StorageV2ErrorDetailValue>>;
+
+/**
+ * The shape a string detail must have to be considered sanitized.
+ *
+ * Two rules, and both are needed:
+ *
+ * 1. **Only `[A-Za-z0-9._-]`.** Every character a learner-authored string is
+ *    *likely* to contain - space, slash, colon, comma, quote, newline, non-ASCII -
+ *    is excluded, while every code, stage name, store name, generation id, and
+ *    subject id this application mints is accepted. A path or a URL is refused
+ *    outright by the `/` and `:` alone.
+ * 2. **No filename ending.** The character class alone cannot tell
+ *    `gen-synthetic-0001` from `photo-of-my-cat.png`, because a slug is
+ *    identifier-shaped. No code, stage, or identifier this application mints ends
+ *    in `.` plus a short extension, so a trailing `.xxxx` marks the value as a
+ *    filename and it is refused.
+ *
+ * A residual is recorded rather than hidden: a subject id that happened to end in
+ * `.v1` would be refused too. That is the conservative direction - the gate
+ * refuses a value rather than passing a filename - and every current id shape is
+ * code-shaped.
+ */
+const SANITIZED_DETAIL_TEXT = /^[A-Za-z0-9._-]{1,64}$/;
+const FILENAME_ENDING = /\.[A-Za-z0-9]{1,5}$/;
+
+/** Whether a string detail is code-shaped and therefore safe to report. */
+export function isSanitizedDetailText(value: string): boolean {
+  return SANITIZED_DETAIL_TEXT.test(value) && !FILENAME_ENDING.test(value);
+}
+
+function assertSanitizedDetails(details: StorageV2ErrorDetails): void {
+  for (const [key, value] of Object.entries(details)) {
+    if (typeof value !== 'string') continue;
+    if (isSanitizedDetailText(value)) continue;
+    // The offending value is deliberately NOT interpolated: a throw that echoed
+    // it would be the leak this check exists to prevent.
+    throw new TypeError(
+      `storage-v2 error detail "${key}" is not a code, count, or opaque identifier and was refused.`,
+    );
   }
 }
 
@@ -459,7 +552,7 @@ export function isStorageV2Error(value: unknown): value is StorageV2Error {
 export function toStorageV2Error(
   value: unknown,
   fallbackCode: StorageV2ErrorCode,
-  details: Record<string, string | number | boolean> = {},
+  details: StorageV2ErrorDetails = {},
 ): StorageV2Error {
   if (isStorageV2Error(value)) return value;
   return new StorageV2Error(fallbackCode, details);

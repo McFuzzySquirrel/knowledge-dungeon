@@ -709,7 +709,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 1A | complete | Establish Linux, macOS, Windows, and browser-engine compatibility rails. |
 | 2 | complete | Extract renderer-neutral application contracts. |
 | 3 | complete | Build storage-v2 and migration infrastructure. |
-| 4 | not-started | Cut over storage behind a flag and add local attachments. |
+| 4 | complete | Cut over storage behind a flag and add local attachments. |
 | 5 | not-started | Deliver full-device backup and restore. |
 | 6 | not-started | Deliver individual subject backup and restore. |
 | 7 | not-started | Deliver safe blank reusable templates. |
@@ -1883,7 +1883,7 @@ Phase 4.
 
 ## Phase 4: Storage Cutover and Local Attachments
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Route the existing persistence facade through storage-v2 behind a disabled-by-default flag.
 
 ### Prerequisites
@@ -1952,10 +1952,326 @@ Manual checks:
 - Migration can run repeatedly without duplication.
 - Phaser rollback can still read mirrored changes.
 - The redesigned app makes no learner-data upload request.
+### Verification evidence
 
-### Rollback
+Recorded on 2026-09-26. The status advanced from `verified` to `complete` on
+2026-09-26, when the maintainer accepted the verified checkpoint. Phase 5
+remains `not-started` and requires separate authorization.
 
-Set `VITE_STORAGE_REPOSITORY=legacy` and retain the staged generation for diagnosis.
+#### What was built
+
+- **Explicit asynchronous application bootstrap.** `src/application/bootstrap.ts`
+  owns hydration, with every store effect injected through a 30-member
+  dependency bag, and follows a read-then-commit discipline: read everything into
+  a plan without touching a store, then commit preferences → shortcuts →
+  progression → subject snapshot → session/progression active id in one
+  synchronous step. `src/main.tsx` awaits it before `createRoot().render()`.
+  Module-load `localStorage` reads are gone from `progressionStore`,
+  `preferencesStore`, `shortcutStore`, and `sessionTracker`, replaced by explicit
+  `hydrate*` entry points.
+- **Repository routing behind the flag.** `repositorySelection.ts` is the single
+  decision point; `subjectPersistence.ts` keeps its exact exported API and routes
+  reads and writes. With the flag off, storage-v2 is never opened — proven in a
+  real browser with `indexedDB.databases()`.
+- **Dual-write.** `dualWrite.ts` runs the mirror only after the primary succeeds,
+  so the legacy key can never be ahead of storage-v2. Covered: subject save,
+  subject delete, subject index, progression, preferences, shortcuts, sessions,
+  attachment bytes. The active-subject pointer is deliberately excluded, because
+  it must stay synchronously readable while stores hydrate and a rollback build
+  reads the same key.
+- **Device-local attachment bytes.** `attachmentBytes.ts` stores image bytes in a
+  dedicated IndexedDB database with a real SHA-256 content hash, and the bytes are
+  copied into a fresh `ArrayBuffer` so a later mutation of the caller's buffer
+  cannot change what was hashed. Object URLs are revoked when the editor re-runs
+  or closes. External attachments store `availability: 'external-only'`,
+  `contentHash: null`, and no bytes, and are never fetched.
+- **Migration state UI.** `MigrationStateSurface.tsx`, `migrationStateCopy.ts`,
+  and `useModalFocus.ts` render the six `MigrationStateKind` values mounted from
+  `App.tsx`. Copy lives as pure data, so a wording change cannot alter which
+  control appears. Only `recovery-required` uses a dialog; the rest are polite
+  live-region panels that never trap focus.
+- **Verification rails.** `npm run test:privacy` (a source-level and unit-level
+  privacy gate with its own non-vacuity floors and a planted positive control),
+  a `storage-v2-browser` Playwright lane bound to a new `tests/e2e/storageV2.spec.ts`
+  against a flagged build, and `npm run test:node20` to run the suite under the CI
+  Node major.
+
+#### Declared default-build behavior changes
+
+Three changes affect the **default** build and need maintainer sign-off.
+
+1. **Boot no longer writes.** Pre-phase, `App.tsx` called `loadSubject(active)` on
+   boot, which rewrote the legacy subject key and created a
+   `knowledge-dungeon:backup:<id>` record on every boot. Hydration is now
+   read-only. Verified: a seeded default build boots with every `localStorage`
+   key byte-identical, in the same insertion order, and no backup key. This was
+   required — the storage-v2 lane asserts the legacy subject key is unchanged
+   across a migration, and a read must not mutate. The only difference is on
+   disk, in the direction of "boot no longer modifies the learner's data".
+2. **The web image path no longer uploads, in either mode.** `NoteEditorModal`'s
+   `FormData` + `fetch('/api/upload')` is gone; bytes go to the device-local
+   store. The Phase 4 exit criterion is that the redesigned app makes no
+   learner-data upload request, and the known defect is that the Welcome copy
+   contradicted the upload path, so this was not flag-gated: a flag-gated upload
+   would have left the false claim live in the default build. The Electron bridge
+   path is unchanged in code and the server route is retained for compatibility.
+3. **Two user-facing statements had to change because the change made them
+   false.** The Welcome privacy paragraph and the note-editor images hint. The
+   privacy paragraph is now branch-accurate: it names IndexedDB for image
+   attachments on the web and the desktop host's own disk on Electron, does not
+   present `localStorage` as where everything lives, makes no absolute
+   "nothing leaves your device" claim, and discloses that external image bytes
+   cannot be retrieved.
+
+A fourth, smaller: a subject payload the subject index does not name is now
+preserved as a `recovery` record with `kind: 'unindexed-subject'` plus a
+disclosure, instead of being carried as a `subjects` record. The bytes are
+preserved verbatim, the subject set stays equal to the one this build can open,
+and the two repositories therefore agree. This was the implementer's deliberate
+reversal of the review's proposed direction; the orchestrator accepted it,
+because making the legacy reader start seeing unindexed payloads would have been
+a default-build behavior change this phase forbids.
+
+#### Defects found in review and fixed before verification
+
+Reviewed three times by `qa-engineer` and repeatedly by the orchestrator, always
+against the actual diff and real execution. The phase was **not** accepted on its
+first or second pass. Four blockers, all found by review rather than by the
+implementation's own suite:
+
+1. **The flagged build lost all progression on every reload, then wrote the loss
+   to the legacy mirror.** `progressionEnvelopeFrom` emitted no `version`, so
+   `normalizeProgressionRecord` classified the storage-v2 reader's own output as a
+   v1 flat record: one empty record for the active subject, the real map buried in
+   `extraFields`, achievements dropped. The next ordinary action then persisted
+   that empty progression to both repositories. Runtime witness: the app's own
+   Statistics dialog showed `Total XP 23` and one badge in the default build and
+   `Total XP 0` and no Badges section in the flagged build, on the same device.
+2. **The write side had the identical defect.** `publishProgressionToActiveGeneration`
+   normalized an unversioned envelope, so progression earned after migration was
+   never persisted while the legacy mirror held it. Fixed in the *function*,
+   because its parameter is `unknown` and only the writer can guarantee the shape;
+   a caller-side fix would have left it one forgotten argument away from the same
+   silent corruption. `sourceVersion` semantics were decided explicitly: it is
+   the shape the writer read, so it is the current version, and the arriving
+   legacy shape is recorded once by the migration in
+   `report.progressionSourceVersions`.
+3. **A device with custom-sprite data could never migrate.** The store is keyed
+   by `spritePath`, but the migration emits up to three records per path
+   (`override`, `anim`, `original`), which collapsed onto one primary key while
+   the descriptor counted the pre-collapse array, so `validateGeneration` refused
+   with `count-mismatch`. Fixed with a kind-aware record id; the count validation
+   was **not** loosened.
+4. **A first-time learner was told their data had been migrated.** A device whose
+   only key is `knowledge-dungeon:locale` — written by the i18next detector on a
+   brand-new install — was classified as having source data, so every new learner
+   on the flagged build saw "the update finished … 0 subjects" and a generation
+   was staged and activated for nothing. Fixed with a companion
+   `hasNoLearnerContent` predicate: a key the app writes on its own initiative is
+   a marker, a key only a learner action writes is content. Preferences were
+   deliberately classified as content, because its presence means a learner chose
+   a theme.
+
+Two UI findings were also closed: the disclosed-problems path rendered
+`problem.code` and `problem.scope` raw while the recovery path sanitised, and
+`Dismiss` stayed live during an in-flight action so a learner could hide the state
+their own action was about to return.
+
+#### Commands run and results
+
+The orchestrator ran the common gate and both phase-specific e2e suites
+independently, as one chain, with exit code 0.
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | pass, 0 errors 0 warnings |
+| `npm run typecheck` | pass |
+| `npm test` | pass — 82 files / 1121 tests, **0 failures** (Phase 3 baseline 55 / 744) |
+| `npm run test:privacy` | pass — 6 files / 34 tests |
+| `npm run test:migrations` | pass — 15 files / 369 tests |
+| `npm run test:e2e` | pass — 12 tests across the four Chromium viewport projects |
+| `npm run test:e2e:storage` | pass — 9 tests on the flagged build |
+| `npm run build:web` | pass |
+| `npm run check:bundle-size` | pass — `Total dist size: 4.12 MB across 125 files` |
+| `npm run test:node20` | pass — 82 files / 1121 tests, identical to Node 22 |
+
+`npm test` was additionally run **three consecutive times** by the implementer
+and the failure identities were byte-identical, which matters because this
+repository has twice been bitten by an intermittent gate.
+
+#### Exit-criteria evidence
+
+- **No visible data loss in legacy fixtures.** Every subject, room, note,
+  validation state, artifact, attachment, badge, XP, fish, session, preference,
+  shortcut, locale, quest, custom-sprite and recovery record was compared across
+  the two repositories, attacking unknown fields, corrupt JSON, an index entry
+  with no payload, a payload with no index entry, unrecoverable local attachment
+  bytes, an external attachment, a v1 flat progression, a v3 progression with
+  unknown fields, a deliberately truncated subject, and all of them at once. The
+  legacy key set is byte-identical before and after.
+- **Migration can run repeatedly without duplication.** Three sequential runs
+  stage, activate, and write a receipt exactly once each, counted through a
+  proxy rather than inferred; one receipt, one subject, one session. An
+  interrupted run is reclaimed and retried cleanly, and a run after the active
+  generation advanced does not steal the pointer. The browser lane covers two
+  tabs migrating concurrently, one generation, one receipt.
+- **Phaser rollback can still read mirrored changes.** With the flag on, subject,
+  progression, preferences, shortcuts, sessions and attachment bytes are all
+  readable after switching to `legacy`, and the mirrored progression is the
+  pre-Phase-4 v3 document. Mirror failures from a quota-throwing and a throwing
+  `localStorage` leave the primary write intact and are reported rather than
+  swallowed. With the flag off, `indexedDB.databases()` proves no storage-v2
+  database was ever created.
+- **The redesigned app makes no learner-data upload request.** An independent
+  browser probe drove the real UI through Welcome, the tutorial, a room panel and
+  the actual `+ Add image` file control in **both** builds: 62 requests, 60
+  same-origin static reads, 2 off-origin static reads of the pre-Cozy Google
+  Fonts stylesheet, **0** app-endpoint, **0** non-GET, **0** WebSocket. The image
+  produced exactly 2 requests, both same-origin lazily loaded scripts; the bytes
+  were never a request, and they are in the device-local store with a SHA-256
+  matching Node's, durable across a reload and mirrored into the generation. The
+  source-level gate walks 108 modules from `src/main.tsx` and reports zero
+  findings, with a planted positive control proving the walker bites.
+
+#### Gates beyond the exit criteria
+
+- **Privacy.** A distinctive synthetic marker planted as subject name, room
+  topic, note body, attachment filename and alt text never appears in any report,
+  receipt, descriptor, or validation output. `StorageV2Error.details` is enforced
+  at construction: only `[A-Za-z0-9._-]{1,64}` with no trailing `.xxxx`, and the
+  thrown `TypeError` names the key, never the value.
+- **Renderer boundary.** The Phase 2 rule still covers `src/core/**`,
+  `src/application/**` and `src/services/persistence/v2/**`, proven to bite with
+  two planted probes.
+- **Lazy boundary.** The default entry chunk contains **zero** storage-v2 or
+  `fflate` markers: `knowledge-dungeon-storage-v2`, `activeGeneration`,
+  `discardStagedGeneration`, `recomputeDescriptor`, `mergeEnvelopes`,
+  `knowledge-dungeon-attachments` all absent, and the storage-v2 modules remain
+  separate dynamic-import chunks. The 20 new files in `dist` are those lazy
+  chunks and their legacy twins.
+- **Accessibility.** axe-core reports zero violations on both the panel and the
+  dialog. All controls measure 44px minimum height in all three live themes;
+  the dialog takes initial focus, Tab and Shift+Tab both wrap, Escape closes, and
+  focus is restored. Contrast was measured per theme and every rendered panel
+  text is at least 7.04:1. The surface does not overflow at 320 CSS px or at a
+  640 px viewport. The sub-44 px window during the shared 250 ms modal animation
+  is bounded to about 40 ms and absent under `prefers-reduced-motion`.
+- **Default build unchanged.** `tests/unit/defaultBuildRendering.test.tsx`
+  passes unmodified and pins the four Welcome tabs, `Start Tutorial`, the setup
+  checklist, the disabled `Enter Dungeon`, and the absence of `generation`,
+  `storage-v2`, `migrat`, `recovery-required` and `external-only` in the rendered
+  text.
+
+#### Performance and bundle result
+
+Raw `dist` is **4,315,447 bytes across 125 files**, against the Phase 3 baseline
+of 4,111,129 bytes / 105 files: **+204,318 bytes (+4.97%)**, with +20 files. The
+20 files are the lazily loaded `migrations`, `migrationState`, `attachmentBytes`
+and `deviceAttachments` chunks and their `-legacy-` twins. The 125 MB / 12 MB raw
+ceiling is not at risk.
+
+Welcome initial JS + CSS, measured by the orchestrator from the default build:
+**201,251 bytes gzip excluding the eagerly loaded Phaser chunk**, inside the plan
+§10.2 300 KB budget. Including it the total is 549,797 bytes, because
+`src/ui/App.tsx` statically imports `GameScreen`, which pulls Phaser in eagerly.
+
+**This is a pre-existing breach that plan §10.2 explicitly forbids** ("no eager
+Phaser or Pixi load on Welcome"), and `tests/e2e/currentBuild.spec.ts` currently
+**asserts the opposite of the plan** by requiring the Phaser vendor chunk to load.
+Phase 3's evidence reported only the entry chunk and so did not surface it. It is
+recorded here as a finding, not fixed: the fix is lazy-loading the renderer host,
+which is Phase 9's work. Phase 3's `index` chunk figure of 97.57 kB gzip becomes
+106,441 bytes in this build; the entry chunk still carries no storage-v2 code.
+
+#### Known limitations and evidence boundaries
+
+- **The storage-v2 browser lane is Linux/Chromium at an emulated viewport only**,
+  and it disclaims accessibility evidence. No Firefox, WebKit, or Edge; no
+  physical Chromebook with ChromeVox; no touch-platform screen reader; no
+  physical device. Those gates stay assigned to Phases 21 and 23.
+- **Genuinely simultaneous** two-tab migration is covered with two live
+  IndexedDB handles, not two browser processes inside one write transaction:
+  Chromium will not open a second connection's request while another holds a
+  pending read-write transaction, and holding a lock from a third page deadlocks.
+  A real cross-tab **interleave** is proven in a browser; the truly-contended
+  lock case is not.
+- **The note editor's file picker is not driven end to end by the wired lane's
+  original design.** QA moved the real `+ Add image` path into the wired lane and
+  deleted the unwired probe, so the evidence now exists in a lane that passes in
+  CI. A `window` test hook was deliberately not added, because it would
+  reintroduce the production seam this phase removed.
+- **No real screen reader, real touch device, or physical 200 % browser zoom.**
+  Every ARIA role, live region, and accessible name is asserted structurally and
+  by axe-core but has not been heard. The 200 % claim is a 640 CSS-px viewport.
+- **Migration preview is not reachable today.** `migrateLegacyState` reports only
+  `migrated`, `partial`, `recovery-required` and `no-source-data`; `preview` comes
+  from `buildMigrationPreview` for a future Data Center screen, so no start
+  control can currently appear. The affordance is wired and tested as a mount
+  point. The recovery dialog's Escape being unavailable during a retry means a
+  never-settling promise would leave a learner stuck; the only producer today
+  cannot return one.
+- **Two hand-maintained transcriptions** exist for the UI's copy vocabulary: 40
+  problem codes and 15 scopes, generated from the core's union declarations and
+  pinned by a test that parses those declarations, so divergence is loud rather
+  than silent. If the v2 tree ever exports a runtime array, the copy module
+  should import it instead.
+- **A pre-existing, font-metric-dependent 320 px overflow in the Welcome screen**
+  reproduces with the migration surface absent (339 px scroll width at a 320 px
+  viewport) and is absent at 640 px. Not caused by this phase; a Phase 21
+  responsive follow-up.
+- **Recorded follow-ups, deliberately not fixed here:** a test-planting
+  declaration is a file-level list written by the planting suite, so a dishonest
+  declaration could still grant cover (mitigated by the declared-directory
+  constraint, the live-marker requirement, fail-closed parsing, and four attack
+  tests); the `qaHardening` allowlist gate does not assert every allowlisted file
+  still imports storage-v2; `DEFAULT_SHORTCUT_KEYS` is a second declaration of the
+  shortcut defaults, pinned by a test; a code-shaped-but-unknown disclosed code
+  renders as `3 not an objects (subject)`, which is cosmetic and only occurs
+  outside the vocabulary; the `StorageV2Error` filename rule refuses a subject id
+  ending in `.v1` but does not treat a 6+ character trailing segment as a
+  filename, so it is a heuristic rather than a proof; the Phase 3 follow-ups
+  carried forward unchanged (`.` as an archive path, `Object.prototype` duplicate
+  members, rejected ZIP directory entries, `progressionSourceVersions`,
+  `ProgressionRecordValue` not a fixed point, `LegacyKeyReport.keyId` embedding
+  the subject id, `stageGeneration` upsert-only on a direct subset re-stage).
+- **Electron packaging was not exercised** and remains a compatibility concern,
+  not a web release gate. The bridge path is tried first on every facade call
+  exactly as before.
+- No learner data exists in any source, fixture, test, report, log, or evidence
+  file added by this phase. Every fixture is synthetic and self-describing; the
+  only URL host is the reserved `example.invalid`.
+
+#### Files
+
+Created: `src/application/bootstrap.ts`,
+`src/services/persistence/v2/{repositorySelection,dualWrite,attachmentBytes,migrationState,appState,appRepository}.ts`,
+`src/services/persistence/deviceAttachments.ts`,
+`src/ui/components/{MigrationStateSurface,migrationStateCopy}.tsx|.ts`,
+`src/ui/hooks/useModalFocus.ts`,
+`.env.storage-v2`, `playwright.storage-v2.config.ts`,
+`tests/privacy/`, `tests/phase4/`, `tests/e2e/{storageV2.spec.ts,storage-v2-lane.ts}`,
+and nine new test files under `tests/unit/` and `tests/migrations/`.
+Modified: `src/main.tsx`, `src/ui/App.tsx`, `src/ui/components/NoteEditorModal.tsx`,
+`src/ui/screens/WelcomeScreen.tsx`, `src/styles.css`,
+`src/store/{progressionStore,preferencesStore,shortcutStore,subjectStore}.ts`,
+`src/services/{sessionTracker.ts,persistence/subjectPersistence.ts}`,
+`src/services/persistence/v2/{repository,migrations,schema,validation,legacyReader}.ts`,
+`package.json`, `tsconfig.node.json`, `.github/workflows/ci.yml`, `README.md`, and
+ten pre-existing test files.
+Scripts added: `test:privacy`, `test:node20`, `build:storage-v2-flagged`,
+`record:web-artifact:storage-v2`, `verify:web-artifact:storage-v2`,
+`test:e2e:storage`, `test:e2e:storage:recorded`.
+
+#### Rollback
+
+Set `VITE_STORAGE_REPOSITORY=legacy` and retain the staged generation for
+diagnosis. The default build already is that configuration, so the rollback is a
+build-time flag with no code change: the legacy repository remains authoritative,
+every dual-written key is readable, and a stale `staged` generation is invisible
+to every read path and reclaimable. Two declared changes are **not** reversible by
+the flag, because they affect the default build and are deliberate: boot no longer
+writes a `knowledge-dungeon:backup:<id>` record, and the web image path no longer
+uploads. Rolling either back is a source revert.
 
 ### Unlocks
 
