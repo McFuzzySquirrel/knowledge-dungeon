@@ -441,6 +441,68 @@ textarea {
   gap: 12px;
 }
 
+/*
+ * Welcome shell: a 320 CSS-pixel viewport has to be operable (plan §10.1), and a
+ * subject name is learner text of unbounded length rendered in several places on
+ * this screen. Two rules, and the second is the one that actually does the work.
+ *
+ * 1. `min-width: 0` on the boxes that carry it. `.welcome-main` already had it,
+ *    which is *why* the failure was an overflow rather than a wider column: every
+ *    grid and flex item below the main column still defaulted to `min-width: auto`,
+ *    i.e. its own min-content, so `#welcome-panel-subjects` and the action row
+ *    inside it could not shrink below the name they contained. Chromium floors
+ *    the tabpanel's own child - the plain `<section>` - at its min-content, so
+ *    that `<section>` is the element that has to be released, not the panel.
+ * 2. `overflow-wrap: anywhere` on the controls and paragraphs that render the
+ *    name. `anywhere` rather than `break-word`, deliberately and load-bearingly:
+ *    only `anywhere` lowers an element's *intrinsic minimum size*, so it fixes
+ *    the container floor instead of wrapping text that is already too wide.
+ *
+ * The name is never shortened. It wraps, so every character stays readable and
+ * selectable, and nothing is changed in the data: this is presentation only.
+ *
+ * The selectors are the Welcome shell's own boxes rather than a blanket
+ * `* { min-width: 0 }`, so the Data Center that Phase 5/6 mount inside the same
+ * tabpanel keeps its own rules and this file stays the only thing that reaches
+ * the default build.
+ */
+.welcome-screen [role='tabpanel'] > *,
+.welcome-screen .welcome-actions > *,
+.welcome-screen .phase-grid > *,
+.welcome-screen .class-grid > *,
+.welcome-screen .welcome-selection-grid > * {
+  min-width: 0;
+}
+
+.welcome-screen .welcome-actions > *,
+.welcome-screen [role='tabpanel'] p {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Welcome shell: 44 by 44 CSS-pixel minimum touch targets (plan §10.1).
+ *
+ * One block, declared for the shell's own controls, in the same shape the Data
+ * Center already uses. The Data Center's controls pass this; the shell's did not,
+ * so a learner on a touch platform was given 35-pixel tabs, 31-pixel buttons, a
+ * 37-pixel input, and a 39-pixel select. Declared on the element type inside
+ * `.welcome-screen` so a control added to this screen later inherits the
+ * minimum rather than having to remember it.
+ *
+ * `min-width` is not applied to `summary`: it is a full-width disclosure row
+ * whose horizontal extent is never the constraint.
+ */
+.welcome-screen button,
+.welcome-screen input,
+.welcome-screen select {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.welcome-screen summary {
+  min-height: 44px;
+}
+
 .welcome-admin-advanced {
   margin-top: 10px;
 }
@@ -4691,6 +4753,13 @@ textarea.game-input:focus {
 }
 
 /* ── Phase 5: Accessibility - Skip-to-content link ──────────────────── */
+/*
+ * `min-height` is the plan §10.1 44 CSS-pixel minimum touch target. The link is
+ * off-screen until focused, so this changes nothing about where it appears; it
+ * changes the size of the target a learner lands on when they tab to it, which
+ * was 35 pixels. The box's own `padding` is what carries the height, so this is
+ * an addition rather than a replacement.
+ */
 .skip-link {
   position: absolute;
   top: -100px;
@@ -4698,6 +4767,9 @@ textarea.game-input:focus {
   background: var(--accent);
   color: var(--bg-deep);
   padding: 8px 16px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   z-index: 10000;
   text-decoration: none;
   font-weight: 600;
