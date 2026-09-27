@@ -474,6 +474,41 @@ textarea {
   min-width: 0;
 }
 
+/*
+ * Grid *tracks*, which is the other half of the same floor and the half that
+ * `min-width: 0` cannot reach.
+ *
+ * `min-width: 0` releases an item; it does not resize the track the item sits in.
+ * An `auto` track's minimum is its items' min-content contributions, so a grid
+ * whose child is wide enough still overflows its own container even with every
+ * child released - and the one child that is unavoidably wide is a native
+ * `<select>`, whose intrinsic min-content width is its widest `<option>`'s
+ * *rendered text* plus native chrome. That is why this was a font-metric
+ * dependency and not a learner-data one: the same build measured a 182 px select
+ * on one host's fallback and a 207 px select on another's, and pushed the page
+ * past 320 CSS pixels only on the wider ones.
+ *
+ * `minmax(0, 1fr)` states the invariant instead of the accident: the track is
+ * this container's width, and the items inside it decide nothing about it. It is
+ * general - it stops *any* item in these grids from setting the floor again,
+ * which is a property a per-element `min-width` does not have.
+ *
+ * The `repeat()` forms use `min(100%, N)` for the same reason, and that spelling
+ * is the one the Data Center already uses for its own counts
+ * (`dataCenter.css`, `minmax(min(100%, 15rem), 1fr)`): a track minimum that is
+ * larger than the container is a floor no `min-width: 0` can lift.
+ *
+ * `.welcome-field-grid` is the box the component names so this rule, rather than
+ * an inline style, is the single source of the constraint. Inline styles cannot
+ * express a track's minimum at all, which is the whole reason the class exists.
+ */
+.welcome-field-grid,
+.welcome-screen [role='tabpanel'],
+.welcome-theme-picker,
+.welcome-main-tabs {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .welcome-screen .welcome-actions > *,
 .welcome-screen [role='tabpanel'] p {
   overflow-wrap: anywhere;
@@ -570,7 +605,9 @@ textarea {
 
 .welcome-selection-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  /* `min(100%, ...)` so the track's minimum can never exceed the container.
+     See the track-floor note above `.welcome-field-grid`. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 10px;
 }
 
@@ -598,7 +635,11 @@ textarea {
 /* Welcome two-column layout */
 .welcome-layout {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  /* `minmax(0, 1fr)` on the fluid column: a `1fr` track's minimum is its
+     content, so the sidebar column's 280px plus a wide main column could push
+     the row past its container. See the track-floor note above
+     `.welcome-field-grid`. */
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 24px;
   align-items: start;
 }
@@ -744,7 +785,9 @@ textarea {
 
 .phase-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  /* `min(100%, ...)` so the track's minimum can never exceed the container.
+     See the track-floor note above `.welcome-field-grid`. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
   gap: 12px;
 }
 
@@ -777,7 +820,9 @@ textarea {
 
 .class-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  /* `min(100%, ...)` so the track's minimum can never exceed the container.
+     See the track-floor note above `.welcome-field-grid`. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 12px;
 }
 
@@ -2169,7 +2214,7 @@ button.danger:hover {
 
 @media (max-width: 900px) {
   .welcome-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .welcome-sidebar {
@@ -2192,11 +2237,11 @@ button.danger:hover {
 
   .phase-grid,
   .class-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .welcome-selection-grid {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
   }
 
   .welcome-actions {

@@ -47,6 +47,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PHASE_1_CURRENT_BUILD_PROJECTS, CURRENT_BUILD_TEST_FILE } from './support-matrix';
 import {
+  FONT_METRIC_SETS,
   OVERFLOW_TOLERANCE_PX,
   PLAN_MINIMUM_TOUCH_TARGET_PX,
   PLAN_ZOOM_PERCENT,
@@ -59,14 +60,18 @@ const REPO_ROOT = process.cwd();
 const SPEC_PATH = path.join(REPO_ROOT, `tests/e2e/${CURRENT_BUILD_TEST_FILE}`);
 const CI_WORKFLOW_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml');
 const PACKAGE_PATH = path.join(REPO_ROOT, 'package.json');
+const STYLES_PATH = path.join(REPO_ROOT, 'src', 'styles.css');
+const WELCOME_SCREEN_PATH = path.join(REPO_ROOT, 'src', 'ui', 'screens', 'WelcomeScreen.tsx');
 
 const specSource = readFileSync(SPEC_PATH, 'utf8');
 const ciWorkflow = readFileSync(CI_WORKFLOW_PATH, 'utf8');
+const stylesSource = readFileSync(STYLES_PATH, 'utf8');
+const welcomeScreenSource = readFileSync(WELCOME_SCREEN_PATH, 'utf8');
 const npmScripts = (JSON.parse(readFileSync(PACKAGE_PATH, 'utf8')) as { scripts: Record<string, string> })
   .scripts;
 
 const OVERFLOW_TEST_TITLE =
-  'the Welcome shell has no horizontal overflow at 320 CSS pixels, at any subject-name length';
+  'the Welcome shell has no horizontal overflow at 320 CSS pixels, at any subject-name length and under any font';
 const TOUCH_TARGET_TEST_TITLE =
   'every Welcome shell control meets the 44 CSS-pixel minimum touch target at 320 pixels';
 
@@ -132,6 +137,99 @@ describe('the 320 CSS-pixel viewport measurement contract', () => {
 
   it('names every Welcome section tab, so a control on a hidden tab is still covered', () => {
     expect([...WELCOME_SECTION_TAB_NAMES]).toEqual(['Create / Load', 'Player Setup', 'Guide', 'Data']);
+  });
+});
+
+/*
+ * The gate measured only the host's own fonts, and that is how it was green here
+ * and red on CI: the floor is text-driven, a native `<select>`'s intrinsic width
+ * is its widest option's *rendered* text plus native chrome, and the same build
+ * measured 182 px on one host's fallback and 207 px on another's. These
+ * assertions are the difference between a gate that is deterministic and one that
+ * is merely lucky.
+ */
+describe('the 320 CSS-pixel gate is font-deterministic', () => {
+  it('declares a metric set the app is not measured under alone', () => {
+    const ids = FONT_METRIC_SETS.map((metricSet) => metricSet.id);
+    expect(ids).toContain('as-shipped');
+    // More than one, so a regression cannot hide behind a single set that happens
+    // to pass on the runner doing the reporting.
+    expect(FONT_METRIC_SETS.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('spans a narrow control and a wide case, and records why each is there', () => {
+    const narrow = FONT_METRIC_SETS.find((metricSet) => metricSet.id === 'serif-16');
+    const wide = FONT_METRIC_SETS.find((metricSet) => metricSet.id === 'mono-20');
+    expect(narrow, 'no narrow control metric set').toBeDefined();
+    expect(wide, 'no wide metric set').toBeDefined();
+    // Both name a *generic* family, which resolves on every host. A set naming a
+    // proprietary family would silently fall back and stop meaning what it says.
+    for (const metricSet of FONT_METRIC_SETS) {
+      expect(metricSet.purpose.length).toBeGreaterThan(20);
+      if (metricSet.fontFamily !== null) {
+        expect(metricSet.fontFamily).toMatch(/^(sans-serif|serif|monospace|system-ui)$/);
+      }
+      if (metricSet.fontSizePx !== null) {
+        expect(metricSet.fontSizePx).toBeGreaterThanOrEqual(16);
+      }
+    }
+    // Exactly one set models the application exactly; the rest are declared
+    // stresses, and a reader can tell which is which from the record.
+    expect(FONT_METRIC_SETS.filter((metricSet) => metricSet.fontFamily === null)).toHaveLength(1);
+  });
+
+  it('runs the cross product in the spec, not one reading per name length', () => {
+    expect(specSource).toContain('applyFontMetricSet');
+    expect(specSource).toContain('for (const metricSet of FONT_METRIC_SETS)');
+    expect(specSource).toContain('measureBiomeSelectWidth');
+    // The biome select is named in the failure message, so a red run says which
+    // control set the floor rather than only that something did.
+    expect(specSource).toContain('biome select ${entry.biomeSelectWidth}px');
+    expect(specSource).toContain('SUBJECT_NAME_LENGTH_CASES.length * FONT_METRIC_SETS.length');
+  });
+});
+
+/*
+ * The floor is a *grid track* minimum, and `min-width: 0` cannot reach one. This
+ * is the invariant the fix states, asserted where a regression would be cheapest
+ * to introduce: in the two files that have to agree.
+ */
+describe('the Welcome grid tracks cannot take a content minimum', () => {
+  it('gives the component\'s inline grid a class the stylesheet can size', () => {
+    expect(welcomeScreenSource).toContain('className="welcome-field-grid"');
+    // The track is the stylesheet's to state; an inline `gridTemplateColumns` here
+    // would outrank it and quietly undo the whole fix.
+    expect(welcomeScreenSource).not.toContain('gridTemplateColumns');
+  });
+
+  it('states the track minimum in the stylesheet, not on the element', () => {
+    expect(stylesSource).toMatch(/\.welcome-field-grid[^{]*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  });
+
+  it('keeps every Welcome card track\'s minimum at or below its container', () => {
+    // A `minmax(Npx, 1fr)` track is a floor no `min-width: 0` can lift, so each
+    // one of the shell's own repeat() tracks must clamp with `min(100%, N)`.
+    const shellTrackBlocks = stylesSource.matchAll(
+      /^\.(welcome-selection-grid|phase-grid|class-grid)\s*\{([^}]*)\}/gm,
+    );
+    const found: string[] = [];
+    for (const match of shellTrackBlocks) {
+      const declaration = /grid-template-columns:\s*([^;]+);/.exec(match[2] as string)?.[1]?.trim();
+      if (!declaration) continue;
+      found.push(declaration);
+      expect(
+        declaration,
+        `.${match[1]} still has an unclamped track minimum: ${declaration}`,
+      ).toContain('min(100%,');
+    }
+    expect(found.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('leaves no nowrap label able to widen the biome row again', () => {
+    // The label is the last unbounded child in that row. A nowrap label is
+    // unbounded by construction, so it must not come back here.
+    expect(welcomeScreenSource).not.toMatch(/htmlFor="biome-select"[^>]*whiteSpace/);
   });
 });
 

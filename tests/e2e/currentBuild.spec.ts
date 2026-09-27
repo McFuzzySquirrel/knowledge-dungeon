@@ -2,12 +2,15 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type Page, type Request, type TestInfo } from '@playwright/test';
 
 import {
+  FONT_METRIC_SETS,
   PLAN_MINIMUM_TOUCH_TARGET_PX,
   PLAN_ZOOM_PERCENT,
   SUBJECT_NAME_LENGTH_CASES,
   WELCOME_NARROW_VIEWPORT,
   WELCOME_SECTION_TAB_NAMES,
+  applyFontMetricSet,
   expectSweepCanSeeAForcedOffender,
+  measureBiomeSelectWidth,
   measureHorizontalOverflow,
   measureTouchTargets,
   seedLegacySubject,
@@ -296,27 +299,36 @@ test('safe tutorial action renders the default Phaser world with static-only net
  * no new project, no new config, and no second build.
  */
 
-interface NarrowViewportCase {
+interface NarrowViewportMeasurement {
   readonly label: string;
   readonly characters: number;
+  readonly fontMetricSet: string;
   readonly reading: HorizontalOverflowReading;
   /** Width of the seeded subject's own selection control, or 0 when unseeded. */
   readonly subjectEntryWidth: number;
+  /** The biome `<select>`, whose intrinsic width is the floor's main input. */
+  readonly biomeSelectWidth: number | null;
   /** The forced-overflow control run against this page. */
   readonly sweepControlSawTheForcedOffender: boolean;
 }
 
 /**
- * One measurement, on a device that has genuinely never been used.
+ * One name length, measured under every declared font metric set.
  *
  * A fresh context per name length rather than one context re-seeded, because the
  * subject list is read on mount: a seed applied to a page that is already showing
  * the list is a different state from the one that overflows.
+ *
+ * The metric sets are applied by swapping one stylesheet on the *same* page
+ * rather than by loading a page per set. That is the difference between a
+ * font-deterministic gate and a slow one: the cross product is 30 readings from
+ * 5 page loads, and every reading is taken on a page whose fonts have been
+ * reported as ready and whose layout has been re-settled after the swap.
  */
 async function measureWelcomeShellForNameCase(
   browser: Browser,
   nameCase: SubjectNameCase,
-): Promise<NarrowViewportCase> {
+): Promise<NarrowViewportMeasurement[]> {
   const context = await browser.newContext({ viewport: { ...WELCOME_NARROW_VIEWPORT } });
   try {
     const page = await context.newPage();
@@ -334,73 +346,109 @@ async function measureWelcomeShellForNameCase(
       page.getByRole('heading', { level: 1, name: 'Knowledge Dungeon' }),
     ).toBeVisible();
     const subjectEntryWidth = await waitForSubjectListEntry(page, nameCase.subjectName);
+    // The list is on the page before any font is touched, so a zero here is the
+    // "measured an empty element" trap and not a layout result.
+    if (nameCase.subjectName !== null) {
+      expect(
+        subjectEntryWidth,
+        `${nameCase.label}: the seeded subject list entry was laid out at zero width.`,
+      ).toBeGreaterThan(0);
+    }
     await settleLayout(page);
 
-    // Non-vacuity, before the reading that matters: break the page on purpose and
-    // require the sweep to notice. A sweep that cannot see an overflow it was
-    // handed would make every "no overflow" below meaningless.
-    const control = await expectSweepCanSeeAForcedOffender(page);
+    const measurements: NarrowViewportMeasurement[] = [];
+    for (const metricSet of FONT_METRIC_SETS) {
+      await applyFontMetricSet(page, metricSet);
+      // The name is still the learner's name after a font swap, so the layout
+      // being measured is still the layout that carries it. Asserted rather than
+      // assumed, because a swap that somehow unmounted the list would leave a
+      // shorter page and a clean reading.
+      const entryWidthAfterSwap = await waitForSubjectListEntry(page, nameCase.subjectName);
+      if (nameCase.subjectName !== null) {
+        expect(
+          entryWidthAfterSwap,
+          `${nameCase.label} under ${metricSet.id}: the subject list entry was laid out at zero width after the font swap.`,
+        ).toBeGreaterThan(0);
+      }
 
-    const reading = await measureHorizontalOverflow(page);
-    return {
-      label: nameCase.label,
-      characters: nameCase.characters,
-      reading,
-      subjectEntryWidth,
-      sweepControlSawTheForcedOffender: control.seen,
-    };
+      // Non-vacuity, before the reading that matters: break the page on purpose
+      // and require the sweep to notice. A sweep that cannot see an overflow it
+      // was handed would make every "no overflow" below meaningless.
+      const control = await expectSweepCanSeeAForcedOffender(page);
+
+      measurements.push({
+        label: nameCase.label,
+        characters: nameCase.characters,
+        fontMetricSet: metricSet.id,
+        reading: await measureHorizontalOverflow(page),
+        subjectEntryWidth: entryWidthAfterSwap,
+        biomeSelectWidth: await measureBiomeSelectWidth(page),
+        sweepControlSawTheForcedOffender: control.seen,
+      });
+    }
+    return measurements;
   } finally {
     await context.close();
   }
 }
 
-test('the Welcome shell has no horizontal overflow at 320 CSS pixels, at any subject-name length', async ({
+test('the Welcome shell has no horizontal overflow at 320 CSS pixels, at any subject-name length and under any font', async ({
   browser,
   page,
 }, testInfo) => {
-  const cases: NarrowViewportCase[] = [];
+  const measurements: NarrowViewportMeasurement[] = [];
   for (const nameCase of SUBJECT_NAME_LENGTH_CASES) {
-    cases.push(await measureWelcomeShellForNameCase(browser, nameCase));
+    measurements.push(...(await measureWelcomeShellForNameCase(browser, nameCase)));
   }
 
   await attachJson(testInfo, 'welcome-narrow-viewport-overflow.json', {
     viewport: WELCOME_NARROW_VIEWPORT,
     planZoomPercent: PLAN_ZOOM_PERCENT,
     note: '200% zoom at a 640 CSS-pixel window is this same 320 CSS-pixel layout viewport.',
-    cases: cases.map((entry) => ({
+    fontMetricSets: FONT_METRIC_SETS.map((metricSet) => ({
+      id: metricSet.id,
+      fontFamily: metricSet.fontFamily,
+      fontSizePx: metricSet.fontSizePx,
+      purpose: metricSet.purpose,
+    })),
+    measurements: measurements.map((entry) => ({
       label: entry.label,
       characters: entry.characters,
+      fontMetricSet: entry.fontMetricSet,
       subjectEntryWidth: entry.subjectEntryWidth,
+      biomeSelectWidth: entry.biomeSelectWidth,
       sweepControlSawTheForcedOffender: entry.sweepControlSawTheForcedOffender,
       ...entry.reading,
     })),
   });
 
-  // ── The control, first, so a false pass is impossible.
-  for (const entry of cases) {
+  // ── The control, first, on every single reading, so a false pass is impossible.
+  for (const entry of measurements) {
     expect(
       entry.sweepControlSawTheForcedOffender,
-      `${entry.label}: the overflow sweep did not notice a 1280px box forced into a 320px viewport, so a clean reading from it proves nothing.`,
+      `${entry.label} under ${entry.fontMetricSet}: the overflow sweep did not notice a 1280px box forced into a 320px viewport, so a clean reading from it proves nothing.`,
     ).toBe(true);
   }
 
-  // ── The page fits, at every name length, on both halves of the measurement.
-  for (const entry of cases) {
+  // ── The page fits, at every name length, under every declared metric set, on
+  // both halves of the measurement.
+  for (const entry of measurements) {
+    const where = `${entry.label} (${entry.characters} characters) under ${entry.fontMetricSet}`;
     expect(
       entry.reading.clientWidth,
-      `${entry.label}: the reading is not at the plan's viewport width, so it is not the measurement this gate claims to be.`,
+      `${where}: the reading is not at the plan's viewport width, so it is not the measurement this gate claims to be.`,
     ).toBe(WELCOME_NARROW_VIEWPORT.width);
 
     expect(
       entry.reading.pageOverflowPx,
-      `${entry.label} (${entry.characters} characters): documentElement.scrollWidth ${entry.reading.documentScrollWidth} exceeds clientWidth ${entry.reading.clientWidth}. Offenders: ${entry.reading.offenders
+      `${where}: documentElement.scrollWidth ${entry.reading.documentScrollWidth} exceeds clientWidth ${entry.reading.clientWidth} (biome select ${entry.biomeSelectWidth}px). Offenders: ${entry.reading.offenders
         .map((offender) => `${offender.selector} right=${offender.right} width=${offender.width}`)
         .join('; ')}`,
     ).toBe(0);
 
     expect(
       entry.reading.offenders,
-      `${entry.label} (${entry.characters} characters): elements reach right=${entry.reading.offenders[0]?.right ?? 'none'} past clientWidth=${entry.reading.clientWidth}. Offenders: ${entry.reading.offenders
+      `${where}: elements reach right=${entry.reading.offenders[0]?.right ?? 'none'} past clientWidth=${entry.reading.clientWidth}. Offenders: ${entry.reading.offenders
         .map((offender) => `${offender.selector} right=${offender.right} width=${offender.width}`)
         .join('; ')}`,
     ).toEqual([]);
@@ -409,9 +457,25 @@ test('the Welcome shell has no horizontal overflow at 320 CSS pixels, at any sub
     // of elements that were actually measured is asserted too.
     expect(
       entry.reading.measuredElementCount,
-      `${entry.label}: the sweep measured no elements at all.`,
+      `${where}: the sweep measured no elements at all.`,
     ).toBeGreaterThan(50);
   }
+
+  // ── The sweep is a sweep, not a single extra reading. A metric-set list of one
+  // would be a gate pinned to whichever set happened to pass, which is the
+  // failure mode this sweep exists to remove.
+  expect(FONT_METRIC_SETS.length).toBeGreaterThanOrEqual(4);
+  expect(
+    measurements.filter((entry) => entry.fontMetricSet === 'mono-20').length,
+    'the widest declared metric set was not measured for every name length.',
+  ).toBe(SUBJECT_NAME_LENGTH_CASES.length);
+  expect(
+    measurements.filter((entry) => entry.fontMetricSet === 'serif-16').length,
+    'the narrow control metric set was not measured for every name length.',
+  ).toBe(SUBJECT_NAME_LENGTH_CASES.length);
+  // The cross product really is the product, not five readings under one set.
+  expect(new Set(measurements.map((entry) => entry.fontMetricSet)).size).toBe(FONT_METRIC_SETS.length);
+  expect(measurements.length).toBe(SUBJECT_NAME_LENGTH_CASES.length * FONT_METRIC_SETS.length);
 
   // ── The name is wrapped, not shortened. This is the reason the fix is allowed
   // to exist at all: a control that hid the tail of the name would satisfy every

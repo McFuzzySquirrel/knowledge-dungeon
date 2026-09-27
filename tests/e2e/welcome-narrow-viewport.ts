@@ -30,6 +30,32 @@
  * page and asserts the sweep *notices*. A sweep that cannot see an overflow it
  * was handed is worse than no sweep, because it passes.
  *
+ * ## Why the measurement is swept across font metric sets
+ *
+ * A layout floor driven by *text* is only as wide as the text happens to render.
+ * A native `<select>`'s intrinsic min-content width is its widest `<option>`'s
+ * rendered text plus native chrome, so it scales with the font's average advance
+ * width. Measured on a 320 CSS-pixel viewport, the same build with the same
+ * subject list gives a 182 px biome select under one host's fallback and a 207 px
+ * select under another - which is the whole reason a gate that read only the
+ * host's own fonts was green locally and red on CI, and green for the wrong
+ * reason here.
+ *
+ * A gate whose verdict depends on which fonts the runner happens to have is a
+ * flaky gate, so the floor is asserted under a **declared set of metric sets**:
+ * one that leaves the app's own typography alone, and five that force a known
+ * family at a known size, deliberately spanning a narrow and a wide case plus two
+ * large-text stresses. The families are generic (`sans-serif`, `serif`,
+ * `monospace`) precisely so they resolve on every host, and every set is recorded
+ * in the evidence, so a reader can see which set produced which verdict rather
+ * than being told the layout is fine.
+ *
+ * The advance width of `monospace` still differs between hosts; that is not
+ * pretended away. It is handled by making the *assertion* metric-independent -
+ * the fix is a track-sizing rule, so it holds for any advance width - and by
+ * asserting the floor at the widest declared size, where a host's monospace has
+ * to be 50 % wider than anything a learner meets before the gate would notice.
+ *
  * ## Why the seed is localStorage and not IndexedDB
  *
  * The default production build runs `VITE_STORAGE_REPOSITORY=legacy`, which
@@ -80,6 +106,117 @@ export type WelcomeSectionTabName = (typeof WELCOME_SECTION_TAB_NAMES)[number];
 /** Selectors the gate's failure messages quote, so a failure names its cause. */
 export const WELCOME_SHELL_ROOT_SELECTOR = '.welcome-screen';
 export const WELCOME_SUBJECT_PANEL_SELECTOR = '#welcome-panel-subjects';
+
+/**
+ * A declared set of font metrics the layout floor is asserted under.
+ *
+ * `null` for either field means "leave the application's own value alone", so
+ * `as-shipped` is the only set that models the application exactly. The rest
+ * are *stresses*: they name a generic family (which resolves on every host) and
+ * a size in CSS pixels, and they deliberately go coarser than the application's
+ * own type scale, because a floor assertion should hold for the worst text a
+ * learner can be shown rather than for the text this runner happens to have.
+ */
+export interface FontMetricSet {
+  /** Stable, evidence-safe identifier. */
+  readonly id: string;
+  /** A generic CSS family list, or `null` for the application's own stack. */
+  readonly fontFamily: string | null;
+  /** A fixed CSS pixel size, or `null` for the application's own size. */
+  readonly fontSizePx: number | null;
+  /** What this set is for. Contains no learner data. */
+  readonly purpose: string;
+}
+
+export const FONT_METRIC_SETS: readonly FontMetricSet[] = Object.freeze([
+  {
+    id: 'as-shipped',
+    fontFamily: null,
+    fontSizePx: null,
+    purpose:
+      "The application's own typography, untouched. The only set that models it exactly, and the one whose verdict depends on the host's installed fonts - which is why it is not the only set.",
+  },
+  {
+    id: 'sans-16',
+    fontFamily: 'sans-serif',
+    fontSizePx: 16,
+    purpose:
+      'A narrow-ish proportional baseline at a fixed size: the app text at a size no element goes below.',
+  },
+  {
+    id: 'serif-16',
+    fontFamily: 'serif',
+    fontSizePx: 16,
+    purpose:
+      'The narrow control. Serif metrics are typically the narrowest available, so this set is the one that must keep passing to show the sweep is not merely asserting "everything blew up".',
+  },
+  {
+    id: 'mono-16',
+    fontFamily: 'monospace',
+    fontSizePx: 16,
+    purpose:
+      'The reproduced condition. Monospace has the widest advance width per character of the three generic families, and it is the metric set under which a native select measures widest.',
+  },
+  {
+    id: 'sans-20',
+    fontFamily: 'sans-serif',
+    fontSizePx: 20,
+    purpose:
+      'A large-text stress on a proportional family: a learner whose default text size is 125% of the nominal one.',
+  },
+  {
+    id: 'mono-20',
+    fontFamily: 'monospace',
+    fontSizePx: 20,
+    purpose:
+      'The widest declared set: the widest available family at the largest declared size. A host whose monospace is 50% wider than this one still has to pass, which is where the headroom comes from.',
+  },
+]);
+
+const FONT_METRIC_STYLE_ID = 'kd-welcome-narrow-viewport-font-metric';
+
+/**
+ * Applies one metric set to the live page and waits for the relayout.
+ *
+ * The override is a single `<style>` element owned by the gate, keyed by id, and
+ * it is *replaced* rather than added to, so switching between sets cannot leave
+ * a previous set's rules behind. `as-shipped` removes the element outright, so
+ * the one set that claims to model the application really does.
+ *
+ * `!important` is required and is not a shortcut: the application's own rules set
+ * `font-family` and `font-size` on hundreds of elements, and a rule that loses to
+ * them would silently measure the application's typography while claiming to
+ * measure something else.
+ */
+export async function applyFontMetricSet(page: Page, set: FontMetricSet): Promise<void> {
+  await page.evaluate(
+    (args: { styleId: string; family: string | null; sizePx: number | null }) => {
+      const existing = document.getElementById(args.styleId);
+      if (args.family === null && args.sizePx === null) {
+        existing?.remove();
+        return;
+      }
+      const style = (existing as HTMLStyleElement | null) ?? document.createElement('style');
+      style.id = args.styleId;
+      const family = args.family ?? 'inherit';
+      const size = args.sizePx === null ? 'inherit' : `${args.sizePx}px`;
+      style.textContent =
+        `*, *::before, *::after { font-family: ${family} !important; font-size: ${size} !important; }`;
+      if (!style.isConnected) document.documentElement.append(style);
+    },
+    { styleId: FONT_METRIC_STYLE_ID, family: set.fontFamily, sizePx: set.fontSizePx },
+  );
+  await settleLayout(page);
+}
+
+/** The width of the biome `<select>`, the control whose intrinsic size is the floor. */
+export async function measureBiomeSelectWidth(page: Page): Promise<number | null> {
+  return page.evaluate(() => {
+    const select = document.getElementById('biome-select');
+    if (!(select instanceof HTMLElement)) return null;
+    return Math.round(select.getBoundingClientRect().width * 100) / 100;
+  });
+}
 
 const SUBJECT_FIXTURE = path.join(
   REPO_ROOT,
