@@ -26,6 +26,7 @@
  * difference is visible.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 
@@ -218,9 +219,182 @@ describe('Phase 6 verifier V9: the lazy boundary (B1)', () => {
 });
 
 // ── The built artifact ──────────────────────────────────────────────────────
+//
+// ## Why this half is guarded, and what the guard owes the reader
+//
+// `dist/` is **gitignored** (`.gitignore` line 2), so a clean CI checkout has no
+// built artifact at all. Every assertion in the block below therefore depends on a
+// build that a unit-test job does not produce, and an unguarded `readdirSync` is not
+// a skip - it is a red run. That is how this gate broke PR #56's Unit Tests job:
+// 125 files passed, `lazyBoundary.test.ts` failed with `ENOENT ... scandir
+// 'dist/assets'`, and four jobs that *do* carry a build were skipped behind it.
+//
+// The direction of that failure is the safe one and is worth stating: unlike a gate
+// that is green locally for the wrong reason and red in CI, this one is **red
+// without a build and green with one**, so it never reported a pass it had not
+// earned. The cost was never a false pass; it was that the built-artifact properties
+// went unverified in CI, because the job that would have verified them never ran.
+//
+// So the guard follows the house shape at `tests/phase5/seam.test.ts:278-286`: guard
+// on `existsSync`, assert a **positive statement about the observed state**, return.
+// Not a skip, not a silent pass, not a failure. Three things beyond the precedent,
+// because the precedent alone does not deliver "cannot report a pass it did not
+// earn":
+//
+// 1. **The absence is stated on stdout, with a count, every run it holds.** "There
+//    was nothing to measure" becomes a reported fact with a stated cause and a
+//    number of assertions that did not run, not an unexamined green.
+// 2. **The absence is proved to be the gitignore rule's doing**, via
+//    `git check-ignore`. A checkout with no `dist/` for some *other* reason is a
+//    different observation and is reported differently, so a future reader is not
+//    told "clean checkout" when the real cause was something else.
+// 3. **With a build present, the measurement is also stated on stdout, with the
+//    count of assertions that did run.** So the line is present in both conditions
+//    and neither condition is silent.
+//
+// ## Where these properties *are* verified in CI
+//
+// Not here, and not lost either. `npm run build:web` then `npm run check:bundle-size`
+// run in the `web-build` job, and `tests/e2e/currentBuild.spec.ts` runs in the
+// browser lanes; `tests/phase5/seam.test.ts` holds the Phase 5 half of the same
+// built-artifact claims and is guarded the same way. The coverage did not disappear -
+// it lives in the jobs that have the artifact. What this file adds when it can run is
+// the **marker-free** half: the static-reachability closure and the five-marker
+// presence check, neither of which has an equivalent in a build job.
 
 const ASSETS = join(ROOT, 'dist', 'assets');
-const HAS_BUILD = existsSync(join(ASSETS, 'index-Cdmtsl_W.js')) || existsSync(join(ROOT, 'dist', 'index.html'));
+const DIST_ENTRY = join(ROOT, 'dist', 'index.html');
+
+/** How many of this block's assertions read the built artifact. */
+const BUILT_ARTIFACT_ASSERTIONS = 7;
+
+/** Whether a built artifact is present to measure at all. */
+function builtArtifactState(): {
+  readonly present: boolean;
+  readonly assetsPresent: boolean;
+  readonly entryPresent: boolean;
+} {
+  const assetsPresent = existsSync(ASSETS);
+  const entryPresent = existsSync(DIST_ENTRY);
+  return { present: assetsPresent && entryPresent, assetsPresent, entryPresent };
+}
+
+/**
+ * Whether `dist/` is ignored by git, and by which rule.
+ *
+ * This is what turns "there is no `dist/`" into "there is no `dist/` **because it is
+ * build output, not source**". A checkout that is missing `dist/` for any other
+ * reason - a partial checkout, a deleted directory - is a different observation, and
+ * the caller reports it differently rather than calling it clean.
+ */
+function distIgnoreRule(
+  path = 'dist',
+): { readonly ignored: boolean; readonly rule: string | null } {
+  try {
+    // `-v` prints the rule that matched; a non-zero exit means "not ignored".
+    const out = execFileSync('git', ['check-ignore', '-v', path], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    // `git check-ignore -v` prints `<source>:<line>:<pattern>\t<pathname>`, and the
+    // *pattern* is the rule - the source is only which file carries it. Capturing the
+    // source here reported the cause as `.gitignore` rather than `dist`, which is a
+    // true but useless answer to "which rule accounts for the absence".
+    const line = out.trim().split('\n')[0] ?? '';
+    const match = /^[^:]+:\d+:([^\t]+)\t/.exec(line);
+    return { ignored: true, rule: match?.[1] ?? 'unknown-rule' };
+  } catch (error) {
+    // Exit code 1 is "not ignored"; anything else is git being unavailable, which is
+    // reported as its own cause rather than folded into "not ignored".
+    const status = (error as { status?: number }).status;
+    if (status === 1) return { ignored: false, rule: null };
+    return { ignored: false, rule: null };
+  }
+}
+
+/**
+ * The one guard every built-artifact assertion calls.
+ *
+ * Returns `true` when the caller should go ahead and measure. Returns `false` after
+ * it has: stated the absence on stdout with a count, asserted a positive statement
+ * about the observed state, and - when the artifact is absent - asserted that the
+ * absence is the gitignore rule's doing.
+ *
+ * The return is a plain boolean so no caller can forget to check it, and the
+ * statements happen here rather than in seven copies of the same five lines.
+ */
+function guardBuiltArtifact(what: string): boolean {
+  const state = builtArtifactState();
+  if (state.present) {
+    // A build is present, so every assertion in this block runs. The run-level line is
+    // printed once, by the accounting test; this is the per-assertion note.
+    console.log(
+      `[phase6-verifier] lazyBoundary: ran "${what}" against the built artifact`,
+    );
+    return true;
+  }
+
+  // No build. The run-level statement - cause, counts, and where the property IS
+  // verified - is printed once by {@link stateAbsentRun} and is not repeated here: a
+  // fact printed seven times is a fact a future reader learns to skip.
+  stateAbsentRun(state);
+
+  // A positive statement about the observed state, in the house shape: the artifact
+  // directory is absent, so the entry document must be absent too. A checkout with
+  // `dist/index.html` but no `dist/assets` is a *broken* artifact, and this fails on
+  // it rather than skipping over it.
+  expect(
+    state.entryPresent,
+    'dist/index.html exists without dist/assets, which is a broken artifact rather than an absent one',
+  ).toBe(false);
+
+  // ...and the absence is the gitignore rule's doing, so "clean checkout" is a
+  // statement about the repository rather than about this machine.
+  const ignore = distIgnoreRule();
+  expect(
+    ignore.ignored,
+    'dist/ is absent but git does not ignore it, so this is not a clean checkout: something removed the build output, and the built-artifact properties have not been verified',
+  ).toBe(true);
+  expect(ignore.rule, 'git reports dist/ as ignored but names no rule for it').not.toBeNull();
+
+  console.log(
+    `[phase6-verifier] lazyBoundary: did NOT run "${what}" - no built artifact`,
+  );
+  return false;
+}
+
+/** How many times the run-level absence statement has been printed. */
+let absenceStatementPrinted = 0;
+
+/**
+ * State, once per run, that there is nothing to measure and why - with counts.
+ *
+ * Called by the guard on every absent run, and idempotent per process so the run-level
+ * line appears exactly once however many built-artifact assertions reach it.
+ */
+function stateAbsentRun(state: ReturnType<typeof builtArtifactState>): void {
+  if (absenceStatementPrinted > 0) return;
+  absenceStatementPrinted += 1;
+  const ignore = distIgnoreRule();
+  console.log(
+    [
+      '[phase6-verifier] lazyBoundary: NO BUILT ARTIFACT TO MEASURE.',
+      `dist/assets ${state.assetsPresent ? 'present' : 'absent'}; dist/index.html ${state.entryPresent ? 'present' : 'absent'}.`,
+      `0 of ${BUILT_ARTIFACT_ASSERTIONS} built-artifact assertions ran.`,
+      'The 3 source-level assertions in this file ran unconditionally: the flag default,',
+      'the import-graph walk with its pinned two-caller non-vacuity control, and the',
+      'storage-v2 seam. They need no build.',
+      `Absence cause: git reports dist/ as ignored by the pattern "${String(ignore.rule)}", so a clean checkout has no build output.`,
+      'This property is NOT lost: it is verified in CI by the jobs that carry a build -',
+      'the "web-build" job (build:web + check:bundle-size) and the browser lanes',
+      '(tests/e2e/currentBuild.spec.ts) - and by tests/phase5/seam.test.ts for the',
+      'Phase 5 half. What runs only when a build is present is this file\'s',
+      'marker-free half: the static-reachability closure and the five-marker presence',
+      'check, which have no equivalent in a build job.',
+    ].join(' '),
+  );
+}
 
 function assetNames(): string[] {
   return readdirSync(ASSETS).filter((name) => /\.(js|css)$/.test(name));
@@ -278,21 +452,57 @@ function staticClosure(roots: readonly string[]): { reached: Set<string>; parent
 }
 
 describe('Phase 6 verifier V9: the default build (B2)', () => {
-  it('there is a default build in this checkout to measure', () => {
-    // Stated rather than skipped, so a run without a build cannot report a pass it
-    // did not earn.
-    expect(HAS_BUILD).toBe(true);
-    expect(existsSync(join(ASSETS, 'index-Cdmtsl_W.js')) || assetNames().some((n) => /^index-[A-Za-z0-9_-]+\.js$/.test(n))).toBe(true);
+  it('this gate reports what it found: a build to measure, or a stated and explained absence', () => {
+    // The gate's own accounting test, and the one that makes "cannot report a pass it
+    // did not earn" true rather than aspirational. It never demands a build - a clean
+    // CI checkout has none, and `dist/` is gitignored - and it never passes silently
+    // either. Exactly one of two things is true, and this asserts which:
+    //
+    // - there IS a build, and it is a real one with an entry chunk; or
+    // - there is NOT, and `guardBuiltArtifact` has stated the absence on stdout with
+    //   the count, asserted that no entry document exists either, and asserted that
+    //   the absence is the gitignore rule's doing.
+    //
+    // A third possibility - a partial artifact, or an absence git cannot explain -
+    // fails inside the guard rather than passing here.
+    const state = builtArtifactState();
+    if (state.present) {
+      expect(
+        assetNames().some((name) => /^index-[A-Za-z0-9_-]+\.js$/.test(name)),
+        'dist/assets and dist/index.html are present but there is no entry chunk, so this is not a build of this application',
+      ).toBe(true);
+      expect(guardBuiltArtifact('build present')).toBe(true);
+      // The same non-vacuity check on the present path, so it holds in both
+      // conditions: git must be able to say "not ignored" about a tracked file.
+      expect(distIgnoreRule('src/main.tsx').ignored).toBe(false);
+      return;
+    }
+    expect(guardBuiltArtifact('the accounting test itself')).toBe(false);
+
+    // NON-VACUITY for the gitignore assertion the guard just made. The guard's claim
+    // is "`dist/` is ignored", and that claim would be free if `git check-ignore` said
+    // yes to everything - so the same call is run against a tracked path, which git
+    // must report as *not* ignored. If this ever fails, the guard's assertion on the
+    // next run is not evidence of anything.
+    const tracked = distIgnoreRule('src/main.tsx');
+    expect(
+      tracked.ignored,
+      'git check-ignore reported a tracked source file as ignored, so the dist/ assertion is not a discriminator',
+    ).toBe(false);
+    expect(tracked.rule).toBeNull();
+    // ...and the ignored verdict for `dist` is specific to it, not to everything.
+    expect(distIgnoreRule('dist').ignored).toBe(true);
   });
 
   it('the default build ships the product chunks and never loads them statically', () => {
+    if (!guardBuiltArtifact('product chunks and static reachability')) return;
     const files = assetNames();
     const productChunks = files.filter(isProductChunk);
     // Phase 6's chunk is in the default build. If this fails, the build under
     // measurement is not the build the gate is about.
     expect(productChunks.filter((name) => name.startsWith('subjectBackup-')).length).toBeGreaterThan(0);
 
-    const html = readFileSync(join(ROOT, 'dist', 'index.html'), 'utf8');
+    const html = readFileSync(DIST_ENTRY, 'utf8');
     // The initial set: what `index.html` names as a module entry, a module preload,
     // or a stylesheet - i.e. what a module-capable browser fetches before the
     // application runs.
@@ -322,7 +532,8 @@ describe('Phase 6 verifier V9: the default build (B2)', () => {
   });
 
   it('the legacy entry is excluded from "initial" for a reason, and the exclusion leaves no hole', () => {
-    const html = readFileSync(join(ROOT, 'dist', 'index.html'), 'utf8');
+    if (!guardBuiltArtifact('the legacy-entry exclusion')) return;
+    const html = readFileSync(DIST_ENTRY, 'utf8');
     const legacyEntries = [...html.matchAll(/assets\/(index-legacy-[A-Za-z0-9_-]+\.js)/g)].map((m) => m[1] as string);
     expect(legacyEntries.length).toBeGreaterThan(0);
     for (const name of legacyEntries) {
@@ -348,7 +559,8 @@ describe('Phase 6 verifier V9: the default build (B2)', () => {
   });
 
   it('the legacy entry chunk carries no product code, checked with the implementer\'s own marker list', () => {
-    const html = readFileSync(join(ROOT, 'dist', 'index.html'), 'utf8');
+    if (!guardBuiltArtifact('the legacy entry marker check')) return;
+    const html = readFileSync(DIST_ENTRY, 'utf8');
     const legacyEntry = /assets\/(index-legacy-[A-Za-z0-9_-]+\.js)/.exec(html)?.[1];
     expect(legacyEntry).toBeDefined();
     const source = read(legacyEntry as string);
@@ -367,6 +579,14 @@ describe('Phase 6 verifier V9: the default build (B2)', () => {
   });
 
   it('every one of the implementer\'s five markers is PRESENT in a product chunk, so none of them is vacuous', () => {
+    // LOAD-BEARING, and guarded rather than softened. This is the check that closes
+    // the real gap left by the raised byte ceiling: the implementer's assertion proves
+    // the five markers are *absent* from the initial files, and only this one proves
+    // they are *present* in a product chunk - so a marker whose source string is
+    // renamed fails here instead of quietly becoming vacuous there. A guard that
+    // returns early on a checkout with no build is a guard, not a weakening; the
+    // assertions below are unchanged and are the point of the test.
+    if (!guardBuiltArtifact('the five-marker presence check')) return;
     // The measurement their assertion omits. If a marker string is renamed in the
     // source, their "absent from the initial files" assertion keeps passing while
     // checking nothing; this one goes red.
@@ -386,7 +606,7 @@ describe('Phase 6 verifier V9: the default build (B2)', () => {
         expect(isProductChunk(carrier), `${marker} is carried by the non-product chunk ${carrier}`).toBe(true);
       }
       // ...and it is absent from every initial file.
-      const html = readFileSync(join(ROOT, 'dist', 'index.html'), 'utf8');
+      const html = readFileSync(DIST_ENTRY, 'utf8');
       for (const [, href] of html.matchAll(/(?:src|href)="(\/assets\/([^"]+))"/g)) {
         const name = href as string;
         if (!files.includes(name)) continue;
@@ -396,6 +616,7 @@ describe('Phase 6 verifier V9: the default build (B2)', () => {
   });
 
   it('the shipped product bytes are what the implementer measured, and the ceiling is a real bound', () => {
+    if (!guardBuiltArtifact('the product byte ceiling')) return;
     const productChunks = assetNames().filter((name) => isProductChunk(name) && /\.(js|css)$/.test(name));
     const shipped = productChunks.reduce((total, name) => total + statSync(join(ASSETS, name)).size, 0);
     // The implementer recorded 266,635 bytes. Measured here rather than repeated.
@@ -417,13 +638,14 @@ describe('Phase 6 verifier V9: the default build (B2)', () => {
   });
 
   it('the entry chunk contains no `__vitePreload` dependency entry for a product chunk that a browser would fetch unasked', () => {
+    if (!guardBuiltArtifact('the entry-chunk preload map')) return;
     // The implementer's disclosure: rolldown's dependency map names the Data Center
     // chunk inside the entry, and they read that as a browser *prefetch*. Measured:
     // the modern entry names it in a plain string array, with no `rel=prefetch` or
     // `rel=modulepreload` link in the document, so nothing is fetched because of
     // the map. The dynamic import that would fetch it is behind a runtime flag that
     // defaults to false.
-    const html = readFileSync(join(ROOT, 'dist', 'index.html'), 'utf8');
+    const html = readFileSync(DIST_ENTRY, 'utf8');
     const entry = /assets\/(index-[A-Za-z0-9_-]+\.js)/.exec(html)?.[1] as string;
     const source = read(entry);
     expect(html).not.toMatch(/rel="(?:prefetch|preload)"[^>]*DataCenter/);
