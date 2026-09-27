@@ -103,6 +103,7 @@ import {
 } from '@/services/persistence/v2/validation';
 import type { GenerationSnapshot, StorageV2Repository } from '@/services/persistence/v2/repository';
 import {
+  archiveMemberTimeFrom,
   fullDeviceExternalOnlyReason,
   FULL_DEVICE_FORMAT_VERSION,
   FULL_DEVICE_MANIFEST_MEMBER,
@@ -200,30 +201,27 @@ export interface FullDeviceExportResult {
 
 const encoder = new TextEncoder();
 
-/** The ZIP epoch, and the range the DOS timestamp can represent. */
-const ZIP_EPOCH_YEAR = 1980;
-const ZIP_MAX_YEAR = 2107;
-
 /**
  * The member modification time an export stamps, derived from the injected clock.
  *
  * `now` is an ISO-8601 string, so the result is a function of the caller's clock
  * and not of the wall clock. A value outside the range a DOS timestamp can
- * represent - before 1980, after 2107 - would make fflate raise, so it is clamped
- * to the representable range rather than being allowed to fail the export. The
- * clamp is disclosed here because it is the one case where two different `now`
- * values could produce the same `mtime`; both are then equally deterministic.
+ * represent - before 1980, after 2107 - is clamped rather than allowed to fail
+ * the export, and the clamp is disclosed because it is the one case where two
+ * different `now` values could produce the same `mtime`; both are then equally
+ * deterministic.
+ *
+ * RAIL CHANGE, recorded deliberately, and behaviour-identical. The clamp used to
+ * be a private twelve-line copy of exactly this logic, because this was the only
+ * product. The `.kdsubject` product needs the same derivation, and two copies of
+ * it is how two archives stop agreeing about what a clamped out-of-range clock
+ * means. The body now lives in the codec module as
+ * `archiveMemberTimeFrom`, which is where the DOS-timestamp range is knowledge
+ * about, and this function is a named delegation so the export's determinism
+ * claim still points at one place in this file.
  */
 function exportMemberTime(now: string): Date {
-  const parsed = new Date(now);
-  const valid = Number.isFinite(parsed.getTime()) ? parsed : new Date(0);
-  if (valid.getUTCFullYear() < ZIP_EPOCH_YEAR) {
-    return new Date(Date.UTC(ZIP_EPOCH_YEAR, 0, 1, 0, 0, 0));
-  }
-  if (valid.getUTCFullYear() > ZIP_MAX_YEAR) {
-    return new Date(Date.UTC(ZIP_MAX_YEAR, 0, 1, 0, 0, 0));
-  }
-  return valid;
+  return archiveMemberTimeFrom(now);
 }
 
 function sortedValues<T>(envelopes: readonly { recordId: string; value: T }[]): T[] {

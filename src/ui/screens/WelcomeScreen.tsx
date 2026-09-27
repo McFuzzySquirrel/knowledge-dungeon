@@ -216,6 +216,24 @@ export function WelcomeScreen(): JSX.Element {
     })();
   }
 
+  /**
+   * The Data Center imported one subject, so refresh the list and stay put.
+   *
+   * Deliberately *not* `handleDeviceDataRestored`. A whole-device restore moves to
+   * the Create / Load tab, because the learner has just replaced everything and
+   * wants to see it. A subject import must not: the Data Center's own report
+   * carries the disclosures that decide whether the import was a good idea - the
+   * images that came back without their picture data, the references inside the
+   * file that could not be rewritten - and navigating away unmounts the surface
+   * carrying them. So this reloads the list, leaves the tab alone, and leaves
+   * focus where the learner put it.
+   */
+  function handleSubjectImported() {
+    void (async () => {
+      await refreshExistingSubjects();
+    })();
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function loadExisting() {
@@ -825,7 +843,10 @@ export function WelcomeScreen(): JSX.Element {
           DataCenterScreen === null ? (
             <p className="room-help-text">Loading the Data Center…</p>
           ) : (
-            <DataCenterScreen onRestored={handleDeviceDataRestored} />
+            <DataCenterScreen
+              onRestored={handleDeviceDataRestored}
+              onSubjectImported={handleSubjectImported}
+            />
           )
         ) : (
         <section>

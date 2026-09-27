@@ -1517,11 +1517,26 @@ describe('Phase 5 gate 10: the product tree is renderer-neutral and cannot send 
     /\blocalStorage\b/,
   ];
 
-  it('the product modules are the two the plan names, and they import no renderer', () => {
+  it('the product tree is exactly the four modules Phase 5 and Phase 6 name, and none imports a renderer', () => {
+    // RAIL CHANGE, recorded deliberately, and **stronger or neutral**. The pinned list
+    // grew from two entries to four when Phase 6 added `subjectBackup.ts` and
+    // `idRemapping.ts` to the same tree. What this test defends is "no module in the
+    // data-product tree imports a renderer", and that property is still asserted over
+    // the **whole tree** - `productModules()` reads the directory rather than taking a
+    // list - so a fifth module would be scanned by the next two tests whether or not
+    // this list were updated. The list's job is to make an *unreviewed* addition
+    // visible, and it does that by failing here; a relaxed "at least these" would not.
+    //
+    // The test's *name* is the one thing here that is weaker than what it replaced: it
+    // said "the two the plan names", which stopped being true the moment a third phase
+    // used the same tree, and a name that must be edited on every addition is a name
+    // that will eventually be edited wrongly.
     const modules = productModules();
     expect(modules).toEqual([
       'src/services/persistence/products/archiveValidation.ts',
       'src/services/persistence/products/fullDeviceBackup.ts',
+      'src/services/persistence/products/idRemapping.ts',
+      'src/services/persistence/products/subjectBackup.ts',
     ]);
     for (const path of modules) {
       const code = blankComments(readProductModule(path));

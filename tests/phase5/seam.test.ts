@@ -29,6 +29,24 @@ const SRC = join(ROOT, 'src');
 const V2 = join(SRC, 'services', 'persistence', 'v2');
 const PRODUCTS = join(SRC, 'services', 'persistence', 'products');
 
+/**
+ * The chunk names a data-product build emits, as one list every claim in this file
+ * is measured against.
+ *
+ * Three entries are Phase 5's and one is Phase 6's: `subjectBackup` is the
+ * `.kdsubject` product, which shares the ZIP codec and the archive validator with
+ * its sibling and therefore ships as a chunk of its own. Keeping the list in one
+ * place is what stops a second product from being "unrelated" by omission - which
+ * is exactly the mistake this list's growth records, and exactly the class of
+ * mistake a closed list exists to prevent.
+ */
+const PRODUCT_CHUNK_NAMES = ['DataCenter', 'archiveValidation', 'fullDeviceBackup', 'subjectBackup'] as const;
+
+/** Whether a built file is one of the data-product chunks. */
+function isProductChunk(name: string): boolean {
+  return PRODUCT_CHUNK_NAMES.some((prefix) => name.startsWith(`${prefix}-`));
+}
+
 function posix(value: string): string {
   return value.split('\\').join('/');
 }
@@ -265,9 +283,18 @@ describe('V7.2: the default build', () => {
       return;
     }
     const files = readdirSync(assets);
-    const productChunks = files.filter(
-      (name) => /^(DataCenter|archiveValidation|fullDeviceBackup)-/.test(name) && /\.(js|css)$/.test(name),
-    );
+    const productChunks = files.filter((name) => isProductChunk(name) && /\.(js|css)$/.test(name));
+    // RAIL CHANGE, recorded deliberately, and **stronger**: the chunk names are now a
+    // shared list rather than a literal inside this test, and that list grew because
+    // Phase 6's product is in the build. The failure that prompted it was real and
+    // informative - `subjectBackup-*.js` is a product chunk, and it references
+    // `archiveValidation-*.js`, which this test's hard-coded recogniser did not know
+    // was a product chunk, so the "referenced only by the product's own graph" rule
+    // reported the product's own sibling as an unrelated chunk. Phase 6's chunk is
+    // now *also* held to that rule rather than being outside it, and every assertion
+    // below therefore measures one more chunk than it did before.
+    expect(productChunks.filter((name) => name.startsWith('subjectBackup-')).length,
+      'expected the default dist to ship the Phase 6 product chunk').toBeGreaterThan(0);
     // The recorded finding: the guard is a runtime `if`, so the bundler emits the
     // product chunks into the default artifact.
     expect(productChunks.length, 'expected the default dist to ship the product chunks').toBeGreaterThan(0);
@@ -296,7 +323,7 @@ describe('V7.2: the default build', () => {
       expect(referrers.length, `${chunk} is referenced by ${JSON.stringify(referrers)}`).toBeGreaterThan(0);
       for (const referrer of referrers) {
         const isEntry = entries.includes(referrer);
-        const isProduct = /^(DataCenter|archiveValidation|fullDeviceBackup)-/.test(referrer);
+        const isProduct = isProductChunk(referrer);
         expect(isEntry || isProduct, `${chunk} is referenced by the unrelated chunk ${referrer}`).toBe(true);
       }
       // And the reference is a *dynamic* import: the chunk name appears inside a
@@ -314,8 +341,61 @@ describe('V7.2: the default build', () => {
     expect(shipped).toBeGreaterThan(0);
     expect(modernBytes).toBeGreaterThan(0);
     expect(legacyBytes).toBeGreaterThan(0);
-    // Small against the plan's 12 MB total-dist ceiling.
-    expect(shipped).toBeLessThan(200 * 1024);
+
+    // RAIL CHANGE, recorded deliberately: the ceiling moved from 200 KiB to 320 KiB,
+    // and the reason is a measurement rather than a preference. The shipped bytes are
+    // 266,635 with Phase 6's product in the build (Phase 5 measured roughly 128 KiB
+    // for one product and a one-tab Data Center). The number grew because a second
+    // product and a second tab exist, and neither is optional.
+    //
+    // A byte ceiling is a weak proxy for the property that matters, so the property
+    // is now also asserted directly, and it is the one plan section 11 requires: **no
+    // byte of any product chunk is in the initial payload.** The initial set is what
+    // `index.html` names as a module entry, a module preload, or a stylesheet - what
+    // a module-capable browser fetches before the application runs - and none of those
+    // files may reference a product chunk. That is what "the guard is a runtime `if`,
+    // so the bundler emits the chunks but never loads them" means, and it holds
+    // whatever the shipped total happens to be.
+    //
+    // The check is on product *code*, not on product chunk *names*, and the
+    // difference is a measurement rather than a subtlety. The entry chunk does carry
+    // the product chunk names: rolldown's `__vitePreload` dependency map lists every
+    // chunk a dynamic import may preload, and the map is built unconditionally. So a
+    // browser may issue a *prefetch* for a product chunk - which is Phase 5's
+    // documented cost of "the guard is a runtime `if`" and is not what this rule is
+    // about. What must be absent is the product's **code**: no marker from any
+    // product may appear in a file a module-capable browser fetches before the
+    // application runs, which is the only way "the entry chunk cannot open an
+    // archive" can be true of a build.
+    const initial = new Set<string>();
+    for (const [, href] of html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)) {
+      const name = (href as string).replace('/assets/', '');
+      // The `nomodule` legacy entry is never fetched by a module-capable browser, so
+      // it is excluded from "initial" on purpose; the loop above covers it instead by
+      // requiring every product chunk to be reachable only by a dynamic import.
+      if (name.includes('-legacy-')) continue;
+      initial.add(name);
+    }
+    expect(initial.size, 'the entry document names no initial files').toBeGreaterThan(0);
+    // One marker per product, each of which only that product's code can contain.
+    const PRODUCT_CODE_MARKERS: ReadonlyArray<readonly [string, string]> = [
+      ['the ZIP codec', 'invalid block type'],
+      ['the Phase 5 product', 'knowledge-dungeon-device-backup.kdbak'],
+      ['the Phase 6 product', 'knowledge-dungeon-subject-backup.kdsubject'],
+      ['the Data Center component', 'kd-data-center'],
+      ['the subject tab', 'One subject backup'],
+    ];
+    for (const name of initial) {
+      if (!/\.(js|css)$/.test(name)) continue;
+      const source = readFileSync(join(assets, name), 'utf8');
+      for (const [what, marker] of PRODUCT_CODE_MARKERS) {
+        expect(source.includes(marker), `the initial file ${name} contains ${what} ("${marker}")`).toBe(false);
+      }
+    }
+
+    // The ceiling itself, set from the measurement above with headroom, and still
+    // small against the plan's 12 MB total-dist ceiling.
+    expect(shipped).toBeLessThan(320 * 1024);
   });
 
   it('the default build\'s entry chunk does not contain the ZIP codec', () => {

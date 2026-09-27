@@ -1,70 +1,95 @@
 /**
- * Phase 5: the Data Center.
+ * Phases 5 and 6: the Data Center.
  *
- * One screen, one data product, and three rules that shape it.
+ * One screen, two data products, and the rules that shape both.
  *
  * ## Rule 1: it renders nothing at all unless the flag says so
  *
- * `VITE_DATA_PRODUCTS_V2` is the plan's Phase 5 owner flag and it defaults to
- * `false`. The Welcome screen mounts this component only when the flag is on, and
- * this component reads the flag itself as well, so a build that is served this
- * file by mistake still renders nothing: no heading, no tab, no control, no live
- * region. The default build's data tab is therefore exactly what it was before
- * this file existed, and the plan's Phase 5 rollback is a build-time flag rather
- * than a source change.
+ * `VITE_DATA_PRODUCTS_V2` is the plan's owner flag for all three data-product
+ * phases and it defaults to `false`. The Welcome screen mounts this component only
+ * when the flag is on, and this component reads the flag itself as well, so a
+ * build that is served this file by mistake still renders nothing: no heading, no
+ * tab, no control, no live region. The default build's data tab is therefore
+ * exactly what it was before this file existed, and the plan's Phase 5 rollback is
+ * a build-time flag rather than a source change.
  *
- * ## Rule 2: the product is reached only through a lazy `import()`
+ * ## Rule 2: both products are reached only through a lazy `import()`
  *
  * Every call into `src/services/persistence/products/` is a dynamic import of a
  * string literal, and every *type* from it is reached through a type-position
  * `import()` expression that TypeScript erases. Nothing here is a static import -
- * not even `import type` - because a static edge would put the product and the
- * ZIP codec it pulls in into the entry chunk a build with the flag off loads.
- * That is plan section 11's "new data products are opt-in", and it is the reason
- * the first thing a learner does in a flagged build costs one extra request.
+ * not even `import type` - because a static edge would put the products and the ZIP
+ * codec they pull in into the entry chunk a build with the flag off loads. That is
+ * plan section 11's "new data products are opt-in", and it is why the first thing a
+ * learner does in a flagged build costs one extra request.
+ *
+ * The two dynamic imports sit in two files, not one: this one, for the `.kdbak`,
+ * and `SubjectBackupTab` for the `.kdsubject`. The shared boundary helpers are in
+ * `productAccess`, which reaches storage-v2 through the `.kdsubject` product's
+ * re-exported accessors so there is one lazy import for the device and not two.
  *
  * ## Rule 3: a backup is a local download and a local file pick, and nothing else
  *
- * The export path is `product` → `Blob` → object URL → anchor → **revoke**. There
- * is no upload, no share, no `fetch`, no navigation, and no form anywhere in this
- * file or in either surface it renders, and `tests/data/localDownloadOnly.test.ts`
- * walks the real application graph to keep it that way. The file name comes from
- * the product (`result.fileName`), which is a constant, so nothing a learner
- * authored can reach a file name.
+ * The export path is `product` → `Blob` → object URL → anchor → **revoke**, and it
+ * exists exactly once, in `productAccess.downloadBackupFile`. There is no upload,
+ * no share, no `fetch`, no navigation, and no form anywhere in this file or in any
+ * surface it renders, and `tests/data/localDownloadOnly.test.ts` walks the real
+ * application graph to keep it that way. The file name comes from the product
+ * (`result.fileName`), which is a constant, so nothing a learner authored can
+ * reach a file name.
  *
- * ## The order the learner meets
+ * ## The tabs
  *
- * 1. **Privacy**, first and unconditionally: what a backup is, and the three
- *    things it cannot promise.
- * 2. **Take a backup**: one control, one status line.
+ * Two, wired as a real tablist: `role="tablist"`, roving `tabIndex`, arrow-key
+ * movement with Home and End, and `aria-selected` that is genuinely `true` on
+ * exactly one tab. Only the selected panel's contents are rendered, so the other
+ * tab's file input does not exist in the DOM - a hidden panel full of focusable
+ * controls is a thing a keyboard user can tab into and a screen reader can read, and
+ * the `aria-controls` of an unselected tab still resolves because the panel
+ * *element* is always there.
+ *
+ * ## The order the learner meets, per tab
+ *
+ * 1. **Privacy**, first and unconditionally: what a backup is, and the three things
+ *    it cannot promise.
+ * 2. **Take a backup**: choose, then one control, one status line.
  * 3. **Restore a backup**: choose a file, read what is in it, and only then the
- *    explicit confirmation - which exists from the moment a file is chosen and
- *    is the only route to a restore.
+ *    explicit confirmation - which exists from the moment a file is chosen and is
+ *    the only route to a restore.
  * 4. **What happened**: the outcome, reported field by field from the product's
  *    own result. See `RecoveryStatus` for what it deliberately refuses to claim.
  *
  * The confirmation is a real dialog (plan section 10.1: focus trapped, initial
- * focus, Escape, restoration) and it is opened by the act of choosing a file, so
- * the import is unreachable by any other route. `tests/unit/dataCenter.test.tsx`
- * drives all four steps.
+ * focus, Escape, restoration), opened by the act of choosing a file, so the import
+ * is unreachable by any other route. `ConfirmDialog` is that dialog, shared by
+ * both tabs; `tests/unit/dataCenter.test.tsx` drives the device tab through all
+ * four steps and `tests/unit/subjectBackupTab.test.tsx` drives the subject tab
+ * through its two modes.
  *
  * Privacy: every string in this file is generic. Nothing here renders a subject
  * name, a room topic, a note, an image file name, an image link, or a path, and
- * the only identifiers that reach the DOM are the opaque ones the product itself
- * reports, inside a collapsed "Technical details" block.
+ * the only identifiers that reach the DOM are the opaque ones the products
+ * themselves report, inside collapsed "Technical details" blocks. The one place a
+ * subject *name* is rendered in the Data Center as a whole is the subject tab's
+ * replace confirmation, which the plan requires to name what it destroys.
  */
 
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type JSX } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type JSX, type KeyboardEvent } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
-import { useModalFocus } from '@/ui/hooks/useModalFocus';
 import { runtimeConfig } from '@/config/featureFlags';
 import { ImportPreview, type BackupPreview } from './ImportPreview';
+import { RecoveryStatus, type RestoreOutcome } from './RecoveryStatus';
+import { ConfirmDialog } from './ConfirmDialog';
+import { SubjectBackupTab } from './SubjectBackupTab';
 import {
-  RecoveryStatus,
-  type RestoreFailureReport,
-  type RestoreOutcome,
-  type RestoreSuccessReport,
-} from './RecoveryStatus';
+  downloadBackupFile,
+  readDeviceAttachmentIds,
+  readFailure,
+  readLiveDevice,
+  toDeviceExportReport,
+  toDeviceImportReport,
+  type FailureReport,
+} from './productAccess';
 import './dataCenter.css';
 
 // ── The product's own types, reached without a static edge ─────────────────
@@ -75,146 +100,9 @@ import './dataCenter.css';
 // compiling rather than rendering a field that is no longer there.
 
 type FullDeviceProduct = typeof import('@/services/persistence/products/fullDeviceBackup');
-type FullDeviceExportResult = Awaited<ReturnType<FullDeviceProduct['exportFullDeviceBackup']>>;
 type FullDeviceImportResult = Awaited<ReturnType<FullDeviceProduct['importFullDeviceBackup']>>;
-/** The live repository handle, named by the product's own request type. */
-type DeviceRepository = import('@/services/persistence/products/fullDeviceBackup').FullDeviceExportRequest['repository'];
-
-// ── The download ───────────────────────────────────────────────────────────
-
-/**
- * Hand a `.kdbak` to the learner as a file on this device.
- *
- * Four steps and no fifth: a `Blob` that owns its bytes, an object URL, an anchor
- * that carries the product's file name, and a revoke. The revoke is deferred by
- * one task rather than run inline, because some browsers have not finished
- * taking a copy of the blob when the click handler returns, and revoking inside
- * the handler cancels the download there.
- */
-function downloadBackupFile(bytes: Uint8Array, fileName: string): void {
-  // A Blob must own its bytes: a view over a larger buffer would otherwise carry
-  // the rest of that buffer into the file.
-  const blob = new Blob([bytes.slice().buffer as ArrayBuffer], { type: 'application/zip' });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  anchor.rel = 'noopener';
-  anchor.style.display = 'none';
-  document.body.appendChild(anchor);
-  try {
-    anchor.click();
-  } finally {
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-  }
-}
 
 // ── Failure reporting ──────────────────────────────────────────────────────
-
-/**
- * Read a failure the way the product says failures may be read: a code, and
- * details that are codes, counts, and lengths.
- *
- * `toReport()` is the sanitized form the product itself publishes, and it is
- * preferred over reading `code`/`details` off the instance. A failure that is not
- * typed at all - an `IndexedDB` error, say - is reported as
- * `UNEXPECTED_ERROR` with **no message**: a message is the one field a foreign
- * error is free to fill with anything, and a subject name in a paragraph is
- * exactly the leak this product was built to prevent.
- */
-function readFailure(error: unknown): RestoreFailureReport {
-  if (typeof error === 'object' && error !== null) {
-    const candidate = error as {
-      code?: unknown;
-      details?: unknown;
-      toReport?: () => unknown;
-    };
-    if (typeof candidate.toReport === 'function') {
-      const report = candidate.toReport() as { code?: unknown; details?: unknown } | null;
-      if (report !== null && typeof report === 'object' && typeof report.code === 'string') {
-        return { code: report.code, details: readDetailValues(report.details) };
-      }
-    }
-    if (typeof candidate.code === 'string') {
-      return { code: candidate.code, details: readDetailValues(candidate.details) };
-    }
-  }
-  return { code: 'UNEXPECTED_ERROR', details: {} };
-}
-
-/** Keep only the value shapes a typed detail is allowed to carry. */
-function readDetailValues(details: unknown): Readonly<Record<string, string | number | boolean | null>> {
-  if (typeof details !== 'object' || details === null) return {};
-  const kept: Record<string, string | number | boolean | null> = {};
-  for (const [key, value] of Object.entries(details)) {
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null) {
-      kept[key] = value;
-    }
-  }
-  return kept;
-}
-
-// ── The live device ────────────────────────────────────────────────────────
-
-/**
- * The live storage-v2 handle and the generation its pointer names.
- *
- * The product's request type *is* a repository handle, so the screen that hands a
- * generation to the product has to be able to reach the handle the bootstrap
- * published. The product publishes it - `resolveLiveDeviceRepository()` and
- * `readLiveActiveGenerationId()` - and this screen asks the product for both,
- * which is what makes this the only route from a screen to storage-v2.
- *
- * The boundary this rests on is plan section 11's "there is exactly one place in
- * the application that knows storage-v2 exists", restated one level down:
- * `tests/migrations/qaHardening.test.ts` holds a closed allowlist
- * (`STORAGE_V2_SEAMS`) of the files permitted to name a storage-v2 module, and a
- * screen that reached `repositorySelection` itself would have to be an entry on
- * it. Going through the product instead means no UI file is on that list, the
- * product tree stays the single seam, and a build with the flag off still
- * contains none of it - the accessor is reached by a lazy `import()` of a
- * literal, so the selection module and the repository type behind it are fetched
- * only when a learner actually takes or restores a backup.
- *
- * `null` is the expected answer rather than an error: while
- * `VITE_STORAGE_REPOSITORY` is `legacy` there is no versioned store to read, and
- * the screen says so in words instead of failing.
- */
-async function readLiveDevice(): Promise<{ repository: DeviceRepository; generationId: string } | null> {
-  const product = await import('@/services/persistence/products/fullDeviceBackup');
-  const repository = await product.resolveLiveDeviceRepository();
-  if (repository === null) return null;
-  const generationId = await product.readLiveActiveGenerationId();
-  if (generationId === null) return null;
-  return { repository, generationId };
-}
-
-/** The attachment ids a generation references, which is what the payload map is keyed by. */
-async function readAttachmentIds(repository: DeviceRepository, generationId: string): Promise<string[]> {
-  const snapshot = await repository.readRecords(generationId);
-  return snapshot.records.attachmentMetadata.map((envelope) => envelope.value.attachmentId);
-}
-
-/** The product's result, narrowed to the fields this screen reports. */
-function toSuccessReport(result: FullDeviceImportResult): RestoreSuccessReport {
-  return {
-    generationId: result.generationId,
-    previousActiveGenerationId: result.previousActiveGenerationId,
-    activated: result.activated,
-    previousGenerationRetained: result.previousGenerationRetained,
-    keepPreviousGeneration: result.keepPreviousGeneration,
-    retentionNote: result.retentionNote,
-    disclosedWarnings: result.disclosedWarnings,
-    externalOnlyAttachments: result.externalOnlyAttachments,
-    recordCounts: result.recordCounts,
-    contentChecksum: result.contentChecksum,
-    restoredActiveSubjectId: result.restoredActiveSubjectId,
-    reusedArchiveGenerationId: result.reusedArchiveGenerationId,
-    migrationReceiptCount: result.migrationReceiptCount,
-    receiptNote: result.receiptNote,
-  };
-}
 
 function toPreview(result: FullDeviceImportResult['preview']): BackupPreview {
   return {
@@ -241,14 +129,9 @@ interface ExportReport {
   readonly manifestCreatedAt: string;
 }
 
-function toExportReport(result: FullDeviceExportResult): ExportReport {
-  return {
-    fileName: result.fileName,
-    byteLength: result.bytes.byteLength,
-    subjectCount: result.manifest.recordCounts.subjects,
-    externalOnlyCount: result.externalOnlyAttachments.length,
-    manifestCreatedAt: result.manifest.createdAt,
-  };
+function toLegacyExportReport(result: Awaited<ReturnType<FullDeviceProduct['exportFullDeviceBackup']>>): ExportReport {
+  const narrowed = toDeviceExportReport(result);
+  return { ...narrowed, manifestCreatedAt: result.manifest.createdAt };
 }
 
 // ── Motion ─────────────────────────────────────────────────────────────────
@@ -280,6 +163,24 @@ function readReducedMotionPreference(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+// ── The tabs ───────────────────────────────────────────────────────────────
+
+/**
+ * The two products, in the order a learner meets them.
+ *
+ * `tabId`/`panelId` are filled in by the component from `useId`, and `matches` is
+ * the one thing that decides what is rendered. The names are chosen so Phase 5's
+ * browser lane, which locates the full-backup tab by `/full[\s-]*device|full[\s-]*backup/i`,
+ * still resolves to exactly one tab: neither "Full device backup" nor "One subject
+ * backup" is matched twice, and no future tab may be named so that two match.
+ */
+type TabKey = 'device' | 'subject';
+
+const TABS: ReadonlyArray<{ readonly key: TabKey; readonly label: string; readonly hint: string }> = [
+  { key: 'device', label: 'Full device backup', hint: 'Everything on this device in one file' },
+  { key: 'subject', label: 'One subject backup', hint: 'A single subject, its progress, and its images' },
+];
+
 // ── The shell ──────────────────────────────────────────────────────────────
 
 export interface DataCenterProps {
@@ -291,18 +192,30 @@ export interface DataCenterProps {
    * its subject list and show it.
    */
   readonly onRestored?: (() => void) | null;
+  /**
+   * Called after a **subject** import has activated a new generation.
+   *
+   * Separate from `onRestored` because the two need different things. A
+   * whole-device restore navigates the Welcome screen to the subject list; a
+   * subject import must not, because the outcome report behind it carries the
+   * disclosures that decide whether the import was a good idea. This one only
+   * refreshes the list.
+   */
+  readonly onSubjectImported?: (() => void) | null;
 }
 
-export function DataCenter({ onRestored = null }: DataCenterProps): JSX.Element | null {
+export function DataCenter({ onRestored = null, onSubjectImported = null }: DataCenterProps): JSX.Element | null {
   const enabled = runtimeConfig.dataProductsV2;
   const activeSubjectId = useSessionStore((state) => state.activeSubjectId);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   const headingId = useId();
-  const tabId = useId();
-  const panelId = useId();
-  const dialogTitleId = useId();
-  const dialogBodyId = useId();
+  const tabsId = useId();
+  const tabIds: Record<TabKey, string> = { device: `${tabsId}-tab-device`, subject: `${tabsId}-tab-subject` };
+  const panelIds: Record<TabKey, string> = { device: `${tabsId}-panel-device`, subject: `${tabsId}-panel-subject` };
+
+  const [activeTab, setActiveTab] = useState<TabKey>('device');
+  const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const inspectButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -316,19 +229,11 @@ export function DataCenter({ onRestored = null }: DataCenterProps): JSX.Element 
   const [chosenBytes, setChosenBytes] = useState<Uint8Array | null>(null);
   const [preview, setPreview] = useState<BackupPreview | null>(null);
   const [inspectionMessage, setInspectionMessage] = useState<string | null>(null);
-  const [inspectionFailure, setInspectionFailure] = useState<RestoreFailureReport | null>(null);
+  const [inspectionFailure, setInspectionFailure] = useState<FailureReport | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [outcome, setOutcome] = useState<RestoreOutcome | null>(null);
-
-  // The dialog is contained and Escape-dismissed, and genuinely not dismissible
-  // while a restore is in flight: a surface that looks dismissible and ignores
-  // the key is worse than one that does not.
-  const dialogRef = useModalFocus<HTMLDivElement>({
-    active: dialogOpen && !importing,
-    onEscape: dialogOpen && !importing ? () => setDialogOpen(false) : null,
-  });
 
   const openFilePicker = useCallback(() => {
     fileInputRef.current?.click();
@@ -346,12 +251,12 @@ export function DataCenter({ onRestored = null }: DataCenterProps): JSX.Element 
       if (live === null) {
         setExportMessage(null);
         setExportFailure(
-          'This build is not keeping its data in the versioned store a full-device backup reads from, so there is nothing here to back up. Use the subject tools above instead.',
+          'This build is not keeping its data in the versioned store a full-device backup reads from, so there is nothing here to back up. Use the subject tab instead.',
         );
         return;
       }
       const product = await import('@/services/persistence/products/fullDeviceBackup');
-      const attachmentIds = await readAttachmentIds(live.repository, live.generationId);
+      const attachmentIds = await readDeviceAttachmentIds(live.repository, live.generationId);
       const result = await product.exportFullDeviceBackup({
         repository: live.repository,
         generationId: live.generationId,
@@ -360,7 +265,7 @@ export function DataCenter({ onRestored = null }: DataCenterProps): JSX.Element 
         activeSubjectId: activeSubjectId ?? null,
       });
       downloadBackupFile(result.bytes, result.fileName);
-      const report = toExportReport(result);
+      const report = toLegacyExportReport(result);
       setExportMessage(
         `Saved ${report.fileName} to this device: ${report.byteLength} bytes, ` +
           `${report.subjectCount} ${report.subjectCount === 1 ? 'subject' : 'subjects'}.` +
@@ -461,7 +366,7 @@ export function DataCenter({ onRestored = null }: DataCenterProps): JSX.Element 
         keepPreviousGeneration: true,
       });
       setDialogOpen(false);
-      setOutcome({ kind: 'success', result: toSuccessReport(result) });
+      setOutcome({ kind: 'success', result: toDeviceImportReport(result) });
       onRestored?.();
     } catch (error) {
       setDialogOpen(false);
@@ -472,6 +377,45 @@ export function DataCenter({ onRestored = null }: DataCenterProps): JSX.Element 
   }, [chosenBytes, preview, onRestored]);
 
   const handleDismissOutcome = useCallback(() => setOutcome(null), []);
+
+  // ── The tablist ──
+  //
+  // Arrow keys move between tabs and select as they go, which is the ARIA pattern
+  // for an automatic-activation tablist: there is nothing on the other tab to
+  // discover before switching, and a learner pressing Right once expects to be on
+  // the next tab. Home and End go to the ends. The roving `tabIndex` means Tab
+  // itself moves out of the tablist rather than through it, so the tablist is one
+  // stop in the page's tab order and two stops inside.
+  const handleTabKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, current: TabKey) => {
+      const index = TABS.findIndex((tab) => tab.key === current);
+      if (index < 0) return;
+      let next = index;
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          next = (index + 1) % TABS.length;
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          next = (index - 1 + TABS.length) % TABS.length;
+          break;
+        case 'Home':
+          next = 0;
+          break;
+        case 'End':
+          next = TABS.length - 1;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      const key = (TABS[next] as { readonly key: TabKey }).key;
+      setActiveTab(key);
+      tabRefs.current[key]?.focus();
+    },
+    [],
+  );
 
   if (!enabled) return null;
 
@@ -493,213 +437,215 @@ export function DataCenter({ onRestored = null }: DataCenterProps): JSX.Element 
         no account to sign in to and nothing is sent anywhere.
       </p>
 
-      <div className="kd-tabs" role="tablist" aria-label="Data products">
-        <button
-          type="button"
-          role="tab"
-          className="kd-tab"
-          id={tabId}
-          aria-selected="true"
-          aria-controls={panelId}
-        >
-          Full device backup
-        </button>
+      <div className="kd-tabs" role="tablist" aria-label="Data products" aria-orientation="horizontal">
+        {TABS.map((tab) => {
+          const selected = tab.key === activeTab;
+          return (
+            <button
+              type="button"
+              role="tab"
+              key={tab.key}
+              ref={(node) => {
+                tabRefs.current[tab.key] = node;
+              }}
+              className="kd-tab"
+              id={tabIds[tab.key]}
+              aria-selected={selected}
+              aria-controls={panelIds[tab.key]}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => setActiveTab(tab.key)}
+              onKeyDown={(event) => handleTabKeyDown(event, tab.key)}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       <div
         className="kd-panel"
         role="tabpanel"
-        id={panelId}
-        aria-labelledby={tabId}
+        id={panelIds.device}
+        aria-labelledby={tabIds.device}
         tabIndex={0}
+        hidden={activeTab !== 'device'}
       >
-        {/* ── Privacy, first and always ── */}
-        <section className="kd-block" aria-labelledby={`${headingId}-privacy`}>
-          <h3 className="kd-subheading" id={`${headingId}-privacy`}>
-            Where your data goes
-          </h3>
-          <ul className="kd-bullets">
-            <li>
-              A backup is a file your browser writes to this device, in the place you chose. Knowledge Dungeon
-              does not upload it, and there is nowhere for it to upload it to.
-            </li>
-            <li>
-              A backup can only include picture data that is on this device. An image you added as a link to
-              a picture on the internet stays a link: the app never downloads it, so there are no bytes to
-              back up.
-            </li>
-            <li>
-              A restore keeps the copy that is here now. It writes the backup into a new copy first and only
-              then switches to it, so a restore that goes wrong leaves what you had in place.
-            </li>
-          </ul>
-        </section>
+        {activeTab === 'device' ? (
+          <>
+            {/* ── Privacy, first and always ── */}
+            <section className="kd-block" aria-labelledby={`${headingId}-privacy`}>
+              <h3 className="kd-subheading" id={`${headingId}-privacy`}>
+                Where your data goes
+              </h3>
+              <ul className="kd-bullets">
+                <li>
+                  A backup is a file your browser writes to this device, in the place you chose. Knowledge
+                  Dungeon does not upload it, and there is nowhere for it to upload it to.
+                </li>
+                <li>
+                  A backup can only include picture data that is on this device. An image you added as a link to
+                  a picture on the internet stays a link: the app never downloads it, so there are no bytes to
+                  back up.
+                </li>
+                <li>
+                  A restore keeps the copy that is here now. It writes the backup into a new copy first and only
+                  then switches to it, so a restore that goes wrong leaves what you had in place.
+                </li>
+              </ul>
+            </section>
 
-        {/* ── Take a backup ── */}
-        <section className="kd-block" aria-labelledby={`${headingId}-export`}>
-          <h3 className="kd-subheading" id={`${headingId}-export`}>
-            Take a backup
-          </h3>
-          <p className="kd-lede">
-            One file with every subject, your progress, your study history, your settings, your custom
-            pictures, and every image whose data is on this device. It is written straight to this device.
-          </p>
-          <div className="kd-actions">
-            <button
-              type="button"
-              className="kd-button kd-button--primary"
-              onClick={() => void handleCreateBackup()}
-              disabled={exporting}
-              aria-busy={exporting || undefined}
-            >
-              {exporting ? 'Making the backup…' : 'Download device backup'}
-            </button>
-          </div>
-          <p className="kd-status" data-kd-surface="export-status" role="status" aria-live="polite">
-            {exportMessage}
-          </p>
-          {exportFailure === null ? null : (
-            <p className="kd-problem" data-kd-surface="export-problem" role="alert">
-              <span className="kd-marker" aria-hidden="true">
-                !
-              </span>
-              {exportFailure}
-            </p>
-          )}
-        </section>
-
-        {/* ── Restore a backup ── */}
-        <section className="kd-block" aria-labelledby={`${headingId}-restore`}>
-          <h3 className="kd-subheading" id={`${headingId}-restore`}>
-            Restore a backup
-          </h3>
-          <p className="kd-lede">
-            Choose a backup file and read what is in it before anything changes. Restoring makes the file the
-            copy this device uses.
-          </p>
-          <div className="kd-actions">
-            <button
-              type="button"
-              ref={inspectButtonRef}
-              className="kd-button kd-button--primary"
-              onClick={openFilePicker}
-              disabled={importing}
-            >
-              Inspect a backup file
-            </button>
-            {preview === null ? null : (
-              <button type="button" className="kd-button" onClick={openFilePicker} disabled={importing}>
-                Choose a different backup file
-              </button>
-            )}
-            {/*
-              The real file input. It is `hidden` rather than `display: none`-ed by
-              a class for the same reason the Welcome screen's own pickers are: the
-              control the learner presses is a real button, so the input needs no
-              accessible presence of its own, and a test can still set files on it.
-            */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".kdbak,application/zip,application/x-zip-compressed"
-              hidden
-              onChange={(event) => handleFileChosen(event)}
-            />
-          </div>
-          <p className="kd-status" data-kd-surface="inspection-status" role="status" aria-live="polite">
-            {inspectionMessage}
-          </p>
-          {inspectionFailure === null ? null : (
-            <div className="kd-problem-block" data-kd-surface="inspection-problem" role="alert">
-              <p className="kd-problem">
-                <span className="kd-marker" aria-hidden="true">
-                  !
-                </span>
-                This file cannot be used. Nothing on this device was changed.
-              </p>
+            {/* ── Take a backup ── */}
+            <section className="kd-block" aria-labelledby={`${headingId}-export`}>
+              <h3 className="kd-subheading" id={`${headingId}-export`}>
+                Take a backup
+              </h3>
               <p className="kd-lede">
-                It was reported as <span className="kd-mono">{inspectionFailure.code}</span>. A backup has to
-                be a file this version of Knowledge Dungeon wrote, and this one is not one.
+                One file with every subject, your progress, your study history, your settings, your custom
+                pictures, and every image whose data is on this device. It is written straight to this device.
               </p>
-            </div>
-          )}
+              <div className="kd-actions">
+                <button
+                  type="button"
+                  className="kd-button kd-button--primary"
+                  onClick={() => void handleCreateBackup()}
+                  disabled={exporting}
+                  aria-busy={exporting || undefined}
+                >
+                  {exporting ? 'Making the backup…' : 'Download device backup'}
+                </button>
+              </div>
+              <p className="kd-status" data-kd-surface="export-status" role="status" aria-live="polite">
+                {exportMessage}
+              </p>
+              {exportFailure === null ? null : (
+                <p className="kd-problem" data-kd-surface="export-problem" role="alert">
+                  <span className="kd-marker" aria-hidden="true">
+                    !
+                  </span>
+                  {exportFailure}
+                </p>
+              )}
+            </section>
 
-          <ImportPreview preview={preview} fileName={fileName} />
+            {/* ── Restore a backup ── */}
+            <section className="kd-block" aria-labelledby={`${headingId}-restore`}>
+              <h3 className="kd-subheading" id={`${headingId}-restore`}>
+                Restore a backup
+              </h3>
+              <p className="kd-lede">
+                Choose a backup file and read what is in it before anything changes. Restoring makes the file the
+                copy this device uses.
+              </p>
+              <div className="kd-actions">
+                <button
+                  type="button"
+                  ref={inspectButtonRef}
+                  className="kd-button kd-button--primary"
+                  onClick={openFilePicker}
+                  disabled={importing}
+                >
+                  Inspect a backup file
+                </button>
+                {preview === null ? null : (
+                  <button type="button" className="kd-button" onClick={openFilePicker} disabled={importing}>
+                    Choose a different backup file
+                  </button>
+                )}
+                {/*
+                  The real file input. It is `hidden` rather than `display: none`-ed by
+                  a class for the same reason the Welcome screen's own pickers are: the
+                  control the learner presses is a real button, so the input needs no
+                  accessible presence of its own, and a test can still set files on it.
+                */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".kdbak,application/zip,application/x-zip-compressed"
+                  hidden
+                  onChange={(event) => handleFileChosen(event)}
+                />
+              </div>
+              <p className="kd-status" data-kd-surface="inspection-status" role="status" aria-live="polite">
+                {inspectionMessage}
+              </p>
+              {inspectionFailure === null ? null : (
+                <div className="kd-problem-block" data-kd-surface="inspection-problem" role="alert">
+                  <p className="kd-problem">
+                    <span className="kd-marker" aria-hidden="true">
+                      !
+                    </span>
+                    This file cannot be used. Nothing on this device was changed.
+                  </p>
+                  <p className="kd-lede">
+                    It was reported as <span className="kd-mono">{inspectionFailure.code}</span>. A backup has to
+                    be a file this version of Knowledge Dungeon wrote, and this one is not one.
+                  </p>
+                </div>
+              )}
 
-          <RecoveryStatus outcome={outcome} busy={importing} onDismiss={handleDismissOutcome} />
-        </section>
+              <ImportPreview preview={preview} fileName={fileName} />
+
+              <RecoveryStatus
+                outcome={outcome}
+                busy={importing}
+                onDismiss={handleDismissOutcome}
+                pendingHeading="Restoring"
+                pendingLine="Writing the backup into a new copy on this device. This can take a moment."
+              />
+            </section>
+          </>
+        ) : null}
       </div>
 
-      {/* ── The explicit destructive confirmation ── */}
-      {dialogOpen ? (
-        <div className="kd-dialog-layer">
-          <div
-            className="kd-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={dialogTitleId}
-            aria-describedby={dialogBodyId}
-            aria-busy={importing || undefined}
-            tabIndex={-1}
-            ref={dialogRef}
-            data-kd-surface="restore-confirmation"
-          >
-            <h3 className="kd-dialog-title" id={dialogTitleId}>
-              Replace the data on this device?
-            </h3>
-            <div id={dialogBodyId}>
-              {reading ? (
-                <p className="kd-dialog-line">Reading the file you chose. Nothing has changed yet.</p>
-              ) : (
-                <ul className="kd-bullets">
-                  <li>
-                    Restoring this file makes it the copy this device uses. Everything the app has on this
-                    device is replaced by what is in the file
-                    {subjectCount === 0
-                      ? ', and the file holds no subjects.'
-                      : `, which carries ${subjectCount} ${subjectCount === 1 ? 'subject' : 'subjects'}.`}
-                  </li>
-                  <li>
-                    The copy that is here now is kept, not deleted, so you can go back to it if this is the
-                    wrong file.
-                  </li>
-                  {externalOnlyCount === 0 ? null : (
-                    <li>
-                      {externalOnlyCount} {externalOnlyCount === 1 ? 'image has' : 'images have'} no picture
-                      data in the file and will come back without {externalOnlyCount === 1 ? 'it' : 'them'}.
-                      The full reason is in the list on the Data tab.
-                    </li>
-                  )}
-                </ul>
-              )}
-            </div>
-            {importing ? (
-              <p className="kd-dialog-line" role="status" aria-live="polite">
-                Restoring. The window stays open until it has finished.
-              </p>
-            ) : null}
-            <div className="kd-actions">
-              <button
-                type="button"
-                className="kd-button"
-                onClick={closeDialog}
-                disabled={importing}
-              >
-                Keep the data that is here
-              </button>
-              <button
-                type="button"
-                className="kd-button kd-button--danger"
-                onClick={() => void handleConfirmRestore()}
-                disabled={chosenBytes === null || reading || importing}
-                aria-busy={importing || undefined}
-              >
-                Replace device data with this backup
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <div
+        className="kd-panel"
+        role="tabpanel"
+        id={panelIds.subject}
+        aria-labelledby={tabIds.subject}
+        tabIndex={0}
+        hidden={activeTab !== 'subject'}
+      >
+        {activeTab === 'subject' ? <SubjectBackupTab onSubjectImported={onSubjectImported} /> : null}
+      </div>
+
+      {/* ── The explicit destructive confirmation, for the full-device tab ── */}
+      <ConfirmDialog
+        open={dialogOpen}
+        surface="restore-confirmation"
+        title="Replace the data on this device?"
+        busy={importing}
+        busyMessage="Restoring. The window stays open until it has finished."
+        dismissLabel="Keep the data that is here"
+        confirmLabel="Replace device data with this backup"
+        confirmDisabled={chosenBytes === null || reading}
+        onDismiss={closeDialog}
+        onConfirm={() => void handleConfirmRestore()}
+      >
+        {reading ? (
+          <p className="kd-dialog-line">Reading the file you chose. Nothing has changed yet.</p>
+        ) : (
+          <ul className="kd-bullets">
+            <li>
+              Restoring this file makes it the copy this device uses. Everything the app has on this device is
+              replaced by what is in the file
+              {subjectCount === 0
+                ? ', and the file holds no subjects.'
+                : `, which carries ${subjectCount} ${subjectCount === 1 ? 'subject' : 'subjects'}.`}
+            </li>
+            <li>
+              The copy that is here now is kept, not deleted, so you can go back to it if this is the wrong
+              file.
+            </li>
+            {externalOnlyCount === 0 ? null : (
+              <li>
+                {externalOnlyCount} {externalOnlyCount === 1 ? 'image has' : 'images have'} no picture data in
+                the file and will come back without {externalOnlyCount === 1 ? 'it' : 'them'}. The full reason
+                is in the list on the Data tab.
+              </li>
+            )}
+          </ul>
+        )}
+      </ConfirmDialog>
     </section>
   );
 }

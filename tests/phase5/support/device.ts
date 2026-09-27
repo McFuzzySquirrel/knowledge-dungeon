@@ -768,9 +768,37 @@ export async function buildVerifierDevice(
   await repository.activateGeneration(labels.generationId);
 
   const report = await repository.validateGeneration(labels.generationId);
-  if (!report.ok) {
+  // The one record this device holds that storage-v2's own validator **refuses**:
+  // `ATTACHMENT.hashDisagrees` has bytes that are not the bytes its declared
+  // `contentHash` names, and `validateAttachmentBlobRecord` recomputes the digest
+  // and reports `content-hash-mismatch`. That is the whole point of the record - the
+  // Phase 5 product has to be robust to a device holding a corrupt attachment and
+  // must refuse to carry the bytes - so it is asserted here **by name and count**
+  // rather than allowed to pass unnoticed inside an `ok` assertion.
+  //
+  // `stageGeneration` and `activateGeneration` do not validate: validation is an
+  // explicit, separate step a caller chooses. So a generation like this is reachable
+  // the way a store corrupted on disk is reachable - it was written by something that
+  // did not check, which is exactly the state the exporter has to survive.
+  const blocking = report.problems.filter((problem) => problem.severity === 'error');
+  const unexpected = blocking.filter(
+    (problem) => !(problem.code === 'content-hash-mismatch' && problem.scope === 'attachment-blob' && problem.count === 1),
+  );
+  if (unexpected.length > 0) {
     throw new Error(
-      `verifier device fixture does not validate: ${JSON.stringify(report.problems.slice(0, 6))}`,
+      `verifier device fixture has problems beyond its one deliberate corruption: ${JSON.stringify(
+        unexpected.slice(0, 6),
+      )}`,
+    );
+  }
+  // An `empty` device has no attachments at all, so it has nothing to corrupt and
+  // nothing to refuse. The absence of the deliberate problem is therefore correct
+  // there and its presence is correct here.
+  if (blocking.length !== (empty ? 0 : 1)) {
+    throw new Error(
+      `verifier device fixture should hold exactly one deliberate corruption, found ${JSON.stringify(
+        blocking,
+      )}`,
     );
   }
 

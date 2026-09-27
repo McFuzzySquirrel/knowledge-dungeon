@@ -11,6 +11,39 @@
  * Web Crypto, and it must be a pure function of its input. A test asserts the
  * two agree whenever `globalThis.crypto.subtle.digest` is available and skips
  * cleanly when it is not.
+ *
+ * ## RAIL CHANGE: binary values are in the canonical form
+ *
+ * An `ArrayBuffer` used to fall through to the "any other class instance" branch
+ * and serialize as `{}`, so `checksumValue` of an `AttachmentBlobRecordValue` - whose
+ * `bytes` field is typed `ArrayBuffer` - was **independent of its own bytes**. Every
+ * per-record checksum was blind to attachment content, and because the generation
+ * roll-up is a roll-up of per-record checksums, the blind spot reached every
+ * generation checksum, the `checksumMismatches` report, and the subject import's
+ * plan-section-7.1 step-3 comparison. A blob corrupt on the device was therefore
+ * carried forward and activated by an import, and no checksum in the system could
+ * ever report it.
+ *
+ * Bytes now serialize to a **fixed-size digest form** rather than an expanded byte
+ * array, for two reasons. A byte array is O(n) in the serialized string, and a
+ * record checksum is hashed again for the store roll-up, so a multi-megabyte
+ * attachment would be serialized more than once per write. And a digest form is the
+ * same *shape* for an `ArrayBuffer` and for a `Uint8Array` over the same bytes, so
+ * one value cannot have two checksums depending on which container a caller happened
+ * to hand over - the ambiguity this module exists to remove.
+ *
+ * The format is `{"__bytes__":{"length":<byte count>,"sha256":"<lowercase hex>"}}`:
+ * keys ascending, no whitespace, digest form fixed-width. `length` is carried
+ * alongside the digest so a truncated payload that happened to share a digest is
+ * still distinguishable, and because a SHA-256 of a *stream* of bytes is
+ * length-sensitive anyway.
+ *
+ * No generation format version is bumped for this. The value shape of every record
+ * is unchanged - only a derived checksum differs - and no storage-v2 generation has
+ * shipped: this build is pre-release, the legacy reader still reads `localStorage`,
+ * and the whole of storage-v2 is a rebuild-phase foundation. A stored checksum
+ * written by a build with the blind spot is treated as derived state to be
+ * rewritten, not as learner data to be migrated.
  */
 
 // ── Canonical JSON ────────────────────────────────────────────────────────
@@ -22,6 +55,52 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Realm-safe detection of "this is a buffer or a view over one".
+ *
+ * `instanceof ArrayBuffer` is false for a buffer created in another realm - a
+ * `postMessage` transfer, an `iframe`, a worker - and storage-v2 reads values that
+ * have crossed exactly those boundaries. `Object.prototype.toString` consults the
+ * *internal* `[[Class]]` slot, so it answers correctly across realms, and
+ * `ArrayBuffer.isView` is defined to be cross-realm. A `SharedArrayBuffer` is
+ * deliberately not matched: it is not storable in IndexedDB and not a
+ * record field type, so nothing legitimate depends on how it serializes.
+ */
+function isBinaryBuffer(value: unknown): boolean {
+  if (ArrayBuffer.isView(value)) return true;
+  if (value instanceof ArrayBuffer) return true;
+  return Object.prototype.toString.call(value) === '[object ArrayBuffer]';
+}
+
+/**
+ * A `Uint8Array` over the value's bytes, without copying them.
+ *
+ * The view's own `byteOffset` is honoured, so a `Buffer` or a subarray hashes the
+ * bytes it actually covers rather than the whole allocation behind it.
+ */
+function bytesOf(value: object): Uint8Array {
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView;
+    return new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength);
+  }
+  // The cross-realm case: a buffer that is not an `ArrayBuffer` instance here.
+  return new Uint8Array(value as ArrayBuffer);
+}
+
+/**
+ * The canonical form of a run of bytes.
+ *
+ * Fixed width and content-derived, so a checksum of a record that holds a
+ * multi-megabyte attachment costs a hash rather than a multi-megabyte string. See
+ * the "RAIL CHANGE" note in the module header for why bytes are in the canonical
+ * form at all.
+ */
+function serializeBytes(value: object): string {
+  const bytes = bytesOf(value);
+  return `{"__bytes__":{"length":${bytes.length},"sha256":"${sha256Hex(bytes)}"}}`;
+}
+
+/**
  * Serialize a value to canonical JSON.
  *
  * - object keys are emitted in ascending code-unit order;
@@ -29,6 +108,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * - `undefined` object properties are dropped, matching `JSON.stringify`;
  * - `undefined` array elements become `null`, also matching `JSON.stringify`;
  * - `NaN` and `Infinity` become `null`, also matching `JSON.stringify`;
+ * - an `ArrayBuffer` or a view over one becomes the fixed-width
+ *   `{"__bytes__":{"length":N,"sha256":"…"}}` digest form, so binary content is
+ *   part of the canonical form rather than an empty object. See the "RAIL CHANGE"
+ *   note in the module header;
  * - non-finite-safe types (`bigint`, `symbol`, `function`) are rejected rather
  *   than silently coerced, so a checksum can never be ambiguous;
  * - `Map` and `Set` are rejected for the same reason: their contents are
@@ -77,8 +160,8 @@ function serializeValue(value: unknown, seen: Set<object>): string {
     if (object instanceof Date) {
       return JSON.stringify(object.toISOString());
     }
-    if (object instanceof Uint8Array) {
-      return JSON.stringify(Array.from(object));
+    if (isBinaryBuffer(object)) {
+      return serializeBytes(object);
     }
     if (
       object instanceof Map ||

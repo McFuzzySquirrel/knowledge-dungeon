@@ -14,14 +14,17 @@
  *    products it gates, and its documented rollback is a build-time flag rather
  *    than a source change, because the plan's Phase 5 rollback is "Hide the tab
  *    and disable import. The format is additive."
- * 3. **The default build does not reach the product.** The product module is not
- *    in the first-party import graph reachable from `src/main.tsx`, so a build
- *    with the flag off cannot open an archive, write one, or bundle the ZIP codec
- *    because of it.
+ * 3. **The default build does not reach either product eagerly.** Neither product
+ *    module is in the first-party import graph reachable from `src/main.tsx`
+ *    through a `static` or `require` edge, so a build with the flag off cannot
+ *    open an archive, write one, or bundle the ZIP codec because of them.
  *
  * The third property is asserted against the real module graph, not against a
  * list of file names, so a product module imported from anywhere in the
- * application would be caught whichever file did the importing.
+ * application would be caught whichever file did the importing. Phase 6's
+ * subject product **is** in that graph, through one lazy `import()` from
+ * `src/ui/data/SubjectBackupTab.tsx`, and the gate pins that importer rather than
+ * asserting an absence that stopped being true when the tab landed.
  *
  * The registered half is the product's own conditional: it must be reachable from
  * the application graph, and only then.
@@ -37,6 +40,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
 import { blankComments, walk } from './support/importGraph';
+import { classifySpecifierEdges } from './support/importGraph';
 import {
   ARCHIVE_VALIDATION_MODULE,
   FULL_DEVICE_BACKUP_MODULE,
@@ -119,9 +123,14 @@ function eagerImporters(paths: readonly string[], targetPath: string): string[] 
 const PRODUCT_MODULE_PATHS = [
   'src/services/persistence/products/fullDeviceBackup.ts',
   'src/services/persistence/products/archiveValidation.ts',
+  'src/services/persistence/products/subjectBackup.ts',
+  'src/services/persistence/products/idRemapping.ts',
   'src/ui/data/DataCenter.tsx',
   'src/ui/data/ImportPreview.tsx',
   'src/ui/data/RecoveryStatus.tsx',
+  'src/ui/data/ConfirmDialog.tsx',
+  'src/ui/data/SubjectBackupTab.tsx',
+  'src/ui/data/productAccess.ts',
 ] as const;
 
 /**
@@ -261,8 +270,14 @@ describe('Phase 5 gate 8: the product exists, and the default build cannot reach
     // never checked: the product really does reach the codec, statically, because
     // that dependency is the product's own and costs a default build nothing while
     // the product itself is lazy.
+    //
+    // The list below is the *graph's* product tree, so it is exactly the modules a
+    // screen currently reaches lazily. Phase 6's `subjectBackup.ts` joined it when
+    // the Data Center's subject-backup tab landed - it reaches the codec statically
+    // for the same reason as its siblings, and `idRemapping.ts` reaches it not at
+    // all - so the list grew by one and the "not eagerly" claim above is unchanged.
     const productPaths = paths.filter((path) => path.startsWith(PRODUCTS_TREE));
-    expect(productPaths.length).toBeGreaterThanOrEqual(2);
+    expect(productPaths.length).toBeGreaterThanOrEqual(3);
     const codecImporters = productPaths.filter(
       (path) =>
         edgeKindsTo(readFileSync(join(process.cwd(), path), 'utf8'), join(process.cwd(), path), 'src/services/persistence/v2/archive.ts')
@@ -271,7 +286,90 @@ describe('Phase 5 gate 8: the product exists, and the default build cannot reach
     expect(codecImporters.sort()).toEqual([
       'src/services/persistence/products/archiveValidation.ts',
       'src/services/persistence/products/fullDeviceBackup.ts',
+      'src/services/persistence/products/subjectBackup.ts',
     ]);
+
+    // The Phase 6 product modules exist, reach the codec statically like their
+    // siblings, and are now reachable from the application graph - but **only**
+    // through a lazy `import()` of a literal, from the screens that drive them.
+    //
+    // RAIL CHANGE, recorded deliberately, and weaker by exactly the step Phase 6
+    // took. This used to assert that neither module appeared in the walk at all,
+    // with the comment that the Data Center's subject-backup tab "has not landed".
+    // That assertion was true for one reason: no screen imported them. The tab has
+    // landed, so the absence assertion became false - correctly - the moment
+    // `SubjectBackupTab.tsx` named the product, and deleting it would have left a
+    // file on disk with no gate at all. What replaced it is the property the
+    // absence assertion was a proxy for, stated directly and still strictly:
+    //
+    // - no module outside the product tree reaches either module through a
+    //   `static` or `require` edge, so a build with the flag off cannot put the
+    //   subject-backup path or the remapper in its entry chunk; and
+    // - the two modules outside the product tree that name them are named here, and
+    //   `tests/data/subjectProductBoundary.test.ts` proves every one of those edges
+    //   is a `dynamic` one, so nothing static, side-effecting, or `require`-ing
+    //   reaches the product from a screen.
+    const subjectProductEager = [
+      ...eagerImporters(paths, 'src/services/persistence/products/subjectBackup.ts'),
+      ...eagerImporters(paths, 'src/services/persistence/products/idRemapping.ts'),
+    ];
+    expect(subjectProductEager).toEqual([]);
+
+    for (const module of [
+      'src/services/persistence/products/subjectBackup.ts',
+      'src/services/persistence/products/idRemapping.ts',
+    ]) {
+      expect(existsSync(join(process.cwd(), module)), module).toBe(true);
+      // Both are now in the application graph, which is the *good* outcome and the
+      // one the surrounding comments predicted.
+      expect(paths, module).toContain(module);
+    }
+    // ...and the only way in is a `dynamic` edge, from the two named screens. The
+    // classification is the compiler-based one, not this file's regex `edgeKindsTo`:
+    // a type-position `import('...')` is erased and must not be counted as a caller,
+    // and the two spellings of it - `typeof import('...')` and `import('...').Thing` -
+    // are indistinguishable to a pattern.
+    const valueCallers: string[] = [];
+    for (const module of [
+      'src/services/persistence/products/subjectBackup.ts',
+      'src/services/persistence/products/idRemapping.ts',
+    ]) {
+      for (const path of paths.filter((path) => !path.startsWith(PRODUCTS_TREE))) {
+        for (const edge of classifySpecifierEdges(readFileSync(join(process.cwd(), path), 'utf8'), path, module)) {
+          if (edge.kind === 'dynamic') valueCallers.push(`${path} -> ${module}`);
+        }
+      }
+    }
+    // A pinned positive half, so "no eager edge" is not also what a classifier that
+    // matched nothing would report.
+    expect([...new Set(valueCallers)].sort()).toEqual([
+      'src/ui/data/SubjectBackupTab.tsx -> src/services/persistence/products/subjectBackup.ts',
+      'src/ui/data/productAccess.ts -> src/services/persistence/products/subjectBackup.ts',
+    ]);
+    // `subjectBackup.ts` reaches the codec statically, exactly like its siblings.
+    expect(
+      edgeKindsTo(
+        readFileSync(join(process.cwd(), 'src/services/persistence/products/subjectBackup.ts'), 'utf8'),
+        join(process.cwd(), 'src/services/persistence/products/subjectBackup.ts'),
+        'src/services/persistence/v2/archive.ts',
+      ),
+    ).toEqual(['static']);
+    // `idRemapping.ts` reaches it **not at all**, and that is the stronger property:
+    // the remapper is a pure function of its records, so it must not be able to open,
+    // write, or inflate an archive even in principle. A gate that only checked
+    // "not eagerly" would let a future edit reach the codec dynamically and still
+    // pass.
+    const remapperSource = readFileSync(
+      join(process.cwd(), 'src/services/persistence/products/idRemapping.ts'),
+      'utf8',
+    );
+    expect(
+      edgeKindsTo(
+        remapperSource,
+        join(process.cwd(), 'src/services/persistence/products/idRemapping.ts'),
+        'src/services/persistence/v2/archive.ts',
+      ),
+    ).toEqual([]);
 
     // Everything else in the storage-v2 tree *is* reachable, because Phase 4
     // routed the application through it. Stating that here is what makes the

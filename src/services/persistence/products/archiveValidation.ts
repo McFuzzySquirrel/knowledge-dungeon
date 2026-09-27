@@ -68,8 +68,7 @@ import {
   readArchiveEntryNames,
   UNREPRESENTABLE_MEMBER_NAME,
   type ArchiveFile,
-} from '@/services/persistence/v2/archive';
-import { canonicalJsonStringify, sha256Hex } from '@/services/persistence/v2/checksum';
+} from '@/services/persistence/v2/archive';import { canonicalJsonStringify, sha256Hex } from '@/services/persistence/v2/checksum';
 import {
   CANONICAL_SUBJECT_SCHEMA_VERSION,
   STORAGE_V2_GENERATION_FORMAT_VERSION,
@@ -360,6 +359,55 @@ function validationFailure(
   });
 }
 
+// ── The injected clock, reduced to a ZIP timestamp ─────────────────────────
+
+/** The year a DOS timestamp starts at. */
+const ZIP_EPOCH_YEAR = 1980;
+
+/** The last year a DOS timestamp can represent. */
+const ZIP_MAX_YEAR = 2107;
+
+/**
+ * The `ArchiveFile.mtime` a product should stamp for a caller-supplied clock.
+ *
+ * ZIP encoding is delegated to `fflate`, and fflate stamps each entry from
+ * `Date.now()` unless an `mtime` is supplied - with two-second resolution. A
+ * product that wants a byte-deterministic archive must therefore derive the member
+ * time from the clock its caller injected, and the derivation has to be declared
+ * once: two products sharing it is the point, and a second copy is how two archives
+ * stop agreeing about what a clamped out-of-range clock means.
+ *
+ * It is **not** a clock, and it lives here rather than in the codec module for a
+ * hard reason rather than a stylistic one. `tests/migrations/qaExitCriteriaReproduction.test.ts`
+ * refuses `new Date(...)` anywhere in `v2/archive.ts` - along with `Date.now`,
+ * `Math.random`, and `fetch` - because the codec's contract is that it has no clock
+ * and no ambient state. Constructing a `Date` from the caller's ISO string is a
+ * parameter conversion, not a clock read, but it is still a `new Date(...)` in that
+ * file, and the rail is right to object: the strongest form of "the codec cannot
+ * introduce a clock" is one a source scan can verify. So the conversion belongs to
+ * the product side, where the clock is a parameter, and the codec keeps its
+ * guarantee intact.
+ *
+ * A value outside the range a DOS timestamp can represent is clamped rather than
+ * allowed to fail an export, because fflate would raise on it. The clamp is
+ * disclosed because it is the one case where two different `now` values can produce
+ * the same `mtime` - anything before 1980, or anything after 2107 - and both are
+ * then equally deterministic, which is the property that matters. An unparseable
+ * value becomes the Unix epoch and is clamped forward, so a caller with a bad clock
+ * gets a deterministic archive rather than a thrown export.
+ */
+export function archiveMemberTimeFrom(iso: string): Date {
+  const parsed = new Date(iso);
+  const valid = Number.isFinite(parsed.getTime()) ? parsed : new Date(0);
+  if (valid.getUTCFullYear() < ZIP_EPOCH_YEAR) {
+    return new Date(Date.UTC(ZIP_EPOCH_YEAR, 0, 1, 0, 0, 0));
+  }
+  if (valid.getUTCFullYear() > ZIP_MAX_YEAR) {
+    return new Date(Date.UTC(ZIP_MAX_YEAR, 0, 1, 0, 0, 0));
+  }
+  return valid;
+}
+
 // ── Reading and validating an archive ─────────────────────────────────────
 
 /**
@@ -458,28 +506,90 @@ export function isPrototypeMemberName(name: string): boolean {
 }
 
 function readMembers(bytes: Uint8Array): { files: readonly ArchiveFile[]; ignored: readonly string[] } {
+  const { files, ignoredDirectoryEntries } = readAndVetArchiveMembers(bytes, (name) =>
+    // A directory entry under one of the plan's three prefixes is metadata. It is
+    // never a member, so it can never be counted, declared, or treated as an
+    // unexpected extra member.
+    FULL_DEVICE_MEMBER_PREFIXES.includes(name.slice(0, -1) as FullDeviceMemberPrefix),
+  );
+  return { files, ignored: ignoredDirectoryEntries };
+}
+
+/**
+ * Every archive member a data product has read and vetted, and what it ignored.
+ *
+ * `ignoredDirectoryEntries` are the directory entries the caller's predicate
+ * accepted as metadata, in the order the codec enumerated them.
+ */
+export interface VettedArchiveMembers {
+  readonly files: readonly ArchiveFile[];
+  readonly ignoredDirectoryEntries: readonly string[];
+  readonly entryNames: readonly string[];
+}
+
+/**
+ * Read an archive's members and apply every check that is **layout independent**.
+ *
+ * This is the shared structural entry point for the data products, and it exists
+ * because those checks are properties of a ZIP archive, not of any one product's
+ * member list:
+ *
+ * 1. the input is bytes;
+ * 2. the archive is readable, with `unzip-failed` classified into the shape that
+ *    actually applies;
+ * 3. it is not empty;
+ * 4. no member the archive's own central directory lists was dropped in
+ *    inflation (which is how a `__proto__` member disappears silently);
+ * 5. no entry *declares* itself a directory, a symlink, or another special file;
+ * 6. no member name is unsafe or is an `Object.prototype` key, and no member name
+ *    is repeated.
+ *
+ * What it deliberately does **not** do is judge whether a member belongs to the
+ * layout. That is a product's decision, made afterwards against its own closed
+ * member set, and it is the honest place for it: "the layout is closed" is a
+ * statement about the *declared* member set.
+ *
+ * `acceptDirectoryEntry` is the one product-supplied predicate, on the raw member
+ * name, and an accepted directory entry is recorded rather than dropped. It is
+ * exactly `readArchive`'s own option, forwarded unchanged.
+ *
+ * ## Why this is shared rather than copied
+ *
+ * The `.kdsubject` product reads a different layout - five fixed member names and
+ * one content-addressed prefix, against the `.kdbak`'s two fixed names and three
+ * prefixes - but the *safety* of reading a hostile ZIP is the same problem. Two
+ * copies of `assertNoMemberWasDropped` is two copies to forget to update, and the
+ * failure mode of the forgotten one is silent data loss. So the sequence above
+ * lives here, once, and each product supplies only its layout.
+ */
+export function readAndVetArchiveMembers(
+  bytes: Uint8Array,
+  acceptDirectoryEntry: (name: string) => boolean,
+): VettedArchiveMembers {
+  if (!(bytes instanceof Uint8Array)) {
+    throw new StorageV2Error('ARCHIVE_MALFORMED', { reason: 'not-bytes' });
+  }
   const ignored: string[] = [];
+  let files: readonly ArchiveFile[];
   try {
-    const files = readArchive(bytes, {
+    files = readArchive(bytes, {
       acceptDirectoryEntry: (name) => {
-        // A directory entry under one of the plan's three prefixes is metadata.
-        // It is recorded as ignored and never becomes a member, so it can never be
-        // counted, declared, or treated as an unexpected extra member.
-        if (!FULL_DEVICE_MEMBER_PREFIXES.includes(name.slice(0, -1) as FullDeviceMemberPrefix)) {
-          return false;
-        }
+        if (!acceptDirectoryEntry(name)) return false;
         ignored.push(name);
         return true;
       },
     });
-    return { files, ignored };
   } catch (error) {
     // The codec reports one outcome - "these bytes are not a readable ZIP" - for
-    // three different problems, and each of them deserves its own reason:
-    // a file that is not a ZIP at all, a file that stops mid-member, and a file
-    // whose members are all present but whose index is not. The classifier reads
-    // fixed header fields and inflates nothing; see `classifyUnreadableArchive`.
-    if (error instanceof StorageV2Error && error.code === 'ARCHIVE_MALFORMED' && error.details.reason === 'unzip-failed') {
+    // three different problems, and each of them deserves its own reason: a file
+    // that is not a ZIP at all, a file that stops mid-member, and a file whose
+    // members are all present but whose index is not. The classifier reads fixed
+    // header fields and inflates nothing; see `classifyUnreadableArchive`.
+    if (
+      error instanceof StorageV2Error &&
+      error.code === 'ARCHIVE_MALFORMED' &&
+      error.details.reason === 'unzip-failed'
+    ) {
       const shape = classifyUnreadableArchive(bytes);
       if (shape !== 'unreadable-with-end-of-central-directory') {
         throw new StorageV2Error('ARCHIVE_MALFORMED', { reason: shape });
@@ -487,6 +597,17 @@ function readMembers(bytes: Uint8Array): { files: readonly ArchiveFile[]; ignore
     }
     throw error;
   }
+  if (files.length === 0) {
+    throw new StorageV2Error('ARCHIVE_MALFORMED', { reason: 'no-members' });
+  }
+  // Both structural checks run against the archive's *own* account of its
+  // contents, not only against what came back, so an entry the codec could not
+  // represent is caught here rather than being missing without an error.
+  const entryNames = readArchiveEntryNames(bytes);
+  assertNoMemberWasDropped(entryNames, new Set(files.map((file) => file.path)));
+  assertEntriesAreData(bytes, entryNames);
+  assertMemberNamesAreSafe(files);
+  return { files, ignoredDirectoryEntries: ignored, entryNames };
 }
 
 /**
@@ -1089,17 +1210,12 @@ export function readFullDeviceArchiveContents(bytes: Uint8Array): FullDeviceArch
   }
 
   // ── 1. Structure ──
+  // Every layout-independent check - readability, emptiness, no dropped member, no
+  // entry that declares itself something other than data, no unsafe or duplicated
+  // member name - is the shared sequence, so a second product cannot forget one of
+  // them. `readMembers` supplies only the `.kdbak`-specific directory-entry
+  // predicate.
   const { files, ignored } = readMembers(bytes);
-  if (files.length === 0) {
-    throw new StorageV2Error('ARCHIVE_MALFORMED', { reason: 'no-members' });
-  }
-  const entryNames = readArchiveEntryNames(bytes);
-  // Both structural checks run against the archive's *own* account of its
-  // contents, not only against what came back, so an entry the codec could not
-  // represent is caught here rather than being missing without an error.
-  assertNoMemberWasDropped(entryNames, new Set(files.map((file) => file.path)));
-  assertEntriesAreData(bytes, entryNames);
-  assertMemberNamesAreSafe(files);
 
   const bytesByPath = new Map<string, Uint8Array>();
   for (const file of files) bytesByPath.set(file.path, file.bytes);

@@ -1391,12 +1391,23 @@ describe('Phase 5 Data Center: the lazy boundary', () => {
     // permitted to say otherwise. A screen that reached `repositorySelection`
     // itself would have to be an entry on that list; reaching the product's
     // published accessor means no UI file is on it at all.
+    //
+    // The file list is pinned rather than derived from "whatever is there",
+    // because a closed list is what makes the assertion mean something: a new file
+    // under `src/ui/data/` that *does* name storage-v2 has to be added here
+    // deliberately, and adding it deliberately is the review step. Phase 6 added
+    // three files - the shared product boundary, the shared dialog, and the subject
+    // tab - and all three keep the invariant, so the list grew and the offender
+    // list stayed empty.
     const files = firstPartyModulesUnder('src/ui/data');
     expect(files).toEqual([
+      'src/ui/data/ConfirmDialog.tsx',
       'src/ui/data/DataCenter.tsx',
       'src/ui/data/ImportPreview.tsx',
       'src/ui/data/RecoveryStatus.tsx',
+      'src/ui/data/SubjectBackupTab.tsx',
       'src/ui/data/dataCenter.css',
+      'src/ui/data/productAccess.ts',
     ]);
     const offenders: string[] = [];
     for (const file of files) {

@@ -31,6 +31,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import ts from 'typescript';
 
 export const REPO_ROOT = process.cwd();
 export const SRC_ROOT = join(REPO_ROOT, 'src');
@@ -288,6 +289,20 @@ function resolveSpecifier(fromFile: string, specifier: string): Resolution {
   return { kind: 'unresolved' };
 }
 
+/**
+ * The repo-relative path a specifier names, or `null` when it is external or
+ * unresolved.
+ *
+ * Separate from {@link resolveSpecifier} so the walk keeps the richer
+ * `Resolution` (it has to report unresolved specifiers) while the edge classifier
+ * only needs the answer. Both go through the same candidate list, so the two
+ * cannot disagree about which file a specifier is.
+ */
+function resolveSpecifierFrom(fromFile: string, specifier: string): string | null {
+  const resolution = resolveSpecifier(fromFile, specifier);
+  return resolution.kind === 'first-party' ? repoPath(resolution.file) : null;
+}
+
 // ── The walk ───────────────────────────────────────────────────────────────
 
 export interface GraphModule {
@@ -369,6 +384,143 @@ export function walk(options: WalkOptions = {}): Graph {
     externalSpecifiers: [...externals].sort(),
     areas: [...areas].sort(),
   };
+}
+
+// ── Edge classification ────────────────────────────────────────────────────
+
+/**
+ * How one module reference was reached, from a real parse of the source.
+ *
+ * Five kinds, and the distinction between the last two is what every lazy-boundary
+ * claim in this suite rests on:
+ *
+ * - `static` - a binding import or an `export ... from`. The target's code is in
+ *   the graph at module-evaluation time, so it lands in the entry chunk.
+ * - `side-effect` - a bare `import '...'`. Also eager, reported separately only so a
+ *   finding names the shape.
+ * - `require` - a real binding on every bundler that honours it, and eager.
+ * - `dynamic` - `import('...')` **in a value position**. A real edge, and the only
+ *   kind a screen may have into a data product: it puts the product in a separate
+ *   chunk that a build with the flag off never fetches.
+ * - `type-only` - `import type ... from '...'`, `export type ... from '...'`, and the
+ *   `import('...')` a **type alias** uses, whether or not it is written
+ *   `typeof import(...)`. **Erased at build**: no binding, no runtime edge, no
+ *   chunk, no byte in any bundle. A screen may name a product's types as freely as
+ *   it likes, because none of that reaches a default build.
+ *
+ * ## Why the compiler and not a pattern
+ *
+ * The difference between `type P = typeof import('m')` and `const p = await
+ * import('m')` is the difference between an erased declaration and a chunk, and a
+ * regular expression cannot see it: both are the token sequence `import(` followed
+ * by a string literal. A `typeof`-based heuristic also mis-reads
+ * `type Q = import('m').Thing`, which is equally erased, and would report callers
+ * that do not exist.
+ *
+ * So this is a real parse, with the project's own TypeScript. That is not reusing an
+ * implementation of the thing being verified - the thing being verified is the
+ * *application's* import graph, and TypeScript is a compiler, not a gate - and it is
+ * strictly stronger than a pattern, because it cannot half-match. The non-vacuity
+ * control for it is `tests/data/subjectProductBoundary.test.ts`, which requires all
+ * five kinds to be produced from a synthetic source.
+ */
+export type EdgeKind = 'static' | 'side-effect' | 'dynamic' | 'require' | 'type-only';
+
+export interface Edge {
+  /** Repo-relative path of the file the edge starts in. */
+  readonly file: string;
+  /** The specifier exactly as it was written. */
+  readonly specifier: string;
+  readonly kind: EdgeKind;
+}
+
+/**
+ * Whether a source could possibly name `targetPath` at all.
+ *
+ * A parse is the expensive part of this file, and almost no module in the graph
+ * refers to a given product. This is a sound *negative* filter: a first-party
+ * specifier that resolves to a named file contains that file's stem, because
+ * Vite, TypeScript, and the resolver in this file all build the candidate list by
+ * appending an extension to the written specifier. A module whose blanked source
+ * contains none of `subjectBackup`, `products`, or the full repo-relative path
+ * therefore cannot reference it, and is skipped without a parse.
+ *
+ * The `index` case is covered by the directory check: a specifier that resolves
+ * through `<dir>/index.ts` contains the directory. The one shape neither check
+ * catches is a bare `.` or `..` specifier, and reaching a Phase 6 product module
+ * that way requires being inside the product's own directory - which the
+ * outside-the-product-tree scans exclude anyway. Both callers are asserted
+ * against this filter by the non-vacuity controls that require all five edge
+ * kinds to be produced from a synthetic source.
+ */
+function mayNameTarget(source: string, targetPath: string): boolean {
+  const cut = targetPath.lastIndexOf('/');
+  const stem = targetPath.slice(cut + 1).replace(/\.[^.]+$/, '');
+  const directory = targetPath.slice(0, cut);
+  return source.includes(stem) || source.includes(targetPath) || source.includes(directory);
+}
+
+/** Classify every module reference in `source` that resolves to `targetPath`. */
+export function classifySpecifierEdges(
+  source: string,
+  repoRelativeFile: string,
+  targetPath: string,
+): readonly Edge[] {
+  const code = blankComments(source);
+  if (!mayNameTarget(code, targetPath)) return [];
+  const fromFile = join(REPO_ROOT, repoRelativeFile);
+  const parsed = ts.createSourceFile(repoRelativeFile, code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const edges: Edge[] = [];
+  const record = (specifier: string | undefined, kind: EdgeKind): void => {
+    if (specifier === undefined) return;
+    if (resolveSpecifierFrom(fromFile, specifier) !== targetPath) return;
+    edges.push({ file: repoRelativeFile, specifier, kind });
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)) {
+      const specifier = (node.moduleSpecifier as ts.StringLiteral | undefined)?.text;
+      const clause = node.importClause;
+      record(
+        specifier,
+        clause === undefined ? 'side-effect' : clause.isTypeOnly ? 'type-only' : 'static',
+      );
+    } else if (ts.isExportDeclaration(node)) {
+      record((node.moduleSpecifier as ts.StringLiteral | undefined)?.text, node.isTypeOnly ? 'type-only' : 'static');
+    } else if (ts.isImportTypeNode(node)) {
+      // An `ImportTypeNode`'s argument is a `LiteralTypeNode` wrapping a string
+      // literal; the narrowing is a check rather than a cast, so a future change to
+      // the node's shape is a compile error here instead of an `undefined`.
+      const argument = node.argument;
+      if (ts.isLiteralTypeNode(argument) && ts.isStringLiteral(argument.literal)) {
+        record(argument.literal.text, 'type-only');
+      }
+    } else if (ts.isCallExpression(node)) {
+      if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+        record((node.arguments[0] as ts.StringLiteral | undefined)?.text, 'dynamic');
+      } else if (ts.isIdentifier(node.expression) && node.expression.text === 'require') {
+        record((node.arguments[0] as ts.StringLiteral | undefined)?.text, 'require');
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  return edges;
+}
+
+/** Repo-relative path of every module that reaches `targetPath` by a given kind. */
+export function filesReaching(
+  paths: readonly string[],
+  targetPath: string,
+  kinds: readonly EdgeKind[],
+  excludedPrefix?: string,
+): readonly string[] {
+  const found: string[] = [];
+  for (const path of paths) {
+    if (excludedPrefix !== undefined && path.startsWith(excludedPrefix)) continue;
+    const edges = classifySpecifierEdges(readFileSync(join(REPO_ROOT, path), 'utf8'), path, targetPath);
+    if (edges.some((edge) => kinds.includes(edge.kind))) found.push(path);
+  }
+  return found;
 }
 
 // ── Backup-egress rules ────────────────────────────────────────────────────
