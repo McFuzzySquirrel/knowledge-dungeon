@@ -353,9 +353,11 @@ describe('Phase 5 gate 6: the live gate over the real application graph', () => 
       // product's bytes, an anchor carrying the product's constant file name, and
       // the revoke. `local-download` is a kind this gate already *allows* - it is
       // counted here so a product that adopts it produces a visible, pinned call
-      // site rather than a silent one - so this entry is the pinned list catching
-      // up with an allowed construct, not a new exemption.
-      'src/ui/data/DataCenter.tsx:1',
+      // site rather than a silent one. Phase 6 moved it out of `DataCenter.tsx`
+      // into `src/ui/data/productAccess.ts`, so the pinned call site is a new path
+      // rather than a new construct, and the number of Data Center downloads is
+      // still **one** - a stronger statement than "one in this file".
+      'src/ui/data/productAccess.ts:1',
       'src/ui/screens/VillageScreen.tsx:1',
       'src/ui/screens/WelcomeScreen.tsx:1',
       'src/ui/utils/progressionShareExport.ts:1',
@@ -370,7 +372,7 @@ describe('Phase 5 gate 6: the live gate over the real application graph', () => 
       'src/services/spriteManifest.ts:same-origin-fetch',
       'src/ui/components/CollectionSwitcher.tsx:local-download',
       'src/ui/components/MakeItYoursTab.tsx:same-origin-fetch',
-      'src/ui/data/DataCenter.tsx:local-download',
+      'src/ui/data/productAccess.ts:local-download',
       'src/ui/screens/VillageScreen.tsx:local-download',
       'src/ui/screens/WelcomeScreen.tsx:local-download',
       'src/ui/utils/progressionShareExport.ts:local-download',
@@ -380,11 +382,11 @@ describe('Phase 5 gate 6: the live gate over the real application graph', () => 
   });
 
   it('no module in the graph can share a backup, and the data-products flag is still off by default', () => {
-    // The product is reachable now - the Data Center lazily imports it - so this
-    // assertion is no longer satisfied by the flag's absence: it is satisfied by
-    // the product and its screens containing no share, no capability probe, and
-    // no `mailto:`. The flag is still the thing that keeps the product out of the
-    // default build, and `tests/data/phase5FlagDefault.test.ts` holds that.
+    // Both products are reachable now - the Data Center lazily imports them - so
+    // this assertion is no longer satisfied by the flag's absence: it is satisfied
+    // by the products and their screens containing no share, no capability probe,
+    // and no `mailto:`. The flag is still the thing that keeps the products out of
+    // the default build, and `tests/data/phase5FlagDefault.test.ts` holds that.
     const scan = scanGraph(walk());
     const shareRules = scan.findings.filter(
       (finding) =>
@@ -394,12 +396,20 @@ describe('Phase 5 gate 6: the live gate over the real application graph', () => 
     );
     expect(shareRules, describeFindings(shareRules)).toEqual([]);
     expect(rulesIn(scan.findings, 'src/config/featureFlags.ts')).toEqual([]);
-    // ...and the Data Center itself plants nothing at all: the only construct it
-    // uses is the local download this gate allows.
-    expect(rulesIn(scan.findings, 'src/ui/data/DataCenter.tsx')).toEqual([]);
-    expect(scan.allowed.filter((entry) => entry.file === 'src/ui/data/DataCenter.tsx')).toEqual([
-      { file: 'src/ui/data/DataCenter.tsx', line: expect.any(Number), kind: 'local-download' },
-    ]);
+    // ...and **every** file in the Data Center's own tree plants nothing at all: the
+    // only construct any of them uses is the local download this gate allows. The
+    // list is derived from the tree rather than pinned, so a Data Center file added
+    // tomorrow is checked the moment it lands instead of after someone remembers to
+    // name it here.
+    for (const file of everySourceModule().filter((path) => path.startsWith('src/ui/data/'))) {
+      expect(rulesIn(scan.findings, file), file).toEqual([]);
+    }
+    // ...and the tree has exactly one local-download call site, so a second copy of
+    // the four-step sequence cannot appear without failing here.
+    expect(
+      scan.allowed.filter((entry) => entry.file.startsWith('src/ui/data/')),
+      'the Data Center tree must have exactly one local-download call site',
+    ).toEqual([{ file: 'src/ui/data/productAccess.ts', line: expect.any(Number), kind: 'local-download' }]);
   });
 });
 

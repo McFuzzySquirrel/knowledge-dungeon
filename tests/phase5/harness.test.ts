@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { readArchiveJson, readArchive, writeArchive } from '@/services/persistence/v2/archive';
 import type { AttachmentBlobRecordValue, SubjectRecordValue } from '@/services/persistence/v2/schema';
 import {
+  ATTACHMENT,
   SUBJECT,
   buildVerifierDevice,
   captureDevice,
@@ -30,10 +31,32 @@ describe('verifier harness: the device is real and the instruments can fail', ()
       const active = await device.repository.readActiveGenerationId();
       expect(active).toBe(VERIFIER_GENERATION);
       const report = await device.repository.validateGeneration(VERIFIER_GENERATION);
-      // Disclosure-level warnings are legitimate for a shallow snapshot; a
-      // blocking problem is not, and `ok` is exactly the blocking test.
-      expect(report.problems.filter((problem) => problem.severity === 'error')).toEqual([]);
-      expect(report.ok).toBe(true);
+      // Disclosure-level warnings are legitimate for a shallow snapshot. A blocking
+      // problem is not - with exactly one exception, which the fixture plants on
+      // purpose: `ATTACHMENT.hashDisagrees` holds bytes that are not the bytes its
+      // declared `contentHash` names, and `validateAttachmentBlobRecord` recomputes
+      // the digest, so the production validator refuses that one record. The device
+      // is *supposed* to be in that state - it is the corrupt device the whole Phase
+      // 5 product has to survive - so the exception is named and counted here rather
+      // than being allowed to hide inside a blanket "no errors".
+      const blocking = report.problems.filter((problem) => problem.severity === 'error');
+      expect(blocking).toEqual([
+        { code: 'content-hash-mismatch', scope: 'attachment-blob', count: 1, severity: 'error' },
+      ]);
+      // And the problem names the planted record, so the exception cannot drift onto
+      // a different attachment without this gate noticing.
+      const blobs = (await device.repository.readRecords(VERIFIER_GENERATION)).records.attachmentBlobs;
+      const disagreeing = blobs.filter((envelope) => {
+        const record = envelope.value as unknown as { attachmentId: string; bytes: ArrayBuffer };
+        return hashOf(new Uint8Array(record.bytes)) !== (
+          blobs.find((other) => other.recordId === envelope.recordId)?.value as unknown as {
+            contentHash: string;
+          }
+        ).contentHash;
+      });
+      expect(disagreeing.map((envelope) => envelope.recordId)).toEqual([
+        `blob:${ATTACHMENT.hashDisagrees}`,
+      ]);
       const snapshot = await device.repository.readRecords(VERIFIER_GENERATION);
       // Every store the plan's section 7.3 names carries something.
       const values = snapshot.records as unknown as Record<string, unknown[]>;

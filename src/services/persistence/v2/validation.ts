@@ -35,7 +35,7 @@ import {
   CANONICAL_SUBJECT_SCHEMA_VERSION,
   STORAGE_V2_GENERATION_FORMAT_VERSION,
 } from './schema';
-import { checksumValue } from './checksum';
+import { checksumValue, sha256Hex } from './checksum';
 
 /** Which record type a problem was found in. Never a record identity. */
 export type ValidationScope =
@@ -176,22 +176,32 @@ function requireString(
 }
 
 /**
- * Byte length of a stored buffer, or `null` when the value is not a buffer.
+ * The stored bytes of a buffer, or `null` when the value is not a buffer.
  *
  * Uses a structural check rather than `instanceof ArrayBuffer`, because a buffer
  * that has crossed a structured-clone boundary (which is what IndexedDB does)
- * need not share this realm's `ArrayBuffer` constructor.
+ * need not share this realm's `ArrayBuffer` constructor. `ArrayBuffer.isView` is
+ * defined to work across realms, and `Object.prototype.toString` consults the
+ * internal `[[Class]]` slot, so the cross-realm buffer case is still covered.
+ *
+ * The view's own `byteOffset` is honoured, so a `Buffer` or a subarray yields the
+ * bytes it actually covers rather than the whole allocation behind it. The same
+ * rule is applied by `canonicalJsonStringify` in `./checksum`, so a hash taken
+ * here and a hash taken from the canonical form cannot disagree.
  */
-function bufferByteLength(value: unknown): number | null {
-  if (value instanceof ArrayBuffer) return value.byteLength;
-  if (ArrayBuffer.isView(value)) return value.byteLength;
+function bufferBytes(value: unknown): Uint8Array | null {
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView;
+    return new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength);
+  }
   if (
     typeof value === 'object' &&
     value !== null &&
     typeof (value as { byteLength?: unknown }).byteLength === 'number' &&
     Object.prototype.toString.call(value) === '[object ArrayBuffer]'
   ) {
-    return (value as { byteLength: number }).byteLength;
+    return new Uint8Array(value as ArrayBuffer);
   }
   return null;
 }
@@ -415,6 +425,24 @@ export function validateAttachmentMetadataRecord(value: AttachmentMetadataRecord
   return collector.build();
 }
 
+/**
+ * A blob record's own claim about its bytes, checked.
+ *
+ * `contentHash` is a statement the record makes about its payload, and this is the
+ * one place that statement can be held to account. Without the recomputation a
+ * record whose `bytes` were replaced in place - same `byteLength`, same declared
+ * hash, different content - validated `ok: true`, and because the canonical form of
+ * a buffer is a digest of its bytes, its per-record checksum, its store roll-up and
+ * the whole-generation `contentChecksum` were all *unchanged* as well. The bytes
+ * were therefore invisible to every checksum in the system, and an import that
+ * merged that generation carried the corruption forward and activated it.
+ *
+ * The comparison is content-only: it reports a `content-hash-mismatch` and never the
+ * hash, the bytes, or a filename, so a validation report stays safe to log. The code
+ * was already reserved for the external-only-with-a-hash case on the *metadata*
+ * record, so it carries the same meaning here - the record's declared content and
+ * its actual content disagree - and a screen already has copy for it.
+ */
 export function validateAttachmentBlobRecord(value: AttachmentBlobRecordValue): ValidationResult {
   const collector = new ProblemCollector();
   const record = value as unknown as Record<string, unknown>;
@@ -423,18 +451,23 @@ export function validateAttachmentBlobRecord(value: AttachmentBlobRecordValue): 
     return collector.build();
   }
   requireString(collector, record, 'attachmentId', 'attachment-blob');
-  requireString(collector, record, 'contentHash', 'attachment-blob');
-  const bytes = record.bytes;
-  const byteLength = bufferByteLength(bytes);
-  if (byteLength === null) {
+  const declaredHash = requireString(collector, record, 'contentHash', 'attachment-blob');
+  const bytes = bufferBytes(record.bytes);
+  if (bytes === null) {
     collector.add('blob-without-bytes', 'attachment-blob');
     return collector.build();
   }
-  if (byteLength === 0) {
+  if (bytes.length === 0) {
     collector.add('blob-without-bytes', 'attachment-blob');
   }
-  if (typeof record.byteLength === 'number' && record.byteLength !== byteLength) {
+  if (typeof record.byteLength === 'number' && record.byteLength !== bytes.length) {
     collector.add('wrong-type', 'attachment-blob');
+  }
+  // The hash is compared in lower case, because it is a hex string produced by
+  // `sha256Hex` and a record that upper-cased it has made a claim this application
+  // did not make - not the same claim, and not one to accept silently.
+  if (declaredHash !== null && declaredHash !== sha256Hex(bytes)) {
+    collector.add('content-hash-mismatch', 'attachment-blob');
   }
   return collector.build();
 }

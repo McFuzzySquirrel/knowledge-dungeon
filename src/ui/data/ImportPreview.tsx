@@ -77,6 +77,22 @@ export interface BackupPreviewAttachmentBytes {
   readonly byteLength: number;
 }
 
+/**
+ * One row of the "what it carries" table: a count key and the name a learner has
+ * for it.
+ *
+ * Declared here rather than imported from a product, for the reason
+ * {@link BackupPreview} is: the product tree is reachable only through a lazy
+ * `import()`, so the rows a product counts are named here and the caller supplies
+ * them. Phase 6 needs it because a `.kdsubject` counts six things a `.kdbak`
+ * counts ten, and rendering the `.kdbak`'s ten rows against a `.kdsubject`'s
+ * counts would show five rows of zero for categories the format has no room for.
+ */
+export interface PreviewSection {
+  readonly key: string;
+  readonly label: string;
+}
+
 /** The sanitized view of a `.kdbak`: everything this surface may show. */
 export interface BackupPreview {
   readonly formatVersion: number;
@@ -103,17 +119,17 @@ export interface BackupPreview {
  * is always zero is noise. The order is the plan's own section 7.3 order, so two
  * people reading two backups read them in the same sequence.
  */
-const STORE_ROWS: ReadonlyArray<{ readonly store: string; readonly label: string }> = [
-  { store: 'subjects', label: 'Subjects' },
-  { store: 'progression', label: 'Progress' },
-  { store: 'sessions', label: 'Study sessions' },
-  { store: 'preferences', label: 'Settings' },
-  { store: 'shortcuts', label: 'Keyboard shortcuts' },
-  { store: 'assistance', label: 'Assistance records' },
-  { store: 'attachments', label: 'Image records' },
-  { store: 'customSprites', label: 'Custom pictures' },
-  { store: 'recovery', label: 'Recovery records' },
-  { store: 'migrationReceipts', label: 'Data-move receipts' },
+const DEVICE_PREVIEW_SECTIONS: readonly PreviewSection[] = [
+  { key: 'subjects', label: 'Subjects' },
+  { key: 'progression', label: 'Progress' },
+  { key: 'sessions', label: 'Study sessions' },
+  { key: 'preferences', label: 'Settings' },
+  { key: 'shortcuts', label: 'Keyboard shortcuts' },
+  { key: 'assistance', label: 'Assistance records' },
+  { key: 'attachments', label: 'Image records' },
+  { key: 'customSprites', label: 'Custom pictures' },
+  { key: 'recovery', label: 'Recovery records' },
+  { key: 'migrationReceipts', label: 'Data-move receipts' },
 ];
 
 /**
@@ -178,9 +194,29 @@ export interface ImportPreviewProps {
    * surface shows: the one the learner themselves just picked.
    */
   readonly fileName: string | null;
+  /**
+   * The rows of the "what it carries" table.
+   *
+   * Defaults to the ten storage-v2 stores a `.kdbak` counts. A caller whose
+   * archive counts a different closed set passes its own, because a table of
+   * zeros for categories the format has no room for is noise dressed as data.
+   */
+  readonly sections?: readonly PreviewSection[];
+  /**
+   * The surface's heading.
+   *
+   * Defaults to the `.kdbak`'s, so Phase 5's own assertions on this component are
+   * unchanged; a caller whose file has a different extension names it.
+   */
+  readonly heading?: string;
 }
 
-export function ImportPreview({ preview, fileName }: ImportPreviewProps): JSX.Element | null {
+export function ImportPreview({
+  preview,
+  fileName,
+  sections = DEVICE_PREVIEW_SECTIONS,
+  heading = 'What is in this backup',
+}: ImportPreviewProps): JSX.Element | null {
   const headingId = useId();
   const countsId = useId();
   const disclosureId = useId();
@@ -199,7 +235,7 @@ export function ImportPreview({ preview, fileName }: ImportPreviewProps): JSX.El
       aria-busy={false}
     >
       <h3 className="kd-preview-heading" id={headingId}>
-        What is in this backup
+        {heading}
       </h3>
       {fileName === null ? null : (
         <p className="kd-preview-file">
@@ -217,10 +253,10 @@ export function ImportPreview({ preview, fileName }: ImportPreviewProps): JSX.El
           {formatByteCount(preview.totalBytes)}, made {formatInstant(preview.createdAt)}.
         </p>
         <dl className="kd-counts">
-          {STORE_ROWS.map((row) => (
-            <div className="kd-counts-row" key={row.store}>
+          {sections.map((row) => (
+            <div className="kd-counts-row" key={row.key}>
               <dt className="kd-counts-label">{row.label}</dt>
-              <dd className="kd-counts-value">{preview.recordCounts[row.store] ?? 0}</dd>
+              <dd className="kd-counts-value">{preview.recordCounts[row.key] ?? 0}</dd>
             </div>
           ))}
         </dl>

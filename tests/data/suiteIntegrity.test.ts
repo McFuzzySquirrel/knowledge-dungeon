@@ -27,6 +27,13 @@
  *    bearer token, an absolute home path, or a query string. Synthetic fixtures are
  *    allowed to name `example.invalid` and nothing else.
  *
+ * Every gate file declares its phase in a heading, and this file checks for that
+ * marker: `Phase 5 gate` in the nine Phase 5 files and `Phase 6 gate` in the eight
+ * Phase 6 ones. This file declares its own marker here rather than relying on the
+ * assertion text that checks for it - a self-satisfying assertion is a real form of the
+ * accidental-pass this gate exists to prevent, and the marker belongs in prose a reader
+ * sees anyway.
+ *
  * Privacy: this file reports file paths, counts, and rule ids. It never copies a
  * matched value into a failure message.
  */
@@ -101,6 +108,86 @@ const GATE_FILES: ReadonlyArray<{
   },
 ];
 
+/**
+ * The Phase 6 gates, and the exit criterion each one holds.
+ *
+ * RAIL CHANGE, recorded deliberately, and **stronger or neutral** by construction.
+ * The closed file list below exists for one reason: a gate suite must account for
+ * itself, so a file that is written but never run cannot pass unnoticed, and a stray
+ * scratch file cannot be left behind. Phase 6 added eight more gate files, and the two
+ * assertions that used to hard-code nine have to know about them - otherwise the suite
+ * fails on its own arrival, which teaches a maintainer nothing and looks like a defect
+ * in the product.
+ *
+ * So both were **extended**, not relaxed:
+ *
+ * - `every Phase 5 exit criterion is held by a named gate file` still pins
+ *   `GATE_FILES` at its Phase 5 length of 9, and now also pins `PHASE_6_GATE_FILES` at
+ *   its own length of 8, so both phases' gate sets are closed lists rather than
+ *   prefixes.
+ * - `the suite is exactly the eight gate files plus its support modules` - whose name
+ *   already understated what it checked - now compares against **both** lists, so the
+ *   union is still an exact equality. A ninth Phase 6 gate, a tenth, or a stray
+ *   `.test.ts` all still fail here.
+ *
+ * The change to the file's own test *name* is deliberate too, and is the only thing
+ * in this file that is weaker than what it replaced: the old name said "eight" and
+ * there were already nine files. Naming the property instead of the count is the
+ * durable form, and the count is asserted twice below where it belongs.
+ */
+const PHASE_6_GATE_FILES: ReadonlyArray<{
+  readonly file: string;
+  readonly criterion: string;
+  readonly what: string;
+}> = [
+  {
+    file: 'subjectCopyIndependence.test.ts',
+    criterion: 'A copied subject is independent and fully usable.',
+    what: 'gate 10',
+  },
+  {
+    file: 'subjectReplaceFidelity.test.ts',
+    criterion: 'A replaced subject matches the backup semantically, and the destruction is bounded.',
+    what: 'gate 11',
+  },
+  {
+    file: 'subjectImportIsolation.test.ts',
+    criterion: 'A subject import never partially overwrites the device, and never touches what it did not import.',
+    what: 'gate 12',
+  },
+  {
+    file: 'subjectIdRemapping.test.ts',
+    criterion: 'Copy-mode identifier remapping is exhaustive, and protected text is not rewritten.',
+    what: 'gate 13',
+  },
+  {
+    file: 'subjectCorruptArchiveMatrix.test.ts',
+    criterion: 'A corrupt or hostile subject archive is refused, and the device does not move.',
+    what: 'gate 14',
+  },
+  {
+    file: 'subjectDeterminism.test.ts',
+    criterion: 'An export is byte-deterministic under a fixed clock.',
+    what: 'gate 15',
+  },
+  {
+    file: 'subjectPrivacy.test.ts',
+    criterion: 'No learner data on any sanitized surface of the subject product.',
+    what: 'gate 16',
+  },
+  {
+    file: 'subjectProductBoundary.test.ts',
+    criterion: 'The subject product is renderer-neutral, unreachable from the application, and local.',
+    what: 'gate 17',
+  },
+  {
+    file: 'subjectSharedProgression.test.ts',
+    criterion:
+      'A record keyed on one subject but holding several is neither destroyed by a replace nor forked by a copy, and the id-reference disclosures are truthful.',
+    what: 'gate 18',
+  },
+];
+
 function listFiles(directory: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(directory).sort()) {
@@ -138,14 +225,20 @@ describe('Phase 5 data suite: the command and the criteria it holds', () => {
     expect(viteConfig).toContain("include: ['tests/**/*.test.{ts,tsx}']");
   });
 
-  it('every Phase 5 exit criterion is held by a named gate file, and every gate file exists', () => {
+  it('every Phase 5 and Phase 6 exit criterion is held by a named gate file, and every gate file exists', () => {
+    // Both phases' gate sets are closed lists, and both lengths are pinned, so adding
+    // a gate without updating this file fails here rather than passing unnoticed.
     expect(GATE_FILES).toHaveLength(9);
-    for (const gate of GATE_FILES) {
+    expect(PHASE_6_GATE_FILES).toHaveLength(9);
+    for (const [gate, phase] of [
+      ...GATE_FILES.map((entry) => [entry, 5] as const),
+      ...PHASE_6_GATE_FILES.map((entry) => [entry, 6] as const),
+    ]) {
       const path = join(DATA_ROOT, gate.file);
       expect(statSync(path).isFile(), gate.file).toBe(true);
       // The file really declares a test for the criterion, not just a comment.
       const source = sourceOf(path);
-      expect(source.includes('Phase 5 gate'), gate.file).toBe(true);
+      expect(source.includes(`Phase ${phase} gate`), gate.file).toBe(true);
       expect(source.length, gate.file).toBeGreaterThan(2000);
     }
     // The four exit criteria, in the plan's order, are all present.
@@ -169,7 +262,7 @@ describe('Phase 5 data suite: the command and the criteria it holds', () => {
     expect(gitignore).toMatch(/^data\/$/m);
 
     const files = listFiles(DATA_ROOT).map((file) => relative(REPO_ROOT, file));
-    expect(files.length).toBeGreaterThanOrEqual(16);
+    expect(files.length).toBeGreaterThanOrEqual(24);
     // Every path is relative and inside `tests/data/`, and none of them is ignored.
     // `git check-ignore` exits 0 for an ignored path and 1 for a tracked one, so a
     // non-zero exit across the whole list is the assertion.
@@ -186,10 +279,16 @@ describe('Phase 5 data suite: the command and the criteria it holds', () => {
     ).not.toBe(0);
   });
 
-  it('the suite is exactly the eight gate files plus its support modules', () => {
+  it('the suite is exactly the gate files of both phases plus its support modules', () => {
     const all = listFiles(DATA_ROOT).map((file) => relative(REPO_ROOT, file).split('\\').join('/'));
     const tests = all.filter((path) => path.endsWith('.test.ts'));
-    expect([...tests].sort()).toEqual(GATE_FILES.map((gate) => `tests/data/${gate.file}`).sort());
+    // An exact equality against the union of the two closed lists, so a stray scratch
+    // file, a renamed gate, and a forgotten gate all fail here.
+    expect([...tests].sort()).toEqual(
+      [...GATE_FILES, ...PHASE_6_GATE_FILES]
+        .map((gate) => `tests/data/${gate.file}`)
+        .sort(),
+    );
     // Support code lives in one directory and is not a test file, so Vitest never
     // collects it on its own.
     const support = all.filter((path) => path.includes('/support/'));
@@ -288,7 +387,8 @@ describe('Phase 5 data suite: the registered reproductions are accounted for', (
     }
     // Each of the seven files that held a registration still holds at least the
     // tests it held, and the total is far above the twenty-four that were
-    // implemented, so nothing was removed to make the count zero.
+    // implemented, so nothing was removed to make the count zero. Phase 6's eight
+    // gate files are held to the same floor, so a new gate cannot arrive empty.
     for (const file of [
       'tests/data/attachmentBytesRoundTrip.test.ts',
       'tests/data/corruptArchiveIsolation.test.ts',
@@ -297,6 +397,7 @@ describe('Phase 5 data suite: the registered reproductions are accounted for', (
       'tests/data/memberPathSafety.test.ts',
       'tests/data/phase5FlagDefault.test.ts',
       'tests/data/populatedStateRoundTrip.test.ts',
+      ...PHASE_6_GATE_FILES.map((gate) => `tests/data/${gate.file}`),
     ]) {
       const entry = perFile.find((line) => line.startsWith(`${file}:`));
       expect(entry, file).toBeDefined();
@@ -305,8 +406,10 @@ describe('Phase 5 data suite: the registered reproductions are accounted for', (
     // A floor, and deliberately well below the measured count: the point is only
     // that the count did not reach zero by deleting tests, so the floor has to sit
     // far above the nine call sites that were once `it.fails` and far below the
-    // suite's real size, or a future added test would break the gate.
-    expect(live).toBeGreaterThan(60);
+    // suite's real size, or a future added test would break the gate. It was raised
+    // once, when Phase 6 added eight more gate files, and stays a floor rather than
+    // becoming an equality.
+    expect(live).toBeGreaterThan(120);
   });
 
   it('the corruption table is fifteen distinct cases with distinct rule statements', () => {
@@ -352,7 +455,7 @@ describe('Phase 5 data suite: privacy', () => {
     // only host this repository's synthetic fixtures may name, so anything that
     // looks like a real host has to be justified and this suite refuses to.
     const files = listFiles(DATA_ROOT);
-    expect(files.length).toBeGreaterThanOrEqual(16);
+    expect(files.length).toBeGreaterThanOrEqual(24);
 
     const HOST_LIKE = /\b[a-z][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|co|uk|de|app|xyz|info|biz)\b/gi;
     const CREDENTIAL_LIKE =

@@ -482,12 +482,12 @@ describe('V5.2: the archive generation label', () => {
   });
 });
 
-describe('V5.3: the roll-up checksum does not cover attachment bytes - quantified', () => {
+describe('V5.3: the roll-up checksum covers attachment bytes - quantified', () => {
   beforeEach(async () => {
     await device();
   });
 
-  it('two generations whose attachment bytes differ can share a contentChecksum', async () => {
+  it('two generations whose attachment bytes differ cannot share a contentChecksum', async () => {
     const target = await device({ alt: true });
     const blobValues = values<{ attachmentId: string; contentHash: string; bytes: ArrayBuffer; byteLength: number; storedAt: string }>(
       (await target.repository.readRecords(target.generationId)).records.attachmentBlobs,
@@ -500,48 +500,60 @@ describe('V5.3: the roll-up checksum does not cover attachment bytes - quantifie
       bytes[0] = (bytes[0] as number) ^ 0xff;
       return { ...blob, bytes: bytes.buffer as ArrayBuffer };
     });
-    await target.repository.putRecords(target.generationId, { attachmentBlobs: changed as never });
     const before = await target.repository.readGeneration(target.generationId);
+    await target.repository.putRecords(target.generationId, { attachmentBlobs: changed as never });
     const after = await target.repository.readGeneration(target.generationId);
-    expect(before?.descriptor?.contentChecksum).toBe(after?.descriptor?.contentChecksum);
-    // The declared hash no longer matches the bytes it names, and the repository
-    // does not notice, because it never hashes them.
+    // The roll-up moves, because a buffer is in the canonical form as a digest of
+    // its own bytes. This is the case the product's step-3 comparison rests on: a
+    // generation that carried different attachment content has a different
+    // checksum, so an import that merges one can see that it did.
+    expect(before?.descriptor?.contentChecksum).not.toBe(after?.descriptor?.contentChecksum);
+    // The declared hash no longer matches the bytes it names, and the record is
+    // refused rather than carried: `validateAttachmentBlobRecord` recomputes the
+    // digest, so a corrupt attachment can never be activated or merged forward.
     const first = changed[0]!;
     expect(hashOf(fromArrayBuffer(first.bytes))).not.toBe(first.contentHash);
     const report = await target.repository.validateGeneration(target.generationId);
     expect(report.checksumMismatches).toEqual([]);
-    expect(report.ok).toBe(true);
+    expect(report.ok).toBe(false);
+    // Two, not one: the fixture's own planted corruption is still there, and this
+    // test has just added a second. The collector groups by code and scope, so a
+    // count of 2 is the evidence that the instrument sees both.
+    expect(report.problems).toContainEqual({
+      code: 'content-hash-mismatch',
+      scope: 'attachment-blob',
+      count: 2,
+      severity: 'error',
+    });
   });
 
-  it('the serialized form of a blob record simply has no bytes in it', async () => {
-    // The mechanism, stated exactly: `canonicalJsonStringify` has no
-    // `ArrayBuffer` branch, and an `ArrayBuffer` has no enumerable own keys, so
-    // it serializes as `{}`.
-    // A `Uint8Array` built in *this* realm, so the comparison with the
-    // application's `instanceof Uint8Array` branch is a real one and not a
-    // cross-realm artefact.
+  it('the serialized form of a blob record contains a digest of its bytes, and not its bytes', () => {
+    // The mechanism, stated exactly: a buffer serializes to a **fixed-width digest
+    // form** rather than to its contents, so the checksum of a record holding a
+    // multi-megabyte attachment costs a hash, and every byte of the payload is
+    // covered without being expanded into the serialized string.
+    // A `Uint8Array` built in *this* realm, so the comparison below is a real one
+    // and not a cross-realm artefact.
     const bytes = new Uint8Array(Array.from(bytesOf('ZZ-verifier-checksum-gap')));
-    // An `ArrayBuffer` has no `ArrayBuffer` branch and no enumerable own keys, so
-    // it serializes as `{}` and every byte of the payload is dropped from the
-    // checksum. The storage-v2 schema declares `bytes: ArrayBuffer`, so *every*
-    // blob record the product writes is of the uncovered kind.
-    expect(canonicalJsonStringify({ bytes: bytes.slice().buffer })).toBe('{"bytes":{}}');
-    // A `Uint8Array` *is* covered - but only through an `instanceof` check, so the
-    // coverage is realm-sensitive: a `TextEncoder` from another realm produces a
-    // `Uint8Array` this realm does not recognise, and the bytes are then
-    // serialized as an object with numeric keys. Value-dependent, so still
-    // covered, but by accident rather than by design.
+    const digest = hashOf(bytes);
+    expect(canonicalJsonStringify({ bytes: bytes.slice().buffer })).toBe(
+      `{"bytes":{"__bytes__":{"length":${bytes.length},"sha256":"${digest}"}}}`,
+    );
+    // The **same** form for a view over the same bytes, so one value cannot have two
+    // checksums depending on which container a caller happened to hand over - the
+    // ambiguity the canonical form exists to remove.
     const covered = canonicalJsonStringify({ bytes });
-    expect(covered).toBe(`{"bytes":[${Array.from(bytes).join(',')}]}`);
-    // A buffer from another realm is *not* recognised, and falls into the generic
-    // object branch. Still value-dependent, so still covered - but the coverage
-    // depends on which realm constructed the view, which is the cross-realm trap
-    // this repository has already been bitten by once under Node 20.
-    const realmSensitive = canonicalJsonStringify({ bytes: bytesOf('ZZ-verifier-checksum-gap') });
-    expect(realmSensitive).toContain('"0":');
-    expect(realmSensitive).not.toBe(covered);
+    expect(covered).toBe(canonicalJsonStringify({ bytes: bytes.slice().buffer }));
+    // And the same for a view built in another realm, which the cross-realm trap
+    // this repository has already been bitten by once under Node 20 used to defeat.
+    const otherRealm = canonicalJsonStringify({ bytes: bytesOf('ZZ-verifier-checksum-gap') });
+    expect(otherRealm).toBe(covered);
+    // A different payload must produce a different serialized form, or the digest is
+    // not covering anything.
+    const different = new Uint8Array(bytes);
+    different[0] = (different[0] as number) ^ 0xff;
+    expect(canonicalJsonStringify({ bytes: different })).not.toBe(covered);
   });
-
   it('a restore cannot be made to attach the wrong bytes to a record', () => {
     // The archive's content addressing closes the gap at the product boundary:
     // a member's name must equal the digest of the bytes it carries, and a

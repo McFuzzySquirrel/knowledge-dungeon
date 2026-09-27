@@ -216,6 +216,24 @@ export function WelcomeScreen(): JSX.Element {
     })();
   }
 
+  /**
+   * The Data Center imported one subject, so refresh the list and stay put.
+   *
+   * Deliberately *not* `handleDeviceDataRestored`. A whole-device restore moves to
+   * the Create / Load tab, because the learner has just replaced everything and
+   * wants to see it. A subject import must not: the Data Center's own report
+   * carries the disclosures that decide whether the import was a good idea - the
+   * images that came back without their picture data, the references inside the
+   * file that could not be rewritten - and navigating away unmounts the surface
+   * carrying them. So this reloads the list, leaves the tab alone, and leaves
+   * focus where the learner put it.
+   */
+  function handleSubjectImported() {
+    void (async () => {
+      await refreshExistingSubjects();
+    })();
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function loadExisting() {
@@ -681,7 +699,16 @@ export function WelcomeScreen(): JSX.Element {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+          {/*
+            `welcome-field-grid` carries no layout of its own here. It names the box
+            so the stylesheet can own the one thing inline styles cannot express: the
+            *track* sizing. An `auto` grid track's minimum is its items' min-content
+            contributions, so this grid's floor was the biome row's - a `nowrap`
+            label beside a native `<select>`, whose intrinsic width is its widest
+            option's rendered text. The track is `minmax(0, 1fr)` in
+            `src/styles.css` so no item in here can set the page's width again.
+          */}
+          <div className="welcome-field-grid" style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
             <input
               type="text"
               placeholder="Subject name (e.g. Linear Algebra)"
@@ -695,7 +722,16 @@ export function WelcomeScreen(): JSX.Element {
               onChange={(e) => setRootTopic(e.target.value)}
             />
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <label htmlFor="biome-select" style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              {/*
+                `white-space: nowrap` was removed rather than kept. With the track
+                fixed it costs nothing today - "Dungeon theme:" is far shorter than
+                320 CSS pixels, so it never wraps - but a nowrap label is unbounded
+                by construction, and it was the last thing in this row able to push
+                the row wider than the viewport. Letting it wrap only when it must
+                is what keeps a *longer* label from reintroducing this exact bug; the
+                single-line look is unchanged on every width where the label fits.
+              */}
+              <label htmlFor="biome-select" style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                 Dungeon theme:
               </label>
               <select
@@ -825,7 +861,10 @@ export function WelcomeScreen(): JSX.Element {
           DataCenterScreen === null ? (
             <p className="room-help-text">Loading the Data Center…</p>
           ) : (
-            <DataCenterScreen onRestored={handleDeviceDataRestored} />
+            <DataCenterScreen
+              onRestored={handleDeviceDataRestored}
+              onSubjectImported={handleSubjectImported}
+            />
           )
         ) : (
         <section>

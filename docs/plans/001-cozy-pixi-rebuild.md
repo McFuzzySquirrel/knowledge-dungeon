@@ -711,7 +711,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 3 | complete | Build storage-v2 and migration infrastructure. |
 | 4 | complete | Cut over storage behind a flag and add local attachments. |
 | 5 | complete | Deliver full-device backup and restore. |
-| 6 | not-started | Deliver individual subject backup and restore. |
+| 6 | complete | Deliver individual subject backup and restore. |
 | 7 | not-started | Deliver safe blank reusable templates. |
 | 8 | not-started | Establish Cozy design tokens and the CC0 media gate. |
 | 9 | not-started | Build the PixiJS runtime host. |
@@ -2698,7 +2698,7 @@ Phase 6.
 
 ## Phase 6: Individual Subject Backup Product
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Move one subject and its associated learner state safely between devices.
 
 ### Prerequisites
@@ -2755,9 +2755,491 @@ Run the common gate.
 
 Hide the product and remove only staged import data.
 
+### Verification evidence
+
+Recorded on 2026-09-27. The maintainer explicitly accepted the verified checkpoint on
+2026-09-27, so Phase 6 is `complete`. Phase 7 remains `not-started` and requires
+separate authorization.
+
+#### What was built
+
+- **`.kdsubject` export and import** in `src/services/persistence/products/subjectBackup.ts`,
+  and `idRemapping.ts` for copy-mode identifier remapping as a pure, standalone
+  function. The layout is the plan's §7.3 layout unchanged: `manifest.json`,
+  `subject.json`, `progression.json`, `sessions.json`, `assistance.json`,
+  `attachments/<sha256>`. Attachment members are content-addressed, so two identical
+  payloads collapse to one. The `fflate` codec, the archive-member vetting, the
+  prototype-name rule, the manifest checksum format, the per-record validators, and the
+  `MIGRATION_BLOCKING_POLICY` refusal rule are all **reused** from Phase 5 rather than
+  forked. Fish live inside `ProgressionRecordValue.bySubject[...].fishCollection`, so
+  `progression.json` carries them, and a gate proves it rather than asserting it.
+- **A staged, never-in-place import.** A subject import is a *partial* generation
+  change, unlike Phase 5's whole-generation replace, so plan §5.2's "never partially
+  overwrite the active data generation" and §7.1's pointer model are satisfied by
+  reading the active generation, carrying every unrelated record over byte-for-byte,
+  staging a new generation, comparing counts/relationships/checksums, validating,
+  activating, and retaining the previous generation unconditionally. `putRecords` on
+  the live generation appears nowhere; `discardStagedGeneration` runs on every failure
+  path.
+- **Manifest**: a closed 13-key set with no identifier of any kind, three separate
+  version contracts each refused on its own and cross-checked between the manifest and
+  all four documents, and a content-free constant file name.
+- **Data Center subject-backup tab** in `src/ui/data/{SubjectBackupTab,ConfirmDialog,productAccess}.tsx`,
+  alongside a real two-tab tablist, a shared confirmation dialog, and both new
+  disclosure surfaces rendered. Reached by lazy `import()` only.
+- **Verification rails**: 8 new gates in `tests/data/` (the suite is now 18 files /
+  192 tests), an independent 11-file / 110-test suite in `tests/phase6/` sharing no
+  code or fixture with the phase's own, and a committed Playwright lane
+  (`playwright.subject-product.config.ts`, port 43181, 5 tests) with a gating CI step
+  inside the existing `storage-v2-browser` job so the flagged artifact is still built
+  exactly once.
+
+#### The phase was not acceptable on its first pass
+
+`qa-engineer` reviewed it adversarially and returned **not acceptable** with a CRITICAL
+finding that refuted an exit criterion. The orchestrator reproduced the root cause in
+the source before acting on the report.
+
+- **BLOCKER — a cross-device replace destroyed another subject's entire progression.**
+  `ProgressionRecordValue` carries both `subjectId` and `bySubject`, and the canonical
+  legacy v3 shape is a *single* envelope whose `bySubject` map held every subject on
+  the device. The replace filtered on `record.subjectId !== target`, so a record whose
+  `bySubject` also held a bystander's notes, fish, XP and streak was dropped wholesale
+  and replaced with the archive's — which, from a *different* device, carries only the
+  exported subject. `BETA`'s subject record survived, `BETA`'s sessions survived, and
+  `BETA`'s progression ceased to exist anywhere, with nothing reported: the
+  `destroyedRecordCounts` unit is *records*, and a bystander vanishing from inside one
+  record is invisible to it. The on-device path was masked by luck, because a same-device
+  export carries the foreign entry. Plan §5.3's "Same-ID imports can overwrite subjects
+  while leaving stale progression" is the defect class, and the product was reproducing
+  it. The fix is a `bySubject`-aware merge in both modes: the target's own key is the
+  archive's wholesale, a foreign key is never destroyed and never merged, a conflict
+  keeps the device's newer value, and all three outcomes are counted. QA then attacked
+  it seven ways, including the direction of loss, and confirmed that a dirtied target is
+  still replaced wholesale while a bystander in the *same record* survives.
+- **HIGH — a copy import forked another subject's fish and note identities.** The
+  foreign `bySubject` key was carried verbatim correctly, but the *nested* fish/note/loot
+  ids inside every key were rewritten, so the device ended up holding two identities for
+  one fish, and `progressionEnvelopeFrom`'s last-writer-wins flatten picked between them
+  by **sorting on a minted opaque subject id**. The winning record was an accident of
+  ordering, chosen by neither the learner nor the product. Now scoped to the key being
+  remapped.
+- **HIGH — the storage-v2 checksum chain was blind to attachment bytes.** Phase 5 had
+  already recorded this exposure; Phase 6 is the first product to lean on the *generation*
+  checksum comparison for a **partial merge**, which is what made it load-bearing.
+  `canonicalJsonStringify` had a `Uint8Array` branch and no `ArrayBuffer` branch, so a
+  blob's bytes serialised as `{}` and two generations differing only in attachment bytes
+  shared a `contentChecksum`. Fixed with a realm-safe digest form plus a validator that
+  recomputes `sha256(bytes)`. QA upheld the decision not to bump the generation format
+  (value shape unchanged, checksum is derived state, no generation has shipped) after
+  confirming no code path compares a retained generation's *stored* checksums against a
+  current-rule recomputation — the rollback path reads records, not their historical
+  checksums.
+- Three smaller findings: `relativePath` was protected on a **false premise** (the
+  Electron writer puts a room id in it as a whole path segment); the residual-reference
+  count was documented as covering ids in object *keys* when it does not; and
+  `DungeonMetadata.dungeonId` was an undeclared subject-id location. All three are fixed
+  or, for the second, corrected to tell the truth about an accepted gap. A fourth, the
+  product's own doc comment claiming the sanitized preview cannot name the archive's
+  subject, was false whenever there is a disclosure; the same false claim in the tab was
+  corrected too. The disclosure itself was ruled **acceptable** — it is Phase 5's own
+  `ExternalOnlyAttachmentReport`, §7.3 requires reporting *which* attachments are
+  unavailable, and it carries no name, topic, note, filename or URL.
+
+Two gate assertions became *weaker by one step* when the tab landed, because "the Phase 6
+modules are absent from the application graph" stopped being true for the good reason. QA
+upheld the replacements after planting a **canary static import** and confirming five
+gates — including its own — turn red, then reverting. The replacements state the real
+property ("no `static`/`require` edge from outside the product tree, and exactly two
+named `dynamic` callers"), and the "exactly two" clause is *stronger* than the absence
+assertion ever was, because it also fails if a third legitimate lazy caller appears.
+
+#### Commands run and results
+
+The orchestrator ran the common gate, the phase-specific gates, all three browser lanes,
+and the rollback path independently.
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | pass, 0 errors 0 warnings |
+| `npm run typecheck` | pass |
+| `npm test` | pass — 125 files / 1673 tests, 0 failures (Phase 5 baseline 103 / 1422) |
+| `npm run test:data` | pass — 18 files / 192 tests (baseline 9 / 99) |
+| `npm run test:privacy` | pass — 6 files / 34 tests |
+| `npm run test:migrations` | pass — 15 files / 373 tests |
+| `npm run build:web` | pass |
+| `npm run check:bundle-size` | pass — `Total dist size: 4.38 MB across 134 files` |
+| `npm run test:e2e` | pass — 12 tests across the four Chromium viewports |
+| `npm run test:e2e:data-products:full` | pass — 4 tests, Phase 5 fresh-profile restore |
+| `npm run test:e2e:subject-product:full` | pass — 5 tests, the new Phase 6 lane |
+
+#### Exit-criteria evidence
+
+- **A copied subject is independent and fully usable.** The same `.kdsubject` imported
+  **twice** onto one device — the strongest form, since the first copy's ids are then on
+  the destination — yields 5 subjects with all eight identifier classes pairwise
+  disjoint, and the two copies' minted ids disjoint from each other. Every declared
+  reference resolves *inside* its own copy: rooms keys against their own `roomId`, root
+  room, all four `DungeonMetadata` room references, `tagIndex` values, `notePath` and
+  `artifactPath` whole segments, `roomsVisited`, `collectedNotes`, fish `subjectId`,
+  snapshot attachment ids, and blob records against their metadata hashes. Mutating the
+  source afterwards — topic, note path, root room, a new room — leaves the copy
+  byte-identical. The copy is then read back, **exported again**, and that
+  second-generation archive re-imported as a third working subject. Proven in a real
+  browser too: real IndexedDB, a second fresh context, disjoint subject and room ids,
+  XP carried, the source device unchanged.
+- **A replaced subject matches the backup semantically.** Proven after first *destroying*
+  the device's copy, so the comparison cannot pass vacuously: ids preserved
+  (`idMapping === []`, `identifiersRemapped === 0`), the record verbatim, progression
+  `bySubject` deep-equal, every session and attachment byte-equal, blob bytes equal to
+  the real bytes with `storedAt` re-stamped. The refusal ladder holds with the device
+  byte-identical after each: unconfirmed replace, no target, a target that is not the
+  archive's subject, a target the device does not hold.
+- **No unrelated subject or global setting changes.** **This criterion was refuted once
+  and now holds.** Every unrelated store is carried forward byte-for-byte; a refused
+  import leaves the whole device fingerprint — pointer, every record value *and its
+  bytes*, every descriptor, ordered legacy `localStorage` — byte-identical, and a
+  fingerprint is proven able to move on a single flipped byte. The bystander-progression
+  loss described above was the one real escape and is closed, attacked seven ways,
+  including two and three replaces in sequence (still byte-identical, every generation
+  still validating). The one **deliberate** deviation is disclosed rather than hidden:
+  the new generation carries no `migrationReceipts`, because a receipt is a statement
+  about the generation that holds it and storage-v2 refuses a generation whose receipts
+  name another. The previous generation retains them byte-for-byte, and no receipt is
+  minted for an import, following the Phase 5 precedent that `fromStorage` is typed
+  `'legacy-localstorage'`.
+- **All ID references remain valid after copy import.** Proven for all 25 declared
+  locations plus the whole-token sweep of every remaining string. Two **disclosed**
+  limits: an id held in an undeclared object *key* is carried verbatim and, by design,
+  not swept and not counted (the header says so); and `relativePath` addresses a file in
+  the Electron `userData` tree the copy did not move, so it is carried verbatim *and
+  disclosed* through a new count-only `verbatimDisclosures` channel. No field in the
+  current domain holds a real reference in an undeclared key.
+
+#### Gates beyond the exit criteria
+
+- **No learner data** in the manifest, member paths, file names, error details,
+  disclosures, or reports. Six markers planted as subject name, room topic, note,
+  attachment file name, alt text and tag, hunted in the manifest bytes, every leaf at
+  every depth, every member name, the download file name, the export result, the whole
+  serialised import result, and **every refusal** across the corruption matrix. The only
+  URL host anywhere is the reserved `example.invalid`.
+- **Default build genuinely unchanged, and the rollback path measured.** With
+  `VITE_DATA_PRODUCTS_V2=false` a fresh Chromium context on Welcome issued **14
+  requests, none of them a product chunk**, and `.kd-data-center` was **not in the DOM**
+  with only the 7 shell tabs present. No product code marker appears in any of the nine
+  files `index.html` names, including the `nomodule` legacy entry, whose static closure
+  reaches no product or storage chunk.
+- **Accessibility, measured independently in Chromium.** Zero axe violations on the
+  subject tab itself, with and without the open confirmation. Both Data Center tabs
+  measure 44.0 px and 45.7 px with `min-height: 44px` resolved, and no control inside
+  `.kd-data-center` is under 44 px. Dialog: `role="dialog"`, `aria-modal`, labelled and
+  described, initial focus inside, **12/12** Tab and Shift+Tab hops contained, Escape
+  closing, focus restored to the opener. Tablist and mode radio groups both
+  arrow-key-operable. `prefers-reduced-motion` yields 0 animated elements in the
+  subtree. Zero horizontal overflow at 320, 480 and 640 px.
+- **The destructive path is unreachable by accident, in layers.** The mode group is
+  disabled unless the archive's own subject id exists on this device; the choice lives
+  *inside* the dialog and is re-asserted to `copy` on every file choice; the confirm
+  handler re-checks `mode === 'replace'` in the handler, not only in `disabled`; there is
+  no `<form>`, no text field and no key handler on the file input; and in copy mode none
+  of the product's three destructive fields is even in the request. A browser run measured
+  the copy radio `checked` on open and the replace radio never checked, and the replace
+  radio disabled on a fresh profile and enabled on one holding the archive's subject.
+- **Determinism.** Byte-identical under a fixed clock, proven in the ZIP DOS headers at
+  a date the wall clock is not at. The limitation is disclosed and is inherent: a DOS
+  timestamp is local time, so determinism is per-timezone while the *content* is
+  deterministic everywhere.
+
+#### Performance and bundle result
+
+Raw default `dist` is **4,596,884 bytes across 134 files**, against the Phase 5 baseline
+of 4,463,882 / 132: **+133,002 bytes (+3.0%)**, +2 files — the new product chunk and its
+`-legacy-` twin.
+
+**The default build ships the Phase 6 product without ever loading it**: 277,629 bytes
+raw across 9 product chunks, because the guard is a runtime `if` rather than a
+build-time `define`. The arithmetic decides it against the plan's budgets — 6.0 % of the
+raw `dist` ceiling, and not "initial" at all, as the measured 14-request trace shows. A
+byte ceiling in the product-chunk gate was raised from 200 KiB to 320 KiB; QA upheld it
+only after confirming the new direct property assertion is load-bearing and
+non-vacuous, and after closing a real gap the implementer left — a rename of any of the
+five source markers would have made the assertion silently check nothing.
+
+#### Known limitations and evidence boundaries
+
+- **Replace fidelity has no browser evidence.** The lane deliberately does not drive the
+  destructive mode, because an unattended test performing a destructive replace against a
+  seeded device has "the test destroyed its own fixture" as a failure mode. That path is
+  covered against a real repository in `tests/data` — which is exactly where the blocker
+  lived.
+- **The 320 px overflow is real, and it is pre-existing Welcome shell, not Phase 6.**
+  The first report attributed it to the Data Center; QA could not reproduce it, and the
+  cause turned out to be **subject-name length** — `#welcome-panel-subjects` has a 299 px
+  min-content in `.welcome-main`'s flex row, giving 367 px of overflow at 320 px with a
+  78-character name and **0 with a short one**. Both engineers then reproduced it
+  independently, on the flag-off build where the Phase 6 tab does not exist, with the
+  overflow identical whether or not the Data Center is open. Plan §10.1's 320 px
+  requirement is therefore **not met by the application as a whole**. On acceptance the
+  maintainer routed this to the Welcome-surface owner as a **tracked follow-up outside
+  Phase 6** (plan §12 rule 13), rather than deferring it to Phase 21, so it is fixed and
+  gated before the later accessibility audit depends on it. **The first fix was
+  incomplete**, and only the first CI run after acceptance proved it — see the follow-up
+  record below.
+- **Copy mode doubles the device-global assistance store, unboundedly, and the counters
+  report 0 while it happens.** Each copy import appends the archive's whole assistance
+  store with minted ids, as byte-identical duplicates with no natural key to deduplicate
+  on; a device that takes N copies holds N+1 records. The *behaviour* predates the fix;
+  what the fix made worse is that `foreignState`'s assistance counters read 0 and
+  `carriedForwardStores` omits `assistance`, so a reader concludes the store was
+  untouched. No data is destroyed and nothing on the device changes, so this is not an
+  exit-criteria blocker — but it breaches plan §12 rule 10's idempotence, it matters at
+  Phase 19 where that store starts being read for behaviour, and **the counters must not
+  report 0 for something that happened**. Named follow-up before Phase 19.
+- **One LOW reporting imprecision:** a stale `DungeonMetadata.dungeonId` is counted in
+  both `verbatimDisclosures` and `unresolvedReferenceCount`, so a screen adding the two
+  over-counts by one. Each channel's documented meaning is individually true. No data
+  effect.
+- **One INFO copy defect in `RecoveryStatus.tsx`:** the preserved-assistance sentence
+  reads "1 … **were** kept" and drops the noun at both numbers. Every sibling clause is
+  correct. No privacy, data, or accessibility impact.
+- **The checksum digest form is not injective.** A plain object shaped like the
+  `{"__bytes__":…}` form serialises to the same text. Harmless, and verified rather than
+  assumed: no untrusted path can create it, because blobs are store records never parsed
+  from an archive document and the reader builds `bytes` from ZIP member bytes; and if one
+  ever reached a generation it would be refused as `blob-without-bytes` at `error`
+  severity. Recorded where the module's "a checksum can never be ambiguous" claim
+  otherwise holds.
+- **All browser evidence is emulated Chromium on Linux**, one viewport, against the
+  flagged build. No Firefox, WebKit, Edge, ChromeOS, or physical device. The plan's §10.4
+  manual checks — a Chromebook with ChromeVox, an iPad or Android touch screen reader, a
+  macOS Safari check — remain outstanding and stay assigned to Phases 21 and 23. Nothing
+  here is VoiceOver, NVDA, or ChromeVox evidence.
+- **Not verified:** memory across world mount/unmount cycles (out of scope, Phase 22);
+  two-tab, concurrent-writer, quota exhaustion and blocked `versionchange` behaviour; the
+  real-device behaviour of the Electron attachment path; and the corrupt-archive matrix
+  in a browser, since the lane refuses three hostile inputs while the 22-name matrix and
+  the consistently-corrupt family are `tests/data` only. The implementer's 22 new
+  regression cases were confirmed to exist, be registered, and pass, but were not
+  independently re-derived assertion by assertion — QA's own 13 cases in the same area
+  are the independent check on the *behaviour*.
+- **No learner data** exists in any source, fixture, test, report, log, or evidence file
+  added by this phase. Every fixture is synthetic and self-describing.
+- The product's filter-and-replace import was **not** the accepted design; the
+  `bySubject`-aware merge in `mergeProgressionForReplace` and `mergeAssistanceForReplace`
+  is, and both are exported and pure so the rule can be tested directly.
+
+#### Files
+
+Created: `src/services/persistence/products/{subjectBackup,idRemapping}.ts`,
+`src/ui/data/{SubjectBackupTab.tsx,ConfirmDialog.tsx,productAccess.ts}`,
+`playwright.subject-product.config.ts`, `tests/data/support/{nastySubject,subjectArchive,sharedProgressionDevice,importGraph}.ts`,
+8 `tests/data/subject*.test.ts` gates, `tests/unit/subjectBackupTab.test.tsx`,
+`tests/e2e/{subjectProductRoundTrip.spec.ts,subject-product-lane.ts,subject-product-lane.test.ts}`,
+`tests/phase6/` (11 files / 110 tests).
+Modified: `src/services/persistence/products/{archiveValidation,fullDeviceBackup}.ts`
+(shared seams extracted, behaviour byte-identical), `src/services/persistence/v2/{checksum,validation}.ts`
+(the attachment-byte checksum fix), `src/ui/data/{DataCenter,ImportPreview,RecoveryStatus}.tsx`
+and `dataCenter.css`, `src/ui/screens/WelcomeScreen.tsx`, and nine existing gates.
+`src/services/persistence/v2/archive.ts` is **byte-identical to HEAD** — a change there
+was started and reverted, and the codec boundary is untouched.
+
+#### Rollback
+
+Hide the product and remove only staged import data. Concretely: with
+`VITE_DATA_PRODUCTS_V2=false` the Data Center renders neither tab, `.kd-data-center` is
+absent from the DOM, and **no product chunk is ever requested** — measured at 14 total
+requests and an empty product-chunk list. The legacy import/export path is untouched and
+no `.kdsubject` is read or written. Because retention is unconditional, a device that has
+already imported a subject backup keeps its previous generation readable, so the rollback
+loses nothing, and a failed import leaves a staged generation that is discarded rather
+than activated.
+
 ### Unlocks
 
 Phase 7.
+
+#### Tracked follow-up, worked after acceptance: the 320 CSS-pixel Welcome overflow
+
+Recorded on 2026-09-27, the same day Phase 6 was accepted. This is **follow-up work
+outside the phase** under plan §12 rule 13; Phase 6 stayed closed and this was not
+folded into Phase 7. Owner: `ui-engineer`, as the React DOM shell's owner.
+
+- **The defect.** `#welcome-panel-subjects` has a **299.2 px min-content** inside
+  `.welcome-main`'s 278 px flex column, and a subject name is learner text of unbounded
+  length rendered in several places on that screen. The page overflowed at 320 CSS px
+  by **254 px with a 78-character name** and **527 px with a 122-character one**, with
+  12 named offenders. A 29-character *spaced* name overflows 0 px, because a name with
+  spaces has a min-content equal to its longest word — which is precisely why the first
+  report blamed the Data Center and the second could not reproduce it at all.
+- **The fix** is 72 additive lines in `src/styles.css`, scoped to the Welcome shell's
+  own boxes: `min-width: 0` on the grid and flex items that carry the name, and
+  `overflow-wrap: anywhere` on the controls and paragraphs that render it. `anywhere`
+  rather than `break-word` is load-bearing and not a style preference — only `anywhere`
+  lowers an element's *intrinsic minimum size*, and the entire defect was a min-content
+  floor. The learner's name is never shortened: it wraps, every character stays readable
+  and selectable, and nothing in the data changes.
+- **The touch targets went with it.** The same measurement found **16** controls under
+  44 px in the Welcome shell, not the 11 first reported — 35 px tabs, 31 px buttons, a
+  37 px input, a 39 px select, and an 18 px `<summary>` row. `ui-engineer` judged this
+  in scope because it is the same shape as the overflow fix and the Data Center already
+  established the pattern, and took it to **0** across all four tabs (49 shortfalls
+  before). One further rule block sets `min-height` on the skip link, which is the
+  first focusable control a keyboard learner meets.
+- **The gate is committed and has real teeth.** Two tests in
+  `tests/e2e/currentBuild.spec.ts`, which the existing `browser-smoke` CI job already
+  runs against the shared production artifact, so **no new build and no new project**:
+  the four matrix-sanctioned Chromium projects narrow the viewport *inside* a test,
+  because a project's job is to supply the engine and the plan names the width. Both
+  traps that produced the earlier misdiagnosis are closed in the test rather than by
+  discipline — the wait refuses a zero-width element, the page is settled before every
+  reading, a **forced offender is injected before each reading and must be reported**,
+  and the sweep must have measured more than 50 elements so an empty pass cannot occur.
+  `tests/e2e/welcome-narrow-viewport.test.ts` adds 10 wiring tests, including that the
+  sanctioned project set is still exactly the original four.
+- **Independently verified by the orchestrator**, not taken on report: reverting
+  `src/styles.css` to `HEAD`, rebuilding, and re-running turns **both** tests red with
+  the defect measured in the failure message — `scrollWidth 574 exceeds clientWidth 320`,
+  12 offenders, `Expected: 0 / Received: 254`, and 16 named sub-44px controls. Restoring
+  the file turns them green again. The gate fails on the unfixed layout and passes only
+  on the fix.
+- **A number that was wrong in both directions and is now settled.** The originally
+  reported 53 px at 29 characters does not reproduce on the current build; the 299.2 px
+  min-content is real but is the *empty-device* floor, and the fix collapses it to 278,
+  so the fit is now structural rather than coincidental on page padding. The load-bearing
+  cases are the unbreakable 78- and 122-character tokens.
+- **Deliberately left tracked:** the rest of the application shell's touch targets (HUD,
+  room panel, modals, settings, note editor) are unmeasured and very likely have their
+  own 35 px controls — that is a larger audit belonging with the Phase 8 visual system;
+  `.kd-data-center .kd-technical summary` declares `min-height: 32px` below §10.1, read
+  from the stylesheet and not measured, because it renders only after an import outcome
+  that no automated lane reaches; browser `Ctrl+=` zoom is not driven, though a 640 CSS-px
+  window yields a 320 CSS-px layout viewport so the gate covers that half of §10.1 by
+  identity; and a 122-character *spaced* name was not tested, the token cases being
+  stricter.
+- Gate result after the fix: `npm test` **126 files / 1683 tests**, `test:data` 18 / 192,
+  `npm run test:e2e` **20 passed** (12 before), `check:bundle-size` 4.39 MB / 134 files,  and on a freshly built flagged artifact `test:e2e:storage` 9, `test:e2e:data-products` 4,
+  `test:e2e:subject-product` 5. The Phase 6 product lanes are unaffected by the shell
+  change, which is what the one-artifact-per-run discipline is for.
+
+#### The gate was not sufficient, and CI proved it
+
+Recorded 2026-09-27, after the phase was accepted and the branch pushed. The claim
+above — that the 320 CSS-pixel requirement was met — **was not true when it was
+written**, and the first CI run on the branch is what established that. Both
+corrections are recorded here rather than left in the pull request, because an
+evidence record that overstates what was verified is worse than one that admits a
+gap.
+
+- **The first fix did not remove the font dependence, and the gate could not see
+  that.** The gate passed locally in all four projects and failed on CI in all four,
+  on the *no-subject* case, with `documentElement.scrollWidth 336` against
+  `clientWidth 320` and the biome select at 198 px as the widest offender. A native
+  `<select>`'s intrinsic min-content width is its widest `<option>`'s **rendered text**,
+  so it scales with the font's average character width: measured at 320 px the select
+  is 182–188 px under Inter, Times and Arial giving zero overflow, and 207 px under
+  monospace giving 26 px, with the runner's 198 px between this machine's 188 and
+  monospace's 207. The biome row — a `white-space: nowrap` label plus a `flex: 1`
+  select inside a grid whose single implicit column is `auto` — meant the row's
+  min-content became the **track** floor, which the first fix's `min-width: 0` could
+  not reach. `overflow-wrap: anywhere` was never involved: there is no long text in
+  that case. **This is learner-facing rather than a CI artifact**, because plan §2.4
+  keeps remote Google Fonts until Phase 8 and so every learner is on a system font
+  stack today; the gate passed locally only because this machine's fallback is narrow
+  enough.
+  Two candidate fixes were measured and rejected first: `select { min-width: 0 }` is a
+  **no-op** here, because the floor is the track and not the select, and
+  `max-width: 100%` is circular, resolving against a parent that the select itself
+  sizes. The fix clamps every single-column grid track in the shell to
+  `minmax(0, 1fr)`, removes `nowrap` from the biome label, and clamps the `repeat()`
+  card tracks with `min(100%, N)` — a `minmax(Npx, 1fr)` floor is likewise unreachable
+  by `min-width: 0` and was the same latent bug one media query away. A
+  `.welcome-field-grid` class exists because `grid-template-columns` cannot be
+  expressed as an inline style, and a wiring gate fails if anyone inlines the property
+  or drops the class.
+- **The gate is now font-deterministic**, which the first version was not: it
+  reported on whatever fonts the host happened to have, which is exactly why it
+  passed here and failed there. It now measures six declared metric sets, all naming
+  generic families so they resolve on any host, as a cross product with the subject
+  name lengths — 30 readings per project — and one set is deliberately the *narrow*
+  control so the sweep cannot pass by asserting only that everything blew up. The
+  forced-offender control, the settle logic, the greater-than-50 measured-element
+  guard and the no-subject case are all kept.
+- **Independently verified beyond the declared matrix:** zero overflow and zero
+  offending elements at 320 px under monospace 26 px and 32 px, fonts substantially
+  wider than any in the sweep, with the select settling onto its 44 px floor.
+- **A limit found while verifying, recorded rather than hidden:** at **240 px**,
+  *below* the width §10.1 names, overflow returns — 37 px as-shipped and up to 78 px
+  under monospace 32 px. The 320 px requirement is met with real headroom, but the
+  layout does not keep scaling below it.
+- **An ablation that corrects the earlier claim.** Removing `overflow-wrap: anywhere`
+  restores 527–1299 px of overflow even as-shipped, so **that** rule was carrying the
+  original 78/122-character defect and `min-width: 0` was not. The earlier record
+  credited both. `min-width: 0` is kept as an independent second barrier and is not
+  claimed to be currently required. Separately, the select's `min-width: 44px` is
+  load-bearing for the **touch target** rather than the overflow: without it the
+  select collapses to 26 px in a state that has **no overflow at all**, which the
+  overflow gate alone could never have caught.
+
+#### A second gate defect, found by the same CI run
+
+The Unit Tests job failed on the first push with `125 passed | 1 failed`, all seven
+failures in `tests/phase6/lazyBoundary.test.ts`, as `ENOENT` on `dist/assets` and
+`dist/index.html`. `dist` is gitignored, so a clean CI checkout has no `dist/`, and
+`assetNames()` called `readdirSync` unguarded behind an `expect(HAS_BUILD).toBe(true)`.
+The comment above that assertion read *"Stated rather than skipped, so a run without
+a build cannot report a pass it did not earn"* — the intent was right and the code did
+the opposite: on a checkout with no build it **failed**, which is how it skipped.
+
+The direction is safe, and the distinction matters: unlike Phase 5's privacy gate,
+which was green locally for the wrong reason, this one was **red on CI and green
+locally**, so it never produced a false pass. But it blocked `Web Build and Bundle`,
+`Browser Smoke`, the storage-v2 flagged build and all four compatibility lanes, so
+the built-artifact properties it exists to check were not verified on CI at all.
+
+The fix follows the precedent `tests/phase5/seam.test.ts` already set — guard on
+`existsSync`, assert a **positive statement** about the observed state, and return —
+and keeps the original intent, which the precedent alone does not deliver: the absence
+is **proved to be the gitignore rule's doing** by parsing the pattern out of
+`git check-ignore -v`, that assertion is itself shown to **discriminate** by running
+the same call against a tracked file git must report as not ignored, and the absence
+is stated once per run with counts and its cause so "there was nothing to measure"
+becomes a stated fact with a stated cause rather than an unexamined pass. The five
+marker presence check that closes the real gap left by the raised byte ceiling keeps
+all three of its assertions verbatim. Verified under both conditions — `dist` present
+and `dist` moved aside — and with a **negative control**: with the product chunks
+deleted from `dist`, three assertions still fail, so the guard suppresses exactly the
+absence of a build and nothing else.
+
+#### Three environment-dependent gates, and what that pattern is worth
+
+Phase 5 shipped a gate that was green locally for the wrong reason. This phase
+produced three that were **red on CI and green locally**: the two above, and the
+font-metric overflow. All three failed in the safe direction — in the environment that
+actually matters, rather than passing quietly where it did not — and all three found
+either a real defect or a real gate defect. None produced a false pass, and none can
+now: the two gates are guarded with stated absences and proven non-vacuous, and the
+layout gate measures a declared font matrix instead of the host's fonts. The remaining
+exposure is the recorded one: browser evidence here is emulated Chromium on Linux, and
+the physical-device checks in §10.4 stay assigned to Phases 21 and 23.
+
+#### CI evidence
+
+- Branch `phase-6-subject-backup`, PR #56. First run `36303051250` failed Unit Tests on
+  the gate defect above. Second run `36304039100` failed `Browser Smoke (Chromium
+  Matrix)` in all four projects on the font-metric overflow, and passed the other nine
+  jobs. Third run **`36306567000` passed all ten**: Lint, Typecheck, Unit Tests, Web
+  Build and Bundle, Browser Smoke (Chromium Matrix), Browser (Storage v2 Flagged
+  Build), and the four representative compatibility lanes for Linux/Chromium,
+  Linux/Firefox, macOS/WebKit and Windows/Edge.
+- The product's own gates are unchanged by any of the three fixes. After the final
+  one: `npm test` **126 files / 1690 tests** (the font matrix adds seven wiring-gate
+  tests), `test:data` 18 / 192, `npm run test:e2e:recorded` **20 passed**,
+  `check:bundle-size` 4.39 MB / 134 files, and on one freshly built flagged artifact
+  `test:e2e:storage` 9, `test:e2e:data-products` 4, `test:e2e:subject-product` 5. The
+  tabpanel track change touches the box the Data Center mounts inside, so the product
+  lanes were re-run rather than assumed.
+- Default `dist` is 4,598,462 bytes across 134 files.
 
 ---
 

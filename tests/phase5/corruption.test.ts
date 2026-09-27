@@ -646,7 +646,7 @@ describe('V3: corrupt archives never replace current data', () => {
     expect((thrown as StorageV2Error).code).toBe('VALIDATION_FAILED');
   });
 
-  it('the fingerprint the gate trusts really does see attachment bytes, and storage-v2\'s own checksum does not', async () => {
+  it('the fingerprint the gate trusts really does see attachment bytes, and so does storage-v2\'s own checksum', async () => {
     // Non-vacuity for "the device is unchanged" when the change under test is a
     // byte: a mutation the fingerprint cannot see would make every assertion in
     // this file decorative.
@@ -671,20 +671,34 @@ describe('V3: corrupt archives never replace current data', () => {
     expect(changed).toHaveLength(1);
     expect(changed[0]?.[1]).toBe(`blob:${blob.value.attachmentId}`);
 
-    // The generation's own roll-up checksum did **not** move, and storage-v2's
-    // own validation reports no mismatch. This is the recorded follow-up about
-    // attachment bytes, measured rather than quoted:
-    // `canonicalJsonStringify` serializes an `ArrayBuffer` as `{}`, so a blob
-    // record's checksum covers the id, the declared hash, the length, and the
-    // timestamp - and not one byte of the payload.
+    // The generation's own roll-up checksum **did** move, because a buffer is in
+    // the canonical form as a digest of its own bytes, and storage-v2's own
+    // validation refuses the mutated record: its declared `contentHash` is not the
+    // hash of the bytes it carries. So the two instruments - the verifier's
+    // fingerprint and the repository's own checksum - agree, and neither depends on
+    // the other to see the byte.
     const descriptorRow = (rows: ReadonlyArray<readonly [string, string]>, generationId: string): string | undefined =>
       rows.find((entry) => entry[0] === `generation:${generationId}`)?.[1];
-    expect(descriptorRow(after.meta, target.generationId)).toBe(descriptorRow(before.meta, target.generationId));
+    expect(descriptorRow(after.meta, target.generationId)).not.toBe(
+      descriptorRow(before.meta, target.generationId),
+    );
     const report = await target.repository.validateGeneration(target.generationId);
     expect(report.checksumMismatches).toEqual([]);
-    expect(report.ok).toBe(true);
-    expect(canonicalJsonStringify({ bytes: mutated.buffer })).toBe('{"bytes":{}}');
-    expect(canonicalJsonStringify({ bytes: new Uint8Array([1, 2, 3]) })).toBe('{"bytes":[1,2,3]}');
+    expect(report.ok).toBe(false);
+    expect(report.problems).toContainEqual({
+      code: 'content-hash-mismatch',
+      scope: 'attachment-blob',
+      count: 2,
+      severity: 'error',
+    });
+    // The canonical form is a fixed-width digest, and a view over the same bytes
+    // gives the same one.
+    const serialized = canonicalJsonStringify({ bytes: mutated.buffer });
+    expect(serialized).toContain('"__bytes__":');
+    expect(canonicalJsonStringify({ bytes: new Uint8Array(mutated.buffer) })).toBe(serialized);
+    // The verifier's fingerprint hex-encodes binary itself rather than relying on
+    // the canonical form, which is why it kept working when the canonical form did
+    // not cover the bytes.
     expect(encodeValue({ bytes: mutated.buffer })).toContain('ab:');
   });
 });

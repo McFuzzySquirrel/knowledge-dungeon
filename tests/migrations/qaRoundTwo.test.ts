@@ -29,7 +29,7 @@ import {
   type StorageV2StoreName,
   type SubjectRecordValue,
 } from '@/services/persistence/v2/schema';
-import { checksumValue } from '@/services/persistence/v2/checksum';
+import { checksumValue, sha256Hex } from '@/services/persistence/v2/checksum';
 import type { GenerationRecords } from '@/services/persistence/v2/validation';
 
 import {
@@ -470,7 +470,12 @@ describe('R2 attack: the in-memory descriptor agrees with what IndexedDB stored'
     await repo.stageGeneration({ generationId: GEN, source: 'initial', records: {} });
     await repo.activateGeneration(GEN);
     const bytes = new Uint8Array([1, 2, 3, 4]).buffer;
-    const hash = checksumValue(Array.from(new Uint8Array(bytes)));
+    // The digest of the bytes themselves. `checksumValue(Array.from(bytes))` is a
+    // digest of the *array*, which is a different string, and the two used to pass
+    // for one another here because no validator ever hashed a blob's payload. The
+    // record-id pairing this test measures is unchanged; the hash it now claims is
+    // the one its content actually has.
+    const hash = sha256Hex(new Uint8Array(bytes));
 
     await repo.putRecords(GEN, {
       subjects: [subject('subject-r2-a')],

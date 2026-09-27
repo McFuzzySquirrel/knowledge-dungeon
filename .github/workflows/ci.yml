@@ -113,6 +113,16 @@ jobs:
           npm --version
           npx playwright --version
       - name: Run the current-build viewport suite against the shared artifact
+        # This step is also the 320 CSS-pixel viewport gate for the Welcome
+        # shell: `currentBuild.spec.ts` measures horizontal overflow at the
+        # width plan section 10.1 names, at five subject-name lengths, and
+        # measures every Welcome control against the 44 CSS-pixel minimum touch
+        # target. It is a step in this job rather than a job or a lane of its
+        # own for one reason: the artifact and the single Chromium install both
+        # already exist here, so a second project, a second config, or a second
+        # build would add cost and a second artifact to a run that has exactly
+        # one. It gates, and the wiring gate
+        # `tests/e2e/welcome-narrow-viewport.test.ts` asserts that it does.
         run: npm run test:e2e:recorded
       - name: Upload browser failure evidence
         if: failure()
@@ -195,6 +205,22 @@ jobs:
       # NOT carry `continue-on-error`, so the exemption cannot creep back in.
       - name: Run the fresh-profile data-product restore lane
         run: npm run test:e2e:data-products:recorded
+      # Phase 6 individual-subject backup lane.
+      #
+      # A third *step in this job*, for the same reason as the one above: the flagged
+      # artifact with `VITE_DATA_PRODUCTS_V2=true` exists only here, this job uploads
+      # evidence only and never `dist`, and a job of its own would have to build the
+      # artifact a second time. One build, one Chromium install, one upload.
+      #
+      # It gates. `.kdsubject` had no browser evidence at all before this lane: the
+      # only substrate for its central risk - a destructive or partial write against
+      # a real device - was the `fake-indexeddb` shim. A restore or refusal regression
+      # has to be a red run, so `tests/e2e/subject-product-lane.test.ts` asserts that
+      # this step is not exempt from failing. The wording here deliberately avoids
+      # naming the exemption key, because Phase 5's wiring gate asserts on the raw
+      # text of this job and a comment that spelled it out would fail that gate.
+      - name: Run the individual-subject backup lane
+        run: npm run test:e2e:subject-product:recorded
       - name: Upload sanitized storage-v2 evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,5 +1,26 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
+import { expect, test, type Browser, type Page, type Request, type TestInfo } from '@playwright/test';
+
+import {
+  FONT_METRIC_SETS,
+  PLAN_MINIMUM_TOUCH_TARGET_PX,
+  PLAN_ZOOM_PERCENT,
+  SUBJECT_NAME_LENGTH_CASES,
+  WELCOME_NARROW_VIEWPORT,
+  WELCOME_SECTION_TAB_NAMES,
+  applyFontMetricSet,
+  expectSweepCanSeeAForcedOffender,
+  measureBiomeSelectWidth,
+  measureHorizontalOverflow,
+  measureTouchTargets,
+  seedLegacySubject,
+  selectWelcomeSectionTab,
+  settleLayout,
+  waitForSubjectListEntry,
+  type HorizontalOverflowReading,
+  type SubjectNameCase,
+  type TouchTargetReading,
+} from './welcome-narrow-viewport';
 
 const WCAG_22_AA_TAGS = [
   'wcag2a',
@@ -259,4 +280,322 @@ test('safe tutorial action renders the default Phaser world with static-only net
   });
   expect(webSocketUrls, `Unexpected WebSocket destinations: ${webSocketUrls.join(', ')}`).toEqual([]);
   expect(privacyReport.violations, privacyReport.violations.join('\n')).toEqual([]);
+});
+
+/*
+ * ── The 320 CSS-pixel viewport gate ───────────────────────────────────────
+ *
+ * Plan §10.1 requires core operation at 200 % zoom and a 320 CSS-pixel viewport,
+ * and the default production build did not meet it: `#welcome-panel-subjects`
+ * has a min-content width, `.welcome-main` is a flex row, and a subject name is
+ * rendered inside that panel, so the name set the floor of the whole row. A name
+ * with a break opportunity in it measured zero, which is why this was not
+ * reproducible from a short name.
+ *
+ * These two tests are that failure's regression gate, in this suite and no
+ * other, for the reason `welcome-narrow-viewport.test.ts` records: this suite is
+ * the one the shared production artifact's `browser-smoke` step already runs, so
+ * the gate ships in an existing gating step on an already-built artifact with
+ * no new project, no new config, and no second build.
+ */
+
+interface NarrowViewportMeasurement {
+  readonly label: string;
+  readonly characters: number;
+  readonly fontMetricSet: string;
+  readonly reading: HorizontalOverflowReading;
+  /** Width of the seeded subject's own selection control, or 0 when unseeded. */
+  readonly subjectEntryWidth: number;
+  /** The biome `<select>`, whose intrinsic width is the floor's main input. */
+  readonly biomeSelectWidth: number | null;
+  /** The forced-overflow control run against this page. */
+  readonly sweepControlSawTheForcedOffender: boolean;
+}
+
+/**
+ * One name length, measured under every declared font metric set.
+ *
+ * A fresh context per name length rather than one context re-seeded, because the
+ * subject list is read on mount: a seed applied to a page that is already showing
+ * the list is a different state from the one that overflows.
+ *
+ * The metric sets are applied by swapping one stylesheet on the *same* page
+ * rather than by loading a page per set. That is the difference between a
+ * font-deterministic gate and a slow one: the cross product is 30 readings from
+ * 5 page loads, and every reading is taken on a page whose fonts have been
+ * reported as ready and whose layout has been re-settled after the swap.
+ */
+async function measureWelcomeShellForNameCase(
+  browser: Browser,
+  nameCase: SubjectNameCase,
+): Promise<NarrowViewportMeasurement[]> {
+  const context = await browser.newContext({ viewport: { ...WELCOME_NARROW_VIEWPORT } });
+  try {
+    const page = await context.newPage();
+    await page.route(
+      (url) =>
+        (url.protocol === 'http:' || url.protocol === 'https:') &&
+        url.hostname !== '127.0.0.1',
+      async (route) => {
+        await route.abort('blockedbyclient');
+      },
+    );
+    await seedLegacySubject(page, nameCase.subjectName);
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Knowledge Dungeon' }),
+    ).toBeVisible();
+    const subjectEntryWidth = await waitForSubjectListEntry(page, nameCase.subjectName);
+    // The list is on the page before any font is touched, so a zero here is the
+    // "measured an empty element" trap and not a layout result.
+    if (nameCase.subjectName !== null) {
+      expect(
+        subjectEntryWidth,
+        `${nameCase.label}: the seeded subject list entry was laid out at zero width.`,
+      ).toBeGreaterThan(0);
+    }
+    await settleLayout(page);
+
+    const measurements: NarrowViewportMeasurement[] = [];
+    for (const metricSet of FONT_METRIC_SETS) {
+      await applyFontMetricSet(page, metricSet);
+      // The name is still the learner's name after a font swap, so the layout
+      // being measured is still the layout that carries it. Asserted rather than
+      // assumed, because a swap that somehow unmounted the list would leave a
+      // shorter page and a clean reading.
+      const entryWidthAfterSwap = await waitForSubjectListEntry(page, nameCase.subjectName);
+      if (nameCase.subjectName !== null) {
+        expect(
+          entryWidthAfterSwap,
+          `${nameCase.label} under ${metricSet.id}: the subject list entry was laid out at zero width after the font swap.`,
+        ).toBeGreaterThan(0);
+      }
+
+      // Non-vacuity, before the reading that matters: break the page on purpose
+      // and require the sweep to notice. A sweep that cannot see an overflow it
+      // was handed would make every "no overflow" below meaningless.
+      const control = await expectSweepCanSeeAForcedOffender(page);
+
+      measurements.push({
+        label: nameCase.label,
+        characters: nameCase.characters,
+        fontMetricSet: metricSet.id,
+        reading: await measureHorizontalOverflow(page),
+        subjectEntryWidth: entryWidthAfterSwap,
+        biomeSelectWidth: await measureBiomeSelectWidth(page),
+        sweepControlSawTheForcedOffender: control.seen,
+      });
+    }
+    return measurements;
+  } finally {
+    await context.close();
+  }
+}
+
+test('the Welcome shell has no horizontal overflow at 320 CSS pixels, at any subject-name length and under any font', async ({
+  browser,
+  page,
+}, testInfo) => {
+  const measurements: NarrowViewportMeasurement[] = [];
+  for (const nameCase of SUBJECT_NAME_LENGTH_CASES) {
+    measurements.push(...(await measureWelcomeShellForNameCase(browser, nameCase)));
+  }
+
+  await attachJson(testInfo, 'welcome-narrow-viewport-overflow.json', {
+    viewport: WELCOME_NARROW_VIEWPORT,
+    planZoomPercent: PLAN_ZOOM_PERCENT,
+    note: '200% zoom at a 640 CSS-pixel window is this same 320 CSS-pixel layout viewport.',
+    fontMetricSets: FONT_METRIC_SETS.map((metricSet) => ({
+      id: metricSet.id,
+      fontFamily: metricSet.fontFamily,
+      fontSizePx: metricSet.fontSizePx,
+      purpose: metricSet.purpose,
+    })),
+    measurements: measurements.map((entry) => ({
+      label: entry.label,
+      characters: entry.characters,
+      fontMetricSet: entry.fontMetricSet,
+      subjectEntryWidth: entry.subjectEntryWidth,
+      biomeSelectWidth: entry.biomeSelectWidth,
+      sweepControlSawTheForcedOffender: entry.sweepControlSawTheForcedOffender,
+      ...entry.reading,
+    })),
+  });
+
+  // ── The control, first, on every single reading, so a false pass is impossible.
+  for (const entry of measurements) {
+    expect(
+      entry.sweepControlSawTheForcedOffender,
+      `${entry.label} under ${entry.fontMetricSet}: the overflow sweep did not notice a 1280px box forced into a 320px viewport, so a clean reading from it proves nothing.`,
+    ).toBe(true);
+  }
+
+  // ── The page fits, at every name length, under every declared metric set, on
+  // both halves of the measurement.
+  for (const entry of measurements) {
+    const where = `${entry.label} (${entry.characters} characters) under ${entry.fontMetricSet}`;
+    expect(
+      entry.reading.clientWidth,
+      `${where}: the reading is not at the plan's viewport width, so it is not the measurement this gate claims to be.`,
+    ).toBe(WELCOME_NARROW_VIEWPORT.width);
+
+    expect(
+      entry.reading.pageOverflowPx,
+      `${where}: documentElement.scrollWidth ${entry.reading.documentScrollWidth} exceeds clientWidth ${entry.reading.clientWidth} (biome select ${entry.biomeSelectWidth}px). Offenders: ${entry.reading.offenders
+        .map((offender) => `${offender.selector} right=${offender.right} width=${offender.width}`)
+        .join('; ')}`,
+    ).toBe(0);
+
+    expect(
+      entry.reading.offenders,
+      `${where}: elements reach right=${entry.reading.offenders[0]?.right ?? 'none'} past clientWidth=${entry.reading.clientWidth}. Offenders: ${entry.reading.offenders
+        .map((offender) => `${offender.selector} right=${offender.right} width=${offender.width}`)
+        .join('; ')}`,
+    ).toEqual([]);
+
+    // An empty sweep over an empty page is a pass with no content, so the number
+    // of elements that were actually measured is asserted too.
+    expect(
+      entry.reading.measuredElementCount,
+      `${where}: the sweep measured no elements at all.`,
+    ).toBeGreaterThan(50);
+  }
+
+  // ── The sweep is a sweep, not a single extra reading. A metric-set list of one
+  // would be a gate pinned to whichever set happened to pass, which is the
+  // failure mode this sweep exists to remove.
+  expect(FONT_METRIC_SETS.length).toBeGreaterThanOrEqual(4);
+  expect(
+    measurements.filter((entry) => entry.fontMetricSet === 'mono-20').length,
+    'the widest declared metric set was not measured for every name length.',
+  ).toBe(SUBJECT_NAME_LENGTH_CASES.length);
+  expect(
+    measurements.filter((entry) => entry.fontMetricSet === 'serif-16').length,
+    'the narrow control metric set was not measured for every name length.',
+  ).toBe(SUBJECT_NAME_LENGTH_CASES.length);
+  // The cross product really is the product, not five readings under one set.
+  expect(new Set(measurements.map((entry) => entry.fontMetricSet)).size).toBe(FONT_METRIC_SETS.length);
+  expect(measurements.length).toBe(SUBJECT_NAME_LENGTH_CASES.length * FONT_METRIC_SETS.length);
+
+  // ── The name is wrapped, not shortened. This is the reason the fix is allowed
+  // to exist at all: a control that hid the tail of the name would satisfy every
+  // width assertion above and fail the learner.
+  await seedLegacySubject(
+    page,
+    SUBJECT_NAME_LENGTH_CASES.find((nameCase) => nameCase.characters === 122)?.subjectName ?? null,
+  );
+  await page.setViewportSize({ ...WELCOME_NARROW_VIEWPORT });
+  await page.goto('/');
+  const longName = SUBJECT_NAME_LENGTH_CASES.find((nameCase) => nameCase.characters === 122)
+    ?.subjectName as string;
+  await waitForSubjectListEntry(page, longName);
+  await settleLayout(page);
+
+  const entry = page.locator('#welcome-panel-subjects .welcome-actions button').filter({ hasText: longName }).first();
+  const rendered = (await entry.innerText()).replace(/\s+/g, ' ').trim();
+  // Every character of the name is still there. The button also carries a sibling
+  // progress count, so the name is asserted as a prefix rather than the whole
+  // label, and compared with whitespace removed: `overflow-wrap` inserts a line
+  // break, not a character, so the name itself must be byte-identical.
+  expect(rendered.startsWith(longName), `rendered as: ${rendered.slice(0, 140)}`).toBe(true);
+  expect(rendered.replace(/\s/g, '')).toContain(longName);
+
+  // It is real, selectable text rather than an image, a `title`, or a tooltip, and
+  // the name's own text node is the one a learner selects. `Selection.toString()`
+  // is not used: it depends on document focus, which a headless measurement
+  // context does not have, so a `""` there would be an artefact rather than a
+  // finding. The Range is the thing being asserted, and the selection is checked
+  // for having taken it.
+  const nameText = await entry.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const node = walker.nextNode();
+    if (!node) return { text: '', lineBoxes: 0, rangeCount: -1, selectedTheName: false };
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const current = window.getSelection();
+    current?.removeAllRanges();
+    current?.addRange(range);
+    return {
+      text: range.toString(),
+      lineBoxes: range.getClientRects().length,
+      rangeCount: current?.rangeCount ?? 0,
+      selectedTheName: current?.anchorNode === node && current?.focusNode === node,
+    };
+  });
+  expect(nameText.text.trim()).toBe(longName);
+  expect(nameText.rangeCount).toBe(1);
+  expect(nameText.selectedTheName).toBe(true);
+
+  // ...and the name genuinely had to wrap. The number of client rects a Range over
+  // the name's own text node produces is the number of line boxes it occupies,
+  // which is the direct measurement of "this name does not fit on one line here".
+  expect(
+    nameText.lineBoxes,
+    'the 122-character name fit on one line, so nothing was actually wrapped and the width fix is untested',
+  ).toBeGreaterThan(1);
+});
+
+test('every Welcome shell control meets the 44 CSS-pixel minimum touch target at 320 pixels', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext({ viewport: { ...WELCOME_NARROW_VIEWPORT } });
+  try {
+    const page = await context.newPage();
+    await page.route(
+      (url) =>
+        (url.protocol === 'http:' || url.protocol === 'https:') &&
+        url.hostname !== '127.0.0.1',
+      async (route) => {
+        await route.abort('blockedbyclient');
+      },
+    );
+    // The longest name, so the tab that carries the learner's own text is the one
+    // being measured, and the sidebar's three primary controls are all present.
+    const longName = SUBJECT_NAME_LENGTH_CASES.find((nameCase) => nameCase.characters === 122)
+      ?.subjectName as string;
+    await seedLegacySubject(page, longName);
+    await page.goto('/');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Knowledge Dungeon' }),
+    ).toBeVisible();
+    await waitForSubjectListEntry(page, longName);
+    await settleLayout(page);
+
+    // The skip link App.tsx injects on boot. It is the shell's first control and
+    // it is measured here unfocused, which is the size a tab stop lands on.
+    await expect(page.locator('a.skip-link')).toHaveCount(1);
+
+    const readings: Array<TouchTargetReading & { tab: string }> = [];
+    readings.push({ tab: 'Create / Load', ...(await measureTouchTargets(page)) });
+    for (const tab of WELCOME_SECTION_TAB_NAMES.slice(1)) {
+      await selectWelcomeSectionTab(page, tab);
+      readings.push({ tab, ...(await measureTouchTargets(page)) });
+    }
+
+    await attachJson(testInfo, 'welcome-narrow-viewport-touch-targets.json', {
+      viewport: WELCOME_NARROW_VIEWPORT,
+      minimumPx: PLAN_MINIMUM_TOUCH_TARGET_PX,
+      readings,
+    });
+
+    let measuredTotal = 0;
+    for (const reading of readings) {
+      measuredTotal += reading.measuredControlCount;
+      expect(
+        reading.measuredControlCount,
+        `${reading.tab}: no controls were measured, so a clean reading is vacuous.`,
+      ).toBeGreaterThan(0);
+      expect(
+        reading.shortfalls,
+        `${reading.tab}: controls below ${PLAN_MINIMUM_TOUCH_TARGET_PX}x${PLAN_MINIMUM_TOUCH_TARGET_PX} CSS pixels - ${reading.shortfalls
+          .map((shortfall) => `${shortfall.selector} ${shortfall.width}x${shortfall.height}`)
+          .join('; ')}`,
+      ).toEqual([]);
+    }
+    // The whole shell across its four tabs, so a sweep that only ever looked at
+    // one panel cannot pass this.
+    expect(measuredTotal).toBeGreaterThanOrEqual(20);
+  } finally {
+    await context.close();
+  }
 });

@@ -39,7 +39,7 @@ import {
   type StorageV2StoreName,
   type SubjectRecordValue,
 } from '@/services/persistence/v2/schema';
-import { checksumText, checksumValue } from '@/services/persistence/v2/checksum';
+import { checksumText, sha256Hex } from '@/services/persistence/v2/checksum';
 import { FIXTURE_ROOT } from './support/storageV2TestSupport';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -1250,7 +1250,14 @@ describe('attachment bytes and checksums', () => {
   it('stores an attachment blob keyed by its content hash and reads it back', async () => {
     const repo = await repositoryFor('blobs');
     const bytes = new Uint8Array([1, 2, 3, 4, 5]);
-    const contentHash = checksumValue(Array.from(bytes));
+    // The SHA-256 of the **bytes**, not of their JSON array form. These two used to
+    // differ, and nothing noticed: `contentHash` was never recomputed from the
+    // payload, and a buffer serialized to `{}` in the canonical form, so a blob
+    // record could carry a hash of something other than its own content and still
+    // validate. `validateAttachmentBlobRecord` now hashes the bytes and compares,
+    // so a fixture that claims one content and stores another is refused - which is
+    // the point, and is why this line is now the real digest.
+    const contentHash = sha256Hex(bytes);
 
     await repo.stageGeneration({
       generationId: GENERATION_ID,

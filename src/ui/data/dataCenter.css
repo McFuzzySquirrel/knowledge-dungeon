@@ -27,6 +27,16 @@
  *   strong rule          #8a6f3c on card #fdf8ee   4.49:1   control boundary
  *   focus ring           #7a4a12 on card #fdf8ee   7.05:1   non-text
  *
+ * Phase 6 added a subject picker, a radio group, and two hover/selected
+ * backgrounds, and the new pairs are computed the same way:
+ *
+ *   sepia ink            #2f2418 on #f7eddb       13.05:1   text, selected choice
+ *   soft sepia           #55452f on #f7eddb        7.94:1   text, selected choice
+ *   sepia ink            #2f2418 on #f2e6cf       12.26:1   text, hover
+ *   soft sepia           #55452f on #f2e6cf        7.46:1   text, hover
+ *   amber accent         #6b3f0e on card #fdf8ee   8.47:1   radio + select accent
+ *   strong rule          #8a6f3c on #f7eddb        4.09:1   selected choice boundary
+ *
  * `--kd-line` (#b9a37c, 2.31:1) is used only for decoration that carries no
  * meaning - a hairline between two paragraphs. Anything a learner has to *see in
  * order to operate* uses `--kd-line-strong`, which clears 3:1.
@@ -36,7 +46,10 @@
  * Nothing here changes meaning through colour alone. Every state that has a
  * colour also has a word in the text and a glyph in `.kd-marker` /
  * `.kd-outcome-marker`, and the glyph is marked `aria-hidden` so it is not read
- * twice.
+ * twice. The two states Phase 6 added follow the same rule: the selected tab is
+ * bold *and* amber, and the selected import mode is a filled radio *and* the word
+ * "Chosen." in its own row *and* a live sentence naming the mode and what it will
+ * do.
  *
  * ## Touch and zoom
  *
@@ -45,12 +58,11 @@
  * construction rather than by a media query that happens to cover the sizes
  * someone tried. The one media query here is for the dialog's own padding.
  *
- * ## Reduced motion
- *
- * Two rules, because either one alone has a hole. The media query covers a
- * browser with scripting unavailable; the attribute covers a learner who changes
- * the preference while the Data Center is open, which the stylesheet alone would
- * not notice until the next reload.
+ * The subject picker is a native `<select>` rather than a listbox: the popup a
+ * touch platform opens for it is rendered by the platform, so its row height is
+ * not this stylesheet's to get wrong. The radio group's 44-pixel target is the
+ * whole `<label>`, because the native radio inside it is 13 pixels and a
+ * stylesheet cannot honestly claim otherwise.
  */
 
 .kd-data-center {
@@ -169,15 +181,36 @@
   cursor: pointer;
 }
 
+/*
+ * The selected tab is not only a darker fill.
+ *
+ * A tab whose selected state is a background colour alone is a tab two learners
+ * with different vision read differently, so the selected one also carries a
+ * heavier border and bolder text. The border is `--kd-ink` rather than a new
+ * colour, so it inherits the measured 14.31:1 of the ink on the card instead of
+ * introducing a pair nobody computed.
+ */
 .kd-data-center .kd-tab.kd-tab[aria-selected='true'] {
   background: var(--kd-accent);
-  border-color: var(--kd-accent);
+  border-color: var(--kd-ink);
+  border-width: 2px;
   color: var(--kd-accent-ink);
+  font-weight: 700;
 }
 
 .kd-data-center .kd-panel {
   display: grid;
   gap: 14px;
+}
+
+/*
+ * A panel that is not selected carries `hidden`, so its contents are gone from the
+ * accessibility tree and unreachable by Tab. The rule is here as well as the
+ * attribute because `display: grid` on the element would otherwise beat the UA's
+ * `[hidden] { display: none }` and render an empty panel that still occupies a row.
+ */
+.kd-data-center .kd-panel[hidden] {
+  display: none;
 }
 
 .kd-data-center .kd-panel:focus-visible {
@@ -249,9 +282,168 @@
 .kd-data-center .kd-button.kd-button:focus-visible,
 .kd-data-center .kd-tab.kd-tab:focus-visible,
 .kd-data-center .kd-panel:focus-visible,
+.kd-data-center .kd-select:focus-visible,
+.kd-data-center .kd-choice-input:focus-visible,
 .kd-data-center .kd-technical summary:focus-visible {
   outline: 3px solid var(--kd-focus);
   outline-offset: 2px;
+}
+
+/* ── A labelled control and its help text ───────────────────────────────── */
+
+.kd-data-center .kd-field {
+  display: grid;
+  gap: 4px;
+}
+
+.kd-data-center .kd-field-label {
+  color: var(--kd-ink);
+  font-weight: 600;
+}
+
+.kd-data-center .kd-field-help {
+  margin: 0;
+  color: var(--kd-ink-soft);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The subject picker.
+ *
+ * `accent-color` is the only new value in this block and it is the amber accent
+ * already measured at 8.49:1 against the button's cream ink, so the selected
+ * option is a shape-and-weight distinction first and a colour distinction second.
+ * The 44-pixel minimum is the same one every other control here carries, and the
+ * width is bounded so a long subject name wraps or truncates rather than forcing a
+ * horizontal scrollbar at 320 CSS pixels.
+ */
+.kd-data-center .kd-select.kd-select {
+  min-height: 44px;
+  min-width: 44px;
+  width: 100%;
+  max-width: 26rem;
+  padding: 8px 10px;
+  border: 1px solid var(--kd-line-strong);
+  border-radius: 10px;
+  background: var(--kd-card);
+  color: var(--kd-ink);
+  font: inherit;
+  accent-color: var(--kd-accent);
+}
+
+.kd-data-center .kd-select.kd-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* ── The import mode choice ─────────────────────────────────────────────── */
+
+.kd-data-center .kd-choices.kd-choices {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--kd-line-strong);
+  border-radius: 12px;
+  background: var(--kd-card);
+  color: var(--kd-ink);
+}
+
+.kd-data-center .kd-choices-legend {
+  padding: 0 6px;
+  color: var(--kd-ink);
+  font-weight: 700;
+}
+
+/*
+ * The touch target is the whole label, not the 13-pixel radio inside it.
+ *
+ * That is why the input is a grid item and the label is the box: a 44 by 44 rule
+ * applied to the radio itself would either fail or force a custom control, and a
+ * custom radio is a worse accessibility outcome than the native one. The radio
+ * carries `accent-color` and the selected state is *also* stated in words in
+ * `.kd-choice-note` and in the live effect line, so nothing here depends on
+ * telling two colours apart.
+ */
+.kd-data-center .kd-choice.kd-choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-height: 44px;
+  padding: 8px 10px;
+  /* The strong rule, not the decorative one: this border is the boundary of the
+     control a learner has to see in order to operate, so it clears 3:1 (4.09:1 on
+     the selected background below). */
+  border: 1px solid var(--kd-line-strong);
+  border-left-width: 4px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.kd-data-center .kd-choice.kd-choice:hover {
+  background: #f2e6cf;
+}
+
+.kd-data-center .kd-choice.kd-choice:has(.kd-choice-input:checked) {
+  border-color: var(--kd-ink);
+  border-left-color: var(--kd-accent);
+  border-left-width: 6px;
+  background: #f7eddb;
+}
+
+.kd-data-center .kd-choice.kd-choice:has(.kd-choice-input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.kd-data-center .kd-choice-input {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--kd-accent);
+}
+
+.kd-data-center .kd-choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kd-data-center .kd-choice-name {
+  color: var(--kd-ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.kd-data-center .kd-choice-note {
+  color: var(--kd-ink-soft);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.kd-data-center .kd-choices-effect {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  color: var(--kd-ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.kd-data-center .kd-choices-refusal {
+  margin: 0;
+  color: var(--kd-ink-soft);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* ── The dialog's named subject ─────────────────────────────────────────── */
+
+.kd-data-center .kd-dialog-subject {
+  color: var(--kd-ink);
+  overflow-wrap: anywhere;
 }
 
 /* ── Status and problems ────────────────────────────────────────────────── */

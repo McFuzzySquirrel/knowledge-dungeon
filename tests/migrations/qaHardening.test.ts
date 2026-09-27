@@ -140,6 +140,20 @@ const STORAGE_V2_SEAMS: ReadonlyMap<string, string> = new Map([
     extensionless(join(PRODUCTS_DIR, 'archiveValidation.ts')),
     'the archive validator: reads and verifies .kdbak members',
   ],
+  // Phase 6. The individual-subject product is the same kind of seam: it reads a
+  // generation through the repository, stages a new one, and shares the archive
+  // validator's structural read. `idRemapping.ts` names the schema module for its
+  // record value types and its typed refusal, and reaches no storage-v2
+  // *implementation* module at all - which is why it is here as a narrower entry
+  // rather than an exemption.
+  [
+    extensionless(join(PRODUCTS_DIR, 'subjectBackup.ts')),
+    'the individual-subject backup product: reads a generation, stages an import',
+  ],
+  [
+    extensionless(join(PRODUCTS_DIR, 'idRemapping.ts')),
+    'the copy-mode id remapper: record value types and typed refusals only',
+  ],
 ]);
 
 /**
@@ -679,11 +693,25 @@ describe('QA checksum against Web Crypto', () => {
     );
   });
 
-  it('serializes a Uint8Array as an array, so attachment bytes are checksummed', () => {
-    expect(canonicalJsonStringify(new Uint8Array([1, 2, 3]))).toBe('[1,2,3]');
-    expect(checksumValue(new Uint8Array([1, 2, 3]))).toBe(checksumValue([1, 2, 3]));
+  it('serializes bytes as a digest of the bytes, so attachment content is checksummed', () => {
+    // A buffer - in either container - serializes to a fixed-width digest form
+    // rather than to its contents, so the checksum of a record holding a
+    // multi-megabyte attachment costs a hash and every byte is still covered.
+    const view = new Uint8Array([1, 2, 3]);
+    const digest = sha256Hex(view);
+    const expected = `{"__bytes__":{"length":3,"sha256":"${digest}"}}`;
+    expect(canonicalJsonStringify(view)).toBe(expected);
+    // The same form for the `ArrayBuffer` the storage-v2 schema actually declares,
+    // and the same form for a view over it, so one value cannot have two checksums.
+    expect(canonicalJsonStringify(view.slice().buffer)).toBe(expected);
+    expect(checksumValue(view)).toBe(checksumValue(view.slice().buffer));
+    // Bytes are **not** the same value as a plain array of the same numbers, and the
+    // canonical form now says so rather than conflating the two.
+    expect(checksumValue(view)).not.toBe(checksumValue([1, 2, 3]));
+    // A view's own `byteOffset` is honoured, so a subarray hashes the bytes it covers.
+    const backing = new Uint8Array([9, 1, 2, 3, 9]);
+    expect(checksumValue(backing.subarray(1, 4))).toBe(checksumValue(view));
   });
-
   it('is pure: no clock, no randomness, repeated calls are identical', () => {
     const value = { a: 1, b: [1, 2, 3], c: { d: 'synthetic' } };
     const first = checksumValue(value);
@@ -1070,8 +1098,18 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
     // - and `bootstrap.ts` does not import the codec at all, so in practice it
     // allowed none. Phase 5 gives the codec a legitimate importer, the data
     // product that has to write and read `.kdbak` members, and the new rule pins
-    // the *exact* set rather than "at most one": the two product modules, nothing
-    // else, and no static edge from the application graph.
+    // the *exact* set rather than "at most one": the product modules, nothing else,
+    // and no static edge from the application graph.
+    //
+    // RAIL CHANGE, recorded deliberately, and stronger rather than weaker. The
+    // pinned set grew from two entries to three when Phase 6 added
+    // `subjectBackup.ts`, a sibling product in the same tree that reaches the codec
+    // for the same reason. This is a scan of the *source tree*, not of the
+    // application graph, so it sees every product module whether or not a screen
+    // imports it yet - which is exactly the property that keeps a product from
+    // quietly acquiring a fourth importer. What the change does not do is relax the
+    // list into a floor: a fourth entry still fails here, and the eager-edges check
+    // below still fails for any non-product module.
     const importers: string[] = [];
     for (const file of scannableSourceFiles(SRC)) {
       if (isInside(V2_DIR, file)) continue;
@@ -1082,6 +1120,7 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
     expect(importers.sort()).toEqual([
       'src/services/persistence/products/archiveValidation.ts',
       'src/services/persistence/products/fullDeviceBackup.ts',
+      'src/services/persistence/products/subjectBackup.ts',
     ]);
 
     // And the laziness half, asserted here too rather than only in the Phase 5
