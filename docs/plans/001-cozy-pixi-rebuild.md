@@ -2983,8 +2983,9 @@ five source markers would have made the assertion silently check nothing.
   requirement is therefore **not met by the application as a whole**. On acceptance the
   maintainer routed this to the Welcome-surface owner as a **tracked follow-up outside
   Phase 6** (plan §12 rule 13), rather than deferring it to Phase 21, so it is fixed and
-  gated before the later accessibility audit depends on it. **Fixed and gated the same
-  day** — see the follow-up record below.
+  gated before the later accessibility audit depends on it. **The first fix was
+  incomplete**, and only the first CI run after acceptance proved it — see the follow-up
+  record below.
 - **Copy mode doubles the device-global assistance store, unboundedly, and the counters
   report 0 while it happens.** Each copy import appends the archive's whole assistance
   store with minted ids, as byte-identical duplicates with no natural key to deduplicate
@@ -3117,10 +3118,128 @@ folded into Phase 7. Owner: `ui-engineer`, as the React DOM shell's owner.
   identity; and a 122-character *spaced* name was not tested, the token cases being
   stricter.
 - Gate result after the fix: `npm test` **126 files / 1683 tests**, `test:data` 18 / 192,
-  `npm run test:e2e` **20 passed** (12 before), `check:bundle-size` 4.39 MB / 134 files,
-  and on a freshly built flagged artifact `test:e2e:storage` 9, `test:e2e:data-products` 4,
+  `npm run test:e2e` **20 passed** (12 before), `check:bundle-size` 4.39 MB / 134 files,  and on a freshly built flagged artifact `test:e2e:storage` 9, `test:e2e:data-products` 4,
   `test:e2e:subject-product` 5. The Phase 6 product lanes are unaffected by the shell
   change, which is what the one-artifact-per-run discipline is for.
+
+#### The gate was not sufficient, and CI proved it
+
+Recorded 2026-09-27, after the phase was accepted and the branch pushed. The claim
+above — that the 320 CSS-pixel requirement was met — **was not true when it was
+written**, and the first CI run on the branch is what established that. Both
+corrections are recorded here rather than left in the pull request, because an
+evidence record that overstates what was verified is worse than one that admits a
+gap.
+
+- **The first fix did not remove the font dependence, and the gate could not see
+  that.** The gate passed locally in all four projects and failed on CI in all four,
+  on the *no-subject* case, with `documentElement.scrollWidth 336` against
+  `clientWidth 320` and the biome select at 198 px as the widest offender. A native
+  `<select>`'s intrinsic min-content width is its widest `<option>`'s **rendered text**,
+  so it scales with the font's average character width: measured at 320 px the select
+  is 182–188 px under Inter, Times and Arial giving zero overflow, and 207 px under
+  monospace giving 26 px, with the runner's 198 px between this machine's 188 and
+  monospace's 207. The biome row — a `white-space: nowrap` label plus a `flex: 1`
+  select inside a grid whose single implicit column is `auto` — meant the row's
+  min-content became the **track** floor, which the first fix's `min-width: 0` could
+  not reach. `overflow-wrap: anywhere` was never involved: there is no long text in
+  that case. **This is learner-facing rather than a CI artifact**, because plan §2.4
+  keeps remote Google Fonts until Phase 8 and so every learner is on a system font
+  stack today; the gate passed locally only because this machine's fallback is narrow
+  enough.
+  Two candidate fixes were measured and rejected first: `select { min-width: 0 }` is a
+  **no-op** here, because the floor is the track and not the select, and
+  `max-width: 100%` is circular, resolving against a parent that the select itself
+  sizes. The fix clamps every single-column grid track in the shell to
+  `minmax(0, 1fr)`, removes `nowrap` from the biome label, and clamps the `repeat()`
+  card tracks with `min(100%, N)` — a `minmax(Npx, 1fr)` floor is likewise unreachable
+  by `min-width: 0` and was the same latent bug one media query away. A
+  `.welcome-field-grid` class exists because `grid-template-columns` cannot be
+  expressed as an inline style, and a wiring gate fails if anyone inlines the property
+  or drops the class.
+- **The gate is now font-deterministic**, which the first version was not: it
+  reported on whatever fonts the host happened to have, which is exactly why it
+  passed here and failed there. It now measures six declared metric sets, all naming
+  generic families so they resolve on any host, as a cross product with the subject
+  name lengths — 30 readings per project — and one set is deliberately the *narrow*
+  control so the sweep cannot pass by asserting only that everything blew up. The
+  forced-offender control, the settle logic, the greater-than-50 measured-element
+  guard and the no-subject case are all kept.
+- **Independently verified beyond the declared matrix:** zero overflow and zero
+  offending elements at 320 px under monospace 26 px and 32 px, fonts substantially
+  wider than any in the sweep, with the select settling onto its 44 px floor.
+- **A limit found while verifying, recorded rather than hidden:** at **240 px**,
+  *below* the width §10.1 names, overflow returns — 37 px as-shipped and up to 78 px
+  under monospace 32 px. The 320 px requirement is met with real headroom, but the
+  layout does not keep scaling below it.
+- **An ablation that corrects the earlier claim.** Removing `overflow-wrap: anywhere`
+  restores 527–1299 px of overflow even as-shipped, so **that** rule was carrying the
+  original 78/122-character defect and `min-width: 0` was not. The earlier record
+  credited both. `min-width: 0` is kept as an independent second barrier and is not
+  claimed to be currently required. Separately, the select's `min-width: 44px` is
+  load-bearing for the **touch target** rather than the overflow: without it the
+  select collapses to 26 px in a state that has **no overflow at all**, which the
+  overflow gate alone could never have caught.
+
+#### A second gate defect, found by the same CI run
+
+The Unit Tests job failed on the first push with `125 passed | 1 failed`, all seven
+failures in `tests/phase6/lazyBoundary.test.ts`, as `ENOENT` on `dist/assets` and
+`dist/index.html`. `dist` is gitignored, so a clean CI checkout has no `dist/`, and
+`assetNames()` called `readdirSync` unguarded behind an `expect(HAS_BUILD).toBe(true)`.
+The comment above that assertion read *"Stated rather than skipped, so a run without
+a build cannot report a pass it did not earn"* — the intent was right and the code did
+the opposite: on a checkout with no build it **failed**, which is how it skipped.
+
+The direction is safe, and the distinction matters: unlike Phase 5's privacy gate,
+which was green locally for the wrong reason, this one was **red on CI and green
+locally**, so it never produced a false pass. But it blocked `Web Build and Bundle`,
+`Browser Smoke`, the storage-v2 flagged build and all four compatibility lanes, so
+the built-artifact properties it exists to check were not verified on CI at all.
+
+The fix follows the precedent `tests/phase5/seam.test.ts` already set — guard on
+`existsSync`, assert a **positive statement** about the observed state, and return —
+and keeps the original intent, which the precedent alone does not deliver: the absence
+is **proved to be the gitignore rule's doing** by parsing the pattern out of
+`git check-ignore -v`, that assertion is itself shown to **discriminate** by running
+the same call against a tracked file git must report as not ignored, and the absence
+is stated once per run with counts and its cause so "there was nothing to measure"
+becomes a stated fact with a stated cause rather than an unexamined pass. The five
+marker presence check that closes the real gap left by the raised byte ceiling keeps
+all three of its assertions verbatim. Verified under both conditions — `dist` present
+and `dist` moved aside — and with a **negative control**: with the product chunks
+deleted from `dist`, three assertions still fail, so the guard suppresses exactly the
+absence of a build and nothing else.
+
+#### Three environment-dependent gates, and what that pattern is worth
+
+Phase 5 shipped a gate that was green locally for the wrong reason. This phase
+produced three that were **red on CI and green locally**: the two above, and the
+font-metric overflow. All three failed in the safe direction — in the environment that
+actually matters, rather than passing quietly where it did not — and all three found
+either a real defect or a real gate defect. None produced a false pass, and none can
+now: the two gates are guarded with stated absences and proven non-vacuous, and the
+layout gate measures a declared font matrix instead of the host's fonts. The remaining
+exposure is the recorded one: browser evidence here is emulated Chromium on Linux, and
+the physical-device checks in §10.4 stay assigned to Phases 21 and 23.
+
+#### CI evidence
+
+- Branch `phase-6-subject-backup`, PR #56. First run `36303051250` failed Unit Tests on
+  the gate defect above. Second run `36304039100` failed `Browser Smoke (Chromium
+  Matrix)` in all four projects on the font-metric overflow, and passed the other nine
+  jobs. Third run **`36306567000` passed all ten**: Lint, Typecheck, Unit Tests, Web
+  Build and Bundle, Browser Smoke (Chromium Matrix), Browser (Storage v2 Flagged
+  Build), and the four representative compatibility lanes for Linux/Chromium,
+  Linux/Firefox, macOS/WebKit and Windows/Edge.
+- The product's own gates are unchanged by any of the three fixes. After the final
+  one: `npm test` **126 files / 1690 tests** (the font matrix adds seven wiring-gate
+  tests), `test:data` 18 / 192, `npm run test:e2e:recorded` **20 passed**,
+  `check:bundle-size` 4.39 MB / 134 files, and on one freshly built flagged artifact
+  `test:e2e:storage` 9, `test:e2e:data-products` 4, `test:e2e:subject-product` 5. The
+  tabpanel track change touches the box the Data Center mounts inside, so the product
+  lanes were re-run rather than assumed.
+- Default `dist` is 4,598,462 bytes across 134 files.
 
 ---
 
