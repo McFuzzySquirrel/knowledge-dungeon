@@ -188,6 +188,75 @@ const PHASE_6_GATE_FILES: ReadonlyArray<{
   },
 ];
 
+/**
+ * The Phase 7 gates, and the exit criterion each one holds.
+ *
+ * RAIL CHANGE, recorded deliberately, and **stronger or neutral** by construction, on the
+ * same reasoning as the Phase 6 list above: a gate suite must account for itself, so a file
+ * that is written but never run cannot pass unnoticed and a stray scratch file cannot be left
+ * behind. Phase 7 added seven more gate files, and the two assertions that hard-coded the
+ * Phase 5 and Phase 6 lengths have to know about them - otherwise the suite fails on its own
+ * arrival, which teaches a maintainer nothing and looks like a defect in the product.
+ *
+ * Both were **extended**, not relaxed:
+ *
+ * - `every Phase 5, Phase 6 and Phase 7 exit criterion is held by a named gate file` now pins
+ *   all three lengths - 9, 9 and 7 - so every phase's gate set is a closed list rather than a
+ *   prefix, and the phase marker each file must declare is now the phase it actually belongs
+ *   to, which is one more thing to get right rather than one fewer.
+ * - `the suite is exactly the gate files of all three phases plus its support modules` - whose
+ *   name already understated what it checked - now compares against the **union** of three
+ *   closed lists, so the comparison is still an exact equality. An eighth Phase 7 gate, a
+ *   tenth Phase 6 gate, or a stray `.test.ts` all still fail here.
+ *
+ * The one thing this file deliberately does **not** do is enumerate the criteria Phase 7
+ * brings. Phase 7's exit criteria are four sentences and the gate list below is organised by
+ * the property each file holds rather than by the criterion, because the plan's criteria
+ * overlap heavily - "a template contains no learner content, attachment metadata, or original
+ * IDs" is held by four of the seven files between them, and that redundancy is the point.
+ */
+const PHASE_7_GATE_FILES: ReadonlyArray<{
+  readonly file: string;
+  readonly criterion: string;
+  readonly what: string;
+}> = [
+  {
+    file: 'templatePrivacy.test.ts',
+    criterion: 'A template contains no learner content and no attachment metadata.',
+    what: 'gate 19',
+  },
+  {
+    file: 'templateIdentity.test.ts',
+    criterion: 'A template contains no original IDs, and its bytes are a function of the graph.',
+    what: 'gate 20',
+  },
+  {
+    file: 'templateRoundTrip.test.ts',
+    criterion: 'Imported graph structure matches the export, and two imports are independent.',
+    what: 'gate 21',
+  },
+  {
+    file: 'templateHostileInput.test.ts',
+    criterion: 'A malformed or hostile template is refused, and the refusal is silent.',
+    what: 'gate 22',
+  },
+  {
+    file: 'templateImportIsolation.test.ts',
+    criterion: 'An import writes one new subject and never partially overwrites the device.',
+    what: 'gate 23',
+  },
+  {
+    file: 'templateProductBoundary.test.ts',
+    criterion: 'The product is renderer-neutral, needs no archive codec, and is not eagerly reachable.',
+    what: 'gate 24',
+  },
+  {
+    file: 'templateLegacyPath.test.ts',
+    criterion: 'The pre-Phase-7 legacy template path is retained for rollback and is not the product.',
+    what: 'gate 25',
+  },
+];
+
 function listFiles(directory: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(directory).sort()) {
@@ -225,14 +294,16 @@ describe('Phase 5 data suite: the command and the criteria it holds', () => {
     expect(viteConfig).toContain("include: ['tests/**/*.test.{ts,tsx}']");
   });
 
-  it('every Phase 5 and Phase 6 exit criterion is held by a named gate file, and every gate file exists', () => {
-    // Both phases' gate sets are closed lists, and both lengths are pinned, so adding
-    // a gate without updating this file fails here rather than passing unnoticed.
+  it('every Phase 5, Phase 6 and Phase 7 exit criterion is held by a named gate file, and every gate file exists', () => {
+    // All three phases' gate sets are closed lists, and all three lengths are pinned, so
+    // adding a gate without updating this file fails here rather than passing unnoticed.
     expect(GATE_FILES).toHaveLength(9);
     expect(PHASE_6_GATE_FILES).toHaveLength(9);
+    expect(PHASE_7_GATE_FILES).toHaveLength(7);
     for (const [gate, phase] of [
       ...GATE_FILES.map((entry) => [entry, 5] as const),
       ...PHASE_6_GATE_FILES.map((entry) => [entry, 6] as const),
+      ...PHASE_7_GATE_FILES.map((entry) => [entry, 7] as const),
     ]) {
       const path = join(DATA_ROOT, gate.file);
       expect(statSync(path).isFile(), gate.file).toBe(true);
@@ -279,13 +350,13 @@ describe('Phase 5 data suite: the command and the criteria it holds', () => {
     ).not.toBe(0);
   });
 
-  it('the suite is exactly the gate files of both phases plus its support modules', () => {
+  it('the suite is exactly the gate files of all three phases plus its support modules', () => {
     const all = listFiles(DATA_ROOT).map((file) => relative(REPO_ROOT, file).split('\\').join('/'));
     const tests = all.filter((path) => path.endsWith('.test.ts'));
-    // An exact equality against the union of the two closed lists, so a stray scratch
-    // file, a renamed gate, and a forgotten gate all fail here.
+    // An exact equality against the union of the three closed lists, so a stray scratch file,
+    // a renamed gate, and a forgotten gate all fail here.
     expect([...tests].sort()).toEqual(
-      [...GATE_FILES, ...PHASE_6_GATE_FILES]
+      [...GATE_FILES, ...PHASE_6_GATE_FILES, ...PHASE_7_GATE_FILES]
         .map((gate) => `tests/data/${gate.file}`)
         .sort(),
     );
@@ -387,8 +458,8 @@ describe('Phase 5 data suite: the registered reproductions are accounted for', (
     }
     // Each of the seven files that held a registration still holds at least the
     // tests it held, and the total is far above the twenty-four that were
-    // implemented, so nothing was removed to make the count zero. Phase 6's eight
-    // gate files are held to the same floor, so a new gate cannot arrive empty.
+    // implemented, so nothing was removed to make the count zero. Phase 6's and
+    // Phase 7's gate files are held to the same floor, so a new gate cannot arrive empty.
     for (const file of [
       'tests/data/attachmentBytesRoundTrip.test.ts',
       'tests/data/corruptArchiveIsolation.test.ts',
@@ -398,6 +469,7 @@ describe('Phase 5 data suite: the registered reproductions are accounted for', (
       'tests/data/phase5FlagDefault.test.ts',
       'tests/data/populatedStateRoundTrip.test.ts',
       ...PHASE_6_GATE_FILES.map((gate) => `tests/data/${gate.file}`),
+      ...PHASE_7_GATE_FILES.map((gate) => `tests/data/${gate.file}`),
     ]) {
       const entry = perFile.find((line) => line.startsWith(`${file}:`));
       expect(entry, file).toBeDefined();
@@ -409,7 +481,7 @@ describe('Phase 5 data suite: the registered reproductions are accounted for', (
     // suite's real size, or a future added test would break the gate. It was raised
     // once, when Phase 6 added eight more gate files, and stays a floor rather than
     // becoming an equality.
-    expect(live).toBeGreaterThan(120);
+    expect(live).toBeGreaterThan(190);
   });
 
   it('the corruption table is fifteen distinct cases with distinct rule statements', () => {
@@ -433,6 +505,26 @@ describe('Phase 5 data suite: the registered reproductions are accounted for', (
     expect(
       CORRUPTION_CASES.filter((spec) => spec.codecCoverage === 'requires-product-validation').length,
     ).toBeGreaterThan(0);
+  });
+
+  it('the Phase 7 gate list is seven distinct files with distinct criterion statements', () => {
+    // The Phase 7 half of the "a matrix is a matrix" discipline the corruption table below
+    // already holds. Six files that all claimed the same criterion would be a list in
+    // appearance only, and a duplicated `what` label would make a failure message point at
+    // two gates at once.
+    expect(new Set(PHASE_7_GATE_FILES.map((gate) => gate.file)).size).toBe(7);
+    expect(new Set(PHASE_7_GATE_FILES.map((gate) => gate.criterion)).size).toBe(7);
+    // ...and the labels are unique across all three phases, so a gate is identified by one
+    // string in a report.
+    const everyGate = [...GATE_FILES, ...PHASE_6_GATE_FILES, ...PHASE_7_GATE_FILES];
+    expect(new Set(everyGate.map((gate) => gate.what)).size).toBe(everyGate.length);
+    expect(new Set(everyGate.map((gate) => gate.file)).size).toBe(everyGate.length);
+    // The numbering is contiguous from gate 10 onwards, so a reader can tell at a glance how
+    // many gates exist without counting.
+    const numbers = everyGate
+      .map((gate) => Number(gate.what.replace('gate ', '')))
+      .sort((left, right) => left - right);
+    expect(numbers).toEqual(numbers.map((_, index) => index + 1));
   });
 
   it('the manifest key set the suite pins is twelve distinct keys', () => {

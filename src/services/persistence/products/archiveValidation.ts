@@ -66,9 +66,15 @@ import {
   isDirectoryEntryName,
   readArchive,
   readArchiveEntryNames,
-  UNREPRESENTABLE_MEMBER_NAME,
   type ArchiveFile,
-} from '@/services/persistence/v2/archive';import { canonicalJsonStringify, sha256Hex } from '@/services/persistence/v2/checksum';
+} from '@/services/persistence/v2/archive';
+import { isPrototypeMemberName } from '@/services/persistence/v2/prototypeNames';
+
+// Re-exported, not moved. The rule is about names this application adopts, not about
+// archives, and Phase 7 moved its definition to `@/services/persistence/v2/prototypeNames`
+// so a caller that needs only the predicate does not inherit this module's ZIP codec. Every
+// existing import path is unchanged; see that file's header.
+export { isPrototypeMemberName };import { canonicalJsonStringify, sha256Hex } from '@/services/persistence/v2/checksum';
 import {
   CANONICAL_SUBJECT_SCHEMA_VERSION,
   STORAGE_V2_GENERATION_FORMAT_VERSION,
@@ -488,22 +494,14 @@ function isInteger(value: unknown): value is number {
  * adding a member, so a reader that indexed members by name would lose the
  * member silently. Every name that exists on `Object.prototype` is refused for
  * the same reason, and the closed layout has no place for any of them.
- */
-/**
- * Whether a name is one that cannot be an ordinary own key of a plain object.
  *
- * `__proto__` changes an object's prototype instead of adding a member, and the
- * rest of `Object.prototype`'s own names shadow inherited methods. A member name
- * is attacker-controlled, so both are refused rather than indexed.
- *
- * Exported because the rule is not only about archive members: the same reasoning
- * applies to any identifier this product adopts from an archive, and
- * `fullDeviceBackup.ts` applies it to a generation label - which is a *database
- * key*, where a prototype name is at least as hazardous as it is in a member name.
+ * {@link isPrototypeMemberName}, which decides that, is defined in
+ * `@/services/persistence/v2/prototypeNames` and re-exported above. Phase 7 moved it because
+ * the rule stopped being only about archive members - it is also about generation labels,
+ * which are *database keys*, and about room identifiers and tags in the `.kdtemplate`
+ * product - and leaving it here meant a caller that needed only the predicate inherited
+ * this module's ZIP codec.
  */
-export function isPrototypeMemberName(name: string): boolean {
-  return name === UNREPRESENTABLE_MEMBER_NAME || Object.hasOwn(Object.prototype, name);
-}
 
 function readMembers(bytes: Uint8Array): { files: readonly ArchiveFile[]; ignored: readonly string[] } {
   const { files, ignoredDirectoryEntries } = readAndVetArchiveMembers(bytes, (name) =>

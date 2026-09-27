@@ -235,7 +235,14 @@ import {
   type SessionRecordValue,
   type SubjectRecordValue,
 } from '@/services/persistence/v2/schema';
-import { isPrototypeMemberName } from './archiveValidation';
+// Phase 7, RAIL CHANGE, recorded in `tests/data/subjectProductBoundary.test.ts`. This was
+// `import { isPrototypeMemberName } from './archiveValidation'`, and the file is correct
+// about the rule - but `archiveValidation.ts` imports the ZIP codec, so every consumer of
+// this module inherited `fflate` in its static closure to ask one two-clause question. The
+// rule's definition moved to `@/services/persistence/v2/prototypeNames`, a leaf that imports
+// nothing, and this module names the leaf. `archiveValidation.ts` still re-exports the
+// predicate, so no other import path changed and no behaviour changed.
+import { isPrototypeMemberName } from '@/services/persistence/v2/prototypeNames';
 
 // ── The id kinds ───────────────────────────────────────────────────────────
 

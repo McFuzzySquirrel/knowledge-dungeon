@@ -40,18 +40,18 @@
  *
  * ## The tabs
  *
- * Two, wired as a real tablist: `role="tablist"`, roving `tabIndex`, arrow-key
+ * Three, wired as a real tablist: `role="tablist"`, roving `tabIndex`, arrow-key
  * movement with Home and End, and `aria-selected` that is genuinely `true` on
  * exactly one tab. Only the selected panel's contents are rendered, so the other
- * tab's file input does not exist in the DOM - a hidden panel full of focusable
- * controls is a thing a keyboard user can tab into and a screen reader can read, and
- * the `aria-controls` of an unselected tab still resolves because the panel
+ * tabs' file inputs do not exist in the DOM - a hidden panel full of focusable
+ * controls is a thing a keyboard user can tab into and a screen reader can read,
+ * and the `aria-controls` of an unselected tab still resolves because the panel
  * *element* is always there.
  *
  * ## The order the learner meets, per tab
  *
- * 1. **Privacy**, first and unconditionally: what a backup is, and the three things
- *    it cannot promise.
+ * 1. **Privacy**, first and unconditionally: what the product is, and the three
+ *    things it cannot promise.
  * 2. **Take a backup**: choose, then one control, one status line.
  * 3. **Restore a backup**: choose a file, read what is in it, and only then the
  *    explicit confirmation - which exists from the moment a file is chosen and is
@@ -62,16 +62,35 @@
  * The confirmation is a real dialog (plan section 10.1: focus trapped, initial
  * focus, Escape, restoration), opened by the act of choosing a file, so the import
  * is unreachable by any other route. `ConfirmDialog` is that dialog, shared by
- * both tabs; `tests/unit/dataCenter.test.tsx` drives the device tab through all
- * four steps and `tests/unit/subjectBackupTab.test.tsx` drives the subject tab
- * through its two modes.
+ * all three tabs; `tests/unit/dataCenter.test.tsx` drives the device tab through
+ * all four steps, `tests/unit/subjectBackupTab.test.tsx` drives the subject tab
+ * through its two modes, and `tests/unit/subjectTemplateTab.test.tsx` drives the
+ * template tab through its approval step and its landing report.
+ *
+ * ## The template tab is the cutover
+ *
+ * Phase 7's tab is not a fourth product alongside the legacy path - it **replaces**
+ * it. The pre-Phase-7 `exportSubjectAsTemplate` / `createSubjectFromTemplate` pair
+ * in `subjectPersistence.ts` leaked original room ids, attachment metadata,
+ * filenames, the subject's own name, and an ambient clock into a file named after
+ * that subject, and its only application caller was the Welcome screen's admin
+ * panel. That caller is gone; the functions are retained untouched as plan
+ * section 7's rollback. The learner-facing path to a template now goes through
+ * `products/subjectTemplate`, which cannot do any of those five things.
+ *
+ * The consequence worth stating: on a build with `VITE_DATA_PRODUCTS_V2` off, the
+ * Data Center renders nothing at all, so that build offers **no** template feature
+ * rather than the leaking one. That is plan section 11's "new data products are
+ * opt-in" applied honestly - the unsafe path is not kept alive by being the
+ * fallback, because the fallback is the defect.
  *
  * Privacy: every string in this file is generic. Nothing here renders a subject
  * name, a room topic, a note, an image file name, an image link, or a path, and
  * the only identifiers that reach the DOM are the opaque ones the products
- * themselves report, inside collapsed "Technical details" blocks. The one place a
- * subject *name* is rendered in the Data Center as a whole is the subject tab's
- * replace confirmation, which the plan requires to name what it destroys.
+ * themselves report, inside collapsed "Technical details" blocks. The two places a
+ * subject *name* is rendered in the Data Center are the export pickers' own option
+ * lists, and the subject tab's replace confirmation, which the plan requires to
+ * name what it destroys.
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type JSX, type KeyboardEvent } from 'react';
@@ -81,6 +100,7 @@ import { ImportPreview, type BackupPreview } from './ImportPreview';
 import { RecoveryStatus, type RestoreOutcome } from './RecoveryStatus';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SubjectBackupTab } from './SubjectBackupTab';
+import { SubjectTemplateTab } from './SubjectTemplateTab';
 import {
   downloadBackupFile,
   readDeviceAttachmentIds,
@@ -166,19 +186,21 @@ function readReducedMotionPreference(): boolean {
 // ── The tabs ───────────────────────────────────────────────────────────────
 
 /**
- * The two products, in the order a learner meets them.
+ * The three products, in the order a learner meets them.
  *
  * `tabId`/`panelId` are filled in by the component from `useId`, and `matches` is
  * the one thing that decides what is rendered. The names are chosen so Phase 5's
  * browser lane, which locates the full-backup tab by `/full[\s-]*device|full[\s-]*backup/i`,
  * still resolves to exactly one tab: neither "Full device backup" nor "One subject
- * backup" is matched twice, and no future tab may be named so that two match.
+ * backup" nor "Reusable template" is matched twice, and no future tab may be named
+ * so that two match.
  */
-type TabKey = 'device' | 'subject';
+type TabKey = 'device' | 'subject' | 'template';
 
 const TABS: ReadonlyArray<{ readonly key: TabKey; readonly label: string; readonly hint: string }> = [
   { key: 'device', label: 'Full device backup', hint: 'Everything on this device in one file' },
   { key: 'subject', label: 'One subject backup', hint: 'A single subject, its progress, and its images' },
+  { key: 'template', label: 'Reusable template', hint: 'A blank skeleton of rooms, with no notes or progress' },
 ];
 
 // ── The shell ──────────────────────────────────────────────────────────────
@@ -202,17 +224,39 @@ export interface DataCenterProps {
    * refreshes the list.
    */
   readonly onSubjectImported?: (() => void) | null;
+  /**
+   * Called when the learner asks to edit the subject a **template** import made.
+   *
+   * Never called automatically, and that is the point. An imported template is a
+   * subject waiting to be edited, and the report that says so carries the property
+   * the learner most needs first - every room arrived blank, in the Create state -
+   * so navigating on import would unmount the disclosure. The host decides what
+   * "open it" means; the tab supplies the opaque id.
+   */
+  readonly onOpenSubject?: ((subjectId: string) => void) | null;
 }
 
-export function DataCenter({ onRestored = null, onSubjectImported = null }: DataCenterProps): JSX.Element | null {
+export function DataCenter({
+  onRestored = null,
+  onSubjectImported = null,
+  onOpenSubject = null,
+}: DataCenterProps): JSX.Element | null {
   const enabled = runtimeConfig.dataProductsV2;
   const activeSubjectId = useSessionStore((state) => state.activeSubjectId);
   const prefersReducedMotion = usePrefersReducedMotion();
 
   const headingId = useId();
   const tabsId = useId();
-  const tabIds: Record<TabKey, string> = { device: `${tabsId}-tab-device`, subject: `${tabsId}-tab-subject` };
-  const panelIds: Record<TabKey, string> = { device: `${tabsId}-panel-device`, subject: `${tabsId}-panel-subject` };
+  const tabIds: Record<TabKey, string> = {
+    device: `${tabsId}-tab-device`,
+    subject: `${tabsId}-tab-subject`,
+    template: `${tabsId}-tab-template`,
+  };
+  const panelIds: Record<TabKey, string> = {
+    device: `${tabsId}-panel-device`,
+    subject: `${tabsId}-panel-subject`,
+    template: `${tabsId}-panel-template`,
+  };
 
   const [activeTab, setActiveTab] = useState<TabKey>('device');
   const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
@@ -606,6 +650,22 @@ export function DataCenter({ onRestored = null, onSubjectImported = null }: Data
         hidden={activeTab !== 'subject'}
       >
         {activeTab === 'subject' ? <SubjectBackupTab onSubjectImported={onSubjectImported} /> : null}
+      </div>
+
+      <div
+        className="kd-panel"
+        role="tabpanel"
+        id={panelIds.template}
+        aria-labelledby={tabIds.template}
+        tabIndex={0}
+        hidden={activeTab !== 'template'}
+      >
+        {activeTab === 'template' ? (
+          <SubjectTemplateTab
+            onTemplateImported={onSubjectImported}
+            onOpenSubject={onOpenSubject}
+          />
+        ) : null}
       </div>
 
       {/* ── The explicit destructive confirmation, for the full-device tab ── */}

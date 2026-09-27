@@ -77,7 +77,7 @@ import {
   FULL_DEVICE_STATE_SECTIONS,
 } from '@/services/persistence/products/archiveValidation';
 
-import { blankComments } from '../data/support/importGraph';
+import { blankComments, specifiersIn } from '../data/support/importGraph';
 import {
   ATTACHMENT_IDS,
   DEVICE_NOW,
@@ -1517,26 +1517,30 @@ describe('Phase 5 gate 10: the product tree is renderer-neutral and cannot send 
     /\blocalStorage\b/,
   ];
 
-  it('the product tree is exactly the four modules Phase 5 and Phase 6 name, and none imports a renderer', () => {
+  it('the product tree is exactly the five modules Phases 5, 6 and 7 name, and none imports a renderer', () => {
     // RAIL CHANGE, recorded deliberately, and **stronger or neutral**. The pinned list
     // grew from two entries to four when Phase 6 added `subjectBackup.ts` and
-    // `idRemapping.ts` to the same tree. What this test defends is "no module in the
+    // `idRemapping.ts` to the same tree, and to five when Phase 7 added
+    // `subjectTemplate.ts`. What this test defends is "no module in the
     // data-product tree imports a renderer", and that property is still asserted over
     // the **whole tree** - `productModules()` reads the directory rather than taking a
-    // list - so a fifth module would be scanned by the next two tests whether or not
+    // list - so a sixth module would be scanned by the next two tests whether or not
     // this list were updated. The list's job is to make an *unreviewed* addition
     // visible, and it does that by failing here; a relaxed "at least these" would not.
     //
     // The test's *name* is the one thing here that is weaker than what it replaced: it
     // said "the two the plan names", which stopped being true the moment a third phase
     // used the same tree, and a name that must be edited on every addition is a name
-    // that will eventually be edited wrongly.
+    // that will eventually be edited wrongly. It now names the phases rather than a count,
+    // which is the same naming fix Phase 6 applied to this file's own sibling gate and the
+    // durable form.
     const modules = productModules();
     expect(modules).toEqual([
       'src/services/persistence/products/archiveValidation.ts',
       'src/services/persistence/products/fullDeviceBackup.ts',
       'src/services/persistence/products/idRemapping.ts',
       'src/services/persistence/products/subjectBackup.ts',
+      'src/services/persistence/products/subjectTemplate.ts',
     ]);
     for (const path of modules) {
       const code = blankComments(readProductModule(path));
@@ -1579,17 +1583,62 @@ describe('Phase 5 gate 10: the product tree is renderer-neutral and cannot send 
     expect([...FORBIDDEN_RENDERER, ...FORBIDDEN_EGRESS].some((pattern) => pattern.test(clean))).toBe(false);
   });
 
-  it('the product depends only on storage-v2, the core subject contract, and the codec', () => {
+  it('the product depends only on storage-v2, the core domain contracts, and the codec', () => {
+    // RAIL CHANGE, Phase 7, and **narrower rather than wider**: the allowlist gains exactly
+    // one prefix, `@/core/graph/`, and gains it for one module.
+    //
+    // The `.kdtemplate` product reuses the application's own tag rule
+    // (`tagDomain.normalizeTag`) and its own tag-index rebuild, rather than writing a second
+    // dialect of "what a tag is" beside the store's. That is a genuine domain dependency -
+    // the room graph is core domain, and plan section 6 puts graph and navigation there - and
+    // it is a *narrower* allowance than the one being replaced, because the prefix is scoped
+    // to the graph module rather than opening `@/core/` wholesale. A product that reached for
+    // any other core module - progression, review, fishing, note validation - still fails
+    // here by name.
     for (const path of productModules()) {
-      const code = blankComments(readProductModule(path));
-      const specifiers = [...code.matchAll(/from\s*['"]([^'"]+)['"]/g)].map((match) => match[1] as string);
-      for (const specifier of specifiers) {
+      for (const specifier of specifiersIn(blankComments(readProductModule(path)))) {
         const allowed =
           specifier.startsWith('@/services/persistence/v2/') ||
           specifier.startsWith('@/core/validation/persistence') ||
+          specifier.startsWith('@/core/graph/tagDomain') ||
           specifier.startsWith('./');
         expect(allowed, `${path} -> ${specifier}`).toBe(true);
       }
+    }
+  });
+
+  it('the specifier reader this gate uses finds real imports and is not fooled by a key name', () => {
+    // RAIL FIX, Phase 7, and a detector defect rather than a change of what is defended.
+    //
+    // This gate used to extract specifiers with `/from\s*['"]([^'"]+)['"]/g`, which requires
+    // no whitespace between `from` and the quote - so the `.kdtemplate` format's own
+    // `SUBJECT_TEMPLATE_STRUCTURE_EDGE_KEYS = ['from', 'to', 'createdByPhase']` matched, and
+    // the pattern captured `, ` out of the middle of that array literal and reported a
+    // product dependency on a two-character string. The pattern is now
+    // `/\bfrom\s+['"]([^'"]+)['"]/g`: an import is always written with whitespace, and a
+    // string literal that happens to be the word `from` is not one.
+    //
+    // The non-vacuity assertions below are the reason this is a fix rather than a loosening.
+    // The reader still finds every real specifier, in every form a module uses them, and it
+    // still refuses the case it used to mis-read. If the tighter pattern had stopped finding
+    // imports, the loop above would pass vacuously and this test would fail.
+    const real = [
+      "import { a } from '@/services/persistence/v2/schema';",
+      "import type { B } from './archiveValidation';",
+      'import * as tagDomain from "@/core/graph/tagDomain";',
+      "export { c } from '@/core/validation/persistence';",
+    ].join('\n');
+    expect([...specifiersIn(real)].sort()).toEqual([
+      './archiveValidation',
+      '@/core/graph/tagDomain',
+      '@/core/validation/persistence',
+      '@/services/persistence/v2/schema',
+    ]);
+    // ...and the mis-read case is gone.
+    expect(specifiersIn("const KEYS = ['from', 'to', 'createdByPhase'] as const;")).toEqual([]);
+    // Every product module has at least one specifier, so the loop above is never vacuous.
+    for (const path of productModules()) {
+      expect(specifiersIn(blankComments(readProductModule(path))).length, path).toBeGreaterThan(0);
     }
   });
 });

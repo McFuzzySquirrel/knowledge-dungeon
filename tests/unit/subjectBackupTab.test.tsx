@@ -7,10 +7,11 @@
  * around the five things that can go wrong in a screen that offers one safe
  * operation and one destructive one:
  *
- * 1. **The tablist.** Two tabs, real `tab`/`tabpanel` wiring, `aria-selected`
- *    genuinely true on exactly one, roving `tabIndex`, arrow-key movement, Home and
- *    End, and only the selected panel's contents in the DOM - so the other tab's
- *    file input does not exist and cannot be tabbed into.
+ * 1. **The tablist.** Three tabs as of Phase 7 - full device, one subject, and the
+ *    reusable template - with real `tab`/`tabpanel` wiring, `aria-selected` genuinely
+ *    true on exactly one, roving `tabIndex`, arrow-key movement that wraps in both
+ *    directions, Home and End, and only the selected panel's contents in the DOM - so
+ *    the other tabs' file inputs do not exist and cannot be tabbed into.
  * 2. **The export.** A real subject list read from the real device, one subject
  *    chosen, a real `.kdsubject` downloaded through a blob and an object URL that is
  *    revoked - with only *that subject's* attachment ids resolved, and with no
@@ -402,7 +403,7 @@ describe('Phase 6 subject tab: the tablist', () => {
     expect(screen.queryByRole('tab')).toBeNull();
   });
 
-  it('is a real tablist with two tabs, one selected, and only the selected panel in the DOM', async () => {
+  it('is a real tablist with three tabs, one selected, and only the selected panel in the DOM', async () => {
     const { DataCenter } = await loadDataCenter(true);
     await selectLiveRepository(device.repository);
     render(<DataCenter />);
@@ -410,11 +411,19 @@ describe('Phase 6 subject tab: the tablist', () => {
     const tablist = screen.getByRole('tablist', { name: /data products/i });
     expect(tablist).toHaveAttribute('aria-orientation', 'horizontal');
     const tabs = within(tablist).getAllByRole('tab');
-    expect(tabs).toHaveLength(2);
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Full device backup', 'One subject backup']);
+    // Three since Phase 7: the whole device, one subject, and the reusable template.
+    // The template label is chosen so Phase 5's browser lane, which finds the
+    // full-backup tab by `/full[\s-]*device|full[\s-]*backup/i`, still matches exactly
+    // one tab.
+    expect(tabs).toHaveLength(3);
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Full device backup',
+      'One subject backup',
+      'Reusable template',
+    ]);
 
     // `aria-selected` that is actually true, and true on exactly one.
-    expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['true', 'false']);
+    expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false']);
     expect(screen.getAllByRole('tab', { selected: true })).toHaveLength(1);
 
     // Every tab's `aria-controls` resolves to a real tabpanel, labelled by that tab.
@@ -426,23 +435,24 @@ describe('Phase 6 subject tab: the tablist', () => {
     }
 
     // Roving tabindex: the tablist is one stop in the page's order.
-    expect(tabs.map((tab) => tab.getAttribute('tabindex'))).toEqual(['0', '-1']);
+    expect(tabs.map((tab) => tab.getAttribute('tabindex'))).toEqual(['0', '-1', '-1']);
 
-    // Only the selected panel's contents exist, so the other tab's file input is
+    // Only the selected panel's contents exist, so the other tabs' file inputs are
     // not in the DOM and cannot be reached by Tab.
     const panels = screen.getAllByRole('tabpanel', { hidden: true });
-    expect(panels).toHaveLength(2);
+    expect(panels).toHaveLength(3);
     expect(document.querySelectorAll('input[type="file"]')).toHaveLength(1);
     expect(within(panels[1] as HTMLElement).queryByRole('radio')).toBeNull();
   });
 
-  it('moves between tabs with the arrow keys, Home, and End, and selects as it goes', async () => {
+  it('moves between all three tabs with the arrow keys, Home, and End, and selects as it goes', async () => {
     const { DataCenter } = await loadDataCenter(true);
     await selectLiveRepository(device.repository);
     render(<DataCenter />);
 
     const device_ = screen.getByRole('tab', { name: /full device backup/i });
     const subject_ = screen.getByRole('tab', { name: /one subject backup/i });
+    const template_ = screen.getByRole('tab', { name: /reusable template/i });
     device_.focus();
 
     fireEvent.keyDown(device_, { key: 'ArrowRight' });
@@ -451,19 +461,24 @@ describe('Phase 6 subject tab: the tablist', () => {
     expect(device_).toHaveAttribute('aria-selected', 'false');
     expect(document.activeElement?.getAttribute('tabindex')).toBe('0');
 
-    // Wraps at the end, in both directions.
+    // Forward through the third, then wraps at the end, in both directions. The wrap is
+    // the part a second tab could not exercise, and it is the reason the third tab's
+    // presence is a real change to the movement rather than one more stop.
     fireEvent.keyDown(subject_, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(template_);
+    expect(template_).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(template_, { key: 'ArrowRight' });
     expect(document.activeElement).toBe(device_);
     fireEvent.keyDown(device_, { key: 'ArrowLeft' });
-    expect(document.activeElement).toBe(subject_);
+    expect(document.activeElement).toBe(template_);
 
-    fireEvent.keyDown(subject_, { key: 'Home' });
+    fireEvent.keyDown(template_, { key: 'Home' });
     expect(document.activeElement).toBe(device_);
     fireEvent.keyDown(device_, { key: 'End' });
-    expect(document.activeElement).toBe(subject_);
+    expect(document.activeElement).toBe(template_);
 
     // The vertical arrows work too, so a learner who expects a list is not stuck.
-    fireEvent.keyDown(subject_, { key: 'ArrowDown' });
+    fireEvent.keyDown(template_, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(device_);
 
     // A key the tablist does not own is left alone, so browser scrolling still works.
@@ -1556,11 +1571,13 @@ describe('Phase 6 subject tab: accessibility', () => {
       expect(ratio, `${label}: ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
     }
     // Every control boundary a learner must see to operate a control is the strong
-    // rule, and the weak rule stays decoration.
+    // rule, and the weak rule stays decoration. The selector ends at the `{`, so a
+    // modifier class declared later - Phase 7's `.kd-choice--single` - cannot be
+    // mistaken for the base rule and shadow its 44-pixel minimum.
     const source = blankComments(stylesheetSource());
     const selectRule = /\.kd-data-center \.kd-select\.kd-select[^{]*\{[^}]*\}/.exec(source)?.[0] ?? '';
     expect(selectRule).toContain('border: 1px solid var(--kd-line-strong)');
-    const choiceRule = /\.kd-data-center \.kd-choice\.kd-choice[^{]*\{[^}]*\}/.exec(source)?.[0] ?? '';
+    const choiceRule = /\.kd-data-center \.kd-choice\.kd-choice\s*\{[^}]*\}/.exec(source)?.[0] ?? '';
     expect(choiceRule).toContain('min-height: 44px');
     expect(choiceRule).not.toMatch(/border[^;]*var\(--kd-line\)/);
   });

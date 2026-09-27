@@ -1,5 +1,20 @@
 /**
- * ZIP read/write for the `.kdbak`, `.kdsubject`, and `.kdtemplate` products.
+ * ZIP read/write for the `.kdbak` and `.kdsubject` products.
+ *
+ * **RAIL CHANGE (Phase 7), and a correction rather than an addition.** This header used to
+ * name three products, including `.kdtemplate`. It names two, because plan section 7.3
+ * specifies `.kdtemplate` as "**JSON** containing only:" a fixed list - not as an archive -
+ * and the "archive format must use a small audited open-source library" sentence in the
+ * same section is about the two products that *are* archives. A ZIP wrapper around a
+ * graph-only JSON document would add a codec, a member layout, a path-safety surface, and
+ * a compression-ratio surface to a product whose entire claim is that it holds nothing but
+ * a small allowlisted graph, and it would put `fflate` in the closure of the one data
+ * product that needs no dependency at all. So the product is
+ * `@/services/persistence/products/subjectTemplate`, it imports nothing from this module,
+ * and `tests/data/templateProductBoundary.test.ts` asserts the absence mechanically
+ * rather than leaving it to this comment. `DATA_PRODUCT_FORMAT_VERSIONS.kdtemplate` is
+ * unaffected: it is a *document* version, not an archive version, and it was reserved in
+ * Phase 3 for exactly this payload.
  *
  * ZIP encoding is delegated to `fflate` (ADR 002, "Phase 3 archive dependency
  * selection"). Only the explicit `fflate/browser` subpath is imported: the bare
@@ -14,8 +29,8 @@
  * - the resource limits (member count, per-member bytes, total bytes, and
  *   compression ratio), enforced through fflate's `filter` hook so a member is
  *   rejected *before* it is decompressed into memory,
- * - the *writer's* duplicate-name check, which must ask `Object.hasOwn` rather
- *   than `in` so a legitimate member named after an `Object.prototype` key is not
+ * - the *writer's* duplicate-name check, which must ask `Object.hasOwn` rather than
+ *   `in` so a legitimate member named after an `Object.prototype` key is not
  *   mistaken for a duplicate, and
  * - two read-only structural classifiers ({@link classifyArchiveMemberTypes} and
  *   {@link classifyUnreadableArchive}) that read fixed ZIP header fields to
@@ -29,6 +44,13 @@
 
 import { unzipSync, zipSync, type Unzipped, type Zippable } from 'fflate/browser';
 import { StorageV2Error } from './schema';
+import { UNREPRESENTABLE_MEMBER_NAME } from './prototypeNames';
+
+// Re-exported, not moved: this constant has been part of this module's surface since Phase 3
+// and `products/archiveValidation.ts` imports it from here. Its *definition* now lives in
+// `./prototypeNames`, a leaf that imports nothing, so a caller that needs only the name
+// does not inherit the ZIP codec. See that file's header for the whole reason.
+export { UNREPRESENTABLE_MEMBER_NAME } from './prototypeNames';
 
 export interface ArchiveFile {
   /** Member path inside the archive. Never absolute, never traversing. */
@@ -229,13 +251,11 @@ export function writeArchive(files: readonly ArchiveFile[]): Uint8Array {
   return zipSync(zippable);
 }
 
-/**
- * The one member name this writer cannot represent.
- *
- * Every other name on `Object.prototype` is an ordinary string and round-trips
- * fine; `__proto__` is the one whose assignment has a side effect.
- */
-export const UNREPRESENTABLE_MEMBER_NAME = '__proto__';
+// `UNREPRESENTABLE_MEMBER_NAME` is imported from `./prototypeNames` and re-exported above.
+// The archive-specific half of its rationale lives there too: every other name on
+// `Object.prototype` round-trips through a ZIP member name as an ordinary string, and
+// `__proto__` is the one fflate cannot represent at all - which is why `writeArchive` below
+// refuses it with its own reason rather than writing a member that would come back missing.
 
 /** Serialize a value as canonical JSON inside an archive. */
 export function writeArchiveJson(

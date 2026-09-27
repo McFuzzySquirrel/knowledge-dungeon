@@ -37,6 +37,17 @@
  *   amber accent         #6b3f0e on card #fdf8ee   8.47:1   radio + select accent
  *   strong rule          #8a6f3c on #f7eddb        4.09:1   selected choice boundary
  *
+ * Phase 7 added the template tab's room list, its optional text fields, and the
+ * privacy block - and it added **no new colour**, so it introduced no new pair to
+ * compute. The room topic text is `--kd-ink` on `--kd-card` (14.31:1) with a
+ * `--kd-line` left rule beside it, the optional fields are the same
+ * `--kd-ink`/`--kd-card` surface as the picker, and the privacy block reuses
+ * `.kd-bullets` on `--kd-card` (8.71:1 for `--kd-ink-soft`). Its tag checkboxes
+ * reuse `.kd-choice` verbatim, including the `:has(:checked)` rule, so a ticked tag
+ * is a filled box *and* the word "Ticked." in its own row *and* a live sentence
+ * naming the approved list - the three-channel answer, with no new colour to keep in
+ * step.
+ *
  * `--kd-line` (#b9a37c, 2.31:1) is used only for decoration that carries no
  * meaning - a hairline between two paragraphs. Anything a learner has to *see in
  * order to operate* uses `--kd-line-strong`, which clears 3:1.
@@ -49,7 +60,7 @@
  * twice. The two states Phase 6 added follow the same rule: the selected tab is
  * bold *and* amber, and the selected import mode is a filled radio *and* the word
  * "Chosen." in its own row *and* a live sentence naming the mode and what it will
- * do.
+ * do. Phase 7's ticked tag is the same three channels again, on a checkbox.
  *
  * ## Touch and zoom
  *
@@ -62,7 +73,16 @@
  * touch platform opens for it is rendered by the platform, so its row height is
  * not this stylesheet's to get wrong. The radio group's 44-pixel target is the
  * whole `<label>`, because the native radio inside it is 13 pixels and a
- * stylesheet cannot honestly claim otherwise.
+ * stylesheet cannot honestly claim otherwise. Phase 7's tag and biome boxes follow
+ * that rule for the same reason, and its three optional text fields carry the same
+ * `min-height: 44px` as every other control.
+ *
+ * The one thing that *is* given a height here is the room list, and deliberately:
+ * a subject may hold four thousand rooms, and a list with no height limit would make
+ * the rest of the tab unreachable on a phone. The cap is a `max-height` with its own
+ * scroll, so the list scrolls inside the card rather than the page growing without
+ * bound - and the count above it and the line below it are the real numbers, so a
+ * bounded list never claims to be the whole subject.
  */
 
 .kd-data-center {
@@ -283,6 +303,7 @@
 .kd-data-center .kd-tab.kd-tab:focus-visible,
 .kd-data-center .kd-panel:focus-visible,
 .kd-data-center .kd-select:focus-visible,
+.kd-data-center .kd-input:focus-visible,
 .kd-data-center .kd-choice-input:focus-visible,
 .kd-data-center .kd-technical summary:focus-visible {
   outline: 3px solid var(--kd-focus);
@@ -335,6 +356,99 @@
 .kd-data-center .kd-select.kd-select:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+/*
+ * The optional text fields: a template name, a description, and a destination
+ * subject name.
+ *
+ * Deliberately the same surface as `.kd-select` and on the same rules - a 44-pixel
+ * minimum, `width: 100%` with a `max-width` cap, and `overflow-wrap` so a long
+ * unbroken name wraps rather than forcing a horizontal scrollbar at 320 CSS pixels.
+ * A `type="text"` input is a single-line control by definition, so there is no
+ * vertical growth to cap; the wrap matters because a 40-character unbroken name
+ * inside a fixed-width field is a field that scrolls sideways instead of wrapping,
+ * and the learner's own text is exactly the kind of text that has no spaces in it.
+ */
+.kd-data-center .kd-input.kd-input {
+  min-height: 44px;
+  min-width: 44px;
+  width: 100%;
+  max-width: 26rem;
+  padding: 8px 10px;
+  border: 1px solid var(--kd-line-strong);
+  border-radius: 10px;
+  background: var(--kd-card);
+  color: var(--kd-ink);
+  font: inherit;
+}
+
+.kd-data-center .kd-input.kd-input:focus-visible {
+  outline: 3px solid var(--kd-focus);
+  outline-offset: 2px;
+}
+
+/* ── The template tab: what leaves the device, and the room list ─────────── */
+
+/*
+ * The privacy block.
+ *
+ * A plain `.kd-block`-without-the-border: it sits *inside* the intro block, so it
+ * gets a left rule in the ink rather than a second box around it. The rule is
+ * decoration - the words beside it carry everything - so it is the strong one anyway,
+ * which keeps a learner who cannot see the rule from losing any meaning.
+ */
+.kd-data-center .kd-privacy {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 0 4px 12px;
+  border-left: 4px solid var(--kd-line-strong);
+}
+
+.kd-data-center .kd-topics-block {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--kd-line);
+  border-bottom: 1px solid var(--kd-line);
+}
+
+/*
+ * The room topics, which are the one thing a template always carries.
+ *
+ * A real `<ul>` of real `<li>`s, so a screen reader announces the count and the
+ * items, and `overflow-wrap: anywhere` so a topic with no spaces in it - which is
+ * exactly what a pasted compound term or an unbroken reference looks like - wraps
+ * rather than setting a min-content floor. The `max-height` and its own scroll are
+ * the deliberate bound described in the header: a four-thousand-room subject must not
+ * push the approval controls off the end of the page on a phone.
+ */
+.kd-data-center .kd-topics {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 20px;
+  max-height: 15rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: var(--kd-ink);
+  overflow-wrap: anywhere;
+}
+
+.kd-data-center .kd-topic {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A lone choice box with no fieldset around it.
+ *
+ * `.kd-choice` is a grid item of `.kd-choices`; used directly on a `<label>` it
+ * needs to be a block of its own rather than a bare inline element, or the text
+ * beside the box flows around it instead of sitting beside it.
+ */
+.kd-data-center .kd-choice.kd-choice--single {
+  display: flex;
 }
 
 /* ── The import mode choice ─────────────────────────────────────────────── */

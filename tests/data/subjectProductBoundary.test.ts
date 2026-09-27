@@ -64,14 +64,25 @@ const RENDERER_PACKAGES = ['pixi.js', '@pixi/', 'phaser', 'exphaser', 'koreograp
 /**
  * Modules **every** Phase 6 module's closure must reach.
  *
- * The storage-v2 implementation both products share, and the shared archive
- * validator where the structural read lives.
+ * The storage-v2 implementation both products share, and the prototype-name rule both of
+ * them refuse identifiers with.
+ *
+ * RAIL CHANGE, Phase 7, recorded deliberately and **stronger or neutral** by construction.
+ * `products/archiveValidation.ts` used to be on this list, which asserted that the remapper's
+ * closure reached the archive validator - and the archive validator imports the ZIP codec, so
+ * that assertion was holding in place a dependency Phase 7's `.kdtemplate` product paid for
+ * and could not afford. The prototype-name rule's definition moved to
+ * `v2/prototypeNames.ts`, a leaf that imports nothing, and `idRemapping.ts` now names the
+ * leaf. The entry here is therefore the leaf, which is a *more precise* statement of what the
+ * remapper needs; the archive validator moved to {@link REQUIRED_IN_ARCHIVE_CLOSURE}, where it
+ * belongs, because the archive product genuinely reads archives and the remapper does not. A
+ * new assertion also requires the remapper's closure **not** to reach the ZIP codec, which is
+ * the stronger half of the same change.
  */
 const REQUIRED_IN_EVERY_CLOSURE = [
-  'src/services/persistence/v2/archive.ts',
   'src/services/persistence/v2/checksum.ts',
   'src/services/persistence/v2/schema.ts',
-  'src/services/persistence/products/archiveValidation.ts',
+  'src/services/persistence/v2/prototypeNames.ts',
   'src/core/validation/persistence/types.ts',
 ];
 
@@ -85,9 +96,14 @@ const REQUIRED_IN_EVERY_CLOSURE = [
  * product is reached for the live-device accessors the subject product re-exports.
  */
 const REQUIRED_IN_ARCHIVE_CLOSURE = [
+  // The ZIP codec moved here with the archive validator: only the archive product reads
+  // archives, and the remapper's whole argument for being a pure function of its records is
+  // that it has no handle to inflate one with.
+  'src/services/persistence/v2/archive.ts',
   'src/services/persistence/v2/repository.ts',
   'src/services/persistence/v2/validation.ts',
   'src/services/persistence/v2/migrationState.ts',
+  'src/services/persistence/products/archiveValidation.ts',
   'src/services/persistence/products/fullDeviceBackup.ts',
   'src/core/progression/canonicalProgression.ts',
 ];
@@ -193,9 +209,17 @@ describe('Phase 6 gate 8: the product tree is renderer-neutral', () => {
           expect(own, `${entry} must not import ${forbidden} directly`).not.toContain(forbidden);
         }
         // What it *does* name is the record-value contract and the prototype-name
-        // rule, which is the whole of what it needs.
+        // rule, which is the whole of what it needs. The prototype-name rule is the
+        // **leaf** module rather than the archive validator, for the reason on
+        // `REQUIRED_IN_EVERY_CLOSURE`; and the absence below is the new, stronger half of
+        // the same change - the remapper must not drag the ZIP codec in to ask a two-clause
+        // question, because `.kdtemplate` reuses this module and is a JSON product.
         expect(own, entry).toContain('src/services/persistence/v2/schema.ts');
-        expect(own, entry).toContain('src/services/persistence/products/archiveValidation.ts');
+        expect(own, entry).toContain('src/services/persistence/v2/prototypeNames.ts');
+        expect(own, entry).not.toContain('src/services/persistence/products/archiveValidation.ts');
+        expect(closureOf(entry).paths, `${entry} must not reach the ZIP codec`).not.toContain(
+          'src/services/persistence/v2/archive.ts',
+        );
       }
       // No renderer package, by name, anywhere in the closure.
       for (const external of externals) {
