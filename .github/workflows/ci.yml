@@ -64,6 +64,13 @@ jobs:
       - run: npm run build:web
       - run: npm run check:bundle-size
       - run: npm run record:build-metadata
+      # The manifest carries two identities: the `dist` tree hash, and a hash of
+      # the git-tracked source the artifact was recorded against. The tree hash
+      # alone is self-referential - it is recorded from the same `dist` it later
+      # describes - so a stale `dist` paired with a manifest recorded from that
+      # same stale tree matched byte for byte. The source identity is what makes
+      # that pairing fail. Recording and verifying in one job, on one checkout, is
+      # what keeps the two satisfiable here and in every consuming job below.
       - name: Record the shared production artifact identity
         run: npm run record:web-artifact
       - name: Verify the shared production artifact identity
@@ -154,6 +161,11 @@ jobs:
   #   (`artifacts/web-artifact-manifest-storage-v2.json`), so a flagged build can
   #   never be mistaken for, or overwrite, the shared production artifact
   #   identity, and `browser-smoke` and `compatibility-pr` are unaffected.
+  # - That manifest also records a hash of the git-tracked source, so the four
+  #   lanes below cannot certify a `dist` left over from an older source state.
+  #   All four run in this one job against this one checkout, so the source
+  #   identity is the same for the build, the record, and every lane, and no lane
+  #   ever builds a second artifact to keep it that way.
   # - It runs one representative host only (Linux/Chromium). A real IndexedDB
   #   migration does not vary by engine the way rendering does, and keeping the
   #   lane to one cell is what stops a pull request from paying for eight
@@ -221,6 +233,26 @@ jobs:
       # text of this job and a comment that spelled it out would fail that gate.
       - name: Run the individual-subject backup lane
         run: npm run test:e2e:subject-product:recorded
+      # Reload-persistence lane.
+      #
+      # A *fourth* step in this job, for the same reason as the ones above: the
+      # flagged artifact with `VITE_DATA_PRODUCTS_V2=true` exists only here, this
+      # job uploads evidence only and never the artifact itself, and a job of its
+      # own would have to produce it a second time. One artifact, one Chromium
+      # install, one upload.
+      #
+      # It gates, and the reason is sharper than for the three above: a
+      # cross-phase data-loss defect shipped through two accepted phases because
+      # every gate read the active generation directly - the write's destination,
+      # and exactly the generation the next boot superseded. The only test that
+      # could see it creates a subject through the application's own Welcome form,
+      # performs each of the three product writes, reloads, and asserts the
+      # subjects are still listed. `tests/e2e/reload-persistence-lane.test.ts`
+      # asserts that this step's result is the job's result, so the exemption
+      # cannot creep back in. The wording avoids naming that exemption key,
+      # because the Phase 5 wiring gate asserts on the raw text of this job.
+      - name: Run the reload-persistence lane
+        run: npm run test:e2e:reload-persistence:recorded
       - name: Upload sanitized storage-v2 evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -361,18 +361,31 @@ describe('sourceVersion on a written record', () => {
   it('the migration is where the arriving shape is recorded', async () => {
     // The other half of the decision: the original version is not thrown away, it
     // is recorded once by the run that read the source.
-    const repo = repository as StorageV2Repository;
-    window.localStorage.setItem('knowledge-dungeon:v1:progression', JSON.stringify(syntheticFlatV1Payload()));
-    const outcome = await migrateLegacyState({
-      repository: repo,
-      generationId: 'gen-progression-write-v1',
-      now: FIXED_NOW,
-      clock: { now: () => FIXED_NOW },
-    });
+    //
+    // RAIL CHANGE, recorded deliberately: this runs on its own **empty** device
+    // rather than on the suite's shared one. The shared device is already migrated
+    // by the `beforeEach`, and a device that has already moved off the legacy keys
+    // is not migrated again - that re-migration is the cross-phase data-loss
+    // defect. The arriving-shape provenance is a property of the run that reads
+    // the source, so it has to be measured on a device where a run still happens.
+    const repo = await openRepo('progression-write-source');
+    try {
+      window.localStorage.setItem('knowledge-dungeon:v1:progression', JSON.stringify(syntheticFlatV1Payload()));
+      const outcome = await migrateLegacyState({
+        repository: repo,
+        generationId: 'gen-progression-write-v1',
+        now: FIXED_NOW,
+        clock: { now: () => FIXED_NOW },
+      });
+      expect(outcome.report.status).toBe('migrated');
 
-    // A v1 payload was read, and the receipt says so.
-    expect(outcome.report.progressionSourceVersions).toEqual({ 0: 1 });
-    const records = (await repo.readRecords('gen-progression-write-v1')).records.progression;
-    expect(records[0]?.value.sourceVersion).toBe(0);
+      // A v1 payload was read, and the receipt says so.
+      expect(outcome.report.progressionSourceVersions).toEqual({ 0: 1 });
+      const records = (await repo.readRecords('gen-progression-write-v1')).records.progression;
+      expect(records[0]?.value.sourceVersion).toBe(0);
+    } finally {
+      repo.close();
+      await dropRepo('progression-write-source');
+    }
   });
 });

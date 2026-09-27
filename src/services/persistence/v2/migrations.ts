@@ -18,6 +18,16 @@
  * On any failure the legacy state stays active and untouched, `activeGeneration`
  * is not flipped, and a recovery result is returned.
  *
+ * ## The device-level guard
+ *
+ * Two guards decide whether a run does anything, and they are not the same
+ * question. The first is per generation id: "did *this* migration already produce
+ * *this* generation?", which is a no-op success. The second is per device: "has
+ * this device already moved off the legacy keys?", which is a no-op reported as
+ * `already-migrated`. The second is the load-bearing one, and the order matters -
+ * see {@link decideDeviceMigration} for the rule, the six cases it decides, and
+ * the trade-off it deliberately makes.
+ *
  * Determinism: the clock and the id factory are injected, `createId` is seeded,
  * and nothing here reads the real clock, calls `Math.random()`, or touches the
  * network.
@@ -43,6 +53,7 @@ import {
   type AttachmentMetadataRecordValue,
   type CustomSpriteRecordValue,
   type ExternalOnlyAttachmentReport,
+  type GenerationStatus,
   type MigrationCounts,
   type MigrationReceiptValue,
   type MigrationReport,
@@ -51,6 +62,7 @@ import {
   type RecoveryRecordValue,
   type SessionRecordValue,
   type ShortcutRecordValue,
+  type StorageV2GenerationSource,
   type SubjectRecordValue,
 } from './schema';
 import { computeStoreChecksums, type StorageV2Repository } from './repository';
@@ -546,6 +558,192 @@ function parseOrKeep(raw: string): unknown {
   }
 }
 
+// ── The device-level guard ────────────────────────────────────────────────
+
+/**
+ * One generation, as the guard needs it: three fields, so a test can drive the
+ * whole decision table without a database and without inventing a descriptor.
+ */
+export interface DeviceGenerationRef {
+  readonly generationId: string;
+  readonly source: StorageV2GenerationSource;
+  readonly status: GenerationStatus;
+}
+
+/** One `LEGACY_MIGRATION_ID` receipt, as the guard needs it. */
+export interface LegacyMigrationReceiptRef {
+  readonly receiptId: string;
+  /** The generation the receipt was written into. */
+  readonly stagedGenerationId: string;
+}
+
+/**
+ * Everything the registry knows about one device, and nothing else.
+ *
+ * Deliberately *device*-shaped rather than *generation*-shaped. The guard this
+ * feeds used to ask "is this generation id already migrated?", which is the wrong
+ * question, and the answer is a cross-phase data-loss defect: a device whose
+ * first boot took the `hasNoLearnerContent` short-circuit holds
+ * `gen-initial-0001`, so a re-run asked about `gen-migration-0001`, found nothing
+ * there, concluded the device had never migrated, and staged a brand-new
+ * generation from the stale `localStorage` mirror - superseding the generation
+ * every product write lands in. No reader follows a superseded generation, so the
+ * write was invisible and unreachable, and the next boot did it again. The
+ * comment above that guard already said the rule was "this migration already
+ * produced this generation"; this is the rule it meant, stated over the device.
+ */
+export interface DeviceMigrationEvidence {
+  /** Every generation the registry describes, in the repository's own order. */
+  readonly generations: readonly DeviceGenerationRef[];
+  /** What `activeGeneration` names, or `null` when it names nothing. */
+  readonly activeGenerationId: string | null;
+  /**
+   * Every `LEGACY_MIGRATION_ID` receipt on this device, from **any** generation.
+   *
+   * Filtered by migration id by the reader, because "this migration ran here" is
+   * the only question the receipt can answer: a receipt from some other migration
+   * says nothing about whether the legacy keys have been consumed.
+   */
+  readonly legacyMigrationReceipts: readonly LegacyMigrationReceiptRef[];
+}
+
+/**
+ * What the migration should do with a device that already has legacy content.
+ *
+ * Two outcomes, and no third: either re-stage a generation, or do nothing at all.
+ */
+export type DeviceMigrationDecision =
+  | {
+      readonly kind: 'migrate';
+      /** The device has nothing reachable, so there is nothing to supersede. */
+      readonly reason: 'no-reachable-generation';
+    }
+  | {
+      readonly kind: 'skip';
+      readonly reason: 'device-already-migrated';
+      /** What the pointer named, or `null` when it named nothing. */
+      readonly activeGenerationId: string | null;
+      /** The `LEGACY_MIGRATION_ID` receipt on a reachable generation, if any. */
+      readonly receiptId: string | null;
+    };
+
+/**
+ * Whether this device has already moved off the legacy `localStorage` keys.
+ *
+ * ## The one rule
+ *
+ * **A device that holds a reachable generation has already moved on.** "Reachable"
+ * is the registry's own word, not a new one: `staged` is the only status whose
+ * records no reader can reach, so `active` and `superseded` both qualify. That is
+ * the same reachable-or-superseded rule the `migrated` status is defined against,
+ * used for the question it was always meant to answer.
+ *
+ * The rule reads the **registry**, and that is deliberate. A pointer naming a
+ * generation the registry does not describe at all is a corrupt registry, not a
+ * migrated device, and the run that finds it migrates: nothing describes what that
+ * generation holds, so nothing can be said to have superseded it. The reclaim step
+ * refuses to touch whatever the pointer owns, so the run is the safe one.
+ *
+ * ## Why a reachable generation is enough, and a receipt is not required
+ *
+ * A reachable generation means storage-v2 is this device's store. Its pointer is
+ * authoritative, and the legacy keys are the rollback mirror behind it, not a
+ * source of truth. Re-staging a generation from that mirror can only *lose*:
+ *
+ * - it supersedes the generation the device is using, and every write that landed
+ *   only there - a `.kdbak` restore, a `.kdsubject` copy, a `.kdtemplate` import -
+ *   becomes unreachable;
+ * - it can resurrect a subject the learner deleted by restoring, because a restore
+ *   rewrites storage-v2 and not the mirror;
+ * - it reports `activated` for a move the learner did not ask for.
+ *
+ * So the receipt is corroboration, not the test. It is read so the report can name
+ * the receipt that proves the device really was migrated by this migration, which
+ * is the difference between "already migrated" and "was moved on by something
+ * else" - and the first case is the only one a caller can act on by rolling back to
+ * the legacy keys.
+ *
+ * ## The six cases, as a table
+ *
+ * | the device holds | decision | why |
+ * | --- | --- | --- |
+ * | nothing at all | `migrate` | A device that used an older build and then upgraded. This is the whole point of the phase. |
+ * | only a `staged` generation | `migrate` | A run that failed after its stage commit. Its records are unreachable, so `migrated` for it would be the dishonesty the status is defined to prevent. The caller discards and re-stages it. |
+ * | a `legacy-migration` generation with a `LEGACY_MIGRATION_ID` receipt, plus the pointer on it | `skip` | Already migrated, by this migration. |
+ * | a `legacy-migration` generation with a receipt, since superseded by a later generation | `skip` | Already migrated; a later phase legitimately moved the pointer on. |
+ * | an `initial` generation, no receipt (the `hasNoLearnerContent` short-circuit) | `skip` | **The defect.** The device moved on by deciding there was nothing to move, and anything written into it since is real. |
+ * | a generation a product created (`.kdbak`, `.kdsubject`, `.kdtemplate`) | `skip` | Same, one step further along: those writes reach storage-v2 only. |
+ *
+ * ## What is given up, deliberately
+ *
+ * Once a device holds a reachable generation, the legacy mirror is no longer
+ * migrated from. A learner who rolls back to a `legacy` build, creates a subject
+ * there, and returns to this build keeps that subject in the mirror - which is
+ * exactly where a rollback build would find it - and storage-v2 will not import it.
+ * Re-reading the mirror on every boot to catch that case is the defect, not a fix
+ * for it: the mirror is a mirror, it is a *stale* mirror by construction, and
+ * merging it into a live generation is a different feature from guarding a
+ * migration. The alternative - re-migrate whenever the mirror names anything the
+ * active generation lacks - is what destroys the three data products.
+ */
+export function decideDeviceMigration(evidence: DeviceMigrationEvidence): DeviceMigrationDecision {
+  const reachable = evidence.generations.filter((generation) => generation.status !== 'staged');
+  if (reachable.length === 0) {
+    return { kind: 'migrate', reason: 'no-reachable-generation' };
+  }
+  const reachableIds = new Set(reachable.map((generation) => generation.generationId));
+  // Only a receipt on a *reachable* generation counts. A receipt left on a
+  // `staged` generation is the fingerprint of a run that failed, and reading it as
+  // proof of a migration is precisely the dishonesty the staged rule exists to
+  // prevent.
+  const onReachable = evidence.legacyMigrationReceipts.filter((receipt) =>
+    reachableIds.has(receipt.stagedGenerationId),
+  );
+  // The pointer's own generation is the one worth naming, because that is the
+  // generation a caller would have to roll back *from*. When the pointer names
+  // something unreachable - which a self-consistent registry cannot produce - the
+  // report says `null` rather than naming a generation the pointer does not name.
+  const active = evidence.activeGenerationId !== null && reachableIds.has(evidence.activeGenerationId);
+  return {
+    kind: 'skip',
+    reason: 'device-already-migrated',
+    activeGenerationId: active ? evidence.activeGenerationId : null,
+    receiptId: onReachable.length > 0 ? (onReachable[0] as LegacyMigrationReceiptRef).receiptId : null,
+  };
+}
+
+/**
+ * Read the three registry facts {@link decideDeviceMigration} needs, in one pass.
+ *
+ * `listMigrationReceipts()` with no argument reads every receipt on the device
+ * rather than one generation's, which is the whole point: the question is whether
+ * *this device* was migrated, and a generation-scoped read can only answer it for
+ * the generation it was asked about.
+ */
+async function readDeviceMigrationEvidence(
+  repository: StorageV2Repository,
+): Promise<DeviceMigrationEvidence> {
+  const [generations, activeGenerationId, receipts] = await Promise.all([
+    repository.listGenerations(),
+    repository.readActiveGenerationId(),
+    repository.listMigrationReceipts(),
+  ]);
+  return {
+    generations: generations.map((descriptor) => ({
+      generationId: descriptor.generationId,
+      source: descriptor.source,
+      status: descriptor.status,
+    })),
+    activeGenerationId,
+    legacyMigrationReceipts: receipts
+      .filter((receipt) => receipt.migrationId === LEGACY_MIGRATION_ID)
+      .map((receipt) => ({
+        receiptId: receipt.receiptId,
+        stagedGenerationId: receipt.stagedGenerationId,
+      })),
+  };
+}
+
 /**
  * Run the legacy-to-storage-v2 migration.
  *
@@ -649,6 +847,14 @@ export async function migrateLegacyState(
     // and reporting `migrated` for it would tell a caller reading only `status`
     // that the device is migrated when its data is not. It is discarded and
     // migrated again, so `migrated` always means reachable-or-superseded.
+    //
+    // This guard is per *generation id*, and it is the **second** line of defence
+    // rather than the first. A device can be migrated without this id existing on
+    // it at all - the `hasNoLearnerContent` short-circuit above hands a fresh
+    // device `gen-initial-0001` and never writes `gen-migration-0001` - so asking
+    // only about `generationId` cannot answer "has this device moved on?". The
+    // device-level guard below answers that, and it is the one that has to be
+    // right.
     const existing = await repository.readGeneration(generationId);
     const existingReceipts = existing ? await repository.listMigrationReceipts(generationId) : [];
     const alreadyMigrated =
@@ -667,6 +873,38 @@ export async function migrateLegacyState(
       report.status = 'migrated';
       records = existing.records;
       return { report, stagedGenerationId: generationId, records };
+    }
+
+    // ── The device-level guard: has this *device* already moved on? ──
+    //
+    // Reached whenever the guard above did not: a different generation id, or no
+    // generation under this one. Before the device-level rule existed, that
+    // answered "never migrated" on every boot of a device that had been
+    // initialised, and the run below staged a fresh generation from the stale
+    // `localStorage` mirror and flipped the pointer onto it. The generation the
+    // device was actually using became `superseded`, and every write that reached
+    // only that generation - a `.kdbak` restore, a `.kdsubject` copy import, a
+    // `.kdtemplate` import - became invisible and unreachable, with a subject the
+    // learner deleted by restoring coming back from the mirror on the next boot.
+    // Two accepted phases missed it because every unit gate read the active
+    // generation directly, which is the very generation that was superseded.
+    const deviceDecision = decideDeviceMigration(await readDeviceMigrationEvidence(repository));
+    if (deviceDecision.kind === 'skip') {
+      // This run stages nothing, so it reports nothing as staged and nothing as
+      // moved. `recordCounts` and `contentChecksum` stay at their empty
+      // initialisers for the same reason `no-source-data` leaves them empty: they
+      // count what a run wrote, and this run wrote nothing.
+      //
+      // Nothing is reclaimed on this path either, and that is deliberate. A
+      // `staged` generation is unreachable by definition, so leaving one is not
+      // data loss, and a decision whose entire content is "do not touch this
+      // device" must not end in a delete.
+      report.status = 'already-migrated';
+      report.stagedGenerationId = null;
+      report.previousActiveGenerationId = deviceDecision.activeGenerationId;
+      report.activated = false;
+      report.receiptId = deviceDecision.receiptId;
+      return { report, stagedGenerationId: null, records: null };
     }
 
     // Anything unusable at this id is reclaimed before re-staging: a `staged`

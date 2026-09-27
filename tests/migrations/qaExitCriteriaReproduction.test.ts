@@ -204,25 +204,36 @@ describe('QA exit criterion 1: legacy fixtures migrate idempotently', () => {
     // anywhere else inside `stageGeneration` was reported as stage 'transform'
     // and the recovery screen told the learner the wrong thing. The migration
     // now enters the stage before it calls the repository.
+    //
+    // RAIL CHANGE, recorded deliberately, and **stronger or neutral**: the first
+    // half of this test no longer reaches the staging step. Its fixture is an
+    // `active` `legacy-migration` generation with **no receipt** under this
+    // migration's id, which the per-id guard correctly refuses to claim - and
+    // which the device-level guard then declines to migrate over, because a
+    // device holding a reachable generation has already moved off the legacy
+    // keys. That is the whole point of the fix: re-staging over a live generation
+    // is what stranded every data-product write. The observable proof that the
+    // per-id guard still refuses is that the report names no staged generation
+    // (`stagedGenerationId: null`); a per-id no-op would have named `GEN_2`.
     seedLegacyDevice();
     const repo = await repoFor('stage-misreport');
-
-    // An ACTIVE generation under this migration's own id, carrying no receipt.
-    // `stageGeneration` refuses to re-stage it, so the failure happens inside the
-    // staging step, before any data is written.
     await repo.stageGeneration({ generationId: GEN_2, source: 'legacy-migration', records: {} });
     await repo.activateGeneration(GEN_2);
 
-    const outcome = await migrateLegacyState(migrateOptions(repo, { generationId: GEN_2 }));
-    expect(outcome.report.status).toBe('recovery-required');
-    expect(outcome.report.recovery?.code).toBe('GENERATION_ALREADY_ACTIVE');
-    // Observed before the fix: 'transform'. Now: the staging step.
-    expect(outcome.report.recovery?.stage).toBe('stage-records');
-    // The active generation is untouched.
+    const declined = await migrateLegacyState(migrateOptions(repo, { generationId: GEN_2 }));
+    expect(declined.report.status).toBe('already-migrated');
+    expect(declined.report.stagedGenerationId).toBeNull();
+    expect(declined.report.activated).toBe(false);
+    expect(declined.report.recovery).toBeNull();
+    // The live generation is untouched.
     expect(await repo.readActiveGenerationId()).toBe(GEN_2);
+    expect((await repo.readGeneration(GEN_2))?.descriptor?.status).toBe('active');
 
-    // And the stage the migration reports for a failure it owns is the staging
-    // step too, not the transform step that ran before it.
+    // The stage the migration reports for a failure it owns is the staging step
+    // too, not the transform step that ran before it. Driven on a device with no
+    // reachable generation, which is the only shape a staging failure can now
+    // happen on: with a live generation present the device-level guard declines
+    // the run before it stages anything.
     const seen: string[] = [];
     const fresh = await repoFor('stage-misreport-2');
     const injected = await migrateLegacyState(
@@ -236,6 +247,7 @@ describe('QA exit criterion 1: legacy fixtures migrate idempotently', () => {
     expect(injected.report.status).toBe('recovery-required');
     expect(injected.report.recovery?.stage).toBe('stage-records');
     expect(seen).toEqual(['read-legacy', 'transform', 'stage-records']);
+    expect(await fresh.readActiveGenerationId()).toBeNull();
   });
 
   it('retries a FAILED migration with the same generation id and succeeds', async () => {
@@ -263,7 +275,18 @@ describe('QA exit criterion 1: legacy fixtures migrate idempotently', () => {
     expect(await repo.listMigrationReceipts(GEN_1)).toHaveLength(1);
   });
 
-  it('re-running with a DIFFERENT generationId keeps the first generation intact and readable', async () => {
+  it('re-running with a DIFFERENT generationId does not supersede the live generation', async () => {
+    // RAIL CHANGE, recorded deliberately, and **stronger**: this test used to be
+    // named "keeps the first generation intact and readable" and it asserted that
+    // a second run under a *different* generation id re-migrated and left the
+    // first generation `superseded`. That re-migration is the cross-phase
+    // data-loss defect: a device that has already moved off the legacy keys does
+    // not get a second migration, because staging one flips `activeGeneration` and
+    // every write that reached only the generation the device was using becomes
+    // unreachable. The device-level guard (a device holding a reachable generation
+    // has already moved on) now declines the run, and the first generation stays
+    // `active` - which is *stronger* than "intact", and is the property the defect
+    // report was written about.
     seedLegacyDevice();
     const repo = await repoFor('idem-new-gen');
 
@@ -273,44 +296,60 @@ describe('QA exit criterion 1: legacy fixtures migrate idempotently', () => {
     expect(firstSnapshot?.descriptor?.status).toBe('active');
 
     const second = await migrateLegacyState(migrateOptions(repo, { generationId: GEN_2 }));
-    expect(second.report.status).toBe('migrated');
+    expect(second.report.status).toBe('already-migrated');
+    expect(second.report.stagedGenerationId).toBeNull();
+    expect(second.report.activated).toBe(false);
     expect(second.report.previousActiveGenerationId).toBe(GEN_1);
+    expect(second.report.receiptId).toBe(`${GEN_1}-receipt`);
 
-    // The superseded generation is retained for rollback, byte-for-byte.
+    // The live generation is not merely readable, it is still the one the device
+    // uses, byte for byte, and the second id was never created at all.
     const firstAfter = await repo.readGeneration(GEN_1);
-    expect(firstAfter?.descriptor?.status).toBe('superseded');
+    expect(firstAfter?.descriptor?.status).toBe('active');
+    expect(await repo.readActiveGenerationId()).toBe(GEN_1);
     expect(projection(firstAfter?.records)).toEqual(projection(firstSnapshot?.records));
     expect(firstAfter?.contentChecksum).toBe(firstSnapshot?.contentChecksum);
+    expect(await repo.readGeneration(GEN_2)).toBeNull();
 
-    // Exactly one receipt per generation, not two in one.
+    // Still exactly one receipt, on the one generation that has one.
     expect(await repo.listMigrationReceipts(GEN_1)).toHaveLength(1);
-    expect(await repo.listMigrationReceipts(GEN_2)).toHaveLength(1);
-    expect(await repo.listMigrationReceipts()).toHaveLength(2);
+    expect(await repo.listMigrationReceipts(GEN_2)).toHaveLength(0);
+    expect(await repo.listMigrationReceipts()).toHaveLength(1);
 
-    // Re-activating a superseded generation is a rollback and still works.
+    // Re-activating a superseded generation is a rollback and still works. A
+    // rollback is a caller's decision about a generation it chose, not something
+    // a boot does by itself, so the guard does not touch this path.
+    await repo.stageGeneration({ generationId: GEN_2, source: 'local-edit', records: {} });
+    await repo.activateGeneration(GEN_2);
     const rollback = await repo.rollbackToGeneration(GEN_1);
     expect(rollback.activeGenerationId).toBe(GEN_1);
   });
 
   it('re-runs cleanly after the active generation has already advanced twice', async () => {
+    // RAIL CHANGE, recorded deliberately: as above, the runs after the first now
+    // decline rather than migrate. The property this test holds - no duplicated
+    // records, no duplicated receipts, every generation still readable - is
+    // unchanged and still measured, and the device is left on the first
+    // generation with the second and third ids never created.
     seedLegacyDevice();
     const repo = await repoFor('idem-advanced');
 
     await migrateLegacyState(migrateOptions(repo, { generationId: GEN_1 }));
     await migrateLegacyState(migrateOptions(repo, { generationId: GEN_2 }));
     const third = await migrateLegacyState(migrateOptions(repo, { generationId: GEN_3 }));
-    expect(third.report.status).toBe('migrated');
+    expect(third.report.status).toBe('already-migrated');
+    expect(third.report.stagedGenerationId).toBeNull();
 
-    const keys = await allRecords(repo, GEN_3);
+    const keys = await allRecords(repo, GEN_1);
     expect(new Set(keys).size).toBe(keys.length);
-    for (const generationId of [GEN_1, GEN_2, GEN_3]) {
-      expect(await repo.listMigrationReceipts(generationId)).toHaveLength(1);
-    }
-    // All three generations remain readable, so nothing was clobbered.
-    for (const generationId of [GEN_1, GEN_2, GEN_3]) {
-      expect((await repo.readGeneration(generationId))?.descriptor).not.toBeNull();
-    }
-    expect(await repo.readActiveGenerationId()).toBe(GEN_3);
+    expect(await repo.listMigrationReceipts(GEN_1)).toHaveLength(1);
+    expect(await repo.listMigrationReceipts(GEN_2)).toHaveLength(0);
+    expect(await repo.listMigrationReceipts(GEN_3)).toHaveLength(0);
+    // The one generation that exists is still readable, so nothing was clobbered.
+    expect(await repo.readGeneration(GEN_1)).not.toBeNull();
+    expect(await repo.readGeneration(GEN_2)).toBeNull();
+    expect(await repo.readGeneration(GEN_3)).toBeNull();
+    expect(await repo.readActiveGenerationId()).toBe(GEN_1);
   });
 
   it('reports exactly what is and is not idempotent: generationId and now', async () => {
@@ -588,7 +627,17 @@ describe('QA exit criterion 2: a failed staged transaction leaves the active gen
       expect(JSON.parse(JSON.stringify((await repo.readGeneration('gen-baseline'))?.descriptor ?? null))).toEqual(
         beforeMeta,
       );
-      // 5. A subsequent successful migration still works.
+      // 5. RAIL CHANGE, recorded deliberately, and **stronger**: this used to be
+      //    "a subsequent successful migration still works", and it re-ran the
+      //    migration on this device - which holds a live `gen-baseline` - and
+      //    expected it to migrate again and take the pointer. That is the
+      //    cross-phase data-loss defect, so the run now declines. What is asserted
+      //    here is the property the defect report was about: on a device that has
+      //    already moved on, a later boot changes nothing at all. The fresh-device
+      //    retry that this used to cover is still held, in "retries a FAILED
+      //    migration with the same generation id and succeeds" above, on a device
+      //    with no reachable generation - which is now the only shape a run stages
+      //    into.
       const legacy = readLegacyAppState({ storage: snapshotLocalStorage() as unknown as ReadOnlyLegacyStorage });
       const outcome = await migrateLegacyState(
         migrateOptions(repo, {
@@ -615,15 +664,25 @@ describe('QA exit criterion 2: a failed staged transaction leaves the active gen
           },
         }),
       );
-      expect(outcome.report.status).toBe('migrated');
-      expect(await repo.readActiveGenerationId()).toBe(GEN_1);
+      expect(outcome.report.status).toBe('already-migrated');
+      expect(outcome.report.stagedGenerationId).toBeNull();
+      expect(outcome.report.activated).toBe(false);
+      expect(await repo.readActiveGenerationId()).toBe('gen-baseline');
+      expect((await repo.readGeneration('gen-baseline'))?.descriptor?.status).toBe('active');
     });
   }
 
   it('leaves a STAGED generation behind when the failure lands after the stage commit', async () => {
+    // RAIL CHANGE, recorded deliberately, and **stronger or neutral**: the
+    // `gen-baseline` fixture is gone. A device that already holds a reachable
+    // generation is one the device-level guard declines to migrate into, so a
+    // staging failure can no longer happen on top of a live generation - which is
+    // the fix, not a loss. What is measured here is therefore stated on a device
+    // with **no** reachable generation, which is the only shape that can reach the
+    // stage commit at all: the abandoned generation is still on disk in full, and
+    // it is even less reachable than before, because there is no active generation
+    // for a reader to be redirected to.
     const repo = await repoFor('stage-commit-gap');
-    await repo.stageGeneration({ generationId: 'gen-baseline', source: 'initial', records: {} });
-    await repo.activateGeneration('gen-baseline');
 
     const snapshot = JSON.parse(V11) as SubjectRecordValue['snapshot'];
     const subject: SubjectRecordValue = {
@@ -659,7 +718,7 @@ describe('QA exit criterion 2: a failed staged transaction leaves the active gen
     );
 
     expect(outcome.report.status).toBe('recovery-required');
-    expect(await repo.readActiveGenerationId()).toBe('gen-baseline');
+    expect(await repo.readActiveGenerationId()).toBeNull();
 
     // The abandoned staged generation IS still present, in full, on disk.
     const abandoned = await repo.readGeneration(GEN_1);
@@ -668,21 +727,42 @@ describe('QA exit criterion 2: a failed staged transaction leaves the active gen
     const abandonedKeys = await allRecords(repo, GEN_1);
     expect(abandonedKeys).toContain('subjects/subject-phase0-v110-minimal');
     expect(abandonedKeys).toContain('assistance/default');
-    expect((await repo.listGenerations()).map((g) => g.generationId)).toEqual([
-      'gen-baseline',
-      GEN_1,
-    ]);
+    expect((await repo.listGenerations()).map((g) => g.generationId)).toEqual([GEN_1]);
 
-    // It is inert: `readActiveGeneration` still resolves to the baseline, so a
-    // reader can never observe the abandoned generation.
-    const active = await repo.readActiveGeneration();
-    expect(active?.generationId).toBe('gen-baseline');
-    expect((active?.records.subjects ?? []).length).toBe(0);
+    // It is inert: the pointer names nothing, so a reader can never observe the
+    // abandoned generation by any route.
+    expect(await repo.readActiveGeneration()).toBeNull();
 
-    // Prune removes it, so it is reclaimable rather than an unbounded leak.
-    const pruned = await repo.pruneGenerations({ keepAtLeast: 1 });
-    expect(pruned.removed).toEqual([GEN_1]);
-    expect(await repo.readGeneration(GEN_1)).toBeNull();
+    // RAIL CHANGE (same test): the tail used to prove the abandoned generation is
+    // reclaimable by pruning it, and the fixture's active `gen-baseline` is what
+    // made that true. With no active generation the prune policy's floor of one
+    // kept generation retains it, so the loop is closed the way a device actually
+    // closes it - the **next run** reclaims the staged generation and migrates -
+    // which is a stronger statement than a prune: it proves the abandoned records
+    // are not merely removable but are re-migrated into a reachable generation.
+    const reclaimed = await migrateLegacyState(
+      migrateOptions(repo, {
+        legacyState: {
+          ...readLegacyAppState({ storage: snapshotLocalStorage() as unknown as ReadOnlyLegacyStorage }),
+          subjects: [{ subjectId: subject.subjectId, raw: V11, parsed: JSON.parse(V11), schemaVersion: '1.1.0' }],
+          subjectIds: [subject.subjectId],
+          progressionRaw: null,
+          sessionsRaw: null,
+          declaredSessionRaw: null,
+          preferencesRaw: null,
+          shortcutsRaw: null,
+          locale: null,
+          customSprites: [],
+          spritePacksRaw: null,
+          recovery: [],
+        },
+      }),
+    );
+    expect(reclaimed.report.status).toBe('migrated');
+    expect(reclaimed.report.activated).toBe(true);
+    expect(await repo.readActiveGenerationId()).toBe(GEN_1);
+    expect((await repo.readGeneration(GEN_1))?.descriptor?.status).toBe('active');
+    expect(await repo.listMigrationReceipts(GEN_1)).toHaveLength(1);
   });
 
   it('refuses to activate a generation that is not staged', async () => {

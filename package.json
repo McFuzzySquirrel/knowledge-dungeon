@@ -41,6 +41,7 @@
     "preview:e2e": "vite preview --host 127.0.0.1 --port 43173 --strictPort",
     "preview:e2e:data-products": "vite preview --host 127.0.0.1 --port 43179 --strictPort",
     "preview:e2e:subject-product": "vite preview --host 127.0.0.1 --port 43181 --strictPort",
+    "preview:e2e:reload-persistence": "vite preview --host 127.0.0.1 --port 43183 --strictPort",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "manifest": "node scripts/generate-sprite-manifest.mjs",
@@ -62,6 +63,9 @@
     "test:e2e:subject-product": "playwright test --config=playwright.subject-product.config.ts",
     "test:e2e:subject-product:recorded": "playwright test --config=playwright.subject-product.config.ts",
     "test:e2e:subject-product:full": "npm run build:storage-v2-data-products && npm run record:web-artifact:storage-v2 && playwright test --config=playwright.subject-product.config.ts",
+    "test:e2e:reload-persistence": "playwright test --config=playwright.reload-persistence.config.ts",
+    "test:e2e:reload-persistence:full": "npm run build:storage-v2-data-products && npm run record:web-artifact:storage-v2 && playwright test --config=playwright.reload-persistence.config.ts",
+    "test:e2e:reload-persistence:recorded": "playwright test --config=playwright.reload-persistence.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {
