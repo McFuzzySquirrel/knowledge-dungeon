@@ -1,0 +1,1119 @@
+/**
+ * PINNED FIXTURE - a verbatim snapshot of a source file from before the Phase 7 cutover.
+ *
+ * Source path : src/ui/screens/WelcomeScreen.tsx
+ * Taken from  : commit 8eb2587f3c09005e6ac71e2d57e0af6f25dc5d57 (the Phase 6 squash merge), short form 8eb2587
+ * Captured as : 42958 bytes, sha256 2ce9767c25effb9efacf893e748321fd9df439690f9de955cc4e686b3ea30fc6
+ *
+ * Why it is a fixture and not a `git show` at test time. CI clones this repository at
+ * depth 1, so the commit above is not in the runner's object store and a test that
+ * shells out to `git show` fails there while passing locally. That is a gate defect,
+ * not a product defect, and the right repair is to make the gate hermetic rather than
+ * to make CI fetch full history. This file is the hermetic form: the claim it supports
+ * - "unchanged since Phase 6" - is now an explicit, diffable, reviewable artefact in
+ * the repository rather than a lookup that silently depends on what the runner
+ * happened to fetch.
+ *
+ * The sha256 above is the checksum of the body **below the sentinel line**, not of this
+ * whole file, so a gate can prove this fixture is still the exact bytes that were
+ * captured without needing git. What it is for: the positive control for the legacy-caller detector - the pre-cutover screen really did bind the leaking pair, so an empty caller set is a measurement and not a detector that stopped working.
+ *
+ * Do not edit the body. It is a snapshot, not a copy to keep in step.
+ */
+// __P7_FIXTURE_BODY_BELOW__
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type JSX,
+} from 'react';
+import { CURRENT_SCHEMA_VERSION } from '@/core/validation/persistence';
+import { useSessionStore, type GamePhase } from '@/store/sessionStore';
+import { useSubjectStore } from '@/store/subjectStore';
+import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
+import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
+import {
+  exportSubjectToJson,
+  importSubjectFromJson,
+  exportSubjectFolder,
+  exportSubjectsRoot,
+  importSubjectFolder,
+  listSubjectIds,
+  loadSubjectSnapshot,
+  openSubjectsFolder,
+  saveSubjectSnapshot,
+  exportSubjectAsTemplate,
+  createSubjectFromTemplate,
+} from '@/services/persistence/subjectPersistence';
+import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
+import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
+import { runtimeConfig } from '@/config/featureFlags';
+import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
+import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/core/biomes';
+
+/**
+ * Whether this build has the Phase 5 data products at all.
+ *
+ * `VITE_DATA_PRODUCTS_V2` defaults to `false`, so on a default build every branch
+ * below that mentions `dataProductsEnabled` is dead and the Data tab renders
+ * exactly the markup it rendered before the Data Center existed.
+ */
+const dataProductsEnabled = runtimeConfig.dataProductsV2;
+
+/**
+ * The Data Center's component type, reached through a type-position `import()`.
+ *
+ * A type-position `import()` is erased by TypeScript and produces no runtime
+ * import, so naming the component's type costs the default build nothing while
+ * still type-checking the props the Data tab passes it.
+ */
+type DataCenterComponent = typeof import('@/ui/data/DataCenter')['DataCenter'];
+
+const PHASES: { id: GamePhase; title: string; description: string }[] = [
+  {
+    id: 'creator',
+    title: 'Create',
+    description: 'Author a new subject and link topic-rooms into a dungeon.',
+  },
+  {
+    id: 'scribe',
+    title: 'Scribe',
+    description: 'Explore your dungeon and defeat encounters by writing structured notes.',
+  },
+  {
+    id: 'archaeologist',
+    title: 'Review',
+    description: 'Once every room is cleared, revisit artifacts and self-check prompts.',
+  },
+];
+
+const BASE = import.meta.env.BASE_URL;
+const WELCOME_ICON = `${BASE}assets/welcome-icon.png`;
+const CLASS_SPRITES: Record<PlayerClassId, string> = {
+  scholar: `${BASE}assets/sprites/player-hero.svg`,
+  cartographer: `${BASE}assets/sprites/player-explorer.svg`,
+  archivist: `${BASE}assets/sprites/player-archivist.svg`,
+};
+
+const WELCOME_TABS = ['subjects', 'setup', 'guide', 'data'] as const;
+type WelcomeTabId = (typeof WELCOME_TABS)[number];
+
+const THEME_LABELS: Record<ColorTheme, string> = {
+  dark: 'Night',
+  colorful: 'Arcade',
+  aurora: 'Aurora',
+};
+
+function sanitizeFilePart(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'subject';
+}
+
+function downloadTextFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error ?? new Error('Unable to read file.'));
+    reader.readAsText(file);
+  });
+}
+
+export function WelcomeScreen(): JSX.Element {
+  const phase = useSessionStore((s) => s.phase);
+  const setPhase = useSessionStore((s) => s.setPhase);
+  const selectedClass = useSessionStore((s) => s.selectedClass);
+  const setSelectedClass = useSessionStore((s) => s.setSelectedClass);
+  const setActiveScreen = useSessionStore((s) => s.setActiveScreen);
+
+  const snapshot = useSubjectStore((s) => s.snapshot);
+  const initSubject = useSubjectStore((s) => s.initSubject);
+  const importSnapshot = useSubjectStore((s) => s.importSnapshot);
+  const colorTheme = usePreferencesStore((s) => s.colorTheme);
+  const setColorTheme = usePreferencesStore((s) => s.setColorTheme);
+  const loadSubjectFlow = useLoadSubjectFlow();
+
+  const [subjectName, setSubjectName] = useState('');
+  const [rootTopic, setRootTopic] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [existingSubjects, setExistingSubjects] = useState<
+    {
+      id: string;
+      subjectName: string;
+      roomCount: number;
+      clearedRoomCount: number;
+      suggestedPhase: 'Create' | 'Scribe' | 'Review';
+    }[]
+  >([]);
+  const [selectedExistingSubjectId, setSelectedExistingSubjectId] = useState<string | null>(null);
+  const [loadingExisting, setLoadingExisting] = useState(true);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminBusy, setAdminBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState<WelcomeTabId>('subjects');
+  const [selectedBiome, setSelectedBiome] = useState<FloorBiomeId>(FLOOR_BIOME_IDS[0]);
+  const webImportInputRef = useRef<HTMLInputElement | null>(null);
+  const templateImportInputRef = useRef<HTMLInputElement | null>(null);
+  const subjectsTabRef = useRef<HTMLButtonElement | null>(null);
+  const [DataCenterScreen, setDataCenterScreen] = useState<DataCenterComponent | null>(null);
+  const env = getElectronEnvironmentLabel();
+  const electronAvailable = isElectronAvailable();
+  const selectedPhaseLabel = PHASES.find((phaseDef) => phaseDef.id === phase)?.title ?? phase;
+  const selectedClassLabel =
+    PLAYER_CLASSES.find((playerClass) => playerClass.id === selectedClass)?.name ?? 'Not selected yet';
+  const isReadyToEnter = Boolean(selectedClass);
+  const isFirstTimeUser = !snapshot && existingSubjects.length === 0;
+  const selectedExistingSubject =
+    selectedExistingSubjectId
+      ? existingSubjects.find((subject) => subject.id === selectedExistingSubjectId) ?? null
+      : null;
+  const selectedSubjectLabel = selectedExistingSubject?.subjectName ?? 'Not selected yet';
+  const canEnterDungeon = Boolean(selectedExistingSubjectId && isReadyToEnter);
+
+  async function fetchExistingSubjects() {
+    try {
+      const ids = await listSubjectIds();
+      const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
+      return ids.map((id, index) => {
+        const snapshotAtIndex = snapshots[index];
+        const roomCount = snapshotAtIndex?.dungeon.rooms.length ?? 0;
+        const clearedRoomCount = snapshotAtIndex
+          ? Object.values(snapshotAtIndex.rooms).filter((room) => room.validationState.finalPass).length
+          : 0;
+        const suggestedPhase: 'Create' | 'Scribe' | 'Review' =
+          roomCount > 0 && clearedRoomCount === roomCount
+            ? 'Review'
+            : roomCount > 1
+              ? 'Scribe'
+              : 'Create';
+        return {
+          id,
+          subjectName: snapshotAtIndex?.dungeon.subjectName ?? id,
+          roomCount,
+          clearedRoomCount,
+          suggestedPhase,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  async function refreshExistingSubjects() {
+    setLoadingExisting(true);
+    const subjects = await fetchExistingSubjects();
+    setExistingSubjects(subjects);
+    if (selectedExistingSubjectId && !subjects.some((subject) => subject.id === selectedExistingSubjectId)) {
+      setSelectedExistingSubjectId(null);
+    }
+    setLoadingExisting(false);
+  }
+
+  /**
+   * The Data Center restored a backup, so show what it restored.
+   *
+   * The subject list is reloaded from storage and the Create / Load tab is
+   * selected, because a learner who has just restored a backup wants to see the
+   * subjects in it. The Data Center's own report is not lost by this: the Welcome
+   * panels stay mounted, so switching back to the Data tab shows the report
+   * again. Focus is moved to the tab that is now showing, so a keyboard or screen
+   * reader user is not left with focus inside a panel that just became hidden.
+   */
+  function handleDeviceDataRestored() {
+    void (async () => {
+      await refreshExistingSubjects();
+      setActiveTab('subjects');
+      subjectsTabRef.current?.focus();
+    })();
+  }
+
+  /**
+   * The Data Center imported one subject, so refresh the list and stay put.
+   *
+   * Deliberately *not* `handleDeviceDataRestored`. A whole-device restore moves to
+   * the Create / Load tab, because the learner has just replaced everything and
+   * wants to see it. A subject import must not: the Data Center's own report
+   * carries the disclosures that decide whether the import was a good idea - the
+   * images that came back without their picture data, the references inside the
+   * file that could not be rewritten - and navigating away unmounts the surface
+   * carrying them. So this reloads the list, leaves the tab alone, and leaves
+   * focus where the learner put it.
+   */
+  function handleSubjectImported() {
+    void (async () => {
+      await refreshExistingSubjects();
+    })();
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadExisting() {
+      setLoadingExisting(true);
+      const subjects = await fetchExistingSubjects();
+      if (cancelled) return;
+      setExistingSubjects(subjects);
+      setSelectedExistingSubjectId((current) =>
+        current && subjects.some((subject) => subject.id === current)
+          ? current
+          : snapshot && subjects.some((subject) => subject.id === snapshot.dungeon.dungeonId)
+            ? snapshot.dungeon.dungeonId
+            : null,
+      );
+      setLoadingExisting(false);
+    }
+    void loadExisting();
+    return () => {
+      cancelled = true;
+    };
+  }, [snapshot]);
+
+  useEffect(() => {
+    if (dataProductsEnabled) {
+      let cancelled = false;
+      void (async () => {
+        const module = await import('@/ui/data/DataCenter');
+        if (!cancelled) setDataCenterScreen(() => module.DataCenter);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+    return undefined;
+  }, []);
+
+  async function handleStartTutorial() {
+    const subject = createTutorialSubject();
+    await importSnapshot(subject);
+    setPhase('scribe');
+    setSelectedClass('scholar');
+    await refreshExistingSubjects();
+    setSelectedExistingSubjectId(TUTORIAL_SUBJECT_ID);
+    setActiveTab('setup');
+    await loadSubjectFlow(TUTORIAL_SUBJECT_ID);
+    setActiveScreen('game');
+  }
+
+  async function handleCreate() {
+    if (!subjectName.trim() || !rootTopic.trim()) return;
+    setSubmitting(true);
+    try {
+      const created = await initSubject({
+        subjectName: subjectName.trim(),
+        rootTopic: rootTopic.trim(),
+        biome: selectedBiome,
+      });
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(created.dungeon.dungeonId);
+      setSubjectName('');
+      setRootTopic('');
+      setActiveTab('setup');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleLoad(id: string) {
+    if (!isReadyToEnter) return;
+    await loadSubjectFlow(id);
+  }
+
+  async function handleEnterSelectedSubject() {
+    if (!selectedExistingSubjectId) return;
+    localStorage.removeItem('kd-village-spawn');
+    await handleLoad(selectedExistingSubjectId);
+    setActiveScreen('village');
+  }
+
+  async function handleOpenSubjectsFolder() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const opened = await openSubjectsFolder();
+      setAdminMessage(opened ? 'Opened local subjects folder.' : 'Unable to open subjects folder.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportSubjectsRoot() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const exportedTo = await exportSubjectsRoot();
+      setAdminMessage(exportedTo ? `Exported subjects root to: ${exportedTo}` : 'Export cancelled.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportSubject(subjectId: string) {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const exportedTo = await exportSubjectFolder(subjectId);
+      setAdminMessage(exportedTo ? `Exported ${subjectId} to: ${exportedTo}` : 'Export cancelled.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleImportSubjectFolder() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const imported = await importSubjectFolder();
+      if (!imported) {
+        setAdminMessage('Import cancelled.');
+        return;
+      }
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(imported.dungeon.dungeonId);
+      setActiveTab('setup');
+      setAdminMessage(`Imported ${imported.dungeon.subjectName}. Select Enter Dungeon when ready.`);
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportSubjectJson(subjectId: string) {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const subject = await loadSubjectSnapshot(subjectId);
+      if (!subject) {
+        setAdminMessage('Unable to export: subject data not found.');
+        return;
+      }
+      const filename = `${sanitizeFilePart(subject.dungeon.subjectName)}.json`;
+      downloadTextFile(filename, exportSubjectToJson(subject));
+      setAdminMessage(`Exported ${subject.dungeon.subjectName} as ${filename}.`);
+    } catch {
+      setAdminMessage('Export failed.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportAllSubjectsJson() {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const subjects = await Promise.all(existingSubjects.map((subject) => loadSubjectSnapshot(subject.id)));
+      const snapshots = subjects.filter((subject) => subject !== null);
+      if (snapshots.length === 0) {
+        setAdminMessage('No subject data available to export.');
+        return;
+      }
+      const filename = `knowledge-dungeon-subjects-${new Date().toISOString().slice(0, 10)}.json`;
+      const payload = JSON.stringify(
+        {
+          format: 'knowledge-dungeon-subject-bundle',
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          exportedAt: new Date().toISOString(),
+          subjects: snapshots,
+        },
+        null,
+        2,
+      );
+      downloadTextFile(filename, payload);
+      setAdminMessage(`Exported ${snapshots.length} subject${snapshots.length === 1 ? '' : 's'} as ${filename}.`);
+    } catch {
+      setAdminMessage('Export failed.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  function handleImportSubjectJsonClick() {
+    if (adminBusy) return;
+    webImportInputRef.current?.click();
+  }
+
+  async function handleImportSubjectJsonFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const raw = await readFileAsText(file);
+      const imported = importSubjectFromJson(raw);
+      const saveResult = await saveSubjectSnapshot(imported.dungeon.dungeonId, imported);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error ?? 'Failed to persist imported data.');
+      }
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(imported.dungeon.dungeonId);
+      setActiveTab('setup');
+      setAdminMessage(`Imported ${imported.dungeon.subjectName}. Select Enter Dungeon when ready.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Import failed.';
+      setAdminMessage(`Import failed: ${message}`);
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleExportSubjectAsTemplate(subjectId: string) {
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const subject = await loadSubjectSnapshot(subjectId);
+      if (!subject) {
+        setAdminMessage('Unable to export template: subject data not found.');
+        return;
+      }
+      const filename = `${sanitizeFilePart(subject.dungeon.subjectName)}.template.json`;
+      downloadTextFile(filename, exportSubjectAsTemplate(subject));
+      setAdminMessage(`Exported template for ${subject.dungeon.subjectName} as ${filename}.`);
+    } catch {
+      setAdminMessage('Template export failed.');
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  async function handleImportTemplateFromFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setAdminBusy(true);
+    setAdminMessage(null);
+    try {
+      const raw = await readFileAsText(file);
+      const subject = createSubjectFromTemplate(raw);
+      const saveResult = await saveSubjectSnapshot(subject.dungeon.dungeonId, subject);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error ?? 'Failed to persist template data.');
+      }
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(subject.dungeon.dungeonId);
+      setActiveTab('setup');
+      setAdminMessage(`Created ${subject.dungeon.subjectName} from template. Select Enter Dungeon when ready.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Template import failed.';
+      setAdminMessage(`Template import failed: ${message}`);
+    } finally {
+      setAdminBusy(false);
+    }
+  }
+
+  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, tab: WelcomeTabId): void {
+    const index = WELCOME_TABS.indexOf(tab);
+    if (index < 0) return;
+
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') {
+      nextIndex = (index + 1) % WELCOME_TABS.length;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + WELCOME_TABS.length) % WELCOME_TABS.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = WELCOME_TABS.length - 1;
+    }
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      setActiveTab(WELCOME_TABS[nextIndex]);
+    }
+  }
+
+  return (
+    <div className="welcome-screen ui-skin" data-theme={colorTheme}>
+      <header style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <img
+          src={WELCOME_ICON}
+          alt="Knowledge Dungeon crystal icon"
+          width={88}
+          height={88}
+          style={{
+            flex: '0 0 auto',
+            borderRadius: 18,
+            padding: 6,
+            background: 'linear-gradient(180deg, rgba(123, 227, 255, 0.16), rgba(12, 22, 44, 0.42))',
+            border: '1px solid rgba(123, 227, 255, 0.32)',
+            boxShadow: '0 10px 24px rgba(0, 0, 0, 0.35)',
+          }}
+        />
+        <div>
+          <h1>Knowledge Dungeon</h1>
+          <p>
+            A local-first study dungeon-crawler. Build a subject as a mindmap of topic-rooms,
+            then defeat each room&rsquo;s encounter by writing structured notes. Currently running
+            in <strong>{env}</strong> mode.
+          </p>
+        </div>
+      </header>
+
+      <div className="welcome-layout">
+        <div className="welcome-main">
+          <section className="welcome-theme-picker" aria-label="Visual theme">
+            <h2>Visual theme</h2>
+            <div className="welcome-tabs" role="tablist" aria-label="Theme choices">
+              {(Object.keys(THEME_LABELS) as ColorTheme[]).map((theme) => (
+                <button
+                  key={theme}
+                  type="button"
+                  role="tab"
+                  aria-selected={colorTheme === theme}
+                  onClick={() => setColorTheme(theme)}
+                >
+                  {THEME_LABELS[theme]}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="welcome-main-tabs" aria-label="Welcome sections">
+            <div className="welcome-tabs" role="tablist" aria-label="Welcome screen sections">
+              <button
+                type="button"
+                role="tab"
+                ref={subjectsTabRef}
+                aria-selected={activeTab === 'subjects'}
+                aria-controls="welcome-panel-subjects"
+                onKeyDown={(event) => handleTabKeyDown(event, 'subjects')}
+                onClick={() => setActiveTab('subjects')}
+              >
+                Create / Load
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'setup'}
+                aria-controls="welcome-panel-setup"
+                onKeyDown={(event) => handleTabKeyDown(event, 'setup')}
+                onClick={() => setActiveTab('setup')}
+              >
+                Player Setup
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'guide'}
+                aria-controls="welcome-panel-guide"
+                onKeyDown={(event) => handleTabKeyDown(event, 'guide')}
+                onClick={() => setActiveTab('guide')}
+              >
+                Guide
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'data'}
+                aria-controls="welcome-panel-data"
+                onKeyDown={(event) => handleTabKeyDown(event, 'data')}
+                onClick={() => setActiveTab('data')}
+              >
+                Data
+              </button>
+            </div>
+          </section>
+
+      <section
+        id="welcome-panel-setup"
+        role="tabpanel"
+        aria-label="Player Setup"
+        hidden={activeTab !== 'setup'}
+      >
+        <section>
+          <h2>2. Choose a phase</h2>
+          <div className="phase-grid">
+            {PHASES.map((phaseDef) => (
+              <button
+                key={phaseDef.id}
+                type="button"
+                className="phase-card"
+                aria-pressed={phase === phaseDef.id}
+                onClick={() => setPhase(phaseDef.id)}
+              >
+                {phase === phaseDef.id ? <span className="selection-chip">Selected</span> : null}
+                <h3>{phaseDef.title}</h3>
+                <p>{phaseDef.description}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h2>3. Pick a Study Archetype</h2>
+          <div className="class-grid">
+            {PLAYER_CLASSES.map((cls) => (
+              <button
+                key={cls.id}
+                type="button"
+                className="class-card"
+                aria-pressed={selectedClass === cls.id}
+                onClick={() => setSelectedClass(cls.id)}
+              >
+                {selectedClass === cls.id ? <span className="selection-chip">Selected</span> : null}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <img
+                    src={CLASS_SPRITES[cls.id]}
+                    alt=""
+                    width={48}
+                    height={48}
+                    style={{ flex: '0 0 auto' }}
+                  />
+                  <h4 style={{ margin: 0 }}>{cls.name}</h4>
+                </div>
+                <p>{cls.tagline}</p>
+                <div className="perk">Perk: {cls.perk}</div>
+              </button>
+            ))}
+          </div>
+        </section>
+      </section>
+
+      <section
+        id="welcome-panel-subjects"
+        role="tabpanel"
+        aria-label="Create or load subject"
+        hidden={activeTab !== 'subjects'}
+      >
+        <section>
+          <h2>1. Choose or create a subject</h2>
+
+          <div className="tutorial-card" style={{
+            background: 'linear-gradient(135deg, rgba(99, 179, 237, 0.12), rgba(99, 179, 237, 0.04))',
+            border: '1px solid rgba(99, 179, 237, 0.35)',
+            borderRadius: 12,
+            padding: '16px 20px',
+            marginBottom: 20,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <span style={{ fontSize: 28, lineHeight: 1 }}>🎓</span>
+              <div>
+                <strong style={{ fontSize: 16 }}>New here? Start the tutorial</strong>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+                  A 3-room guided dungeon that teaches notes, attachments, and navigation.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="ghost"
+              style={{
+                background: 'rgba(99, 179, 237, 0.15)',
+                border: '1px solid rgba(99, 179, 237, 0.4)',
+                padding: '8px 20px',
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+              onClick={() => void handleStartTutorial()}
+            >
+              Start Tutorial
+            </button>
+          </div>
+
+          {/*
+            `welcome-field-grid` carries no layout of its own here. It names the box
+            so the stylesheet can own the one thing inline styles cannot express: the
+            *track* sizing. An `auto` grid track's minimum is its items' min-content
+            contributions, so this grid's floor was the biome row's - a `nowrap`
+            label beside a native `<select>`, whose intrinsic width is its widest
+            option's rendered text. The track is `minmax(0, 1fr)` in
+            `src/styles.css` so no item in here can set the page's width again.
+          */}
+          <div className="welcome-field-grid" style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+            <input
+              type="text"
+              placeholder="Subject name (e.g. Linear Algebra)"
+              value={subjectName}
+              onChange={(e) => setSubjectName(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Root topic (e.g. Vector Spaces)"
+              value={rootTopic}
+              onChange={(e) => setRootTopic(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {/*
+                `white-space: nowrap` was removed rather than kept. With the track
+                fixed it costs nothing today - "Dungeon theme:" is far shorter than
+                320 CSS pixels, so it never wraps - but a nowrap label is unbounded
+                by construction, and it was the last thing in this row able to push
+                the row wider than the viewport. Letting it wrap only when it must
+                is what keeps a *longer* label from reintroducing this exact bug; the
+                single-line look is unchanged on every width where the label fits.
+              */}
+              <label htmlFor="biome-select" style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Dungeon theme:
+              </label>
+              <select
+                id="biome-select"
+                value={selectedBiome}
+                onChange={(e) => setSelectedBiome(e.target.value as FloorBiomeId)}
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 6 }}
+              >
+                {FLOOR_BIOME_IDS.map((biome) => (
+                  <option key={biome} value={biome}>
+                    {biome.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="welcome-actions">
+              <button
+                type="button"
+                onClick={() => void handleCreate()}
+                disabled={!subjectName.trim() || !rootTopic.trim() || submitting}
+              >
+                {submitting ? 'Creating…' : 'Create new subject'}
+              </button>
+            </div>
+          </div>
+          <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => void refreshExistingSubjects()}
+              disabled={loadingExisting}
+              aria-label="Refresh subject list"
+            >
+              Refresh subjects
+            </button>
+          </div>
+
+          {loadingExisting ? <p>Loading subjects…</p> : null}
+          {existingSubjects.length > 0 ? (
+            <div style={{ marginTop: 16 }}>
+              <h3>Previously created</h3>
+              <p className="room-help-text">Select a subject, then choose Player Setup options and Enter Dungeon.</p>
+              <div className="welcome-actions" style={{ marginTop: 8 }}>
+                {existingSubjects.map((subject) => (
+                  <button
+                    key={subject.id}
+                    type="button"
+                    className={selectedExistingSubjectId === subject.id ? 'ghost room-travel-item--selected' : 'ghost'}
+                    aria-pressed={selectedExistingSubjectId === subject.id}
+                    onClick={() => setSelectedExistingSubjectId(subject.id)}
+                  >
+                    {subject.subjectName}
+                    <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 12 }}>
+                      ({subject.clearedRoomCount}/{subject.roomCount} cleared · Suggested: {subject.suggestedPhase})
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {selectedExistingSubject ? (
+                <div style={{ marginTop: 12 }} className="room-section" aria-live="polite">
+                  <p>
+                    Selected subject: <strong>{selectedExistingSubject.subjectName}</strong>
+                  </p>
+                  <p className="room-help-text">
+                    Progress: {selectedExistingSubject.clearedRoomCount}/{selectedExistingSubject.roomCount} rooms
+                    cleared. Suggested phase: {selectedExistingSubject.suggestedPhase}.
+                  </p>
+                  {!isReadyToEnter ? (
+                    <p className="room-help-text">Pick an archetype in Player Setup to enter this dungeon.</p>
+                  ) : (
+                    <p className="room-help-text">Use Enter Dungeon above when you are ready to continue.</p>
+                  )}
+                  <div className="welcome-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={() => setSelectedExistingSubjectId(null)}
+                    >
+                      Choose different subject
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      </section>
+
+      <section
+        id="welcome-panel-guide"
+        role="tabpanel"
+        aria-label="Guide"
+        hidden={activeTab !== 'guide'}
+      >
+        <section className="room-section" aria-label="Gameplay loop overview">
+          <h2>Gameplay loop</h2>
+          <p className="room-help-text">
+            Knowledge Dungeon works as a loop: map your ideas in Creator, clear encounters by writing
+            notes in Scribe, then run review passes in Archaeologist once rooms are cleared.
+          </p>
+          <p className="room-help-text">
+            For your first subject, start in Creator to build a few connected rooms, then switch to
+            Scribe when you are ready to clear encounters.
+          </p>
+        </section>
+      </section>
+
+      <section
+        id="welcome-panel-data"
+        role="tabpanel"
+        aria-label="Data management"
+        hidden={activeTab !== 'data'}
+      >
+        {/*
+          Phase 5: the Data Center *replaces* the legacy admin panel in a build
+          that opts into the data products, and is absent from every other build.
+
+          The two are alternatives rather than additions on purpose. They are two
+          answers to the same question - "how do I move my data" - and the fresh
+          profile restore lane drives this panel and requires it to present
+          exactly one file picker, so two import surfaces side by side would be
+          both ambiguous and untestable. A build with the flag off renders the
+          markup below byte for byte as it did before the Data Center existed,
+          and the flag is a build-time value, so the plan's Phase 5 rollback is
+          still "turn the flag off".
+        */}
+        {dataProductsEnabled ? (
+          DataCenterScreen === null ? (
+            <p className="room-help-text">Loading the Data Center…</p>
+          ) : (
+            <DataCenterScreen
+              onRestored={handleDeviceDataRestored}
+              onSubjectImported={handleSubjectImported}
+            />
+          )
+        ) : (
+        <section>
+          <h2>Admin</h2>
+          <p>
+            Use import/export to move subject data between devices. Desktop mode includes advanced folder-level tools.
+          </p>
+          {electronAvailable ? (
+            <>
+              <div className="welcome-actions" aria-busy={adminBusy}>
+                <button
+                  type="button"
+                  onClick={() => void handleImportSubjectFolder()}
+                  disabled={adminBusy}
+                  aria-disabled={adminBusy}
+                >
+                  Import subject folder
+                </button>
+              </div>
+              <details className="welcome-admin-advanced" open={!isFirstTimeUser}>
+                <summary>Advanced admin tools</summary>
+                <div className="welcome-actions" aria-busy={adminBusy}>
+                  <button
+                    type="button"
+                    onClick={() => void handleOpenSubjectsFolder()}
+                    disabled={adminBusy}
+                    aria-disabled={adminBusy}
+                  >
+                    Open subjects folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExportSubjectsRoot()}
+                    disabled={adminBusy}
+                    aria-disabled={adminBusy}
+                  >
+                    Export subjects root
+                  </button>
+                  {existingSubjects.map((subject) => (
+                    <button
+                      key={`export-${subject.id}`}
+                      type="button"
+                      onClick={() => void handleExportSubject(subject.id)}
+                      disabled={adminBusy}
+                      aria-disabled={adminBusy}
+                    >
+                      Export {subject.subjectName}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <div className="welcome-actions" aria-busy={adminBusy}>
+                <button
+                  type="button"
+                  onClick={handleImportSubjectJsonClick}
+                  disabled={adminBusy}
+                  aria-disabled={adminBusy}
+                >
+                  Import subject from JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    templateImportInputRef.current?.click();
+                  }}
+                  disabled={adminBusy}
+                  aria-disabled={adminBusy}
+                >
+                  Create from template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExportAllSubjectsJson()}
+                  disabled={adminBusy || existingSubjects.length === 0}
+                  aria-disabled={adminBusy || existingSubjects.length === 0}
+                >
+                  Export all subjects as JSON
+                </button>
+                {existingSubjects.map((subject) => (
+                  <div key={`export-group-${subject.id}`} style={{ display: 'contents' }}>
+                    <button
+                      key={`export-json-btn-${subject.id}`}
+                      type="button"
+                      onClick={() => void handleExportSubjectJson(subject.id)}
+                      disabled={adminBusy}
+                      aria-disabled={adminBusy}
+                    >
+                      Export {subject.subjectName} as JSON
+                    </button>
+                    <button
+                      key={`export-template-${subject.id}`}
+                      type="button"
+                      onClick={() => void handleExportSubjectAsTemplate(subject.id)}
+                      disabled={adminBusy}
+                      aria-disabled={adminBusy}
+                      className="ghost"
+                    >
+                      Export {subject.subjectName} as template
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <input
+                ref={webImportInputRef}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                onChange={(event) => void handleImportSubjectJsonFile(event)}
+              />
+              <input
+                ref={templateImportInputRef}
+                type="file"
+                accept=".json,application/json"
+                hidden
+                onChange={(event) => void handleImportTemplateFromFile(event)}
+              />
+            </>
+          )}
+          {adminMessage ? (
+            <p style={{ marginTop: 8, color: 'var(--text-muted)', wordBreak: 'break-word' }}>
+              {adminMessage}
+            </p>
+          ) : null}
+          <p className="room-help-text" style={{ marginTop: 16 }}>
+            🔒 <strong>Privacy:</strong> Notes, subjects, and settings are stored{' '}
+            {electronAvailable ? 'on your local machine' : 'in your browser on this device'}.{' '}
+            {/*
+              The image sentence is branch-specific, because the sentence that was
+              here named IndexedDB unconditionally. On the desktop build the `+ Local`
+              control calls `electronKnowledgeBridge.addRoomLocalAttachment` and the
+              native host writes the file to disk, so naming IndexedDB there is false.
+              A privacy notice has to be true on every branch it can render, not only
+              the one the web build takes. The web branch's wording is unchanged.
+            */}
+            {electronAvailable
+              ? 'Images you add are written to this device’s disk by the desktop app and are not uploaded anywhere.'
+              : 'Images you add are saved on this device in IndexedDB and are not uploaded anywhere.'}{' '}
+            Links to external images stay links: the app cannot download their bytes, so a
+            backup cannot include them.
+          </p>
+        </section>
+        )}
+      </section>
+    </div>
+
+      <aside className="welcome-sidebar" aria-label="Setup checklist">
+        <div className="welcome-checklist" role="status" aria-live="polite">
+          <h2>Ready to Start?</h2>
+
+          <div className={`welcome-checklist-item${selectedExistingSubjectId ? ' welcome-checklist-item--done' : ''}`}>
+            <span className="welcome-checklist-icon" aria-hidden="true">{selectedExistingSubjectId ? '✓' : '○'}</span>
+            <div className="welcome-checklist-body">
+              <span className="welcome-checklist-label">Subject</span>
+              <span className="welcome-checklist-value">{selectedSubjectLabel}</span>
+            </div>
+            <span className={`welcome-checklist-status${selectedExistingSubjectId ? ' welcome-checklist-status--done' : ''}`}>
+              {selectedExistingSubjectId ? 'Done' : 'Required'}
+            </span>
+          </div>
+
+          <div className="welcome-checklist-item welcome-checklist-item--done">
+            <span className="welcome-checklist-icon" aria-hidden="true">✓</span>
+            <div className="welcome-checklist-body">
+              <span className="welcome-checklist-label">Phase</span>
+              <span className="welcome-checklist-value">{selectedPhaseLabel}</span>
+            </div>
+            <span className="welcome-checklist-status welcome-checklist-status--done">Done</span>
+          </div>
+
+          <div className={`welcome-checklist-item${selectedClass ? ' welcome-checklist-item--done' : ''}`}>
+            <span className="welcome-checklist-icon" aria-hidden="true">{selectedClass ? '✓' : '○'}</span>
+            <div className="welcome-checklist-body">
+              <span className="welcome-checklist-label">Archetype</span>
+              <span className="welcome-checklist-value">{selectedClassLabel}</span>
+            </div>
+            <span className={`welcome-checklist-status${selectedClass ? ' welcome-checklist-status--done' : ''}`}>
+              {selectedClass ? 'Done' : 'Required'}
+            </span>
+          </div>
+        </div>
+
+        <div className="welcome-checklist-actions">
+          {!selectedExistingSubjectId ? (
+            <p className="welcome-checklist-hint">Select a subject to continue</p>
+          ) : !selectedClass ? (
+            <p className="welcome-checklist-hint">Pick an Archetype to continue</p>
+          ) : (
+            <p className="welcome-checklist-hint welcome-checklist-hint--ready">Ready to Enter Dungeon</p>
+          )}
+          <button
+            type="button"
+            className={canEnterDungeon ? 'welcome-enter-dungeon--ready' : undefined}
+            onClick={() => void handleEnterSelectedSubject()}
+            disabled={!canEnterDungeon}
+          >
+            Enter Dungeon
+          </button>
+          {existingSubjects.length > 0 ? (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => { localStorage.removeItem('kd-village-spawn'); setActiveScreen('village'); }}
+            >
+              Continue to Village
+            </button>
+          ) : null}
+          {/*
+            The Data Center's own way in. It is in the sidebar rather than inside
+            the Data tab so that it is reachable from wherever a learner is on
+            this screen, and so that pressing it both selects the Data tab and
+            shows what is on it - one control, one destination, no second click.
+
+            Phase 5: rendered only when the data-products flag is on, so the
+            default build's sidebar is unchanged.
+          */}
+          {dataProductsEnabled ? (
+            <button type="button" className="ghost" onClick={() => setActiveTab('data')}>
+              Open Data Center
+            </button>
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  </div>
+  );
+}

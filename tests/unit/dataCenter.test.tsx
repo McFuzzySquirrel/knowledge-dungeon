@@ -436,18 +436,33 @@ describe('Phase 5 Data Center: the flag gate', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Data' }));
     const panel = document.getElementById('welcome-panel-data') as HTMLElement;
 
-    // The legacy surface, unchanged and complete.
+    // The legacy surface, unchanged and complete - **except** for the template
+    // controls, which Phase 7's cutover retired. They used to be here: a
+    // "Create from template" button, a hidden template file input, and one
+    // "Export <subject> as template" button per subject, all calling the pre-Phase-7
+    // pair in `subjectPersistence.ts` - an exporter that wrote original room ids,
+    // attachment metadata, filenames, the subject's own name, and an ambient clock
+    // into a file named after that subject. The learner-facing path to a template is
+    // now the Data Center's `Reusable template` tab, which is behind the flag this
+    // test has deliberately left off.
+    //
+    // So the honest statement for a flag-off build is: the whole-subject JSON surface
+    // is intact, and there is **no** template feature at all rather than the leaking
+    // one. Keeping the unsafe path as the fallback would keep the defect as the
+    // fallback. `tests/data/templateLegacyPath.test.ts` holds that measurement.
     expect(within(panel).getByRole('heading', { name: 'Admin' })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /Import subject from JSON/i })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /Export all subjects as JSON/i })).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: /Create from template/i })).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: /Create from template/i })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: /as template/i })).toBeNull();
     expect(within(panel).getByText(/Privacy:/i)).toBeInTheDocument();
     // ...and nothing at all from this deliverable.
     expect(within(panel).queryByRole('heading', { name: 'Data Center' })).toBeNull();
     expect(within(panel).queryByRole('tab', { name: /full device backup/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /data center/i })).toBeNull();
-    // The legacy panel's own two file pickers, and not a third.
-    expect(panel.querySelectorAll('input[type="file"]')).toHaveLength(2);
+    // The legacy panel's one remaining file picker, and not a second: the template
+    // picker went with the template buttons.
+    expect(panel.querySelectorAll('input[type="file"]')).toHaveLength(1);
   });
 
   it('replaces the legacy panel with the Data Center when the flag is on, and is the only file picker', async () => {
@@ -1398,7 +1413,10 @@ describe('Phase 5 Data Center: the lazy boundary', () => {
     // deliberately, and adding it deliberately is the review step. Phase 6 added
     // three files - the shared product boundary, the shared dialog, and the subject
     // tab - and all three keep the invariant, so the list grew and the offender
-    // list stayed empty.
+    // list stayed empty. Phase 7 added the template tab, which keeps it too: it is
+    // handed the repository handle `readLiveDevice` published and reaches
+    // `products/subjectTemplate` by a lazy import of a string literal, so it names no
+    // storage-v2 *implementation* module and is not an entry on `STORAGE_V2_SEAMS`.
     const files = firstPartyModulesUnder('src/ui/data');
     expect(files).toEqual([
       'src/ui/data/ConfirmDialog.tsx',
@@ -1406,6 +1424,7 @@ describe('Phase 5 Data Center: the lazy boundary', () => {
       'src/ui/data/ImportPreview.tsx',
       'src/ui/data/RecoveryStatus.tsx',
       'src/ui/data/SubjectBackupTab.tsx',
+      'src/ui/data/SubjectTemplateTab.tsx',
       'src/ui/data/dataCenter.css',
       'src/ui/data/productAccess.ts',
     ]);

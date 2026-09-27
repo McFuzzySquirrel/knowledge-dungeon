@@ -363,11 +363,24 @@ export interface ExternalOnlyAttachmentReport {
  * - `recovery-required` - a failure. The legacy generation is still authoritative
  *   and `activeGeneration` was not flipped.
  * - `no-source-data` - the device had nothing to migrate, so nothing was staged.
+ * - `already-migrated` - this run did nothing, because the device had already
+ *   moved off the legacy keys. Distinct from `migrated` on purpose: `migrated`
+ *   says *this run* produced a reachable-or-superseded generation, and a skip
+ *   produced none, so reporting `migrated` for it would be a claim about a run
+ *   that never happened. Distinct from `no-source-data` on purpose too: this
+ *   device *did* hold legacy source data - it simply already has it in
+ *   storage-v2, and re-staging a generation from the stale mirror would supersede
+ *   the one the device is using and strand every write that only reached it.
+ *   `activated` is `false` in both of those cases and in this one.
  *
  * The activation-blocking rule that produces these values is declared once, as
  * `MIGRATION_BLOCKING_POLICY` in `./migrationState`.
  */
-export type MigrationOutcomeStatus = 'migrated' | 'recovery-required' | 'no-source-data';
+export type MigrationOutcomeStatus =
+  | 'migrated'
+  | 'recovery-required'
+  | 'no-source-data'
+  | 'already-migrated';
 
 
 export interface MigrationCounts {

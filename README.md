@@ -451,11 +451,13 @@ Every compatibility lane must exercise the *same* production web artifact:
 
 1. One job or command runs `npm run build:web` once.
 2. `npm run record:web-artifact` writes
-   `artifacts/web-artifact-manifest.json` with a deterministic `sha256-tree-v1`
-   identity: a SHA-256 tree hash over `sha256(bytes)  posix/relative/path` lines
-   sorted by path, plus per-file hashes, the `index.html` hash, and the
-   toolchain context that produced the build. The script is cross-platform and
-   uses Node built-ins only.
+   `artifacts/web-artifact-manifest.json` with **two** deterministic identities.
+   The artifact identity is `sha256-tree-v1`: a SHA-256 tree hash over
+   `sha256(bytes)  posix/relative/path` lines sorted by path, plus per-file
+   hashes, the `index.html` hash, and the toolchain context that produced the
+   build. The source identity is `sha256-git-tracked-v1`: the same line format
+   and ordering over every git-tracked file, read from working-tree content. The
+   script is cross-platform and uses Node built-ins only.
 3. The CI build job uploads `dist` plus the manifest; each lane job downloads both,
    runs `npm run verify:web-artifact`, and only then previews the artifact. Lanes
    never rebuild.
@@ -463,10 +465,36 @@ Every compatibility lane must exercise the *same* production web artifact:
    the served `index.html` bytes with the **recorded** manifest entrypoint hash,
    and records the artifact identity with the run.
 
+**Why the manifest carries a source identity.** The tree identity on its own is
+self-referential: the manifest is recorded from the same `dist` a lane then
+serves, so "the served `dist` matches the manifest" proves only that `dist`
+matches `dist`. A workspace holding a `dist` built from an older source revision,
+next to a manifest recorded from that same older `dist`, passed that comparison
+byte for byte - and a browser lane went on to certify that stale artifact. The
+source identity closes that: a recorded artifact whose source identity differs
+from the checkout it is verified against is stale evidence, and the gate fails
+with `source-does-not-match-recorded-artifact`.
+
+It is derived from the actual source content rather than from a commit sha,
+because an uncommitted worktree - the normal state while developing - has a sha
+that does not describe it. A commit sha alone would leave a `dist` built from
+uncommitted source passing. It is restricted to *tracked* files, so build
+outputs, `artifacts/`, `dist/`, and untracked files cannot perturb it, which
+also keeps the build's own timestamped `public/assets/sprite-manifest.json` - a
+clean rebuild is not bit-reproducible for exactly that reason - out of the hash.
+Text is line-ending normalized using git's NUL-byte text heuristic, so the same
+commit hashes identically on a CRLF checkout and an LF one. It proves the
+recorded manifest is not older than the current tracked source; it does not
+cryptographically prove which source produced a given `dist`, and it does not
+replace the tree identity, which still carries the artifact-level claim. Both
+must hold. A manifest recorded before this identity existed is rejected with
+`source-missing` and has to be re-recorded.
+
 Verification is an integrity check, not just a hash comparison. The script rejects
 symlinks and special files in the build, requires a complete and well-formed
-recorded manifest, recomputes the recorded tree digest from the recorded file
-entries, validates the recorded file count, byte total, and entrypoint against
+recorded manifest including its source identity, recomputes the recorded tree
+digest from the recorded file entries, validates the recorded file count, byte
+total, and entrypoint against
 those entries, and only then compares the recomputed build with the recorded
 identity. `verify --json` always returns sanitized structured output - bounded
 problem codes plus dist-relative build-output paths - instead of a raw exception.
@@ -482,7 +510,10 @@ is regenerated whenever the manifest is missing or a dev server starts. A clean
 rebuild with the sprite manifest unchanged reproduced the same tree hash; a
 rebuild after regeneration produced a different one. This is precisely why lanes
 consume one uploaded artifact and verify its recorded identity instead of
-rebuilding.
+rebuilding. It is also why the source identity is restricted to git-tracked
+files: the sprite manifest is gitignored, so the timestamped build output cannot
+perturb it, and a rebuild from unchanged source re-records a source identity
+that verifies against the previous run's source identity.
 
 ### Evidence and privacy
 

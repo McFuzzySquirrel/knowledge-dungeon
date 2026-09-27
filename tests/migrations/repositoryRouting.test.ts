@@ -106,11 +106,25 @@ function syntheticSnapshot(subjectName = 'Routing synthetic subject'): SubjectSn
 let databaseName = '';
 let repository: StorageV2Repository | null = null;
 
-async function storageV2For(suffix: string): Promise<StorageV2Repository> {
+async function storageV2For(
+  suffix: string,
+  options: { readonly initial?: boolean } = {},
+): Promise<StorageV2Repository> {
   databaseName = `kd-phase4-routing-${suffix}`;
   repository = await openTestRepository(databaseName, NOW);
-  await repository.stageGeneration({ generationId: GENERATION_ID, source: 'initial', records: {} });
-  await repository.activateGeneration(GENERATION_ID);
+  // `initial: false` opens a device with **no** generation, which is the shape a
+  // device that used an older build and then upgraded actually has. Most of this
+  // file needs a generation to write into, so the fixture creates one by default;
+  // the one test that exercises a real legacy migration asks for the device the
+  // migration is supposed to run on. RAIL CHANGE, recorded deliberately: this
+  // test used to migrate over the pre-staged initial generation, which the
+  // device-level guard now declines - a device that already moved off the legacy
+  // keys is not migrated again, because staging a second generation over the live
+  // one is the cross-phase data-loss defect.
+  if (options.initial !== false) {
+    await repository.stageGeneration({ generationId: GENERATION_ID, source: 'initial', records: {} });
+    await repository.activateGeneration(GENERATION_ID);
+  }
   return repository;
 }
 
@@ -358,7 +372,7 @@ describe('Phase 4 rollback: a device written with the flag on is readable with i
       JSON.stringify({ graphicsMode: 'rpg', colorTheme: 'colorful', activeSpritePack: null }),
     );
 
-    const repo = await storageV2For('rollback');
+    const repo = await storageV2For('rollback', { initial: false });
     selectStorageV2Repository(repo);
     const outcome = await migrateLegacyState({
       repository: repo,
@@ -368,6 +382,7 @@ describe('Phase 4 rollback: a device written with the flag on is readable with i
     });
     expect(outcome.report.status).toBe('migrated');
     expect(outcome.report.activated).toBe(true);
+    expect(await repo.readActiveGenerationId()).toBe('gen-rollback-synthetic-0001');
 
     // 2. The learner keeps working on the flagged device. Progression and the
     //    subject both dual-write, which is what the rollback depends on.

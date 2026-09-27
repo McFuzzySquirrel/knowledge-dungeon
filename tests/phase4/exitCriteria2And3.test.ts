@@ -258,18 +258,29 @@ describe('Exit criterion 2: a migration can run repeatedly without duplication',
     expect(again.report.activated).toBe(false);
     expect(await repo.readActiveGenerationId()).toBe('gen-phase4-later');
 
-    // A *different* migration id migrates again and does take the pointer, which
-    // is the only case in which the previous generation is retained as
-    // `superseded` rather than deleted.
+    // A *different* migration id is a different question. RAIL CHANGE, recorded
+    // deliberately, and **stronger**: this used to expect the run to migrate
+    // again and take the pointer, leaving `gen-phase4-first` `superseded`. That
+    // re-migration over a live generation is the cross-phase data-loss defect -
+    // it strands every write that reached only the generation the device was
+    // using - so a device that already moved off the legacy keys is not migrated
+    // again under any id. The property this test is named for is unchanged and
+    // now holds in its strongest form: the pointer does not move at all, and the
+    // later phase's generation is still the one the device reads.
     const second = await migrateLegacyState({
       repository: repo,
       generationId: 'gen-phase4-second',
       now: NOW,
       clock: { now: () => NOW },
     });
-    expect(second.report.status).toBe('migrated');
-    expect(await repo.readActiveGenerationId()).toBe('gen-phase4-second');
+    expect(second.report.status).toBe('already-migrated');
+    expect(second.report.stagedGenerationId).toBeNull();
+    expect(second.report.activated).toBe(false);
+    expect(await repo.readActiveGenerationId()).toBe('gen-phase4-later');
+    // `gen-phase4-first` is `superseded` by the test's own later phase above, not
+    // by this run: `gen-phase4-second` was never created, so nothing was staged.
     expect((await repo.readGeneration('gen-phase4-first'))?.descriptor?.status).toBe('superseded');
+    expect(await repo.readGeneration('gen-phase4-second')).toBeNull();
     const later = (await repo.readRecords('gen-phase4-later')).records.subjects;
     expect(later).toEqual([]);
   });

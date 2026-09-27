@@ -155,7 +155,9 @@ export type MigrationNextAction = 'start-migration' | 'retry-migration' | 'revie
  * - `recovery-required` offers a retry only when the failure is one a retry can
  *   fix. `INDEXEDDB_UNAVAILABLE` is not: the store is gone, and a screen that
  *   offered a retry there would be lying.
- * - `no-source-data` offers nothing: there is nothing to migrate.
+ * - `no-source-data` offers nothing: there is nothing to migrate. A device that
+ *   was already migrated is classified as this state, and offers nothing for the
+ *   same reason - nothing about it changed.
  */
 export function nextActionsFor(kind: MigrationStateKind, retryable: boolean): readonly MigrationNextAction[] {
   switch (kind) {
@@ -273,6 +275,12 @@ function baseOf(
  * The partial case is a *success with a disclosure*, never a silent success: a
  * report carrying any `external-only` attachment maps to `partial`, so a screen
  * cannot render a clean success for a run that did not carry every byte.
+ *
+ * An `already-migrated` report - a run that declined to re-stage over a device
+ * that has already moved off the legacy keys - is classified as `no-source-data`,
+ * and the reasoning is at that branch. The short version: the state model
+ * describes a *situation*, both statuses describe the same one, and the
+ * distinction belongs to the report.
  */
 export function classifyMigrationReport(report: MigrationReport): MigrationState {
   if (report.status === 'recovery-required') {
@@ -291,7 +299,27 @@ export function classifyMigrationReport(report: MigrationReport): MigrationState
     };
   }
 
-  if (report.status === 'no-source-data') {
+  if (report.status === 'no-source-data' || report.status === 'already-migrated') {
+    // Two statuses, one state, and the reason is a property of the model rather
+    // than a convenience.
+    //
+    // - `no-source-data`: the legacy keys held nothing to move.
+    // - `already-migrated`: the legacy keys held content, and this device has
+    //   already moved off them, so the run declined to re-stage a generation from
+    //   that stale mirror - which would supersede the generation the device is
+    //   using and strand every write that reached only it.
+    //
+    // Every field the state model exposes is identical for the two: nothing was
+    // staged, the pointer did not move, there is nothing to retry, and there is
+    // nothing to tell a learner - a device that was already migrated is not a
+    // device whose data changed. The kind is therefore not a second name for the
+    // same *situation*; it is the same situation, reached two ways, and
+    // `MigrationStateKind` is a closed six-value contract that the copy module
+    // switches over exhaustively and that `tests/phase4/uiSurfaceAudit.test.tsx`
+    // pins as a set. The distinction a caller needs - "this run migrated
+    // something" versus "this device was already migrated" - is carried by
+    // `MigrationReport['status']`, which is where the migration module states it,
+    // and this classifier deliberately does not blur it back into `migrated`.
     return { ...baseOf(report, 'no-source-data'), kind: 'no-source-data', legacyKeys: report.legacyKeys };
   }
 

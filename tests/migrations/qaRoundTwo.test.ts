@@ -684,37 +684,65 @@ describe('R2 attack: the same-generationId no-op path', () => {
 
   it('does NOT short-circuit on a generation built by a different source', async () => {
     // `alreadyMigrated` requires source === 'legacy-migration' AND a receipt
-    // with this migrationId. A `local-edit` generation must be re-staged.
+    // with this migrationId. A `local-edit` generation must not be mistaken for
+    // this migration's own completed work.
+    //
+    // RAIL CHANGE, recorded deliberately, and **stronger or neutral**: what
+    // follows the refusal changed. The per-id guard still declines - that is what
+    // this test holds - but the run no longer then tries to re-stage over a live
+    // generation and reports `GENERATION_ALREADY_ACTIVE` as a *failure*. The
+    // device-level guard (a device holding a reachable generation has already
+    // moved off the legacy keys) declines the whole run, and `already-migrated`
+    // is a better answer than a recovery screen: the device is perfectly healthy,
+    // and a `recovery-required` state makes the bootstrap fall back to the legacy
+    // repository for a device whose storage-v2 copy was never in doubt. The
+    // observable proof that the per-id guard declined is that the report names
+    // **no** staged generation at all - the run never treated `GEN` as its own.
     seedLegacy();
     const repo = await repoFor('noop-wrong-source');
     await repo.stageGeneration({ generationId: GEN, source: 'local-edit', records: { subjects: [subject('subject-r2-x')] } });
     await repo.activateGeneration(GEN);
 
     const outcome = await migrateLegacyState(migrateOptions(repo));
-    // The generation is `active`, so the staging step refuses it.
-    expect(outcome.report.status).toBe('recovery-required');
-    expect(outcome.report.recovery?.code).toBe('GENERATION_ALREADY_ACTIVE');
-    // ...and the foreign data was NOT destroyed by the discard step.
+    expect(outcome.report.status).toBe('already-migrated');
+    expect(outcome.report.stagedGenerationId).toBeNull();
+    expect(outcome.report.activated).toBe(false);
+    expect(outcome.report.recovery).toBeNull();
+    // The pointer never moved, and the foreign data was NOT destroyed by any step.
+    expect(await repo.readActiveGenerationId()).toBe(GEN);
     expect(await allStoreKeys(repo, GEN)).toEqual(['subjects/subject-r2-x']);
   });
 
   it('does NOT short-circuit when the descriptor is active but the receipt is missing', async () => {
     // The brief's fourth case. `alreadyMigrated` needs a receipt, so this is
-    // NOT a no-op: it falls through, and because the generation is `active` the
-    // staging step refuses. The data is preserved, but the caller gets a
-    // recovery result rather than a no-op success.
+    // NOT a no-op success by the per-id rule: it falls through to the
+    // device-level guard, which declines the run. The data is preserved and the
+    // pointer is untouched, and the report is a skip rather than a failure.
+    //
+    // RAIL CHANGE, recorded deliberately: `recovery-required` /
+    // `GENERATION_ALREADY_ACTIVE` became `already-migrated`. The per-id guard is
+    // still required not to short-circuit, and the evidence is `stagedGenerationId`
+    // being `null` - a per-id no-op would have named `GEN`.
     seedLegacy();
     const repo = await repoFor('noop-no-receipt');
     await repo.stageGeneration({ generationId: GEN, source: 'legacy-migration', records: { subjects: [subject('subject-r2-x')] } });
     await repo.activateGeneration(GEN);
 
     const outcome = await migrateLegacyState(migrateOptions(repo));
-    expect(outcome.report.status).toBe('recovery-required');
-    expect(outcome.report.recovery?.code).toBe('GENERATION_ALREADY_ACTIVE');
+    expect(outcome.report.status).toBe('already-migrated');
+    expect(outcome.report.stagedGenerationId).toBeNull();
+    expect(outcome.report.receiptId).toBeNull();
+    expect(outcome.report.recovery).toBeNull();
+    expect(await repo.readActiveGenerationId()).toBe(GEN);
     expect(await allStoreKeys(repo, GEN)).toEqual(['subjects/subject-r2-x']);
   });
 
   it('does NOT short-circuit when a receipt exists for a DIFFERENT migrationId', async () => {
+    // RAIL CHANGE, recorded deliberately: as above, the fall-through outcome is
+    // now the device-level skip rather than a staging refusal. A receipt that
+    // names a different migration is still not this migration's receipt, so the
+    // per-id guard does not claim the generation - and because it is not a
+    // `LEGACY_MIGRATION_ID` receipt it is not reported as one either.
     seedLegacy();
     const repo = await repoFor('noop-other-migration');
     await repo.stageGeneration({ generationId: GEN, source: 'legacy-migration', records: {} });
@@ -738,8 +766,11 @@ describe('R2 attack: the same-generationId no-op path', () => {
     });
 
     const outcome = await migrateLegacyState(migrateOptions(repo));
-    expect(outcome.report.status).toBe('recovery-required');
-    expect(outcome.report.recovery?.code).toBe('GENERATION_ALREADY_ACTIVE');
+    expect(outcome.report.status).toBe('already-migrated');
+    expect(outcome.report.stagedGenerationId).toBeNull();
+    // The device holds a receipt, but not one from this migration.
+    expect(outcome.report.receiptId).toBeNull();
+    expect(await repo.readActiveGenerationId()).toBe(GEN);
   });
 
   it('is NOT a no-op success when the generation is staged WITH its receipt', async () => {

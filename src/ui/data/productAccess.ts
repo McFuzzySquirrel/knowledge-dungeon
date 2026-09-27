@@ -69,6 +69,35 @@
  * reaches a file name, an error message, a status sentence, or a log: the export
  * status reports counts and the product's constant file name, and
  * `readFailure` reports a code.
+ *
+ * ## The two template accessors, and why they are two and not one
+ *
+ * Phase 7's template tab needs the subject **before** an export and the subject
+ * **after** an import, and the two reads want deliberately different shapes.
+ *
+ * {@link readDeviceTemplateSource} is the export side. It returns the room topics
+ * and tags and the biome, because those three are the approval step: the learner
+ * has to see the topics (a template always carries them, so they are the one thing
+ * a share decision turns on) and has to be able to tick each tag. It also returns
+ * the snapshot, which is handed straight to the product and is never decoded by
+ * the surface.
+ *
+ * {@link readDeviceTemplateLanding} is the import side, and it returns **no learner
+ * text at all** - only counts and the phase state. That asymmetry is the point
+ * rather than an accident of two shapes: the surface that reports what an import
+ * created is a *reported* surface, it is rendered into a status line and copied
+ * into a report, and plan section 12, rule 6 governs reported strings. So the one
+ * accessor that feeds a report cannot hand it a topic, even though the accessor
+ * beside it can.
+ *
+ * A template *export* is also the one Data Center operation whose product is
+ * **not** reached through the `.kdsubject` product's re-exports, because
+ * `subjectTemplate.ts` re-exports nothing from its siblings and must not: a single
+ * static re-export would put the ZIP codec in this JSON product's closure, which
+ * `tests/data/templateProductBoundary.test.ts` holds against. So the template tab
+ * dynamic-imports the product tree itself, and the repository handle it is handed
+ * is still the one `readLiveDevice` published - so there is still exactly one
+ * route from a screen to storage-v2.
  */
 
 // ── The product's own types, reached without a static edge ──────────────────
@@ -83,6 +112,19 @@ type SubjectExportResult = Awaited<ReturnType<SubjectProduct['exportSubjectBacku
 type SubjectImportResult = Awaited<ReturnType<SubjectProduct['importSubjectBackup']>>;
 type FullDeviceExportResult = Awaited<ReturnType<FullDeviceProduct['exportFullDeviceBackup']>>;
 type FullDeviceImportResult = Awaited<ReturnType<FullDeviceProduct['importFullDeviceBackup']>>;
+
+/**
+ * The subject shape the product tree's exporters take.
+ *
+ * Named from `src/core/` rather than from a product, for two reasons. It is an
+ * application-owned type and not a product's own, so the `.kdtemplate` product does
+ * not re-export it and naming the product to reach it would be a static edge the
+ * Phase 7 boundary gate has to fail on. And `src/core/` is a declared,
+ * renderer-neutral layer, so a UI file naming a core type is ordinary rather than a
+ * new seam - it is not a storage-v2 module, so this file stays off
+ * `tests/migrations/qaHardening.test.ts`'s closed seam allowlist.
+ */
+type SubjectSnapshot = import('@/core/validation/persistence/types').SubjectSnapshot;
 
 /** Re-exported so a caller can name a typed failure without reaching a product. */
 export type FailureReport = import('@/ui/data/RecoveryStatus').RestoreFailureReport;
@@ -232,6 +274,235 @@ function countRooms(snapshot: unknown): number {
   const rooms = (snapshot as { rooms?: unknown } | null)?.rooms;
   if (rooms === null || typeof rooms !== 'object' || Array.isArray(rooms)) return 0;
   return Object.keys(rooms as Record<string, unknown>).length;
+}
+
+// ── The template tab's two reads ───────────────────────────────────────────
+
+/**
+ * One room, as the export side of the template tab needs to see it.
+ *
+ * Only what an approval decision turns on: the topic, the tags, and the opaque
+ * handle. Nothing else about the room is read, so there is no note, no artifact,
+ * no image, and no review state anywhere in the value - the surface cannot render
+ * what this accessor does not return.
+ */
+export interface DeviceTemplateRoom {
+  /** Opaque. Never rendered, and never reaches a file name. */
+  readonly roomId: string;
+  /** The learner's own topic. Rendered, because a template always carries it. */
+  readonly topic: string;
+  /** The learner's own tags on this room. Rendered as unticked approval boxes. */
+  readonly tags: readonly string[];
+}
+
+/**
+ * Everything the template **export** needs about one subject on this device.
+ *
+ * The snapshot travels with it because the product's exporter is a pure function
+ * of a snapshot, and re-reading the record for it would be a second read of the
+ * same generation for a value this one already has.
+ */
+export interface DeviceTemplateSource {
+  readonly subjectId: string;
+  readonly name: string;
+  /**
+   * The subject's root room, or `null` when it holds none this read could resolve.
+   *
+   * Not for the product - the product resolves the root itself, from the snapshot, and
+   * refuses a snapshot without one. It is here so the export list can lead with the root,
+   * which matters because the list is **bounded**: on a subject with hundreds of rooms
+   * the tail is what a bound drops, and a bound that dropped the root would hide the one
+   * topic a learner most needs before they share a file.
+   */
+  readonly rootRoomId: string | null;
+  readonly rooms: readonly DeviceTemplateRoom[];
+  /**
+   * The biome this subject already uses, or `null` for none.
+   *
+   * The product does **not** read a subject's biome: `approvedBiome` is a
+   * parameter with no default, so a biome is in the file only because a learner
+   * ticked it. This accessor supplies the *value* to offer, and never the
+   * decision.
+   */
+  readonly biome: string | null;
+  /**
+   * The subject's own snapshot, handed straight to the product.
+   *
+   * Never rendered, never logged, and never copied into a message. It is here
+   * because the product's export signature is a snapshot and the Data Center has
+   * no other way to produce one.
+   */
+  readonly snapshot: SubjectSnapshot;
+}
+
+/**
+ * What the template **import** created, read back from the device.
+ *
+ * Counts and one closed code, and no learner text: every field here reaches a
+ * report, and this is the read that feeds the report. The room count, the blank
+ * room count, and the four per-room tallies are *measurements* taken from the
+ * record the product wrote, so "it landed in Creator state with blank rooms" is
+ * something this surface checked rather than something it was told.
+ */
+export interface DeviceTemplateLanding {
+  readonly subjectId: string;
+  /** Read from this device, so it is a name the application holds. */
+  readonly name: string;
+  readonly roomCount: number;
+  /** Rooms whose state, note, artifact, image list, and review count are all blank. */
+  readonly blankRoomCount: number;
+  /** Rooms carrying a note. A count, never the note. */
+  readonly roomsWithNotes: number;
+  /** Rooms carrying a written artifact. A count, never the artifact. */
+  readonly roomsWithArtifacts: number;
+  /** Image records across every room. A count, never a file name. */
+  readonly roomAttachmentCount: number;
+  /** Rooms with any review history. A count. */
+  readonly roomsWithReviewHistory: number;
+  /** The subject's own phase state, from the device record. */
+  readonly phaseState: string;
+}
+
+/** The `dungeon` sub-object of a record's snapshot, or an empty object. */
+function dungeonOf(snapshot: unknown): Record<string, unknown> {
+  const dungeon = (snapshot as { dungeon?: unknown } | null)?.dungeon;
+  return typeof dungeon === 'object' && dungeon !== null && !Array.isArray(dungeon)
+    ? (dungeon as Record<string, unknown>)
+    : {};
+}
+
+/** A non-empty string with its own whitespace, or `null` for anything else. */
+function readNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
+  return value;
+}
+
+/** A trimmed, non-empty string, or `null` for anything else. */
+function readBoundedString(value: unknown): string | null {
+  return readNonEmptyString(value)?.trim() ?? null;
+}
+
+function isBlankRoom(room: Record<string, unknown>): boolean {
+  return (
+    room.state === 'Created' &&
+    readBoundedString(room.noteText) === null &&
+    (room.artifactMarkdown === null || room.artifactMarkdown === undefined) &&
+    Array.isArray(room.attachments) &&
+    room.attachments.length === 0 &&
+    (typeof room.reviewPassCount !== 'number' || room.reviewPassCount === 0)
+  );
+}
+
+/**
+ * The export side's read: one subject's own rooms, tags, biome, and snapshot.
+ *
+ * `null` is the honest answer for a subject this generation does not hold, which
+ * is the ordinary case a learner reaches by picking a template and then choosing a
+ * file while a subject is removed underneath them. Rooms are ordered by topic and
+ * then by room id, so the list a learner reads is a function of the device's own
+ * data rather than of an IndexedDB cursor's order.
+ */
+export async function readDeviceTemplateSource(
+  repository: DeviceRepository,
+  generationId: string,
+  subjectId: string,
+): Promise<DeviceTemplateSource | null> {
+  const generation = await repository.readRecords(generationId);
+  for (const envelope of generation.records.subjects) {
+    if (envelope.value.subjectId !== subjectId) continue;
+    const snapshot = envelope.value.snapshot;
+    const rooms: DeviceTemplateRoom[] = [];
+    const roomMap = (snapshot as { rooms?: unknown } | null)?.rooms;
+    if (typeof roomMap === 'object' && roomMap !== null && !Array.isArray(roomMap)) {
+      for (const [roomId, value] of Object.entries(roomMap as Record<string, unknown>)) {
+        if (typeof value !== 'object' || value === null) continue;
+        const room = value as Record<string, unknown>;
+        // Not trimmed: the product writes `RoomMetadata.topic` verbatim, so a trimmed
+        // copy here would let the room list show a different string from the one the
+        // file carries, on a surface whose entire job is that they agree.
+        const topic = readNonEmptyString(room.topic);
+        if (topic === null) continue;
+        const tags = Array.isArray(room.tags)
+          ? room.tags.filter((tag): tag is string => typeof tag === 'string' && tag.length > 0)
+          : [];
+        rooms.push({ roomId, topic, tags });
+      }
+    }
+    const rootRoomId = readBoundedString(dungeonOf(snapshot).rootRoomId);
+    // The root first, then by topic and then by id: the same shape as the product's own
+    // canonical room order, which is breadth-first from the root, so the list a learner
+    // reads is the order the file itself uses. Leading with the root is also what makes
+    // the surface's bound safe - a bounded list drops its tail, and the root is the one
+    // topic that must not be the thing that got dropped.
+    rooms.sort((left, right) => {
+      if (left.roomId === rootRoomId) return -1;
+      if (right.roomId === rootRoomId) return 1;
+      const byTopic = left.topic.localeCompare(right.topic, 'en');
+      if (byTopic !== 0) return byTopic;
+      return left.roomId < right.roomId ? -1 : left.roomId > right.roomId ? 1 : 0;
+    });
+    return {
+      subjectId,
+      name: readSubjectName(snapshot),
+      rootRoomId: rootRoomId !== null && rooms.some((room) => room.roomId === rootRoomId) ? rootRoomId : null,
+      rooms,
+      biome: readBoundedString(dungeonOf(snapshot).biome),
+      snapshot,
+    };
+  }
+  return null;
+}
+
+/**
+ * The import side's read-back: what the device now holds for the minted subject.
+ *
+ * Deliberately returns counts where the export side returned text. The claims this
+ * licenses are "a new subject was added", "it has N rooms", "every one of those N
+ * rooms is blank", and "it is in the Create state" - and each of them is a
+ * measurement of a record the product wrote, checked here rather than assumed.
+ * Nothing else about the subject is read, so a topic cannot reach the report even
+ * by accident.
+ *
+ * `null` when the subject is not in the generation, which after a successful write
+ * is an anomaly rather than a state: the surface reports the counts it has and says
+ * the read-back found nothing, instead of claiming a verification that did not run.
+ */
+export async function readDeviceTemplateLanding(
+  repository: DeviceRepository,
+  generationId: string,
+  subjectId: string,
+): Promise<DeviceTemplateLanding | null> {
+  const generation = await repository.readRecords(generationId);
+  for (const envelope of generation.records.subjects) {
+    if (envelope.value.subjectId !== subjectId) continue;
+    const snapshot = envelope.value.snapshot;
+    const roomMap = (snapshot as { rooms?: unknown } | null)?.rooms;
+    const values: Record<string, unknown>[] =
+      typeof roomMap === 'object' && roomMap !== null && !Array.isArray(roomMap)
+        ? Object.values(roomMap as Record<string, unknown>).filter(
+            (value): value is Record<string, unknown> => typeof value === 'object' && value !== null,
+          )
+        : [];
+    return {
+      subjectId,
+      name: readSubjectName(snapshot),
+      roomCount: values.length,
+      blankRoomCount: values.filter((room) => isBlankRoom(room)).length,
+      roomsWithNotes: values.filter((room) => readBoundedString(room.noteText) !== null).length,
+      roomsWithArtifacts: values.filter(
+        (room) => room.artifactMarkdown !== null && room.artifactMarkdown !== undefined,
+      ).length,
+      roomAttachmentCount: values.reduce(
+        (total, room) => total + (Array.isArray(room.attachments) ? room.attachments.length : 0),
+        0,
+      ),
+      roomsWithReviewHistory: values.filter(
+        (room) => typeof room.reviewPassCount === 'number' && room.reviewPassCount > 0,
+      ).length,
+      phaseState: readBoundedString(dungeonOf(snapshot).phaseState) ?? 'unreported',
+    };
+  }
+  return null;
 }
 
 // ── Failure reporting ──────────────────────────────────────────────────────

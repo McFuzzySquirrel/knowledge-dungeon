@@ -501,9 +501,57 @@ export function exportSubjectToJson(snapshot: SubjectSnapshot): string {
 }
 
 /**
- * Phase 4d: Export a subject as a template by stripping notes/artifacts while
- * preserving the graph structure (rooms, edges, topics, tags).
- * Templates are shareable skeletons that another user can use to start a new subject.
+ * ── LEGACY TEMPLATE PATH (pre-Phase-7). Retained for rollback. Not the product. ──
+ *
+ * Everything from here to the end of this file is the **legacy** template path, and
+ * `exportSubjectAsTemplate` / `createSubjectFromTemplate` are the only names in it. The
+ * Phase 7 `.kdtemplate` product is a different module with a different format:
+ * `@/services/persistence/products/subjectTemplate`. Four things tell them apart, and a
+ * reader can check any of them:
+ *
+ * - **Where they live.** These two are in a persistence facade that the stores import
+ *   eagerly. The product is in the renderer-neutral data-product tree.
+ * - **Their shape.** These two return and accept the pre-Phase-7 document, which has a
+ *   `format` of `knowledge-dungeon-template` and a flat `rooms` array of `{roomId, topic}`
+ *   summaries. The product's document has a `product` tag, three separate version
+ *   contracts, and rooms addressed by array index.
+ * - **Their privacy.** These two are the plan's section 5.3 defect, "Template metadata
+ *   can contain attachment information that import later discards", and they are the
+ *   *whole* of it: the export writes `roomId`, `rootRoomId`, `attachments`, `fileName`,
+ *   `altText`, the subject's own name, and an ambient-clock `exportedAt`, and the
+ *   importer discards the attachment half of that. Plan section 7.3 forbids every one of
+ *   them. The product's exporter reads none of them.
+ * - **Who uses them.** Only `src/ui/screens/WelcomeScreen.tsx`, the pre-cutover admin
+ *   panel. The redesigned Data Center uses the product, not these.
+ *
+ * They are retained **verbatim** rather than delegating to the product, and the reason is
+ * a real constraint rather than a preference. Delegation would need a static import from
+ * this file to `products/subjectTemplate.ts`, and that would make the product eagerly
+ * reachable from `src/main.tsx` through the stores - breaking the boundary the product's
+ * own gate holds. A dynamic import would work for the bundle but the two functions are
+ * **synchronous** and the only caller is a `src/ui/**` file this phase is not permitted to
+ * touch, so neither their signature nor their call sites can change. Deleting them would
+ * break the plan's Phase 7 rollback, which is "Retain the legacy template path behind the
+ * old UI until cutover".
+ *
+ * `tests/data/templateLegacyPath.test.ts` holds both halves of that story: it pins the
+ * five leaks so nobody mistakes this for the product, and it pins that the only caller is
+ * the pre-cutover screen, so the day the tab lands the gate fails and gets removed with
+ * the functions rather than silently outliving them.
+ *
+ * The one thing to know when touching the product: **these two are not a specification
+ * for it.** The product's format is plan section 7.3 read literally, not this document.
+ */
+
+/**
+ * Export a subject as a legacy template: a graph skeleton carrying the subject's
+ * identifiers, its attachment metadata, its own name, and an ambient timestamp.
+ *
+ * Retained for the plan's Phase 7 rollback. See the block comment above for why it does
+ * not delegate to `products/subjectTemplate`, and for the four ways to tell the two apart.
+ * Every one of the properties the product guarantees is absent here, on purpose: this is
+ * the pre-Phase-7 behaviour, and the gate that measures it is
+ * `tests/data/templateLegacyPath.test.ts`.
  */
 export function exportSubjectAsTemplate(snapshot: SubjectSnapshot): string {
   const templateRooms: Record<string, unknown> = {};
@@ -541,8 +589,17 @@ export function exportSubjectAsTemplate(snapshot: SubjectSnapshot): string {
 }
 
 /**
- * Phase 4d: Create a new subject snapshot from a template JSON string.
- * Generates new IDs and empty room states while preserving the graph structure.
+ * Create a new subject snapshot from a **legacy** template document.
+ *
+ * Retained for the plan's Phase 7 rollback, with `exportSubjectAsTemplate` above. It mints
+ * fresh identifiers from `Date.now()` and `Math.random()`, which are ambient and
+ * un-injectable; the product mints from an injected generator, which is what makes "two
+ * imports create independent subjects" testable. It also accepts a pre-Phase-7 document
+ * only, and the product **refuses** one with the `legacy-template-format-refused` reason
+ * rather than reading it, because that document carries exactly the fields plan section
+ * 7.3 excludes.
+ *
+ * @see The block comment above this pair, and `products/subjectTemplate`.
  */
 export function createSubjectFromTemplate(
   raw: string,

@@ -47,7 +47,7 @@
  * real result still satisfies these shapes.
  */
 
-import { useId, type JSX } from 'react';
+import { useId, type JSX, type ReactNode } from 'react';
 
 import { describeExternalOnlyReason } from './ImportPreview';
 
@@ -192,7 +192,91 @@ export interface SubjectImportReport {
 export type RestoreOutcome =
   | { readonly kind: 'success'; readonly result: RestoreSuccessReport }
   | { readonly kind: 'subject-success'; readonly result: SubjectImportReport }
+  | { readonly kind: 'template-success'; readonly result: TemplateImportReport }
   | { readonly kind: 'failure'; readonly report: RestoreFailureReport };
+
+/**
+ * The outcome of a `.kdtemplate` import.
+ *
+ * Derived from the union for the same reason {@link SubjectImportOutcome} is, so
+ * the template tab cannot hand this surface an archive's result and the failure
+ * branch stays genuinely shared: a typed refusal means the same thing whichever
+ * product produced it.
+ */
+export type TemplateImportOutcome = Extract<RestoreOutcome, { readonly kind: 'template-success' }> | Extract<
+  RestoreOutcome,
+  { readonly kind: 'failure' }
+>;
+
+/**
+ * What a template import created, as this surface reports it.
+ *
+ * Every field is a count, a closed code, or a name **this device holds**. Three
+ * consequences of that rule, and each is load-bearing:
+ *
+ * 1. **The subject name is absent from the product's result and is read from the
+ *    device after the write.** `importSubjectTemplate` does return a `subjectName`,
+ *    but it may be a value *the file* supplied - the template's own declared
+ *    `name`, which the writer approved for sharing. So the tab looks the subject up
+ *    in the generation the import wrote and fills this field from there, which is
+ *    the difference between a name the application chose and a name a file chose.
+ * 2. **The minted subject id is not in this shape at all.** It is what the tab
+ *    needs for its "open it in Create" control, and it is kept in the tab's own
+ *    state. Putting it here would put an opaque identifier into a report surface,
+ *    which is exactly what {@link SubjectImportReport} declines to do.
+ * 3. **No room topic, tag, or file name is in this shape**, so none can reach the
+ *    DOM through the report. The counts below are the whole of what an import
+ *    tells a learner about the rooms it made.
+ */
+export interface TemplateImportReport {
+  /** The device's own name for the subject the import created. */
+  readonly subjectName: string;
+  /** Which of the product's three name sources supplied that name. */
+  readonly subjectNameSource: 'caller' | 'template-name' | 'default';
+  /** How many rooms the document declared, as the product reported them. */
+  readonly declaredRoomCount: number;
+  readonly structureEdgeCount: number;
+  readonly crossLinkCount: number;
+  /** How many approved tags the document carried. A count, never a tag. */
+  readonly approvedTagCount: number;
+  /** Whether the document carried a biome preference. A boolean, never the value. */
+  readonly hasBiome: boolean;
+  /** The generation the record was written into. */
+  readonly generationId: string;
+  /** The generation that was active before the import, and that is still active. */
+  readonly previousActiveGenerationId: string | null;
+  /** The product's own write policy, as a closed code. */
+  readonly writePolicy: string;
+  /** The product's own rollback, as a closed code. */
+  readonly rollback: string;
+  /**
+   * The read-back from the device, or `null` when the subject was not found.
+   *
+   * `null` is a **distinct report** and not a zeroed one: the surface then says the
+   * read-back found nothing and states only what the product's own result licenses,
+   * rather than claiming a verification that did not happen.
+   */
+  readonly landing: TemplateLandingMeasurement | null;
+}
+
+/**
+ * What the device holds for the subject a template import just created.
+ *
+ * A measurement, and every sentence it licenses says so. `blankRoomCount` equal to
+ * `roomCount` is what "it landed in Creator state with blank room state" means, and
+ * it is counted from the record the product wrote rather than repeated from the
+ * product's documentation.
+ */
+export interface TemplateLandingMeasurement {
+  readonly roomCount: number;
+  /** Rooms whose state, note, artifact, image list, and review count are all blank. */
+  readonly blankRoomCount: number;
+  readonly roomsWithNotes: number;
+  readonly roomsWithArtifacts: number;
+  readonly roomAttachmentCount: number;
+  readonly roomsWithReviewHistory: number;
+  readonly phaseState: string;
+}
 
 /**
  * The outcome of a `.kdsubject` import.
@@ -358,6 +442,51 @@ function foreignLine(foreign: SubjectReplaceForeignState): string {
   return `Nothing outside the subject being imported was changed: ${parts.join(', ')}.`;
 }
 
+/**
+ * The failure branch, the surface's rule, applied to the two operations that need
+ * different words.
+ *
+ * Every sentence must be a field the product returned, and that rule bites hardest on
+ * the *safety* claim: an archive restore's safety sentence is licensed by its
+ * generation flip ("written into a new copy first and only then made active"), and that
+ * sentence is **false** for a template import, which is a single additive record and
+ * stages no copy at all. So the operation is a closed parameter rather than one sentence
+ * that is true of two products and quietly untrue of the third.
+ *
+ * There is no third entry, and that is a decision rather than an omission: both archive
+ * products stage a complete generation and flip the pointer, so one safety sentence is
+ * true of both, and a subject import differs from a whole-device restore only in which
+ * noun the learner reads. A caller whose mechanism is genuinely different names itself.
+ */
+export type RecoveryFailureOperation = 'archive-restore' | 'template-import';
+
+interface FailureCopy {
+  readonly verdict: string;
+  readonly safety: string;
+  readonly retry: string;
+}
+
+const FAILURE_COPY: Readonly<Record<RecoveryFailureOperation, FailureCopy>> = {
+  'archive-restore': {
+    verdict: 'The restore did not finish. Nothing was switched over.',
+    safety:
+      'A restore is written into a new copy first and only then made active, so the copy this device was using is still the copy it is using.',
+    retry: 'The backup file you chose is unchanged, and you can choose it again or pick a different one.',
+  },
+  'template-import': {
+    // The one product whose safety mechanism is *not* a generation flip, so the
+    // sentence is the one its own module makes: the document is read, validated,
+    // and minted before a single record is written, and a read-back disagreement
+    // deletes the record it just wrote. A device with no earlier copy gains its
+    // first one, and the learner is told that rather than left to assume otherwise.
+    verdict: 'The template was not brought in. No subject was added, and every subject you already had is exactly as it was.',
+    safety:
+      'A template is read and checked in full before anything is written, so a file this version cannot use is refused before it can change anything. If the write itself disagreed with what was read back, the subject it had just created is removed again.',
+    retry: 'The template file you chose is unchanged, and you can choose it again or pick a different one.',
+  },
+};
+
+
 export interface RecoveryStatusProps {
   /** The outcome to report, or `null` when no import has been attempted. */
   readonly outcome: RestoreOutcome | null;
@@ -376,6 +505,24 @@ export interface RecoveryStatusProps {
    */
   readonly pendingHeading?: string;
   readonly pendingLine?: string;
+  /**
+   * Which operation the failure sentence is about.
+   *
+   * Defaults to the archive restore, which is what this surface was built for and which
+   * both archive products can honestly share. A product whose safety mechanism is a
+   * different mechanism states its own, because one sentence cannot describe two.
+   */
+  readonly failureOperation?: RecoveryFailureOperation;
+  /**
+   * A control the learner can take from this report, rendered below it.
+   *
+   * Phase 7 needs one: an imported template is a subject waiting to be edited, and
+   * the learner must choose to go and edit it rather than being navigated away from
+   * a report they have not read. It is a `ReactNode` rather than a callback so the
+   * caller owns the wording and the disabled state, and so nothing here can navigate
+   * on its own.
+   */
+  readonly action?: ReactNode;
 }
 
 export function RecoveryStatus({
@@ -384,6 +531,8 @@ export function RecoveryStatus({
   onDismiss = null,
   pendingHeading = 'Restoring',
   pendingLine = 'Writing the backup into a new copy on this device. This can take a moment.',
+  failureOperation = 'archive-restore',
+  action = null,
 }: RecoveryStatusProps): JSX.Element | null {
   const headingId = useId();
 
@@ -404,6 +553,7 @@ export function RecoveryStatus({
   if (outcome.kind === 'failure') {
     const { code, details } = outcome.report;
     const entries = detailEntries(details);
+    const copy = FAILURE_COPY[failureOperation];
     return (
       <section className="kd-outcome kd-outcome--problem" data-kd-surface="restore-outcome" aria-labelledby={headingId}>
         <h3 className="kd-outcome-heading" id={headingId}>
@@ -417,14 +567,11 @@ export function RecoveryStatus({
             <span className="kd-outcome-marker" aria-hidden="true">
               !
             </span>
-            The restore did not finish. Nothing was switched over.
+            {copy.verdict}
           </p>
           <ul className="kd-outcome-list">
-            <li>
-              A restore is written into a new copy first and only then made active, so the copy this device
-              was using is still the copy it is using.
-            </li>
-            <li>The backup file you chose is unchanged, and you can choose it again or pick a different one.</li>
+            <li>{copy.safety}</li>
+            <li>{copy.retry}</li>
             <li>
               The problem was reported as <span className="kd-mono">{code}</span>.
             </li>
@@ -445,12 +592,24 @@ export function RecoveryStatus({
             </dl>
           </details>
         )}
+        {action}
         {onDismiss === null ? null : (
           <button type="button" className="kd-button kd-button--quiet" onClick={onDismiss}>
             Clear this report
           </button>
         )}
       </section>
+    );
+  }
+
+  if (outcome.kind === 'template-success') {
+    return (
+      <TemplateImportReportSurface
+        outcome={outcome.result}
+        headingId={headingId}
+        onDismiss={onDismiss}
+        action={action}
+      />
     );
   }
 
@@ -773,3 +932,231 @@ function SubjectImportReportSurface({
     </section>
   );
 }
+
+/**
+ * What a `.kdtemplate` import actually did.
+ *
+ * The same rule as the two reports above - **every sentence is a field the product
+ * returned, or a count this screen read back from the device** - applied to the one
+ * product whose central claim is an *absence*. So the sentences run in the order a
+ * learner asks for them, and each names its own evidence:
+ *
+ * - "A new subject was added, called \<name\>" - the name is **this device's**,
+ *   read back from the record the import wrote rather than taken from the file, and
+ *   which of the product's three name sources supplied it is stated so a learner
+ *   who typed nothing understands where the name came from.
+ * - "It has N rooms, and every one of them is empty" - licensed by
+ *   `landing.blankRoomCount === landing.roomCount`, a count of rooms whose state,
+ *   note, artifact, image list, and review count are all blank, read from the
+ *   device. This is plan phase 7's fourth exit criterion, stated back as a
+ *   measurement rather than as a promise.
+ * - "It is in the Create state, so you can edit its graph" - licensed by
+ *   `landing.phaseState`, mapped to words, with the raw code shown for a state this
+ *   build does not recognise.
+ * - "The tags in the file were M, and a biome was/was not in it" - counts and a
+ *   boolean, never a tag and never a biome value.
+ * - "Nothing else on this device was changed" - licensed by `writePolicy` being
+ *   the product's own `additive-single-record`, which is the reason the sentence is
+ *   true: one record added, nothing deleted, nothing updated, no pointer flipped.
+ * - "If it is the wrong file, deleting this one subject undoes it" - licensed by
+ *   `rollback`, the product's own `delete-the-created-subject-record`.
+ *
+ * Two things it deliberately does **not** say. That a room was opened, selected, or
+ * navigated to: the control that does that is the caller's, rendered through
+ * {@link RecoveryStatusProps.action}, so the learner presses it after reading this.
+ * And that the learner data in the *file* was checked against anything: a template
+ * carries no notes by construction, and the counts above are about the new subject,
+ * not about a comparison.
+ */
+function TemplateImportReportSurface({
+  outcome,
+  headingId,
+  onDismiss,
+  action,
+}: {
+  readonly outcome: TemplateImportReport;
+  readonly headingId: string;
+  readonly onDismiss: (() => void) | null;
+  readonly action: ReactNode;
+}): JSX.Element {
+  const landing = outcome.landing;
+  const allBlank = landing !== null && landing.blankRoomCount === landing.roomCount && landing.roomCount > 0;
+  const declared = outcome.declaredRoomCount;
+  const sameCount = landing !== null && landing.roomCount === declared;
+
+  return (
+    <section className="kd-outcome" data-kd-surface="restore-outcome" aria-labelledby={headingId}>
+      <h3 className="kd-outcome-heading" id={headingId}>
+        What happened
+      </h3>
+      <div role="status" aria-live="polite">
+        <p className="kd-outcome-verdict">
+          <span className="kd-outcome-marker" aria-hidden="true">
+            ✓
+          </span>
+          A new subject was added, called <span className="kd-dialog-subject">{outcome.subjectName}</span>.
+        </p>
+        <ul className="kd-outcome-list">
+          <li>
+            {NAME_SOURCE_LINE[outcome.subjectNameSource]}
+          </li>
+          <li>
+            It has {declared} {declared === 1 ? 'room' : 'rooms'} and {outcome.structureEdgeCount}{' '}
+            {outcome.structureEdgeCount === 1 ? 'link' : 'links'} between them
+            {outcome.crossLinkCount === 0
+              ? ', and no sideways links.'
+              : `, plus ${outcome.crossLinkCount} sideways ${
+                  outcome.crossLinkCount === 1 ? 'link' : 'links'
+                }.`}
+          </li>
+          {/*
+            The property the phase exists for, and the one a learner most needs
+            stated back. A missing read-back is a *different report* rather than a
+            zeroed one: the surface then says the check did not find the subject and
+            claims only what the product's own result licenses.
+          */}
+          {landing === null ? (
+            <li>
+              The check of what actually landed on this device did not find the new subject, so this report
+              cannot tell you how blank its rooms are. What is above comes from what the import itself returned.
+            </li>
+          ) : allBlank ? (
+            <li>
+              All {landing.roomCount} of {landing.roomCount === 1 ? 'it is' : 'them are'} empty: no note, no
+              written artifact, no image, and no review history
+              {sameCount ? ', which is the number the file declared.' : '. The count is not the one the file declared, so check it before you rely on it.'}
+            </li>
+          ) : (
+            <li>
+              {landing.blankRoomCount} of {landing.roomCount} rooms are empty.{' '}
+              {[
+                landing.roomsWithNotes > 0
+                  ? `${landing.roomsWithNotes} ${
+                      landing.roomsWithNotes === 1 ? 'carries' : 'carry'
+                    } a note`
+                  : null,
+                landing.roomsWithArtifacts > 0
+                  ? `${landing.roomsWithArtifacts} ${
+                      landing.roomsWithArtifacts === 1 ? 'carries' : 'carry'
+                    } a written artifact`
+                  : null,
+                landing.roomAttachmentCount > 0
+                  ? `${landing.roomAttachmentCount} ${
+                      landing.roomAttachmentCount === 1 ? 'image is' : 'images are'
+                    } attached`
+                  : null,
+                landing.roomsWithReviewHistory > 0
+                  ? `${landing.roomsWithReviewHistory} ${
+                      landing.roomsWithReviewHistory === 1 ? 'has' : 'have'
+                    } review history`
+                  : null,
+              ]
+                .filter((line): line is string => line !== null)
+                .join(', ')}
+              . A template is not supposed to bring any of that in, so this is worth looking at before you use
+              this subject.
+            </li>
+          )}
+          <li>
+            {PHASE_STATE_LINE[landing?.phaseState ?? ''] ??
+              `The new subject reports its state as ${landing?.phaseState ?? 'nothing'}, which this version of Knowledge Dungeon does not recognise. Check what it is before you use it.`}
+          </li>
+          <li>
+            The file carried {outcome.approvedTagCount} approved{' '}
+            {outcome.approvedTagCount === 1 ? 'tag' : 'tags'}
+            {outcome.hasBiome ? ' and a biome preference' : ' and no biome'}, and the tags and topics in it are the
+            ones whoever made it approved. They are not shown here, because this report can be copied.
+          </li>
+          <li>
+            {outcome.writePolicy === 'additive-single-record'
+              ? 'Nothing else on this device was changed: one subject record was added, nothing was replaced or removed, and this device kept using the copy it was already using.'
+              : `This import reported its write policy as ${outcome.writePolicy}, which is not the additive single record this screen expects. Read the details below before you rely on anything else here.`}
+          </li>
+          <li>
+            {outcome.previousActiveGenerationId === null
+              ? 'This device had no earlier copy, so the subject above is the first thing in it. There was no earlier copy to keep.'
+              : 'The copy this device was using before is still the one it is using. Nothing was switched over, so you can go back to what you had by deleting this one new subject.'}
+          </li>
+          <li>
+            {outcome.rollback === 'delete-the-created-subject-record'
+              ? 'If this is the wrong file, deleting the new subject is the whole of the undo. Nothing else here refers to it.'
+              : `This import reported its undo as ${outcome.rollback}, which this version of Knowledge Dungeon does not recognise.`}
+          </li>
+        </ul>
+      </div>
+      <details className="kd-technical">
+        <summary>Technical details</summary>
+        <dl className="kd-counts">
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">write policy</dt>
+            <dd className="kd-counts-value kd-mono">{outcome.writePolicy}</dd>
+          </div>
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">rollback</dt>
+            <dd className="kd-counts-value kd-mono">{outcome.rollback}</dd>
+          </div>
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">subject name source</dt>
+            <dd className="kd-counts-value kd-mono">{outcome.subjectNameSource}</dd>
+          </div>
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">generation</dt>
+            <dd className="kd-counts-value kd-mono">{outcome.generationId}</dd>
+          </div>
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">rooms in the file</dt>
+            <dd className="kd-counts-value">{declared}</dd>
+          </div>
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">rooms on this device</dt>
+            <dd className="kd-counts-value">{landing === null ? 'not found' : landing.roomCount}</dd>
+          </div>
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">blank rooms on this device</dt>
+            <dd className="kd-counts-value">{landing === null ? 'not found' : landing.blankRoomCount}</dd>
+          </div>
+          <div className="kd-counts-row">
+            <dt className="kd-counts-label">phase state</dt>
+            <dd className="kd-counts-value kd-mono">{landing === null ? 'not found' : landing.phaseState}</dd>
+          </div>
+        </dl>
+      </details>
+      {action}
+      {onDismiss === null ? null : (
+        <button type="button" className="kd-button kd-button--quiet" onClick={onDismiss}>
+          Clear this report
+        </button>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Where the new subject's name came from, in words.
+ *
+ * Three sources, and they are genuinely different to a learner: something they
+ * typed, something the file carried and its writer approved, or a fixed default
+ * because neither was supplied. A surface that reported the name without this would
+ * leave a learner wondering where it came from, which is exactly the question the
+ * file's own privacy rules make worth answering.
+ */
+const NAME_SOURCE_LINE: Readonly<Record<'caller' | 'template-name' | 'default', string>> = {
+  caller: 'You chose that name just now, so it is the name on this device.',
+  'template-name':
+    'You left the name blank, so it uses the name written inside the template file. Whoever made that file approved that name for sharing.',
+  default: 'You left the name blank and the file carried no name, so it got the default name this app always uses.',
+};
+
+/**
+ * The phase state a template import lands in, in words.
+ *
+ * Only the one state, because it is the one this product is contracted to produce.
+ * Every other value - a state from a newer build, or a device that disagrees -
+ * gets its own honest sentence rather than being folded into this one, which is the
+ * rule {@link describeExternalOnlyReason} and {@link describeVerbatimDisclosure}
+ * already follow.
+ */
+const PHASE_STATE_LINE: Readonly<Record<string, string>> = {
+  CreatorActive:
+    'It is in the Create state, so the rooms are there to be edited: the graph is the template&rsquo;s, and every note is still yours to write.',
+};

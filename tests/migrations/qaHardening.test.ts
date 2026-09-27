@@ -154,6 +154,27 @@ const STORAGE_V2_SEAMS: ReadonlyMap<string, string> = new Map([
     extensionless(join(PRODUCTS_DIR, 'idRemapping.ts')),
     'the copy-mode id remapper: record value types and typed refusals only',
   ],
+  // Phase 7. The blank-template product is the same kind of seam for a different
+  // reason, and the reason is worth stating because it is the one that did *not*
+  // apply to its two siblings: it reads a generation through the repository to
+  // learn which identifiers the device already holds, and it writes the one
+  // subject record an import creates. It needs the schema module for its record
+  // value types and its typed refusal, and the repository for the read and the
+  // write - and it needs **no codec at all**, because plan section 7.3 specifies
+  // `.kdtemplate` as JSON rather than as an archive. `tests/data/
+  // templateProductBoundary.test.ts` asserts the absence of the ZIP codec from its
+  // whole closure, which is the mechanical form of that last sentence.
+  //
+  // One Phase 7 change to a Phase 6 entry: `idRemapping.ts` used to reach the
+  // schema module *and* the archive validator, and it now reaches the schema
+  // module and a leaf that holds the prototype-name rule. The seam itself is
+  // unchanged - the module still names storage-v2 only for types and typed
+  // refusals - and `tests/data/subjectProductBoundary.test.ts` now asserts the
+  // narrower closure as well.
+  [
+    extensionless(join(PRODUCTS_DIR, 'subjectTemplate.ts')),
+    'the blank-template product: reads a generation for ids, writes one subject record',
+  ],
 ]);
 
 /**

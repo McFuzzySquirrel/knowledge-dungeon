@@ -20,8 +20,6 @@ import {
   loadSubjectSnapshot,
   openSubjectsFolder,
   saveSubjectSnapshot,
-  exportSubjectAsTemplate,
-  createSubjectFromTemplate,
 } from '@/services/persistence/subjectPersistence';
 import { getElectronEnvironmentLabel, isElectronAvailable } from '@/services/electronBridge';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
@@ -142,7 +140,6 @@ export function WelcomeScreen(): JSX.Element {
   const [activeTab, setActiveTab] = useState<WelcomeTabId>('subjects');
   const [selectedBiome, setSelectedBiome] = useState<FloorBiomeId>(FLOOR_BIOME_IDS[0]);
   const webImportInputRef = useRef<HTMLInputElement | null>(null);
-  const templateImportInputRef = useRef<HTMLInputElement | null>(null);
   const subjectsTabRef = useRef<HTMLButtonElement | null>(null);
   const [DataCenterScreen, setDataCenterScreen] = useState<DataCenterComponent | null>(null);
   const env = getElectronEnvironmentLabel();
@@ -231,6 +228,25 @@ export function WelcomeScreen(): JSX.Element {
   function handleSubjectImported() {
     void (async () => {
       await refreshExistingSubjects();
+    })();
+  }
+
+  /**
+   * The learner pressed "Open it in Create to edit the graph" in the Data Center's
+   * template report, so go there.
+   *
+   * Explicit, like its counterpart: the import itself must not navigate, because the
+   * report behind it is what tells the learner that every room arrived blank and in
+   * the Create state, and a screen that moved on its own would take that with it.
+   * This is the press that follows reading, and it is the same two lines the
+   * pre-Phase-7 template import did by itself - select the subject, show the setup
+   * tab, leave entering the dungeon to the learner.
+   */
+  function handleOpenSubject(subjectId: string) {
+    void (async () => {
+      await refreshExistingSubjects();
+      setSelectedExistingSubjectId(subjectId);
+      setActiveTab('setup');
     })();
   }
 
@@ -439,51 +455,6 @@ export function WelcomeScreen(): JSX.Element {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Import failed.';
       setAdminMessage(`Import failed: ${message}`);
-    } finally {
-      setAdminBusy(false);
-    }
-  }
-
-  async function handleExportSubjectAsTemplate(subjectId: string) {
-    setAdminBusy(true);
-    setAdminMessage(null);
-    try {
-      const subject = await loadSubjectSnapshot(subjectId);
-      if (!subject) {
-        setAdminMessage('Unable to export template: subject data not found.');
-        return;
-      }
-      const filename = `${sanitizeFilePart(subject.dungeon.subjectName)}.template.json`;
-      downloadTextFile(filename, exportSubjectAsTemplate(subject));
-      setAdminMessage(`Exported template for ${subject.dungeon.subjectName} as ${filename}.`);
-    } catch {
-      setAdminMessage('Template export failed.');
-    } finally {
-      setAdminBusy(false);
-    }
-  }
-
-  async function handleImportTemplateFromFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-
-    setAdminBusy(true);
-    setAdminMessage(null);
-    try {
-      const raw = await readFileAsText(file);
-      const subject = createSubjectFromTemplate(raw);
-      const saveResult = await saveSubjectSnapshot(subject.dungeon.dungeonId, subject);
-      if (!saveResult.success) {
-        throw new Error(saveResult.error ?? 'Failed to persist template data.');
-      }
-      await refreshExistingSubjects();
-      setSelectedExistingSubjectId(subject.dungeon.dungeonId);
-      setActiveTab('setup');
-      setAdminMessage(`Created ${subject.dungeon.subjectName} from template. Select Enter Dungeon when ready.`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Template import failed.';
-      setAdminMessage(`Template import failed: ${message}`);
     } finally {
       setAdminBusy(false);
     }
@@ -864,6 +835,7 @@ export function WelcomeScreen(): JSX.Element {
             <DataCenterScreen
               onRestored={handleDeviceDataRestored}
               onSubjectImported={handleSubjectImported}
+              onOpenSubject={handleOpenSubject}
             />
           )
         ) : (
@@ -930,16 +902,6 @@ export function WelcomeScreen(): JSX.Element {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    templateImportInputRef.current?.click();
-                  }}
-                  disabled={adminBusy}
-                  aria-disabled={adminBusy}
-                >
-                  Create from template
-                </button>
-                <button
-                  type="button"
                   onClick={() => void handleExportAllSubjectsJson()}
                   disabled={adminBusy || existingSubjects.length === 0}
                   aria-disabled={adminBusy || existingSubjects.length === 0}
@@ -947,28 +909,38 @@ export function WelcomeScreen(): JSX.Element {
                   Export all subjects as JSON
                 </button>
                 {existingSubjects.map((subject) => (
-                  <div key={`export-group-${subject.id}`} style={{ display: 'contents' }}>
-                    <button
-                      key={`export-json-btn-${subject.id}`}
-                      type="button"
-                      onClick={() => void handleExportSubjectJson(subject.id)}
-                      disabled={adminBusy}
-                      aria-disabled={adminBusy}
-                    >
-                      Export {subject.subjectName} as JSON
-                    </button>
-                    <button
-                      key={`export-template-${subject.id}`}
-                      type="button"
-                      onClick={() => void handleExportSubjectAsTemplate(subject.id)}
-                      disabled={adminBusy}
-                      aria-disabled={adminBusy}
-                      className="ghost"
-                    >
-                      Export {subject.subjectName} as template
-                    </button>
-                  </div>
+                  <button
+                    key={`export-json-btn-${subject.id}`}
+                    type="button"
+                    onClick={() => void handleExportSubjectJson(subject.id)}
+                    disabled={adminBusy}
+                    aria-disabled={adminBusy}
+                  >
+                    Export {subject.subjectName} as JSON
+                  </button>
                 ))}
+                {/*
+                  Phase 7 cutover. The "Create from template" button and the per-subject
+                  "Export ... as template" button used to be here, and both called the
+                  pre-Phase-7 pair in `subjectPersistence.ts`. That exporter wrote
+                  original room ids, attachment metadata, filenames, the subject's own
+                  name, and an ambient clock into a file named after that subject - the
+                  five violations plan section 7.3 lists - and this panel was its last
+                  application caller.
+
+                  They are gone rather than moved, and the replacement is the Data
+                  Center's `Reusable template` tab, which renders on the branch above
+                  and goes through `products/subjectTemplate`. Templates are a
+                  `VITE_DATA_PRODUCTS_V2` feature now, so this branch - which only runs
+                  with the flag off - offers no template feature at all rather than
+                  offering the leaking one. Keeping the unsafe path alive as the
+                  fallback would keep the defect alive with it.
+
+                  The legacy functions themselves are untouched in
+                  `subjectPersistence.ts`; plan section 7's rollback is the *path*, and
+                  the path is what was retired. `tests/data/templateLegacyPath.test.ts`
+                  holds the measurement.
+                */}
               </div>
               <input
                 ref={webImportInputRef}
@@ -976,13 +948,6 @@ export function WelcomeScreen(): JSX.Element {
                 accept=".json,application/json"
                 hidden
                 onChange={(event) => void handleImportSubjectJsonFile(event)}
-              />
-              <input
-                ref={templateImportInputRef}
-                type="file"
-                accept=".json,application/json"
-                hidden
-                onChange={(event) => void handleImportTemplateFromFile(event)}
               />
             </>
           )}

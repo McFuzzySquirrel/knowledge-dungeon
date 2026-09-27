@@ -712,7 +712,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 4 | complete | Cut over storage behind a flag and add local attachments. |
 | 5 | complete | Deliver full-device backup and restore. |
 | 6 | complete | Deliver individual subject backup and restore. |
-| 7 | not-started | Deliver safe blank reusable templates. |
+| 7 | verified | Deliver safe blank reusable templates. |
 | 8 | not-started | Establish Cozy design tokens and the CC0 media gate. |
 | 9 | not-started | Build the PixiJS runtime host. |
 | 10 | not-started | Build asset bundles and functional audio. |
@@ -2686,9 +2686,18 @@ Modified: `src/services/persistence/v2/archive.ts`, `src/ui/screens/WelcomeScree
 Hide the tab and disable import; the format is additive. Concretely: with
 `VITE_DATA_PRODUCTS_V2=false` the Data Center never renders and the product's
 chunks are never fetched, the legacy import/export path is untouched, and no
-`.kdbak` is read or written. Because retention is unconditional, a device that has
-already restored a backup keeps its previous generation readable, so the rollback
-loses nothing.
+`.kdbak` is read or written.
+
+**CORRECTED 2026-09-27 — the original claim in this section was false.** It read
+"Because retention is unconditional, a device that has already restored a backup
+keeps its previous generation readable, so the rollback loses nothing." Retention
+*is* unconditional and the previous generation *is* still readable **by id**, but on
+the next boot the legacy migration stages a fresh generation from the `localStorage`
+mirror and flips `activeGeneration` over it — so **no reader follows the restored
+generation at all**, and the restore's effect becomes invisible. The rollback
+therefore *does* lose the restore. See "A cross-phase durability defect" in the
+Phase 7 evidence for the measured mechanism, the three affected products, and the
+fix. Do not rely on the original wording.
 
 ### Unlocks
 
@@ -3050,10 +3059,18 @@ Hide the product and remove only staged import data. Concretely: with
 `VITE_DATA_PRODUCTS_V2=false` the Data Center renders neither tab, `.kd-data-center` is
 absent from the DOM, and **no product chunk is ever requested** — measured at 14 total
 requests and an empty product-chunk list. The legacy import/export path is untouched and
-no `.kdsubject` is read or written. Because retention is unconditional, a device that has
-already imported a subject backup keeps its previous generation readable, so the rollback
-loses nothing, and a failed import leaves a staged generation that is discarded rather
-than activated.
+no `.kdsubject` is read or written.
+
+**CORRECTED 2026-09-27 — the original claim in this section was false.** It read
+"Because retention is unconditional, a device that has already imported a subject
+backup keeps its previous generation readable, so the rollback loses nothing." The
+measured truth is worse: a `.kdsubject` copy is written to the active storage-v2
+generation **only**, and on the next boot the legacy migration stages a fresh
+generation from the `localStorage` mirror and flips the pointer, so the copy
+disappears from every surface and is **stably lost, not a cache** — confirmed in a
+real browser across two reloads. See "A cross-phase durability defect" in the
+Phase 7 evidence. A failed import is still safe: it leaves a staged generation that
+is discarded rather than activated.
 
 ### Unlocks
 
@@ -3245,7 +3262,7 @@ the physical-device checks in §10.4 stay assigned to Phases 21 and 23.
 
 ## Phase 7: Blank Reusable Template Product
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Deliver a graph-only template workflow that cannot contain private learner data.
 
 ### Prerequisites
@@ -3301,6 +3318,337 @@ Run the common gate.
 ### Rollback
 
 Retain the legacy template path behind the old UI until cutover.
+
+### A cross-phase durability defect found in Phase 7 review
+
+Recorded 2026-09-27, during Phase 7 verification. This is **not** a Phase 7 defect;
+it is a Phase 4 seam that Phase 7 exposed, and it invalidates recorded claims in the
+Phase 5 and Phase 6 evidence, which are corrected in place above. It is recorded here
+because Phase 7's review is where it was found and measured.
+
+**The defect.** A write that reaches the active storage-v2 generation **only** is
+silently discarded on the next page load. The boot path runs the legacy migration on
+**every** boot. On a fresh device the first boot takes the `no-source-data`
+short-circuit and `ensureInitialGeneration` creates a generation whose `source` is
+`initial`. On the second boot the device *has* `localStorage` content, so the
+already-migrated guard — which requires an existing generation with
+`source === 'legacy-migration'` **and** a `LEGACY_MIGRATION_ID` receipt — does not
+fire. The migration therefore **stages a brand-new generation from the stale
+`localStorage` mirror, validates it, writes a receipt, and flips `activeGeneration`
+to it**, superseding the generation the product wrote into. No reader follows a
+superseded generation, so the product's write is invisible.
+
+**Measured, by the orchestrator independently of the reviewer, in Chromium against
+the flagged build:**
+
+| stage | active pointer | `gen-initial-0001` |
+| --- | --- | --- |
+| boot 1, fresh profile | `gen-initial-0001` (`source: initial`) | 0 subjects |
+| a subject is created through the Welcome form | `gen-initial-0001` | 1 subject |
+| **boot 2** | **`gen-migration-0001`** | **`superseded`**, 1 subject stranded |
+| boot 3 | `gen-migration-0001` | `superseded` |
+
+**It affects all three data products**, confirmed by the reviewer in a browser on the
+same build:
+
+- **`.kdtemplate` (Phase 7)** — an imported template subject is listed in-session and
+  gone after one reload, stably, with no UI route to recover it. Exit criterion 4,
+  "templates import into Creator state with blank notes", therefore holds **in-session
+  only**.
+- **`.kdsubject` (Phase 6, already accepted)** — a "Create copy" subject is lost
+  identically on reload.
+- **`.kdbak` (Phase 5, already accepted) — the worst case.** A restore is silently
+  *undone* on the next load: the active generation reverts to the one built from the
+  pre-restore mirror, so **a subject the learner deleted by restoring comes back**.
+
+**Why it survived two accepted phases.** No browser test created a subject through
+the Welcome form, performed a product write, reloaded, and asserted the subject was
+still listed. The unit gates read the active generation directly, which is exactly
+the generation that later gets superseded, so they cannot see it.
+
+**Ownership and the fix.** Plan §7.1 step 7 makes the dual-write obligation Phase 4's,
+and the files are Phase 3/4 (`src/services/persistence/v2/migrations.ts`, and possibly
+`bootstrap.ts`). Owner: `core-logic-engineer`, Phase 4. Two defensible options:
+
+- **Option A (smaller, recommended):** make the migration's idempotency guard recognise
+  an already-migrated **device** rather than an already-migrated **generation id** — if
+  a `LEGACY_MIGRATION_ID` receipt exists anywhere in the registry, re-running must be a
+  no-op, which is what the existing guard already intends but cannot express because it
+  keys on `generationId`. One condition, touches no product, fixes all three at once.
+- **Option B (broader):** route the storage-v2 product writes through `writeThrough`
+  in `subjectPersistence.ts`, as `saveSubjectSnapshot` already does, restoring §7.1's
+  dual-write for every product at the cost of re-opening the legacy mirror Phase 4
+  narrowed on purpose.
+
+**Mandatory regression test for whoever fixes it:** a browser test that creates a
+subject through the Welcome form, performs each of the three product writes, reloads,
+and asserts every subject is still listed — plus a `.kdbak` restore case asserting a
+deleted subject does **not** come back. It does not exist for any of the three.
+
+**Status: FIXED on 2026-09-27, on the maintainer's instruction, and independently
+re-verified.** See the Phase 7 verification evidence below. The two corrected rollback
+sections above are the durable record of what the claim was and why it was wrong.
+
+### Verification evidence
+
+Recorded 2026-09-27. The phase is `verified` and awaits explicit maintainer acceptance;
+Phase 8 remains `not-started` and requires separate authorization.
+
+#### What was built
+
+- **`.kdtemplate` is JSON, not an archive.** §7.3 opens "**JSON** containing only:",
+  and the "audited library, do not hand-roll ZIP" sentence constrains the two products
+  that *are* archives. No codec was added and no dependency was added. `archive.ts`'s
+  header wrongly claimed to serve three products and is corrected, with a gate now
+  enforcing the absence. To make "no ZIP" structural rather than documentary,
+  `isPrototypeMemberName` moved into a new leaf, `v2/prototypeNames.ts`, so the product's
+  closure cannot reach `fflate`; `archiveValidation.ts` and `archive.ts` both re-export it,
+  so no existing import path and no Phase 5/6 behaviour changed.
+- **The format is an allowlist, not a denylist.** The exporter reads exactly six things
+  from a snapshot — room topics, approved tags, and the four graph fields — and there is
+  no `...room` spread and no walk that copies an un-enumerated field. A denylist would
+  be the wrong shape here, because plan §7.3 requires the `.kdbak` import to *preserve
+  unknown app-owned fields*: a denylist would carry every unknown field into a
+  shareable file, invisibly, because the field would look like one the build knows. The
+  Phase 0 unknown-fields fixture is re-identified, each field carrying a distinct
+  marker.
+- **Rooms are addressed by array index, never by id.** That is the "no original IDs"
+  mechanism, not a filter. Room order is a function of content — BFS from the root,
+  siblings by `(topic, tags)`, then unreachable rooms, then a residual tiebreak.
+- **Approval is a falsifiable step, not a claim.** `approvedTags` and `approvedBiome`
+  are parameters with no self-supplying default, and a room's own tags are intersected
+  with the approved list, so an unapproved tag cannot reach the file even by accident.
+  The export result carries the exact normalised list that is *in the file* — a
+  measurement of the document rather than a boolean the reader cannot check.
+- **The cutover.** `WelcomeScreen.tsx` was the only caller of the legacy leaking
+  `exportSubjectAsTemplate` / `createSubjectFromTemplate`; it now has none, and the
+  product *refuses* a legacy document whole rather than half-importing one. The legacy
+  pair is retained verbatim for the documented rollback, with both function bodies
+  byte-identical to `8eb2587`. Delegation was rejected for a real reason: a static
+  import would make the product eagerly reachable and break its own boundary gate, and
+  a dynamic import cannot serve two synchronous functions whose only caller this phase
+  may not change.
+- **`SubjectTemplateTab.tsx`**, the third Data Center tab, with the browser finding two
+  real defects: a first-run device with no subjects crashed the whole Data Center
+  (`found[0].subjectId` on an empty list — jsdom never saw it because every fixture
+  stages subjects), and a bounded room list dropped the root topic because ordering by
+  topic put `room topic N` before `root`.
+
+#### The phase was not acceptable until the cross-phase defect was fixed
+
+Independent review (`tests/phase7/`, 9 files / 95 tests, no shared code or fixture with
+the phase's own gates) could not break the exporter, the importer, the format, or the
+privacy claims, and proved the first three exit criteria. It found the fourth held
+**in-session only**, and traced it to the cross-phase durability defect recorded above.
+The maintainer ordered that fixed before accepting the phase.
+
+#### The durability fix
+
+`decideDeviceMigration(evidence)` is a pure exported function. The rule: **a device
+holding a reachable generation — anything whose status is not `staged` — has already
+moved off the legacy keys, so re-running must be a no-op.** It is placed after
+`hasNoLearnerContent` and after the existing per-generation-id guard, and before the
+reclaim and stage. A new report status `already-migrated` reports `activated: false`,
+`stagedGenerationId: null` and the found receipt, so a skip is never reported as a move.
+
+The reviewer **corrected its own earlier recommendation**, and that is worth recording:
+its proposed "if a `LEGACY_MIGRATION_ID` receipt exists anywhere, skip" rule **would not
+have fixed the defect**, because the `hasNoLearnerContent` short-circuit writes no
+receipt, so the defect device has none. The implemented rule is the generalisation that
+actually closes it.
+
+Verified independently by the orchestrator: neutering the guard and rebuilding turns
+**4 of 6** tests in the new browser lane red, with the pointer moving
+`gen-initial-0001 → gen-migration-0001` in every case and the `.kdbak`-deleted subject
+back in the active generation. Restored, 6/6 green. The lane has teeth.
+
+**The trade, stated rather than hidden.** Once a device holds a reachable generation the
+legacy mirror is no longer migrated from. A learner who rolls back to a legacy build,
+creates a subject there, and returns will keep it in the mirror, where the rollback build
+finds it, and it will not be merged into storage-v2. The reviewer constructed exactly
+this case and measured it, and judged the trade correct: the old behaviour "recovered"
+that subject by superseding the live generation and losing every product write, so the
+fix trades an unrecoverable loss of product data for a recoverable availability gap in a
+rollback scenario. A device with **no** reachable generation still migrates, and the
+reviewer measured the same mirror arriving in the active generation there.
+
+**The regression test whose absence let two phases ship broken:** a committed browser
+lane, `tests/e2e/reloadPersistence.spec.ts`, that creates a subject through the Welcome
+form, performs each of the three product writes, reloads, and asserts every subject is
+still listed and loadable — and for `.kdbak`, that a subject the restore **deleted does
+not come back**. It is a gating step in the existing `storage-v2-browser` job with **no
+new build**, so one-artifact-per-run still holds.
+
+#### Exit-criteria evidence
+
+- **A template contains no learner content, attachment metadata, or original IDs.**
+  **Proven.** The document's key set is asserted for **equality** against a list written
+  from §7.3 rather than from the product's own constants, at all four levels; every leaf
+  is walked; 31 planted private strings appear nowhere in the file. The Phase 0 fixture
+  is re-identified with fresh markers: its topics are the only topics present, and its
+  `preserve-this-synthetic-*` fields, biome, ids, note, artifact, path, filename, alt
+  text and URL are all absent. *No original IDs* is proven by **byte identity** across a
+  different subject id, a permutation of all four room ids, reversed insertion order, and
+  three disjoint id alphabets. The reviewer attacked the documented ordering residual with
+  the hardest twin it could build and the bytes were still identical.
+- **Imported graph structure matches the export.** **Proven** as **isomorphism**, not
+  counts: the parent of every room, the relation and `createdByPhase` of every edge, and
+  the root, compared once from the document and once from the minted subject. A graph
+  with an orphan the root cannot reach round-trips exactly, and re-exporting the stored
+  subject reproduces the file byte-for-byte.
+- **Two imports create independent subjects.** **Proven** by disjointness *and*
+  mutability: mutating the first import's note, name and `tagIndex` leaves the second
+  intact. A generator that can only return taken ids is refused rather than used.
+- **Templates import into Creator state with blank notes.** **Proven durably.** Every
+  room is `Created` with empty note, null artifact, no attachments, zero review passes,
+  blank SM-2 and validation defaults, and `phaseState: 'CreatorActive'`. The reviewer
+  re-measured this in its **own** browser probe rather than trusting the implementer's
+  lane, since the lane and the fix shared an author: **31 checks across three reloads,
+  all passing**, with the pointer never moving, the imported subject present under the
+  same id each time, both surfaces listing it, and a second import on the
+  already-migrated device also surviving.
+
+#### Gates beyond the exit criteria
+
+- **Hostile input:** 45 cases, all refused with a typed `StorageV2Error`, a reason from a
+  closed set — at least 12 distinct reasons observed, so a product that refused
+  everything for one reason would fail — and sanitised details. Prototype-named keys were
+  inserted by **raw JSON surgery**, because a JS object literal sets the prototype and
+  `JSON.stringify` drops it, which would have made the naive case vacuous. The whole
+  device is fingerprinted before and after all 45 and is byte-identical, with the
+  fingerprint proven able to move.
+- **No learner data** in the manifest, file name, error strings, or disclosure copy. The
+  download name is the constant and carries no subject name, template name, or year.
+  Measured in a browser: feeding the picker a file whose topic, tag, note and name are
+  distinct markers, then a legacy document, then a non-JSON file, the **page never
+  contains the file's topic, name, tag or note**.
+- **Accessibility, measured in a real browser:** 44 px minimum on every control, **zero**
+  axe violations at any impact scoped to the Data Center, a three-tab tablist with
+  wrap-around and roving `tabindex`, a dialog holding focus across 14 consecutive Tab
+  presses with Escape restoring focus to the opener, reduced motion honoured, and **zero**
+  horizontal overflow at 320 CSS px across all six declared font metric sets — with a
+  deliberately injected 900 px offender proving the sweep can see overflow.
+- **Bundle:** 4.48 MB / 140 files, +91.3 KiB over the 4.39 MB / 134 baseline, all of it
+  the new tab and the product's own 17.7 kB chunk plus its `-legacy` twin. The entry
+  chunk's static imports are exactly runtime, types, Phaser and React; the only reference
+  to the product anywhere is a `dynamic` import **inside the Data Center chunk**, and
+  opening the template tab still fetches no product chunk. A flag-off build fetched 7
+  chunks with no product chunk, no storage-v2 chunk and no Data Center tab at all.
+
+#### A second evidence-integrity defect, found and fixed
+
+The reviewer found that the **artifact-identity gate was self-referential**: the manifest
+is recorded *from the same `dist`* the lane then serves, so it could not detect a stale
+`dist`. A workspace holding a `dist` from an older revision with a manifest recorded from
+it passed step 1 and then failed the lane, meaning a green browser lane proved only that
+`dist` matched a manifest recorded from `dist` — it could not tie evidence to source.
+This repository has now been bitten three times by a gate that passed for the wrong
+reason, so it was fixed before this evidence was recorded.
+
+The manifest now carries a `sha256-git-tracked-v1` **source identity** beside the
+unchanged `sha256-tree-v1` tree identity, and `MANIFEST_SCHEMA_VERSION` is 2. It hashes
+the **content** of `git ls-files` entries, so it is stable across a rebuild, changes when
+source changes, is blind to `dist/`, `artifacts/` and untracked files by construction, and
+CRLF-normalises text so a Windows lane can verify a Linux-built manifest. Commit sha was
+rejected as insufficient, because a dirty worktree would report a sha that does not
+describe the tree.
+
+**Verified independently by the orchestrator:** with `dist` **byte-for-byte unchanged**,
+adding one line to a tracked source file makes `verify` fail with
+`source-does-not-match-recorded-artifact` and the same tree digest — proving the source
+check is not a proxy for the tree hash. A **boundary worth recording**: the identity
+covers *tracked* files, so an untracked source file is invisible to it. That is correct
+on CI, where everything is committed, and it is why a worktree full of uncommitted work
+still verifies. The precise claim is that the manifest is **not older than the current
+tracked source**; nothing outside a build can prove which source produced a given `dist`.
+
+#### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | pass |
+| `npm run typecheck` | pass |
+| `npm test` | pass — **144 files / 1987 tests** (Phase 6 merged baseline 126 / 1690) |
+| `npm run test:data` | pass — 25 files / 319 tests |
+| `npm run test:migrations` | pass — 15 files / 374 tests |
+| `npm run build:web` | pass |
+| `npm run check:bundle-size` | pass — `Total dist size: 4.48 MB across 140 files` |
+| `npm run build:storage-v2-data-products` | pass — entrypoint `sha256 3779df1d…` |
+| `npm run record:web-artifact:storage-v2` | pass — `sha256-tree-v1 db0d846c…`, `sha256-git-tracked-v1 …` |
+| `npm run test:e2e:reload-persistence:recorded` | pass — 6 tests, the new lane |
+| `npm run test:e2e:subject-product:recorded` | pass — 5 tests |
+| `npm run test:e2e:data-products:recorded` | pass — 4 tests |
+| `npm run test:e2e:storage:recorded` | pass — 9 tests |
+| `npm run test:e2e` | pass — 20 tests across the four Chromium viewports |
+
+#### Known limitations and evidence boundaries
+
+- **The guard's trade is part of the product's contract.** A subject created on a rollback
+  build after the device has moved on is not auto-merged into storage-v2. The module
+  header says so; **no user-facing surface says so.** Carried to Phase 8.
+- **A corrupt `localStorage` mirror on a device that has already moved on is now silently
+  ignored** rather than producing a recovery screen. The reviewer measured this and
+  judged the direction correct — a recovery screen makes the bootstrap select the legacy
+  repository, so the app would read the *stale* mirror — but it is a behaviour change, now
+  pinned by a test so it cannot change by accident.
+- **`recovery-required` is not dead but is genuinely narrowed:** every failure stage now
+  sits after the guard, so it requires a device with no reachable generation. The reviewer
+  injected a throw at each of seven stages and measured the path alive on that shape.
+- **The `staged`-generation reclaim no longer runs on a moved-on device**, by design — a
+  skip must not end in a delete — so such a device relies on `pruneGenerations` for
+  storage. Carried to Phase 8.
+- **The per-run evidence JSON in three specs records the tree identity but not the source
+  hash.** The gate is fully enforced without it, so this is a follow-up for auditability
+  rather than a hole.
+- **Chromium only**, one viewport, against the flagged build. No Firefox, WebKit, Edge,
+  ChromeOS, or physical device; the plan's §10.4 manual checks stay assigned to Phases 21
+  and 23. Nothing here is VoiceOver, NVDA, or ChromeVox evidence. Non-ASCII, emoji, RTL
+  and 400-character topics were not measured in the layout sweep, whose markers are ASCII.
+- **Two-tab concurrency is unmeasured.** The new guard reads `listGenerations()`,
+  `readActiveGenerationId()` and `listMigrationReceipts()` in a `Promise.all` — three
+  reads that are not one snapshot. A second tab staging a generation between them could
+  in principle produce a decision taken from a mixed view. The reviewer did not construct
+  it and claims neither safety nor danger.
+- The `.kdtemplate` specification exists as a module header and type declarations, not a
+  README section, and the product has no browser lane of its own — the reload-persistence
+  lane covers its durability and the data-products lane covers the tab. `.kdbak` and
+  `.kdsubject` are in the same position, so this matches precedent, but Phase 7's
+  deliverable list names the specification explicitly.
+- **A pre-Phase-7 template file cannot be imported by the new product** — refused as
+  `legacy-template-format-refused`, because that document carries exactly the forbidden
+  fields. Intentional, and a learner who exported with an older build must re-export.
+  Worth a release note.
+
+#### Files
+
+Created: `src/services/persistence/products/subjectTemplate.ts`,
+`src/services/persistence/v2/prototypeNames.ts`, `src/ui/data/SubjectTemplateTab.tsx`,
+`playwright.reload-persistence.config.ts`, `tests/data/support/templateSubject.ts`,
+7 `tests/data/template*.test.ts` gates, `tests/unit/{subjectTemplateTab,legacyMigrationDeviceGuard}.test.{tsx,ts}`,
+`tests/e2e/reloadPersistence.spec.ts`, `tests/e2e/reload-persistence-lane{.ts,.test.ts}`,
+`tests/phase7/` (9 files / 95 tests).
+Modified: `src/ui/data/{DataCenter,RecoveryStatus,productAccess}.tsx`, `dataCenter.css`,
+`src/ui/screens/WelcomeScreen.tsx` (the cutover),
+`src/services/persistence/v2/{migrations,migrationState,schema}.ts`,
+`src/services/persistence/{subjectPersistence,products/archiveValidation,products/idRemapping}.ts`,
+`package.json`, `tsconfig.node.json`, `README.md`, `.github/workflows/ci.yml`, and
+thirteen existing test files — seven of them with in-file `RAIL CHANGE` notes that the
+reviewer examined individually and judged **justified and mostly stronger**; the
+`specifics` are recorded under the durability fix above.
+
+#### Rollback
+
+Retain the legacy template path behind the old UI until cutover — **done**. The legacy
+pair is retained verbatim, both bodies byte-identical to `8eb2587`, with no application
+caller. The product refuses a legacy document whole, and never writes a legacy key under
+any request shape. With `VITE_DATA_PRODUCTS_V2=false` the Data Center renders no tab at
+all, so a flag-off build offers **no** template feature rather than the leaking one. The
+product is reached only by `dynamic` import, so no product chunk is fetched before the
+tab is opened.
+
+The durability fix is independent of the flag and is **not** rolled back with it: it
+corrects a defect in the migration guard that predates every data product. Rolling it
+back would reinstate silent data loss on every boot.
 
 ### Unlocks
 
