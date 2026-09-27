@@ -13,12 +13,21 @@
  *   legacy template path behind the old UI until cutover", is the *code*, and a gate that
  *   deleted them would make the rollback unrepresentable.
  *
- * The "unchanged" half is measured against commit `8eb2587`, the last commit before this
- * phase, by comparing the two files with **every comment blanked**. That is the honest form
- * of "comments may differ, code may not": a comment rewrite cannot change a single
+ * The "unchanged" half is measured against a **pinned, verbatim snapshot** of
+ * `subjectPersistence.ts` as it was at commit `8eb2587`, the last commit before this phase,
+ * by comparing it with the working file using **every comment blanked**. That is the honest
+ * form of "comments may differ, code may not": a comment rewrite cannot change a single
  * character of code, and a one-character code change cannot hide inside a blanked region.
- * The comparison is run through `git show`, so it measures the committed file rather than
- * anything in the working tree's history.
+ *
+ * The snapshot is a committed fixture under `./support/fixtures`, not a `git show` at test
+ * time. That is a repair, not a convenience: this assertion originally shelled out to
+ * `git show 8eb2587:...`, and CI clones at depth 1, so the commit is not in the runner's
+ * object store and the test failed there with `fatal: invalid object name` while passing
+ * locally. Reproduced in a depth-1 clone: 2 failed / 142 passed files. The fixture makes the
+ * claim hermetic, reviewable, and diffable, and it re-derives its own body digest on read,
+ * so it cannot be edited into agreeing with whatever the working tree currently is. The
+ * comparison itself is unchanged: a byte comparison between pinned bytes and the working
+ * file, and it still fails on any code edit.
  *
  * ## Part two: the "no ZIP" conclusion
  *
@@ -37,8 +46,7 @@
  * Phase: 7.
  */
 
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -53,20 +61,12 @@ import {
 } from '@/services/persistence/products/subjectTemplate';
 import { MARK, NOW, nastySubject, ROOM, SUBJECT_ID } from './support/nastySubject';
 import { blankComments, closureOf, sourceFilesUnder } from './support/closure';
+import { phase6SubjectPersistence, phase6WelcomeScreen } from './support/phase6Fixtures';
 
 const REPO_ROOT = process.cwd();
 const LEGACY_MODULE = 'src/services/persistence/subjectPersistence.ts';
 const PRODUCT_MODULE = 'src/services/persistence/products/subjectTemplate.ts';
 const CUTOVER_SCREEN = 'src/ui/screens/WelcomeScreen.tsx';
-const BASE_COMMIT = '8eb2587';
-
-function committed(path: string): string {
-  return execFileSync('git', ['show', `${BASE_COMMIT}:${path}`], {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024,
-  });
-}
 
 /** The file with every comment blanked and every blank line dropped. */
 function codeOnly(source: string): string {
@@ -113,8 +113,16 @@ describe('phase 7 verifier V6a: the cutover removed the caller and kept the roll
     expect(typeof createSubjectFromTemplate).toBe('function');
   });
 
-  it("subjectPersistence.ts's code is byte-identical to 8eb2587 once comments are blanked", () => {
-    const before = codeOnly(committed(LEGACY_MODULE));
+  it("subjectPersistence.ts's code is byte-identical to the pinned Phase 6 snapshot once comments are blanked", () => {
+    const pinned = phase6SubjectPersistence();
+    // The fixture must still be the exact bytes that were captured, or the comparison
+    // below would be against a snapshot someone edited to match the working tree.
+    expect(pinned.bodySha256, `${pinned.file} body does not match its declared digest`).toBe(
+      pinned.declaredSha256,
+    );
+    expect(pinned.measuredBytes, `${pinned.file} body length`).toBe(pinned.declaredBytes);
+    expect(pinned.declaredPath).toBe(LEGACY_MODULE);
+    const before = codeOnly(pinned.body);
     const after = codeOnly(readFileSync(join(REPO_ROOT, LEGACY_MODULE), 'utf8'));
     // Reported as a line-level diff of the *code* so a failure names what moved.
     const beforeLines = before.split('\n');
@@ -183,6 +191,44 @@ describe('phase 7 verifier V6a: the cutover removed the caller and kept the roll
     }
     expect(thrown).toBeDefined();
     expect((thrown as { details: { reason?: string } }).details.reason).toBe('document-unexpected-field');
+  });
+});
+
+describe('phase 7 verifier V6a-bis: the pinned snapshots are hermetic and self-verifying', () => {
+  it('both fixtures carry the body their header declares, and that body is the pre-cutover source', () => {
+    for (const fixture of [phase6SubjectPersistence(), phase6WelcomeScreen()]) {
+      // The digest is re-derived from the body at read time, so this is a measurement of
+      // the file in the repository rather than a restatement of the header. A snapshot
+      // edited into agreeing with the working tree fails here first, so the byte-identity
+      // comparison below can never be satisfied by a doctored baseline.
+      expect(fixture.bodySha256, `${fixture.file} body digest`).toBe(fixture.declaredSha256);
+      expect(fixture.measuredBytes, `${fixture.file} body bytes`).toBe(fixture.declaredBytes);
+      expect(fixture.declaredCommit, `${fixture.file} commit`).toMatch(/^[0-9a-f]{40}$/);
+      expect(fixture.declaredShortCommit, `${fixture.file} short commit`).toMatch(/^[0-9a-f]{7,12}$/);
+      expect(fixture.declaredPath).toMatch(/^src\//);
+      // The body is real source, not a placeholder: it declares the module it claims.
+      expect(fixture.body.length, `${fixture.file} body length`).toBeGreaterThan(20_000);
+    }
+  });
+
+  it('neither fixture is a truncated or reflowed copy: the body is the whole file', () => {
+    const persistence = phase6SubjectPersistence();
+    const screen = phase6WelcomeScreen();
+    // Whole-file markers: the first import and the last export of each. A capture that
+    // lost a tail would still parse and would still satisfy a weaker comparison.
+    expect(persistence.body.trimStart().startsWith('/**')).toBe(true);
+    expect(persistence.body.trimEnd().endsWith('}')).toBe(true);
+    expect(persistence.body).toContain('export function createSubjectFromTemplate(');
+    expect(persistence.body).toContain('export function importSubjectFromJson(');
+    expect(screen.body.trimStart().startsWith('import {')).toBe(true);
+    expect(screen.body).toContain('export function WelcomeScreen(');
+    expect(screen.body).toContain('exportSubjectAsTemplate');
+  });
+
+  it('the working tree still holds the two files the fixtures snapshot, so the comparison has two ends', () => {
+    for (const path of [LEGACY_MODULE, CUTOVER_SCREEN]) {
+      expect(existsSync(join(REPO_ROOT, path)), path).toBe(true);
+    }
   });
 });
 

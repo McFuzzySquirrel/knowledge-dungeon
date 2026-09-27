@@ -38,18 +38,19 @@
  * Phase: 7.
  */
 
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { blankComments, classifySpecifierEdges } from '../data/support/importGraph';
 import { blankComments as myBlankComments, closureOf, specifiersIn } from './support/closure';
+import { phase6WelcomeScreen } from './support/phase6Fixtures';
 
 const REPO_ROOT = process.cwd();
 const PRODUCT_MODULE = 'src/services/persistence/products/subjectTemplate.ts';
 const LEGACY_MODULE = 'src/services/persistence/subjectPersistence.ts';
 const CUTOVER_MODULE = 'src/ui/data/SubjectTemplateTab.tsx';
+const CUTOVER_SCREEN = 'src/ui/screens/WelcomeScreen.tsx';
 const PRODUCTS_TREE = 'src/services/persistence/products/';
 
 /** A synthetic module that violates the boundary the way a real regression would. */
@@ -163,22 +164,67 @@ describe('phase 7 verifier V7: the legacy-cutover replacement detects a real cal
     expect(reached.length).toBeGreaterThanOrEqual(100);
   });
 
+  it('the positive control cannot be satisfied by a detector that matches nothing', () => {
+    // The three ways this control could go vacuous, each closed by a measurement rather
+    // than by a comment:
+    //
+    // 1. **The detector dies.** A detector that recognised no edges would report `[]` for
+    //    the pre-cutover screen, and `[]` is not what the control asserts. Stated as an
+    //    assertion so it cannot rot: the expected value is unsatisfiable by a dead one.
+    const deadDetector = (): ReadonlyArray<{ kind: string }> => [];
+    expect(deadDetector().map((edge) => edge.kind)).not.toEqual(['static']);
+    expect(deadDetector().some((edge) => edge.kind !== 'type-only')).toBe(false);
+    // 2. **The real detector is alive on this input, and the edge alone does not
+    //    discriminate.** Both revisions of the screen still import *something* from the
+    //    legacy module - `loadSubjectSnapshot`, `saveSubjectSnapshot` and the rest are
+    //    still there - so the classifier returns `['static']` for each. What differs is
+    //    the **name**: only the pre-cutover file binds the leaking pair. That is exactly
+    //    why the control asserts the edge *and* the name, and why pointing the control at
+    //    the cutover screen instead of the pinned one would fail: the edge would still be
+    //    there, and the name would not.
+    const pinned = phase6WelcomeScreen();
+    const live = blankComments(readFileSync(join(REPO_ROOT, CUTOVER_SCREEN), 'utf8'));
+    const kindsOf = (source: string): string[] =>
+      classifySpecifierEdges(source, CUTOVER_SCREEN, LEGACY_MODULE).map((edge) => edge.kind);
+    expect(kindsOf(blankComments(pinned.body))).toEqual(['static']);
+    expect(kindsOf(live)).toEqual(['static']);
+    expect(blankComments(pinned.body)).toMatch(/\bexportSubjectAsTemplate\b/);
+    expect(live).not.toMatch(/\bexportSubjectAsTemplate\b/);
+    // 3. **The fixture is the real pre-cutover file**, verified by digest rather than by
+    //    the detector's opinion, so the control cannot be pointed at a doctored baseline.
+    expect(pinned.bodySha256).toBe(pinned.declaredSha256);
+    expect(blankComments(pinned.body)).toMatch(/\bexportSubjectAsTemplate\b/);
+  });
+
   it('finds the caller in the pre-cutover screen, which is the positive control for the detector', () => {
-    // `git show` of the commit before this phase: the screen *did* bind the pair there, and
-    // the same detector must say so. Without this, "no callers" could be a detector that
+    // The **real** pre-cutover screen, from the pinned fixture - not a synthetic
+    // stand-in, because a stand-in would be something this file wrote and a detector that
+    // matched nothing in it would also pass. The screen really did bind the pair, and the
+    // same detector must say so. Without this, "no callers" could be a detector that
     // stopped working.
-    const before = execFileSync('git', ['show', '8eb2587:src/ui/screens/WelcomeScreen.tsx'], {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-      maxBuffer: 32 * 1024 * 1024,
-    });
+    //
+    // The fixture replaces a `git show` of the commit before this phase, which is what this
+    // assertion originally used and which failed in CI: the runner is a depth-1 clone, so
+    // the commit is not in its object store. The control keeps its full strength - it is
+    // still the pre-cutover file, byte for byte - and the fixture re-derives its own body
+    // digest on read, so it cannot be edited into something the detector happens to like.
+    const pinned = phase6WelcomeScreen();
+    expect(pinned.bodySha256, `${pinned.file} body does not match its declared digest`).toBe(
+      pinned.declaredSha256,
+    );
+    expect(pinned.measuredBytes, `${pinned.file} body length`).toBe(pinned.declaredBytes);
+    expect(pinned.declaredPath).toBe('src/ui/screens/WelcomeScreen.tsx');
     const edges = classifySpecifierEdges(
-      blankComments(before),
+      blankComments(pinned.body),
       'src/ui/screens/WelcomeScreen.tsx',
       LEGACY_MODULE,
     );
     expect(edges.map((edge) => edge.kind)).toEqual(['static']);
     expect(edges.some((edge) => edge.kind !== 'type-only')).toBe(true);
-    expect(blankComments(before)).toMatch(/\bexportSubjectAsTemplate\b/);
+    expect(blankComments(pinned.body)).toMatch(/\bexportSubjectAsTemplate\b/);
+    // ...and the cutover screen really no longer names either of them, so the two halves
+    // of the control are the same file at two revisions rather than two different files.
+    const now = blankComments(readFileSync(join(REPO_ROOT, CUTOVER_SCREEN), 'utf8'));
+    expect(now).not.toMatch(/\bexportSubjectAsTemplate\b/);
   });
 });

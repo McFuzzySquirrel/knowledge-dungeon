@@ -433,7 +433,15 @@ describe('web-artifact manifest integrity', () => {
     expect(serialized).not.toContain('\\');
   });
 
-  it('never fails the real repository dist or manifest', () => {
+  // This is the only test in the file that does real work against the real
+  // checkout: the `write` and `verify` calls above it each enumerate the tracked
+  // source tree and sha256 every file in it, twice. Measured at 0.8s on an idle
+  // machine, so a 5s default is only a ~6x margin, and it was observed taking
+  // 7.1s and timing out on a loaded one - which is a flaky gate, not a finding.
+  // The budget is explicit and generous rather than left to the 5s default,
+  // because a slow runner must not be able to report this product's evidence
+  // contract as broken.
+  it('never fails the real repository dist or manifest', { timeout: 120_000 }, () => {
     // The suite only ever points the script at temporary directories, except
     // here, where the default source root is deliberately the real repository:
     // one case proves the script reads a real checkout and a real recorded
