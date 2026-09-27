@@ -712,7 +712,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 4 | complete | Cut over storage behind a flag and add local attachments. |
 | 5 | complete | Deliver full-device backup and restore. |
 | 6 | complete | Deliver individual subject backup and restore. |
-| 7 | verified | Deliver safe blank reusable templates. |
+| 7 | complete | Deliver safe blank reusable templates. |
 | 8 | not-started | Establish Cozy design tokens and the CC0 media gate. |
 | 9 | not-started | Build the PixiJS runtime host. |
 | 10 | not-started | Build asset bundles and functional audio. |
@@ -3262,7 +3262,7 @@ the physical-device checks in §10.4 stay assigned to Phases 21 and 23.
 
 ## Phase 7: Blank Reusable Template Product
 
-**Status:** verified
+**Status:** complete
 **Objective:** Deliver a graph-only template workflow that cannot contain private learner data.
 
 ### Prerequisites
@@ -3391,8 +3391,9 @@ sections above are the durable record of what the claim was and why it was wrong
 
 ### Verification evidence
 
-Recorded 2026-09-27. The phase is `verified` and awaits explicit maintainer acceptance;
-Phase 8 remains `not-started` and requires separate authorization.
+Recorded 2026-09-27. The maintainer explicitly accepted the verified checkpoint on
+2026-09-27, so Phase 7 is `complete`. Phase 8 remains `not-started` and requires
+separate authorization.
 
 #### What was built
 
@@ -3635,6 +3636,65 @@ Modified: `src/ui/data/{DataCenter,RecoveryStatus,productAccess}.tsx`, `dataCent
 thirteen existing test files — seven of them with in-file `RAIL CHANGE` notes that the
 reviewer examined individually and judged **justified and mostly stronger**; the
 `specifics` are recorded under the durability fix above.
+
+#### Checkpoint and merge evidence
+
+Recorded 2026-09-27.
+
+- PR #57, branch `phase-7-template`, four commits squashed to **`f978a11`**. The
+  commits are `feat:` for the product, `fix:` for the cross-phase durability defect,
+  `fix:` for the artifact-manifest source identity, and `docs:` for this evidence —
+  the `feat`/`fix`/`docs` split the repo has used since Phase 1.
+- **Four CI failures on the way, all in the first three runs, and all of them mine or
+  our gates rather than the product.** They are recorded because the count is the
+  finding, not because each was interesting on its own:
+  1. `36303051250` — `tests/phase6/lazyBoundary.test.ts` read a gitignored `dist/`
+     and hard-failed on a clean checkout, blocking the four build-carrying jobs.
+  2. `36304039100` — the 320 px Welcome gate failed in all four projects. The gate
+     was right and the layout was wrong: the biome `<select>`'s intrinsic width is
+     its widest option's *rendered text*, so the row's min-content became the grid
+     track floor and the page overflowed on any host whose fallback font is wider
+     than the maintainer's.
+  3. `36339302131` — `tests/phase7/{cutover,gateDirections}.test.ts` shelled out to
+     `git show 8eb2587:<path>`; `actions/checkout@v4` has no `fetch-depth` at any of
+     its eight call sites, so CI's depth-1 clone did not have the object.
+  4. A wall-clock flake QA found while sweeping, not a CI failure: a 5 s default
+     timeout on a test that measured 0.8 s idle and 7.1 s loaded.
+- **Every one was red on CI and green locally** — the safe direction, and none ever
+  produced a false pass. That is a property of the failures, not of the designs: each
+  gate depended on state a clean checkout does not have, and each was written by
+  someone reasoning on a machine that had all of it. The ones in this PR are now
+  hermetic by construction. The reliable detector for the next one remains the CI run
+  itself, which is the argument for keeping the branch-and-review loop rather than
+  batching phases.
+- Final run `36344137351` passed all ten jobs: Lint, Typecheck, Unit Tests, Web Build
+  and Bundle, Browser Smoke (Chromium Matrix), Browser (Storage v2 Flagged Build), and
+  the four representative compatibility lanes.
+- **The two corrected rollback sections in Phase 5 and Phase 6 are the durable record
+  of what those claims were and why they were wrong.** A recorded rollback that is
+  untrue is worse than an admitted gap, and the reason it was untrue is the defect
+  this phase surfaced.
+- Rollback for the phase itself is a source revert to `8eb2587`. **The durability fix
+  must not be reverted with it:** it corrects a defect in the migration guard that
+  predates every data product, and reverting it would reinstate silent data loss on
+  every boot.
+
+#### Carried to Phase 8
+
+1. **The migration guard's trade is not stated to any learner surface.** Once a device
+   holds a reachable generation the legacy mirror is no longer migrated from, so a
+   subject created on a **rollback build** afterwards is not merged into storage-v2.
+   It is recoverable by the rollback build, and the alternative was strictly worse —
+   but the module header documents this and **no user-facing surface does**. The
+   orchestrator's own first reading was that the trade was acceptable as-is and needed
+   no UI; on reflection that was too quick, because a contract a learner can hit
+   belongs somewhere they can read it, not in a source comment.
+2. **`pruneGenerations` reliance is unmeasured.** A skip must not end in a delete, so
+   a device accumulating abandoned `staged` generations now depends on pruning, and
+   how often that runs in a real session was not measured.
+3. **`.kdtemplate` has no README specification section**, though the deliverable list
+   names it. `.kdbak` and `.kdsubject` are in the same position, so it matches
+   precedent rather than departing from it.
 
 #### Rollback
 
