@@ -713,7 +713,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 5 | complete | Deliver full-device backup and restore. |
 | 6 | complete | Deliver individual subject backup and restore. |
 | 7 | complete | Deliver safe blank reusable templates. |
-| 8 | not-started | Establish Cozy design tokens and the CC0 media gate. |
+| 8 | complete | Establish Cozy design tokens and the CC0 media gate. |
 | 9 | not-started | Build the PixiJS runtime host. |
 | 10 | not-started | Build asset bundles and functional audio. |
 | 11 | not-started | Build the Pixi village world foundation. |
@@ -3718,7 +3718,7 @@ Phase 8.
 
 ## Phase 8: Cozy Visual System and CC0 Media Foundation
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Define the storybook visual language and make media licensing enforceable.
 
 ### Prerequisites
@@ -3780,9 +3780,348 @@ Perform manual contrast review for token combinations.
 - Legacy assets are separated from approved Pixi assets.
 - Focus and state styling is visible without relying on color.
 
+### Known limitations and evidence boundaries
+
+- **`cc0-approved` is zero, and that is the honest answer rather than a gap.** All
+  90 pre-existing media files are `legacy-unverified`: 10 were imported from
+  `repo-dungeon`, whose credits page names no CC0 identifier, creator, per-file
+  source URL, or checksum, and 80 were first committed by in-repository feature
+  commits against an MIT-licensed project. MIT is not `CC0-1.0`, so there is no
+  verified grant to record, and inventing one would be a false license claim in a
+  file that ships. Phase 10's bundle sets must therefore be newly authored or
+  genuinely CC0; re-licensing the 90 legacy assets is a copyright-holder decision,
+  not a build step.
+- **A fourth classification, `repository-authored`, was added** for two
+  non-media files (`CREDITS.md` and the registry itself). The plan's three classes
+  are a media taxonomy, so calling an MIT-licensed repository file
+  `cc0-approved` would be a false CC0 claim and calling it unverified would be
+  false too. The checker enforces `media: false` on that class, and a media file
+  must be one of the three plan classes.
+- **`--font-game` now renders in a system stack instead of Cinzel.** Removing the
+  remote Google Fonts `@import` is required by the second exit criterion, and
+  shipping a font binary was not justified in this phase. The *behaviour* is
+  verified (no fetch, no `@font-face`, no web-font fallthrough); whether the Cozy
+  visual direction reads well in the shipping typeface is a design review that has
+  not happened.
+- **The reduced-motion mechanism is Cozy-scoped.** `prefers-reduced-motion` is
+  fully honoured when `VITE_COZY_VISUALS=true`; with the flag off, 22 elements in
+  the legacy stylesheet still transition. Phase 8's scope bullet is to *define*
+  reduced-motion tokens and behavior, and un-scoping a universal `*` override onto
+  a 5,900-line legacy stylesheet is the wholesale-replacement risk the phase
+  non-goals avoid. The residual legacy gap is follow-up work for Phase 21.
+- **`cozy-parchment` is not reachable from the settings picker.** The legacy
+  `resolveInitialColorTheme` has always collapsed the persisted `light` and
+  `sepia` aliases to `dark`, so no screen emits `data-theme="light"`; the
+  parchment recipe is therefore in the same position as the legacy block it
+  replaces. The recipe, its CSS wiring, and its worst case (4.66:1 text, 3.21:1
+  non-text) are tested either way. The theme-picker owner must either expose those
+  aliases as real choices or drop the recipe.
+- **`borderHairline` is a documented WCAG 1.4.11 exemption, not a passing pair**
+  (1.65:1 against its panel). It is the only `decorative` token and is used only on
+  panel dividers; every boundary a learner must identify uses `borderControl` at
+  or above 3:1. A test asserts `borderHairline` never lands on an interactive
+  element.
+- **The token stylesheet is a checked-in generated artifact**, not a build step.
+  The token data lives in TypeScript, `src/styles/cozy-tokens.css` is generated
+  from the emitter, and a test compares them byte-for-byte, so drift is a test
+  failure rather than a silent divergence. A build step would remove the file from
+  the drift surface.
+- **The page-surface bridge needs `:has()`.** `data-theme` lives on a `.ui-skin`
+  descendant while the document background is on `<body>`. Every browser in the
+  plan matrix supports it; below that, the document-level Cozy surface applies,
+  which is a coherent warm surface rather than a legacy colour.
+- **The Welcome budget measurement excludes the `nomodule` ES5 bundle** and the
+  lazy `vendor-phaser-*` and `polyfills-legacy-*` chunks. The `nomodule` bundle is
+  the same application re-emitted at ES5, so counting it would count the app
+  twice; counting it would put the total at about 322.6 KiB, which would need a
+  plan change rather than a script change.
+- **The 320-pixel and 200 % zoom gates are measured on the Welcome shell**, which
+  is what the existing Phase 1 gate covers. Village, dungeon, and fishing screens
+  are not exercised by either, and the Cozy 44-pixel minimum applies to
+  `.ui-skin` controls on all screens.
+- **No physical-device evidence.** There is no Chromebook with ChromeVox, no
+  macOS Safari, no iPad or Android touch screen reader, and no Windows or Linux
+  desktop in this environment. Plan section 10.4's manual device evidence is
+  produced in the later accessibility, performance, and cutover phases. All
+  browser evidence here is headless Chromium and is form-factor evidence, not
+  operating-system certification. The Firefox, WebKit, and Edge lanes were not run
+  for this phase.
+- **The reduced-motion Pixi contract has no consumer yet.** `resolveMotionProfile`
+  is verified as a source-level contract and by the shipped suite, but no Pixi
+  host exists in this build, so the Pixi half of the plan 10.1 requirement is a
+  contract awaiting Phase 9.
+- **Pre-existing, not introduced here and not in scope:** `dist/index.html`
+  carries a `modulepreload` for `vendor-phaser-*`, which the Phase 1 E2E test
+  asserts is requested, against the plan 10.2 "no eager Phaser or Pixi load on
+  Welcome" target. This belongs to the phase that owns the renderer cutover.
+
+### Verification evidence
+
+Recorded on 2026-09-28. The status advanced from `in-progress` to `verified`.
+
+**Merge evidence.** PR #58, branch `phase-8-cozy-and-cc0`, two commits squashed to
+`0a2ecc9`. The pull-request run `36449655352` passed all eleven jobs, and the
+post-merge `main` run `36450524382` passed all eleven again, including the four
+cross-engine compatibility lanes. `Deploy Web to GitHub Pages` ran `36450524329`
+on the same commit. The phase was split into the two independently reversible
+halves the plan implies — the CC0 media gate, which touches nothing a learner
+sees, and the Cozy visual system, which is the only part a learner can see — and
+each commit was verified independently by checking it out into a detached worktree
+and running the gate there, rather than trusting an authoring tree.
+
+**Three of this phase's own gates would have been red on CI.** Verifying a commit
+against a clean checkout of that commit, rather than against the working tree it
+was written in, is what found it, and the same defect class Phase 7's own merge
+record already names had recurred. `qa-verification.test.ts` baselined the legacy
+theme blocks with `git show HEAD:src/styles.css`, so once the change was committed
+`HEAD` *was* the new stylesheet and the gate compared the file against itself,
+finding zero changed lines in `:root` where the no-remote-font criterion requires
+exactly three; it was additionally slicing at magic line offsets valid only for
+the pre-Phase-8 layout, so that pass was structurally incapable of being right.
+`welcome-budget-measure.test.ts` stripped only an absolute `/tmp` path while the
+script prints the entry document relative to the repository root, so from any
+checkout not directly under `/tmp` the per-run temp name survived and two
+measurements of identical bytes compared unequal; the suite had only ever been run
+from a tree under `/tmp`, so the shape CI uses was never exercised. Both are fixed
+against committed fixtures with no git dependency and no path-shape dependency, two
+assertions got tighter rather than looser, and `qa-hermeticity.test.ts` now guards
+the class so the next one fails in the suite rather than on a run.
+
+**One unreproduced failure is recorded rather than dismissed.** Commit one showed
+four failures on one of seven clean-checkout runs and could not be reproduced in
+six subsequent runs; which tests failed was never captured, because the loop that
+observed it read only the summary line. It did not recur on the branch tip across
+four consecutive runs, nor on either the pull-request or the post-merge `main` run,
+so it is not known to affect the merged state. It is recorded because a gate that
+is green on demand is not a gate, and the failure mode — a clean-checkout run
+passing while an authoring tree hides a defect — is exactly the one this phase
+otherwise closed.
+
+Recorded and not fixed, because it predates this phase:
+`tests/phase5/seam.test.ts` asserts a file is unmodified via
+`git status --porcelain`, which is safe on a CI runner's clean tree and red in a
+developer tree where that file is locally edited. It is the same defect class in
+its working-tree form.
+
+#### Baseline before Phase 8
+
+Lint clean, typecheck clean, 1991 tests across 144 files passing, `dist` 4.48 MB
+across 140 files, Welcome initial JavaScript and CSS 196.37 KB gzip excluding lazy
+renderer bundles.
+
+#### Files
+
+- `src/theme/cozyTokens.ts`, `cozyColor.ts`, `cozyCss.ts`, `cozyScope.ts`,
+  `motion.ts`, `legacyThemeMap.ts` (new); `typography.ts`, `colors.ts`, `index.ts`
+  (modified)
+- `src/styles/cozy-tokens.css` (generated), `cozy.css`, `state-signals.css` (new)
+- `src/styles.css`, `src/store/preferencesStore.ts`, `index.html` (modified)
+- `eslint.config.js` (modified: `src/theme/**` added to `RENDERER_NEUTRAL_LAYERS`)
+- `public/assets/asset-licenses.json`, `public/assets/cozy/*.svg` (new);
+  `public/assets/CREDITS.md` (rewritten)
+- `scripts/check-cc0-assets.mjs`, `scripts/generate-cozy-placeholders.mjs`,
+  `scripts/check-welcome-budget.mjs` (new)
+- `package.json` (`test:licenses`, `check:budget:welcome`), `.github/workflows/ci.yml`
+  (`asset-licenses` job, Welcome budget step)
+- `tests/phase8/` (new, 17 files), `tests/e2e/currentBuild.spec.ts` (remote-font
+  assertion)
+
+#### Commands
+
+```text
+npm run lint                  exit 0
+npm run typecheck             exit 0
+npx tsc -b --force            exit 0
+npm test                      161 files / 3411 tests passed
+npm run build:web             built in 42.26s
+npm run check:bundle-size     4.69 MB across 147 files
+npm run test:licenses         PASSED, 99 entries, 97 checksums, pixi-default=6
+npm run check:budget:welcome  198.96 KiB of 300.00 KiB (101.04 KiB headroom)
+npx playwright test tests/e2e/currentBuild.spec.ts   20 passed
+```
+
+`npx tsc -b --force` is reported alongside the incremental run on purpose: the
+incremental `tsc -b` was independently observed reporting success after a prior
+run that had errors, so the forced run is the one that counts.
+
+#### Device checks
+
+None. No physical device was available; see the evidence boundaries above.
+
+#### Migration and data result
+
+No learner-data migration and no data-product change. Phase 8 touches no
+persistence code. `src/store/preferencesStore.ts` gains theme-mapping selectors
+only and adds no store field and no persisted key, so a flag-off and a flag-on
+device read the same `localStorage` and an existing preference hydrates to exactly
+what it produced before the phase.
+
+The CC0 registry is 99 entries: 0 `cc0-approved`, 7 `procedural`, 90
+`legacy-unverified`, 2 `repository-authored`. 97 checksums are recomputed from the
+bytes on disk on every run. The six procedural placeholders in
+`public/assets/cozy/` regenerate byte-identically from
+`scripts/generate-cozy-placeholders.mjs`, are Pixi-eligible, carry no SMIL and no
+CSS animation, and are proven inert under `prefers-reduced-motion`.
+
+#### Bundle and performance result
+
+| | baseline | now | delta |
+| --- | --- | --- | --- |
+| raw `dist` | 4.48 MB / 140 files | 4.69 MB / 147 files | +0.21 MB |
+| Welcome initial JS+CSS gzip | 196.37 KB | 198.96 KiB | +2.6 KiB |
+| Welcome headroom to 300 KiB | 103.63 KB | 101.04 KiB | -2.6 KiB |
+| Welcome initial JavaScript | 103.5 KB gzip | 103.55 KB gzip | +0.05 KB |
+
+The entire raw-size increase is provenance text and placeholder art: the 164 KB
+registry, the 9.7 KB placeholder set, and a larger `CREDITS.md`. The initial-payload
+increase is the inlined Cozy stylesheet, and **0 KB** of token data reaches the
+Welcome JavaScript. The 300 KiB budget is now a committed, gating check rather than
+an unenforced target.
+
+#### Accessibility result
+
+- **Contrast.** The declared token pairs were recomputed with an implementation
+  written from the WCAG 2.x specification rather than the project's own
+  `cozyContrastRatio`, validated against the spec's anchors (`#ffffff`/`#000000` =
+  21.0000, `#ffffff`/`#7f7f7f` = 4.0041, `#ffffff`/`#767676` = 4.5422), across all
+  4 themes x 2 contrast variants. **520 of 520 pairs pass**, 0 below threshold.
+  Worst text 4.66:1 and worst non-text 3.21:1, both in `cozy-parchment` default
+  against `surfaceSunken`. All 128 ratios written in source comments were
+  cross-checked against the recomputed minimums and none disagreed.
+- **Manual contrast review** was performed in a real browser across the five-surface
+  stack, the muted-on-sunken chip, the recorded Phase 1 defect, the selection chip,
+  the focus ring against each surface, and the selection strip side by side. It
+  found the one combination worth re-reviewing — `accentSoft` used as 11-15 px text
+  — which was then reclassified and its parchment values corrected, and it is what
+  showed the default-path selection strip to be indistinguishable.
+- **axe** (WCAG 2.0/2.1/2.2 A/AA) on Welcome: the default artifact reports exactly
+  the one recorded serious `color-contrast` exception,
+  `.welcome-checklist-status--done`, unchanged from the Phase 1 baseline. The
+  `VITE_COZY_VISUALS=true` artifact reports **0** serious or critical violations,
+  so the recorded defect is fixed behind the flag.
+- **Focus and state.** 44 tab stops walked in a real browser: every one carries a
+  visible indicator, every one matches `:focus-visible`, none is below 44x44, in
+  both flag states at 1280 px and 320 px. The selected Welcome tab and the pressed
+  phase card each differ from their unselected siblings by at least one non-colour
+  signal in the **default** artifact, measured as `font-weight 400 -> 700` plus a
+  3 px inset bar, and additionally a `border-width 1px -> 2px` on the card.
+- **320 CSS pixels and 200 % zoom.** Horizontal overflow 0 px in both flag states,
+  measured both as `documentElement.style.zoom = 2` and as a true 640x400 viewport.
+- **Reduced motion.** `REDUCED_MOTION_SCALE`, every duration, and every travel are
+  exactly `0` under the Cozy scope, verified in-browser. See the limitation above
+  for the legacy path.
+
+#### License result
+
+- **New media cannot be added without CC0 metadata.** Verified by 45 independent
+  negative cases plus 103 automated tests, each proven to fail against the
+  pre-fix code. The gate covers media present under `public/assets/`, media present
+  under `src/`, and media named by a module under `src/` through relative,
+  aliased, dynamic-`import()`, and stylesheet `url()` references. The extension
+  vocabulary is closed in both directions, and a `media: false` declaration whose
+  bytes open with a known media container signature is refused, so a real image
+  cannot be smuggled in by renaming it.
+- **Legacy separation.** No `legacy-unverified` asset can reach `pixi-default` by
+  declaring membership, by setting `pixiEligible`, by relocating its entry under a
+  bundle path, by moving the file itself into the bundle directory, or by adding a
+  new bundle whose paths cover the legacy tree. A file that reaches the bundle
+  directory without a registry entry is refused, so the separation cannot be
+  defeated by omission. All 90 legacy assets still ship in `dist` for the legacy
+  renderer, which plan 10.3 explicitly permits, and `pixi.js` is not a dependency
+  and is not installed, so no Pixi runtime exists that could load them.
+- **The registry is machine-readable and self-checking**, published at
+  `/assets/asset-licenses.json`. It contains only paths, ids, license facts,
+  checksums, and commit references; it carries no email-shaped value, no UUID, and
+  no credential, and the checker's failure output prints only ids, paths, field
+  names, and closed-enum classes.
+
+#### Gate integrity
+
+Each gate added by this phase was proven bound and able to fail by mutation:
+the `asset-licenses` job against 7 workflow mutations, the Welcome budget step
+against 8, the renderer-neutral layer against 7 `eslint.config.js` mutations and
+end-to-end with a real `import Phaser from 'phaser'` inside `src/theme/`, and the
+QA verification file against 8 mutations. The remote-font assertion was proven by
+injecting a synthetic Google Fonts stylesheet link into the built artifact and
+observing the shipped spec fail with a count and a resource type and **no
+hostname**. The single-production-build invariant of plan 2.5 and 10.4 holds:
+`ci.yml` contains exactly one `npm run build:web` and one production artifact
+upload, and the license job installs nothing and builds nothing.
+
+#### Rollback
+
+`VITE_COZY_VISUALS=false` and retain legacy renderer themes. Verified by building
+all three states: flag-off and unset are behaviourally identical (the default
+resolution is `false` either way and the unmatchable literal `data-cozy-visuals`
+cannot satisfy the `[data-cozy-visuals='true']` scope), and flag-on is the build
+that activates Cozy, with the computed `--cozy-c-surface-page` becoming `#191410`
+and the bridged `--accent-soft` becoming the Cozy value. The four legacy theme
+blocks are byte-identical to `HEAD` except for three font-stack declarations in
+`:root`, which the no-remote-font criterion requires. Neither project-level gate
+references the flag: the license gate and the budget gate were run with the flag
+`true` and `false` and produced identical output and exit codes.
+
+One rollback caveat is recorded honestly: the unscoped state-signal layer is a
+deliberate flag-off delta required by the fourth exit criterion, so rolling the
+flag back restores the previous colour, geometry, focus ring, and motion, but not
+the two state shapes.
+
 ### Rollback
 
 Set `VITE_COZY_VISUALS=false` and retain legacy renderer themes.
+
+### Follow-up work recorded by this phase
+
+The maintainer accepted Phase 8 on 2026-09-28, so its status advanced from
+`verified` to `complete`, and Phase 9 became the next authorized phase. On the same
+instruction the two renderer-consumer items below were **folded into Phase 9's
+scope** rather than deferred, because a renderer author meets them on the first day
+of that phase and the fixes are additive and non-breaking. The remaining items stay
+deferred and are routed to their owning phase.
+
+**Folded into Phase 9 (authorized there, not deferred):**
+
+- Numeric mirrors for the CSS-string scale tokens (`COZY_RADIUS`, `COZY_SPACE`,
+  `COZY_BORDER_WIDTH`, `COZY_FOCUS`, `COZY_FONT_SIZE`, `COZY_LINE_HEIGHT`,
+  `COZY_FONT_WEIGHT`) and a four-number curve tuple for `COZY_MOTION_EASING`, so a
+  renderer does not `parseFloat` CSS units out of a renderer-neutral module. Today
+  only `COZY_TOUCH_TARGET_MIN` is numeric, which shows the pattern was intended and
+  applied once. Generate the mirrors from the existing string tables so there is
+  still one source of truth, and keep the string tables for CSS.
+- `resolveMotionProfile`'s `durationMs` returning `0` rather than `undefined` for an
+  unknown name, so a host that computes a duration name from data cannot produce
+  `NaN` seconds.
+
+**Deferred to a later phase:**
+
+- `src/game/scenes/FishingScene.ts` lines 597 and 635 keep a
+  `"'Cinzel', Georgia, serif"` canvas `TextStyle` literal, and three Phaser scenes
+  carry eight `'Inter, system-ui, sans-serif'` literals. None causes a fetch, but
+  they will render inconsistently under Cozy, and the two hard-coded `fontSize`
+  and `color` values beside the Cinzel literals are not Cozy tokens.
+  `canvasFontFamily('display')` is the intended replacement. For Phase 17.
+- The non-colour state signals were added only to the two controls the exit
+  criterion was judged against. Ten other legacy selected or pressed controls on
+  other screens still differentiate by colour alone, and each is one line in
+  `src/styles/state-signals.css`. For Phase 21.
+- The legacy reduced-motion gap recorded above. For Phase 21.
+- `tests/data/localDownloadOnly.test.ts` and `tests/privacy/uploadBoundary.test.ts`
+  plant scratch state under `src/` (`src/__data_gate_probe__/`,
+  `src/__privacy_probe__/`). The license gate now reads bytes and reachability
+  rather than name shapes, so it is correct, but any future rule that scans `src/`
+  for a property those probes violate will hit the same wall. A declared scratch
+  root outside `src/` would remove the class of problem.
+- `src/theme/colors.ts` and `src/theme/icons.ts` remain unfrozen legacy modules.
+  The Phase 8 freeze guarantee covers the Cozy token core only.
+- The `FORBIDDEN_RENDERER_IMPORT_MESSAGE` in `eslint.config.js` names only two of
+  the six renderer-neutral layers, so the message points a developer tripping it in
+  `src/theme/` at the wrong trees.
+- `cozy-parchment` reachability: the theme-picker owner must either expose the
+  `light` and `sepia` aliases as real choices or drop the parchment recipe.
+- The generated `src/styles/cozy-tokens.css` is a checked-in artifact. A build step
+  would remove it from the drift surface; it needs an npm script and a CI decision.
+- A design review of the Cozy typeface direction, since `--font-game` now renders in
+  a system stack rather than Cinzel.
 
 ### Unlocks
 
@@ -3809,12 +4148,22 @@ Phase 8 accepted.
 - Add a test world with a sprite, keyboard action, pointer action, and DOM mirror.
 - Keep Pixi in a lazy bundle.
 - Add a build-time Phaser or Pixi renderer switch.
+- Add numeric mirrors for the Cozy scale tokens and a four-number easing curve, so
+  the host consumes numbers rather than parsing CSS units. Folded in from Phase 8
+  on the maintainer's instruction: a renderer author meets these on the first day
+  of this phase, and the additions are non-breaking. Generate the mirrors from the
+  existing string tables so `src/theme/` keeps one source of truth.
+- Make `durationMs` return `0` rather than `undefined` for an unknown name, so a
+  host that computes a duration from data cannot produce `NaN` seconds. Folded in
+  from Phase 8 on the same instruction.
 
 ### Non-goals
 
 - No Village, dungeon, or fishing implementation.
 - No default renderer cutover.
 - No use of Pixi for forms or dialogs.
+- No asset bundle or audio work; that is Phase 10.
+- No visual change to the legacy Phaser scenes.
 
 ### Expected files
 
@@ -3823,6 +4172,8 @@ Phase 8 accepted.
 - `src/renderers/pixi/runtime/PixiWorldHost.tsx`
 - `src/renderers/pixi/runtime/useWorldQuality.ts`
 - `src/renderers/pixi/runtime/types.ts`
+- `src/theme/cozyTokens.ts` (numeric scale mirrors, additive)
+- `src/theme/motion.ts` (easing curve tuple, unknown-name duration fallback)
 - `src/config/featureFlags.ts`
 - `vite.config.ts`
 - `package.json`
@@ -3835,6 +4186,8 @@ Phase 8 accepted.
 - Lifecycle and resize tests.
 - Phaser and Pixi build switch.
 - Lazy Pixi chunk.
+- Numeric Cozy scale mirrors and easing curve, consumed by the host without
+  `parseFloat`.
 
 ### Verification
 
@@ -3853,6 +4206,9 @@ Run the common gate.
 - Repeated mount and unmount does not leak canvases or GPU resources.
 - Keyboard and DOM action mirrors work with Pixi active.
 - Pixi and Phaser builds both compile.
+- The host reads Cozy geometry, typography, and motion as numbers, with no CSS-unit
+  parsing in renderer code, and an unknown motion name yields a zero duration rather
+  than `NaN`.
 
 ### Rollback
 
