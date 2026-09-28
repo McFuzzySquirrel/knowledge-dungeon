@@ -22,6 +22,11 @@ const RENDERER_NEUTRAL_LAYERS = [
   // Center will import, and a product module reaching for an engine would put
   // rendering inside the backup path.
   'src/services/persistence/products/**/*.{ts,tsx}',
+  // The Cozy token tree (Phase 8) is the shared source React DOM and a future
+  // PixiJS host both read, so it must not name either renderer. It is listed here
+  // so the rule, not only `tests/phase8/cozy-renderer-neutrality.test.ts`, is what
+  // holds the boundary: a test that can be deleted is not a gate.
+  'src/theme/**/*.{ts,tsx}',
 ];
 
 /**

@@ -1,5 +1,16 @@
-/* ── Google Font: Cinzel (fantasy serif) ────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap');
+/* ── Cozy storybook visual system (Phase 8) ────────────────────────
+ * Both imports are unconditional, and they are deliberately *not* the same kind
+ * of import. `./styles/state-signals.css` is unscoped: plan 10.1's "no
+ * color-only state communication" is a property of the artifact that ships, so
+ * the phase exit criterion has to hold in the default build, where
+ * VITE_COZY_VISUALS is false; it goes first so it cannot win a specificity tie.
+ * `./styles/cozy.css` *is* scoped under [data-cozy-visuals='true'], the
+ * attribute index.html receives from VITE_COZY_VISUALS, so a default build
+ * matches none of it and everything below renders as it did pre-Phase 8.
+ * Phase 8 also removed the remote Google Fonts request that used to sit here:
+ * system font stacks only, no @font-face, no network, no bundled binary font. */
+@import './styles/state-signals.css';
+@import './styles/cozy.css';
 
 :root {
   color-scheme: dark;
@@ -22,7 +33,7 @@
   --kd-shadow-light: #1a1d2a;
 
   /* Game font family */
-  --font-game: 'Cinzel', 'Georgia', 'Times New Roman', serif;
+  --font-game: ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Segoe UI Variable Display', 'Trebuchet MS', 'Segoe UI', system-ui, -apple-system, sans-serif;
 
   /* Semantic aliases mapped to existing vars for backward compat */
   --bg-deep: #0b1120;
@@ -43,9 +54,9 @@
   --control-selected-bg: linear-gradient(135deg, #4e4260, #d4a857);
   --control-selected-text: #fbfbff;
   --control-selected-border: #ead7a3;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
   --text-title: #ead7a3;
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
 }
 
@@ -2091,7 +2102,7 @@ button.danger:hover {
   border: 1px solid var(--border-soft);
   border-radius: 4px;
   padding: 1px 6px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
   font-size: 12px;
 }
 
@@ -2405,7 +2416,7 @@ button.danger:hover {
   border: 1px solid var(--border-soft);
   border-radius: 4px;
   padding: 1px 4px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
   font-size: 12px;
 }
 

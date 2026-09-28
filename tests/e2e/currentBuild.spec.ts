@@ -21,6 +21,14 @@ import {
   type SubjectNameCase,
   type TouchTargetReading,
 } from './welcome-narrow-viewport';
+// Phase 8's remote-font gate. The predicate lives beside the QA test that proves
+// it fails when the condition recurs, so there is one implementation rather than
+// an inline assertion and a separate test of a copy. See the module header for
+// why the known-legacy tolerance is kept alongside the assertion.
+import {
+  assertNoRemoteFontRequests,
+  countRemoteFontRequests,
+} from '../phase8/support/remoteFontGate';
 
 const WCAG_22_AA_TAGS = [
   'wcag2a',
@@ -98,9 +106,13 @@ function inspectPrivacyNetwork(
     }
 
     if (url.origin !== origin) {
-      // The current pre-Cozy UI still references Google Fonts. Phase 1 does
-      // not redesign that UI; the test blocks these known static requests and
-      // records the exact limitation rather than treating them as app data.
+      // Phase 8 removed the last remote font import, so on the current artifact
+      // this branch is unreachable and the assertion below is the backstop. The
+      // known-legacy static font hosts stay recognised: the tolerance is what
+      // turns a reintroduced font import into a readable count instead of an
+      // anonymous external destination, and the recognition is what lets
+      // `assertNoRemoteFontRequests` below require that count to be zero. A
+      // request to any other external host is still a violation.
       if (knownLegacyFontHosts.has(url.hostname)) {
         blockedLegacyFontRequests.push(observation);
       } else {
@@ -280,6 +292,30 @@ test('safe tutorial action renders the default Phaser world with static-only net
   });
   expect(webSocketUrls, `Unexpected WebSocket destinations: ${webSocketUrls.join(', ')}`).toEqual([]);
   expect(privacyReport.violations, privacyReport.violations.join('\n')).toEqual([]);
+
+  // Phase 8 exit criterion: "The app renders without remote font requests."
+  //
+  // `blockedLegacyFontRequests` used to be recorded and never asserted, so this
+  // criterion had no failing state in the suite. It is asserted now, and the
+  // assertion stays after the tolerance above: the hosts are still recognised as
+  // known-legacy, so a reintroduced font import fails with a sentence about a
+  // font host and a count rather than as an anonymous external destination in a
+  // test whose premise is that there is no external traffic. The message carries
+  // the count and the resource types only - never a hostname - so a failing run
+  // cannot print the destination the privacy suite exists to prove is absent.
+  //
+  // The count is attached first so the artifact records the number even if the
+  // assertion below is what turns the run red.
+  const remoteFontRequestCount = countRemoteFontRequests(privacyReport.blockedLegacyFontRequests);
+  await attachJson(testInfo, 'remote-font-request-check.json', {
+    remoteFontRequestCount,
+    // The count is the claim; the resource types are the only diagnostic that is
+    // safe to record, because they are browser constants rather than destinations.
+    resourceTypes: [
+      ...new Set(privacyReport.blockedLegacyFontRequests.map((entry) => entry.resourceType)),
+    ].sort(),
+  });
+  assertNoRemoteFontRequests(privacyReport.blockedLegacyFontRequests);
 });
 
 /*

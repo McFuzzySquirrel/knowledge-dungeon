@@ -1,5 +1,14 @@
 <!doctype html>
-<html lang="en">
+<!--
+  `data-cozy-visuals` is the Phase 8 build-time gate for the Cozy visual system.
+  Vite substitutes %VITE_COZY_VISUALS% into index.html at build time, so the
+  stylesheet's `[data-cozy-visuals='true']` scope is satisfied only by a build
+  that explicitly set the flag. A build that never set it carries the literal,
+  unmatchable `%VITE_COZY_VISUALS%` - which is the intended off state, because
+  the flag's production default is false. Rollback: VITE_COZY_VISUALS=false.
+  See src/config/featureFlags.ts and src/styles/cozy-tokens.css.
+-->
+<html lang="en" data-cozy-visuals="%VITE_COZY_VISUALS%">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

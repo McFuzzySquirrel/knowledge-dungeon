@@ -8,6 +8,17 @@
  *   - moss  (secondary) : muted green for success states, nature elements
  *   - ink   (text)      : off-white warm tone for primary text
  *   - shadow (bg)       : deepest dungeon black-blue for backgrounds
+ *
+ * PHASE 8 STATUS: this is the *pre-Cozy* palette, retained deliberately.
+ *
+ * `src/theme/cozyTokens.ts` is the source of truth for the Cozy visual system
+ * (plan Phase 8), and the stylesheet consumes those tokens through the
+ * `COZY_LEGACY_VARIABLE_BRIDGE` in `src/theme/cozyCss.ts`. Nothing here is
+ * rewritten, because rewriting it would change the rendered legacy themes -
+ * and with `VITE_COZY_VISUALS=false`, the production default for this phase, the
+ * legacy themes are exactly what must keep rendering. `PALETTE` is retained for
+ * the legacy Phaser path, which Phase 8 does not own; a renderer migration
+ * should read the Cozy tokens instead.
  */
 
 export const PALETTE = {
