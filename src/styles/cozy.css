@@ -1,0 +1,220 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Cozy storybook component layer - Phase 8.
+ *
+ * Hand-written. The token values it reads are in ./cozy-tokens.css, which is
+ * generated from src/theme/** and drift-tested byte-for-byte by
+ * tests/phase8/cozy-tokens.test.ts.
+ *
+ * Scope: every rule is qualified with the same [data-cozy-visuals='true']
+ * selector that gates the tokens, so with VITE_COZY_VISUALS=false - the
+ * production default for this phase - nothing in either file applies and
+ * src/styles.css renders the legacy theme system unchanged. The one thing this
+ * scoping deliberately does *not* cover is the non-colour state signal: that
+ * lives in ./state-signals.css, unscoped, because plan 10.1's "no color-only
+ * state communication" is a property of the artifact that ships and the default
+ * build is the one learners get.
+ *
+ * What this file does NOT do: replace components. Phase 8's non-goals forbid a
+ * wholesale React component replacement, so this layer restyles the existing
+ * surfaces onto the Cozy tokens - rounded storybook panels, a visible focus
+ * ring, non-colour state signals, and reduced motion - without touching JSX.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@import './cozy-tokens.css';
+
+/* === Rounded storybook panels '=========================================== */
+
+[data-cozy-visuals='true'] .ui-skin .welcome-screen,
+[data-cozy-visuals='true'] .ui-skin .hud-rail,
+[data-cozy-visuals='true'] .ui-skin .room-panel,
+[data-cozy-visuals='true'] .ui-skin .modal,
+[data-cozy-visuals='true'] .ui-skin .help-overlay .panel,
+[data-cozy-visuals='true'] .ui-skin .minimap,
+[data-cozy-visuals='true'] .ui-skin .toast,
+[data-cozy-visuals='true'] .ui-skin .inventory-badges-modal,
+[data-cozy-visuals='true'] .ui-skin .onboarding-modal {
+  border-radius: var(--cozy-s-radius-panel);
+  border: var(--cozy-s-border-hairline) solid var(--cozy-c-border-hairline);
+  box-shadow:
+    0 1px 0 var(--cozy-c-accent-soft) inset,
+    0 10px 26px color-mix(in srgb, var(--cozy-c-surface-sunken) 55%, transparent);
+}
+
+[data-cozy-visuals='true'] .ui-skin .modal h2,
+[data-cozy-visuals='true'] .ui-skin .help-overlay h2,
+[data-cozy-visuals='true'] .ui-skin .room-panel-drag-handle,
+[data-cozy-visuals='true'] .ui-skin .inventory-badges-header,
+[data-cozy-visuals='true'] .ui-skin .journal-note-view-header {
+  border-top-left-radius: var(--cozy-s-radius-md);
+  border-top-right-radius: var(--cozy-s-radius-md);
+}
+
+/* Buttons read as storybook tabs: a rounded face, not a gradient slab. */
+[data-cozy-visuals='true'] button,
+[data-cozy-visuals='true'] select,
+[data-cozy-visuals='true'] summary {
+  border-radius: var(--cozy-s-radius-md);
+}
+
+/* The note editor is long-form text: body face, comfortable line height, and
+ * never a display size. src/theme/typography.ts carries the rationale. */
+[data-cozy-visuals='true'] .ui-skin textarea,
+[data-cozy-visuals='true'] .ui-skin .note-editor,
+[data-cozy-visuals='true'] .ui-skin .journal-note-view {
+  font-family: var(--cozy-s-font-body);
+  font-size: var(--cozy-s-font-size-md);
+  line-height: var(--cozy-s-line-height-normal);
+}
+
+/* === Focus: a shape, not a tint '========================================= */
+
+/*
+ * Three independent non-colour signals, so the ring survives any colour vision,
+ * any forced-colours mode, and greyscale printing:
+ *   1. a 3px `outline` with a 2px offset - a drawn ring, not a fill;
+ *   2. a 2px `box-shadow` halo in `focusHalo`, which is >= 4.5:1 against
+ *      `borderFocus` in every theme, so the ring separates from its backdrop;
+ *   3. `outline-offset`, which pushes the ring clear of the control's own fill.
+ *
+ * The legacy stylesheet already establishes visible focus; this does not remove
+ * it, it upgrades the geometry and keeps the same selectors.
+ */
+[data-cozy-visuals='true'] :focus-visible {
+  outline: var(--cozy-s-focus-ring-width) solid var(--cozy-c-border-focus);
+  outline-offset: var(--cozy-s-focus-ring-offset);
+  box-shadow: 0 0 0 var(--cozy-s-focus-halo-width) var(--cozy-c-focus-halo);
+}
+
+/* A keyboard-focused control also drops its elevation, so the ring is never
+ * confused with a hover tint. */
+[data-cozy-visuals='true'] :focus-visible:not(:focus-within) {
+  border-color: var(--cozy-c-border-focus);
+}
+
+/* Forced-colours mode (Windows high contrast) replaces author colours wholesale.
+ * `outline` and `border-style` are the two things it still honours, which is
+ * exactly why the Cozy state signals below are built from them. */
+@media (forced-colors: active) {
+  [data-cozy-visuals='true'] :focus-visible {
+    outline: var(--cozy-s-focus-ring-width) solid CanvasText;
+  }
+}
+
+/* === State signals: never colour alone '================================= */
+
+/*
+ * COZY_STATE_SIGNALS in src/theme/cozyTokens.ts is the contract these
+ * implement. The two signals the constant declares - 700 weight and a 3px
+ * underline bar - are delivered for every control listed here, in this build and
+ * in the default one, where ./state-signals.css delivers the same two.
+ *
+ * The 2px border is a third signal rather than a declared one, because it is the
+ * one that a control cannot always take: the Welcome tab buttons are
+ * `border: none` in the legacy stylesheet, so `border-width` computes to no
+ * border at all there. That asymmetry is why the constant claims the pair and
+ * not the triple - a border on those tabs would also widen a `width: fit-content`
+ * flex strip, which is the one thing that could reintroduce horizontal overflow
+ * at 320 CSS pixels. `.phase-card` and the other bordered controls do get it.
+ */
+[data-cozy-visuals='true'] .ui-skin button[aria-selected='true'],
+[data-cozy-visuals='true'] .ui-skin button[aria-pressed='true'],
+[data-cozy-visuals='true'] .ui-skin .note-section-chips .is-active,
+[data-cozy-visuals='true'] .ui-skin .room-tabs button[aria-selected='true'],
+[data-cozy-visuals='true'] .ui-skin .inventory-badges-tabs button[aria-selected='true'] {
+  border-width: var(--cozy-s-border-state);
+  font-weight: var(--cozy-s-font-weight-bold);
+  box-shadow: inset 0 -3px 0 0 var(--cozy-c-selection-border);
+}
+
+/* The checklist's completed state is the one recorded Phase 1 contrast defect
+ * (`.welcome-checklist-status--done`, tracked in tests/e2e/currentBuild.spec.ts).
+ * Under Cozy it gets a solid surface, not a 10% tint, so `good` text clears 4.5:1
+ * - measured 5.00:1 for cozy-ink, 5.68:1 for cozy-parchment, 5.39:1 for
+ * cozy-berry, 5.59:1 for cozy-firelight - plus a leading check glyph so the
+ * state is not carried by colour at all. The legacy rule is untouched, so the
+ * flag-off build still shows exactly the recorded defect Phase 21 owns. */
+[data-cozy-visuals='true'] .welcome-checklist-status--done {
+  color: var(--cozy-c-good);
+  background: var(--cozy-c-surface-panel-soft);
+  border-color: var(--cozy-c-border-control);
+  font-weight: var(--cozy-s-font-weight-bold);
+}
+
+[data-cozy-visuals='true'] .welcome-checklist-status--done::before {
+  content: '\2713\00a0';
+}
+
+/* Disabled is a 50% opacity reduction plus the component's `not-allowed`
+ * cursor - a shape change, not only a fade. */
+[data-cozy-visuals='true'] :disabled,
+[data-cozy-visuals='true'] [aria-disabled='true'] {
+  opacity: 0.5;
+  border-style: dashed;
+}
+
+/* Hover is a surface raise and never carries meaning on its own. */
+[data-cozy-visuals='true'] .ui-skin button:hover {
+  background: var(--cozy-c-surface-raised);
+}
+
+/* === Touch targets '====================================================== */
+
+/* Plan 10.1: 44 by 44 CSS pixels minimum. Applied to the controls the existing
+ * screens already render as buttons, inputs, and tab strips, so the guarantee
+ * holds without a component change. */
+[data-cozy-visuals='true'] .ui-skin button,
+[data-cozy-visuals='true'] .ui-skin select,
+[data-cozy-visuals='true'] .ui-skin input,
+[data-cozy-visuals='true'] .ui-skin summary,
+[data-cozy-visuals='true'] .ui-skin a[href] {
+  min-block-size: var(--cozy-s-target-min);
+  min-inline-size: var(--cozy-s-target-min);
+}
+
+/* === Reduced motion '===================================================== */
+
+/*
+ * The React half of the plan's "`prefers-reduced-motion` support in React and
+ * Pixi". CSS is the whole of the React half: no JavaScript, so there is no
+ * first-paint window in which motion is still on.
+ *
+ * The Pixi half is the numeric contract in src/theme/motion.ts
+ * (`resolveMotionProfile`): the same names, the same zero, and
+ * `--cozy-s-motion-scale: 0` mirrors `REDUCED_MOTION_SCALE` so a host that only
+ * reads the custom property still gets the right number.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [data-cozy-visuals='true'],
+  [data-cozy-visuals='true'] body,
+  [data-cozy-visuals='true'] #root {
+    --cozy-s-motion-scale: 0;
+    --cozy-s-duration-instant: 0ms;
+    --cozy-s-duration-quick: 0ms;
+    --cozy-s-duration-base: 0ms;
+    --cozy-s-duration-slow: 0ms;
+    --cozy-s-duration-deliberate: 0ms;
+  }
+
+  [data-cozy-visuals='true'] *,
+  [data-cozy-visuals='true'] *::before,
+  [data-cozy-visuals='true'] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* === Layout floors '====================================================== */
+
+/* 320 CSS-pixel viewport and 200% zoom. The existing breakpoints already
+ * reflow the HUD to a stacked layout; this keeps the Cozy panel radius and
+ * padding from pushing a control below the 44px floor when space is tight. */
+@media (max-width: 360px) {
+  [data-cozy-visuals='true'] .ui-skin .welcome-screen,
+  [data-cozy-visuals='true'] .ui-skin .room-panel,
+  [data-cozy-visuals='true'] .ui-skin .modal {
+    border-radius: var(--cozy-s-radius-md);
+    padding: var(--cozy-s-space-3);
+  }
+}

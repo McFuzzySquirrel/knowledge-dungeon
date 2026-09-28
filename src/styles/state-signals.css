@@ -1,0 +1,83 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Phase 8 state signals for the *default* (flag-off) build.
+ *
+ * ## Why this file exists, and why it is deliberately unscoped
+ *
+ * Phase 8's exit criterion is: "Focus and state styling is visible without
+ * relying on color." An independent QA pass measured the shipped default
+ * artifact - the one `npm run build:web` produces, with
+ * `VITE_COZY_VISUALS=false` - and found the Welcome section tab strip
+ * communicating nothing at all: the selected tab was computed-identical to its
+ * three unselected siblings in every property (border `none 0px`, weight 400,
+ * no decoration, same background, same box-shadow, same `::before`/`::after`
+ * content) and its rendered pixels were byte-identical too. `.phase-card`'s
+ * pressed state differed by border colour alone. That is weaker than
+ * colour-only: the state was not communicated at all.
+ *
+ * `src/styles/cozy.css` already gets this right, but every rule in it is
+ * qualified with `[data-cozy-visuals='true']`, and the production default for
+ * that flag is false. A fix that only exists behind the flag would leave the
+ * artifact learners actually get still failing the criterion, so these rules
+ * are unscoped and apply in both flag states. That is a deliberate,
+ * documented exception to "the flag gates the Cozy layer": the *appearance*
+ * is still flag-gated (colours, radii, the focus ring, the motion profile),
+ * while the *state signal* is unconditional, exactly as plan 10.1 asks.
+ *
+ * ## What each rule is allowed to do
+ *
+ * 1. **Non-colour signals only.** Every declaration here is a shape: text
+ *    weight, a border width, an inset bar. No `color`, no `background`, no
+ *    `border-color`. Colour changes are what axe measures, and the recorded
+ *    default artifact has exactly one known serious `color-contrast` exception
+ *    (`.welcome-checklist-status--done`, which Phase 21 owns). Nothing in this
+ *    file can add a second one, and the tests assert the property list rather
+ *    than trusting the comment.
+ * 2. **No layout-affecting signal.** The tab strip is `display: inline-flex;
+ *    width: fit-content` inside a 320 CSS-pixel viewport, and the phase grid is
+ *    a clamped `repeat(auto-fit, minmax(min(100%, 180px), 1fr))`. An inset
+ *    `box-shadow` and a font weight are drawn inside the existing box; a
+ *    border would add to it. The 200% zoom and 320-pixel gates are the reason
+ *    the tab rules carry no border.
+ * 3. **Same vocabulary as the Cozy layer.** These are the two shapes
+ *    `COZY_STATE_SIGNALS.selected` declares - 700 weight and a 3px underline
+ *    bar - so the flag-off and flag-on builds signpost identically and a
+ *    reviewer comparing screenshots is comparing like with like.
+ *
+ * ## How the cascade keeps this from fighting the Cozy layer
+ *
+ * `src/styles.css` imports this file *before* `./styles/cozy.css`, and the
+ * bundler inlines each `@import` in place, so these rules land ahead of both
+ * the Cozy-scoped rules and the legacy body. Each selector here is written at
+ * exactly the same specificity as its Cozy counterpart, so when the flag is on
+ * the Cozy declaration is the later one and wins the tie: one bar, never two.
+ * Against the *legacy* rules - which are the ones this file exists to beat -
+ * these selectors are one class or attribute more specific, so they win on
+ * specificity instead of on order. `tests/phase8/state-signal-parity.test.ts`
+ * pins all three of those claims against the real files.
+ *
+ * ## Scope
+ *
+ * Exactly the two controls the QA finding named: the Welcome tab strips
+ * (`.welcome-tabs`, which is both the section tablist and the theme picker) and
+ * the phase chooser cards. The legacy rules stay exactly as they were; this
+ * file is purely additive, and it is a no-op for every control it does not
+ * name.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/* Selected tab. 700 weight is a type shape and the bar is a drawn shape, so
+ * both survive greyscale, a colour-vision deficiency, a forced-colours mode,
+ * and a monochrome print - none of which a border colour would. */
+.ui-skin .welcome-tabs button[aria-selected='true'] {
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 0 var(--control-selected-border);
+}
+
+/* Pressed phase card. Same two shapes, plus the 2px state border the control
+ * can actually carry: `.phase-card` already has a 1px border, and the phase
+ * grid is a clamped track, so a 2px border is drawn inside the track's width
+ * and cannot widen it. */
+.ui-skin button.phase-card[aria-pressed='true'] {
+  border-width: 2px;
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 0 var(--control-selected-border);
+}

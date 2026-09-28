@@ -16,6 +16,12 @@
  */
 import { create } from 'zustand';
 
+import {
+  COZY_FALLBACK_THEME,
+  LEGACY_COLOR_THEME_VALUES,
+  cozyThemeForColorTheme,
+} from '@/theme/legacyThemeMap';
+import type { CozyTheme } from '@/theme/cozyTokens';
 import type { PersistedPreferencesValue } from '@/services/persistence/v2/appState';
 import { writeThroughInBackground } from '@/services/persistence/v2/dualWrite';
 import { currentStorageV2Repository } from '@/services/persistence/v2/repositorySelection';
@@ -134,6 +140,59 @@ export function initialPreferencesState(
   };
 }
 
+/**
+ * Phase 8: the Cozy theme a persisted colour preference maps onto.
+ *
+ * This is a *mapping*, not a migration. The store keeps storing and hydrating
+ * exactly the `colorTheme` string it always did, so a device that set
+ * `VITE_COZY_VISUALS=false` and a device that set it `true` read the same
+ * `localStorage` entry and neither can lose the other's preference. Changing the
+ * stored value would have been the one thing that could break an existing
+ * installation, so nothing is rewritten.
+ *
+ * No store field is added for the result. Theme reaches the DOM as
+ * `data-theme={colorTheme}` on `.ui-skin` elements, and `src/styles/cozy-tokens.css`
+ * maps that attribute onto a Cozy palette, so a new field would be state nothing
+ * reads until a later phase owns the theme picker. These selectors exist for
+ * that phase and for tests.
+ *
+ * Deliberately not gated on `VITE_COZY_VISUALS`: the mapping is a pure function
+ * of the stored string, so it is identical with the flag on or off, and gating
+ * it would only make the two paths harder to compare.
+ */
+export function selectCozyTheme(state: Pick<PreferencesState, 'colorTheme'>): CozyTheme {
+  return cozyThemeForColorTheme(state.colorTheme);
+}
+
+/** The Cozy theme for a persisted payload, including the legacy aliases. */
+export function resolveInitialCozyTheme(
+  persisted: PersistedPreferences | PersistedPreferencesValue | null,
+): CozyTheme {
+  return cozyThemeForColorTheme(persisted?.colorTheme);
+}
+
+/**
+ * The `data-theme` value for a Cozy theme, for a screen that wants to be
+ * explicit. Returns the canonical legacy spelling so the CSS mapping in
+ * `cozy-tokens.css` resolves it.
+ */
+export function legacyThemeValueForCozyTheme(theme: CozyTheme): ColorTheme | 'light' | 'sepia' {
+  switch (theme) {
+    case 'cozy-parchment':
+      return 'light';
+    case 'cozy-berry':
+      return 'colorful';
+    case 'cozy-firelight':
+      return 'aurora';
+    case 'cozy-ink':
+      return 'dark';
+    default:
+      // Unreachable for a declared CozyTheme; keeps a future theme from
+      // silently rendering as a mismatched palette.
+      return 'dark';
+  }
+}
+
 export interface PreferencesState {
   graphicsMode: GraphicsMode;
   colorTheme: ColorTheme;
@@ -180,5 +239,10 @@ export const __testing = {
   readPersistedPreferences,
   resolveInitialGraphicsMode,
   resolveInitialColorTheme,
+  resolveInitialCozyTheme,
   initialPreferencesState,
+  selectCozyTheme,
+  legacyThemeValueForCozyTheme,
+  COZY_FALLBACK_THEME,
+  LEGACY_COLOR_THEME_VALUES,
 };

@@ -94,6 +94,22 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build:web
       - run: npm run check:bundle-size
+      # Plan section 10.2's Welcome budget: 300 KiB gzip for initial JavaScript and
+      # CSS, excluding lazy renderer bundles. It is a step in this job rather than a
+      # job or a lane of its own because `dist` exists here and nowhere else, and it
+      # reads the same `dist` the one `build:web` above just produced - a second build
+      # would defeat the only property that makes this measurement meaningful, which
+      # is that it describes the artifact that is about to be uploaded. The script
+      # also needs no `npm ci` beyond what this job already installs, because it imports
+      # only Node built-ins.
+      #
+      # The step is not exempt from failing.
+      # `tests/phase8/welcome-budget-gate.test.ts` asserts that, so a regression to a
+      # warning cannot land quietly and a growing Welcome shell cannot ship behind a
+      # green run. The wording above avoids naming that key on purpose, because that
+      # same gate matches the key as a YAML key at the start of a line.
+      - name: Enforce the Welcome initial payload budget
+        run: npm run check:budget:welcome
       - run: npm run record:build-metadata
       # The manifest carries two identities: the `dist` tree hash, and a hash of
       # the git-tracked source the artifact was recorded against. The tree hash

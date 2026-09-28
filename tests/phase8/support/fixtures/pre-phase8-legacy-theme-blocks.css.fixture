@@ -1,0 +1,158 @@
+/* ── The four legacy theme blocks of src/styles.css, as they were before Phase 8 ──
+ *
+ * This is the "before" half of the rollback gate in `tests/phase8/qa-verification.test.ts`.
+ * It exists because that gate used to take its baseline from the checkout's own history,
+ * which is a gate defect of the kind Phase 7 recorded twice. Once the change is committed,
+ * `HEAD:src/styles.css` *is* the new stylesheet, so the gate compared the new file against
+ * itself: it found zero differences where the exit criterion requires exactly three, and
+ * a length mismatch where it requires the two to be the same length. It passed in the
+ * author's working tree - where `HEAD` still held the pre-Phase-8 file - and failed in a
+ * checkout of the committed state. A committed baseline is the only "before" that a
+ * depth-1 CI clone, a reviewer, and a fresh `git clone` all agree on.
+ *
+ * Source path : src/styles.css
+ * Taken from  : commit d415401647456cd7a868538feefa64a95eef82c5 (short form d415401), the commit before the Cozy token change
+ * Extracted   : lines 4-116 - `:root` and the three `.ui-skin[data-theme='...']` blocks,
+ *               verbatim, with no reformatting and no trailing-newline adjustment
+ * Captured as : 3050 bytes, sha256 6303977359c8ebb9b3726d82053a3c556a3ff57fe68fcc836f415c5ec30bdeb5
+ *
+ * What Phase 8 was permitted to change, and nothing else:
+ *
+ *   `--font-game`    was 'Cinzel', 'Georgia', 'Times New Roman', serif
+ *   `--font-mono`    was 'JetBrains Mono', ui-monospace, monospace
+ *   `font-family`    was 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+ *                    Roboto, sans-serif
+ *
+ * All three are web fonts. Removing them is what the "the app renders without remote font
+ * requests" exit criterion requires, and the gate requires the count to stay at three: a
+ * fourth changed line in `:root` fails, and a changed line that is not a font declaration
+ * fails.
+ *
+ * The other 5,813 lines of the stylesheet are not stored here. They are covered by a
+ * digest the gate pins, because storing a second copy of the whole file would make every
+ * future stylesheet edit a 5,800-line diff in a test fixture rather than a one-line
+ * reviewed decision. The only two declarations Phase 8 changed in that region were the
+ * `font-family: 'JetBrains Mono', ui-monospace, monospace;` declarations in the console
+ * and code-block rules, and neither survives in the file today.
+ *
+ * The digest of this file's own body is re-derived every time the gate reads it, so
+ * editing this fixture to agree with a changed stylesheet fails loudly instead of quietly
+ * becoming the new baseline. A real stylesheet change is supposed to fail; re-pinning it
+ * is a reviewed act, in this file and in the gate, at the same time.
+ *
+ * Phase: 8.
+ */
+/* __P8_LEGACY_THEME_BODY_BELOW__ */
+:root {
+  color-scheme: dark;
+
+  /* Core Wood & Stone palette from theme/colors.ts */
+  --kd-stone: #3a3048;
+  --kd-gold: #d4a857;
+  --kd-moss: #7a9c6c;
+  --kd-ink: #e8e0d4;
+  --kd-shadow: #0f1118;
+
+  /* Derived tones */
+  --kd-stone-dark: #2a2235;
+  --kd-stone-light: #4e4260;
+  --kd-gold-dark: #b88a36;
+  --kd-gold-light: #ead7a3;
+  --kd-moss-dark: #5a7a4e;
+  --kd-moss-light: #9ec48c;
+  --kd-ink-muted: #8a8279;
+  --kd-shadow-light: #1a1d2a;
+
+  /* Game font family */
+  --font-game: 'Cinzel', 'Georgia', 'Times New Roman', serif;
+
+  /* Semantic aliases mapped to existing vars for backward compat */
+  --bg-deep: #0b1120;
+  --bg-panel: #1a1d2a;
+  --bg-panel-soft: #242738;
+  --border-soft: #3a3048;
+  --text-primary: #e8e0d4;
+  --text-secondary: #b0a798;
+  --text-muted: #8a8279;
+  --accent: #d4a857;
+  --accent-soft: #ead7a3;
+  --accent-cool: #7a9c6c;
+  --good: #7a9c6c;
+  --bad: #c44a4a;
+  --control-bg: #242738;
+  --control-border: #3a3048;
+  --control-hover-bg: #2e2f42;
+  --control-selected-bg: linear-gradient(135deg, #4e4260, #d4a857);
+  --control-selected-text: #fbfbff;
+  --control-selected-border: #ead7a3;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --text-title: #ead7a3;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+}
+
+.ui-skin[data-theme='light'] {
+  color-scheme: light;
+  --bg-deep: #ebe1d2;
+  --bg-panel: #f7efe2;
+  --bg-panel-soft: #ece0cd;
+  --border-soft: #cab79f;
+  --text-primary: #2b2118;
+  --text-secondary: #5e5043;
+  --text-muted: #77685d;
+  --accent: #8f5821;
+  --accent-soft: #ad6f34;
+  --accent-cool: #2a619e;
+  --good: #167056;
+  --bad: #a63f3f;
+  --control-bg: #e3d2bb;
+  --control-border: #b89d81;
+  --control-hover-bg: #ead9c6;
+  --control-selected-bg: linear-gradient(135deg, #d6a45a, #9d6630);
+  --control-selected-text: #2b2118;
+  --control-selected-border: #8f5821;
+}
+
+.ui-skin[data-theme='colorful'] {
+  color-scheme: dark;
+  --bg-deep: #0d1324;
+  --bg-panel: #171d34;
+  --bg-panel-soft: #222a45;
+  --border-soft: #41508b;
+  --text-primary: #fbfbff;
+  --text-secondary: #cbd3ff;
+  --text-muted: #99a4d8;
+  --accent: #ffcf5f;
+  --accent-soft: #ffe08f;
+  --accent-cool: #7be3ff;
+  --good: #62e5a4;
+  --bad: #ff7e88;
+  --control-bg: #273055;
+  --control-border: #5f79c9;
+  --control-hover-bg: #2e3a66;
+  --control-selected-bg: linear-gradient(135deg, #ffcf5f, #7be3ff);
+  --control-selected-text: #151a28;
+  --control-selected-border: #a2d9ff;
+}
+
+.ui-skin[data-theme='aurora'] {
+  color-scheme: dark;
+  --bg-deep: #0b1020;
+  --bg-panel: #151b2e;
+  --bg-panel-soft: #232a44;
+  --border-soft: #4d5a8e;
+  --text-primary: #fbfbff;
+  --text-secondary: #d1d7ff;
+  --text-muted: #98a2d8;
+  --accent: #9af7e5;
+  --accent-soft: #d2fff7;
+  --accent-cool: #b48cff;
+  --good: #7ee6a8;
+  --bad: #ff8f9d;
+  --control-bg: #25324f;
+  --control-border: #4f6cc7;
+  --control-hover-bg: #2d3d63;
+  --control-selected-bg: linear-gradient(135deg, #9af7e5, #b48cff);
+  --control-selected-text: #101725;
+  --control-selected-border: #d2fff7;
+}
