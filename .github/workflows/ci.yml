@@ -50,10 +50,41 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # Phase 8 CC0 media licensing gate.
+  #
+  # It gates, and it is a job of its own for one reason: it must be able to fail
+  # before anything is built. The plan's Phase 8 exit criterion is that new media
+  # cannot be added without CC0 metadata, and a criterion that is only checked
+  # after `dist` exists has already let the artifact be built once. `web-build`
+  # needs this job, so a registry without provenance, a checksum that does not
+  # match the bytes on disk, an unregistered file, or an unverified asset in the
+  # default PixiJS bundle stops the production artifact from being produced at all.
+  #
+  # There is deliberately no `npm ci` here. The checker imports nothing but Node
+  # built-ins and reads only the repository, so this gate costs a checkout and a
+  # Node setup, and it runs identically with or without a build. It also never
+  # writes to `dist`, which keeps the run at exactly one production build.
+  #
+  # The step is not exempt from failing. `tests/phase8/license-gate-wiring.test.ts`
+  # asserts that the job is bound, that the step runs the npm script, and that no
+  # step in it carries a `continue-on-error`, so a regression to a warning cannot
+  # land quietly. The wording above avoids naming that key on purpose, because that
+  # same gate matches the key as a YAML key at the start of a line.
+  asset-licenses:
+    name: Asset Licenses (CC0 registry)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify every public asset against the CC0 registry
+        run: npm run test:licenses
+
   web-build:
     name: Web Build and Bundle
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, unit-tests]
+    needs: [lint, typecheck, unit-tests, asset-licenses]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
