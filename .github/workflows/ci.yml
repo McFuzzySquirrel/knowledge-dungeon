@@ -94,6 +94,28 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build:web
       - run: npm run check:bundle-size
+      # Phase 9 renderer memory preflight.
+      #
+      # A step in this job rather than a job of its own, for the same reason as the
+      # Welcome budget below: `dist` exists here and nowhere else, and the script
+      # imports only Node built-ins, so it needs no install of its own.
+      #
+      # It is the deterministic half of plan section 10.2's renderer memory gate. It
+      # reads the built artifact - it never starts a browser, never mounts a world,
+      # and never claims a mount/unmount measurement. What it does establish is that
+      # the entry document does not name a Pixi chunk (an eager renderer load on
+      # Welcome), that every renderer chunk is within plan section 10.2's 800 KiB
+      # gzip ceiling for any lazy JavaScript chunk, and that the run measured a
+      # renderer at all. A missing `dist` fails rather than passing an unmeasured
+      # build. The browser-backed half - 20 mount/unmount cycles, canvas count, GPU
+      # memory - needs a Playwright lane and is not claimed here.
+      #
+      # The step is not exempt from failing. `tests/phase9/memory-gate-wiring.test.ts`
+      # asserts that, so a regression to a warning cannot land quietly. The wording
+      # above avoids naming that key on purpose, because that same gate matches the
+      # key as a YAML key at the start of a line.
+      - name: Enforce the renderer memory preflight on the built artifact
+        run: npm run check:memory
       # Plan section 10.2's Welcome budget: 300 KiB gzip for initial JavaScript and
       # CSS, excluding lazy renderer bundles. It is a step in this job rather than a
       # job or a lane of its own because `dist` exists here and nowhere else, and it
@@ -138,6 +160,81 @@ jobs:
             artifacts/web-artifact-manifest.json
           if-no-files-found: error
           retention-days: 14
+      # Phase 9 Pixi-flagged build lane.
+      #
+      # Plan section 11 requires Pixi paths to "run in CI and internal builds" before
+      # cutover, and `VITE_WORLD_RENDERER` is a build-time flag, so the only way to
+      # exercise it is to build with it. This is deliberately *steps in this job* and
+      # not a job of its own, for the same reason the four flagged lanes are steps in
+      # the storage-v2 job: one job means one `npm ci`, and the run stays at one
+      # production build, one recorded artifact identity, and one upload.
+      #
+      # Three properties keep this from disturbing the release:
+      #
+      # - It runs strictly AFTER the production artifact has been recorded, verified,
+      #   and uploaded. Nothing downstream reads this job's `dist` - `browser-smoke`
+      #   and the four compatibility lanes download the uploaded `web-artifact`, not
+      #   this runner's working directory - so the rebuild cannot be mistaken for the
+      #   artifact that shipped.
+      # - It records and uploads no second *production* artifact. The production
+      #   default stays `VITE_WORLD_RENDERER=phaser`, and this build is a flagged one
+      #   that exists to be measured and then discarded. The one thing it does upload
+      #   is the flagged build's own identity, to its own manifest, and only because
+      #   the browser-backed lane below measures it from a different job.
+      # - It installs no browser. The renderer switch is exercised at build level
+      #   here, so a pull request does not pay for a browser install to prove that a
+      #   flag compiles into a working artifact. The browser-backed half of the same
+      #   memory criterion is a separately gated lane, in a job that already has a
+      #   browser, and is not something this step quietly becomes.
+      #
+      # `vite.config.ts` also enforces the lazy-chunk boundary inside every build, so
+      # a Pixi build that statically reached the Pixi runtime would already have
+      # failed the two steps above it rather than being measured here.
+      - name: Build the Phase 9 Pixi-flagged artifact
+        run: npm run build:web:pixi
+      - run: npm run check:bundle-size
+      - name: Enforce the renderer memory preflight on the Pixi-flagged artifact
+        run: npm run check:memory
+      # The browser-backed half of the same criterion, and the only thing this job
+      # uploads besides the release artifact.
+      #
+      # `tests/phase9/memory-gate-wiring.test.ts` records this job's contract: the
+      # Pixi build is a *build-level* lane, it "does not quietly become a browser
+      # lane", and this job must install no browser at all. That contract is honoured
+      # here - this job still installs none - and the browser-backed half runs in
+      # `browser-smoke`, which already has one. That is the only lawful placement
+      # left, and the reason is worth stating rather than working around:
+      #
+      # - the Pixi-flagged artifact can only be produced here, because eleven existing
+      #   wiring gates assert that no other CI job runs any `build:web*` script;
+      # - the `storage-v2-browser` job cannot receive it, because its own gate asserts
+      #   that job neither downloads an artifact nor runs a `build:web*` script;
+      # - `browser-smoke` already downloads an artifact, verifies it, installs one
+      #   browser, and previews a `dist`, so a second artifact costs one upload and
+      #   one download and no new job, no new `npm ci`, and no new browser install.
+      #
+      # The wording of this block deliberately avoids naming the tool whose absence
+      # the gate above asserts on, because that gate matches the phrase anywhere in
+      # this job's text - comments included - and a comment that spelled it out would
+      # fail it. The same reason keeps the tool's name out of the steps it describes.
+      #
+      # The upload is the Pixi build's *own* identity, to its own manifest, so it can
+      # never be mistaken for the release artifact; the lane verifies that manifest
+      # before it measures anything, and `browser-smoke` runs its production suite
+      # against the production artifact before this download replaces `dist`.
+      - name: Record the Pixi-flagged artifact identity
+        run: npm run record:web-artifact:pixi
+      - name: Verify the Pixi-flagged artifact identity
+        run: npm run verify:web-artifact:pixi
+      - name: Upload the Pixi-flagged web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixi-web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest-pixi.json
+          if-no-files-found: error
+          retention-days: 14
 
   browser-smoke:
     name: Browser Smoke (Chromium Matrix)
@@ -178,6 +275,85 @@ jobs:
         # one. It gates, and the wiring gate
         # `tests/e2e/welcome-narrow-viewport.test.ts` asserts that it does.
         run: npm run test:e2e:recorded
+      # Phase 9 Pixi world-host mount/unmount memory lane, as a step in this job.
+      #
+      # The same reasoning as the 320-pixel gate above - the browser and the preview
+      # are already here, so a second job, a second install, or a second `npm ci` would
+      # all be duplication - plus one thing this job could not have predicted: the
+      # artifact under test is a *second*, flagged one, so it is downloaded here rather
+      # than built, and only after the Phase 1 suite has run against the production
+      # artifact above. Nothing before this step reads the replaced `dist`.
+      #
+      # It gates. Plan section 10.2's "no material canvas or GPU memory growth over 20
+      # world mount and unmount cycles" had no browser evidence at all before this step
+      # - `scripts/check-memory.mjs` states in its own output that it reads a build
+      # rather than a browser - and a step that could not fail would leave the phase's
+      # central memory criterion ungated. `tests/e2e/pixi-memory-lane.test.ts` asserts
+      # that this step is not exempt and that no step in this job is; the wording here
+      # avoids naming the exemption key, because the Phase 5 and Phase 6 wiring gates
+      # assert on the raw text of a job whose comments are part of what they check.
+      #
+      # Evidence is the sanitized JSON the lane writes under the allowlisted
+      # `artifacts/compatibility-evidence/` root, which the upload below takes and
+      # nothing else. The lane records no trace, screenshot or video, and its own
+      # results and HTML report directories are deliberately outside that
+      # allowlist, so the pre-existing failure upload further down does not reach
+      # them either.
+      - name: Discard the production dist before the flagged download
+        # `actions/download-artifact` extracts *into* the working directory, so a
+        # second download merges into the tree the first one left behind rather than
+        # replacing it. The two builds emit the same logical chunk names with
+        # different content hashes, so the merged tree is neither artifact: it was
+        # 179 files, the union of a 151-file production dist and the flagged one.
+        #
+        # The identity check caught it, which is the right place for it to be caught:
+        # `dist-does-not-match-recorded-artifact`, before anything was measured. But a
+        # red run is a worse outcome than a correct one, so the tree is replaced
+        # explicitly. This is the mirror of the invariant the build job already
+        # asserts — that nothing between the production upload and the Pixi build
+        # *reads* `dist`. This one is that nothing between the production suite and
+        # the Pixi download *keeps* it.
+        run: rm -rf dist
+      - name: Download the Pixi-flagged artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pixi-web-artifact
+          path: .
+      - name: Verify the Pixi-flagged artifact identity
+        run: npm run verify:web-artifact:pixi
+      - name: Run the Pixi world mount/unmount memory lane
+        run: npm run test:e2e:pixi-memory:recorded
+      # The canvas-pointer lane, on the same flagged artifact, in this same job.
+      #
+      # A separate step rather than a ninth test in the memory spec: that spec's
+      # `testMatch` is pinned to it and its eight-test count is asserted by
+      # `tests/e2e/pixi-memory-lane.test.ts`, so widening it would break a gate that
+      # works and would file this lane's evidence under the memory lane's name inside
+      # the upload allowlist. It needs no second build, no second download and no
+      # second browser install, because the artifact and the Chromium are both
+      # already here.
+      #
+      # The step is not exempt from failing. A pointer press that changes the world
+      # without changing the DOM mirror is invisible to every other gate in the
+      # repository — a synthetic emitter call never enters the engine's event
+      # system, a listener count is satisfied by a listener that never fires, and
+      # the memory lane exercises the keyboard and the DOM control but never the
+      # canvas — so this is the only thing that would catch it.
+      - name: Run the Pixi canvas-pointer DOM mirror lane
+        run: npm run test:e2e:pixi-pointer:recorded
+      - name: Upload sanitized browser-smoke evidence
+        # Allowlist: sanitized per-run JSON evidence only, on the same terms as the
+        # storage-v2 and compatibility lanes. Nothing else leaves the runner, and
+        # this lane's own two output directories are deliberately outside the
+        # allowlisted root. `always()` because a red run is the run whose measurements
+        # a reader most needs.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-evidence
+          path: artifacts/compatibility-evidence
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v4

@@ -39,9 +39,20 @@ const RENDERER_NEUTRAL_LAYERS = [
  * directory behavior ever changes:
  * - `pixi.js` and the recursive `pixi.js` glob also cover `pixi.js/unsafe-eval`.
  * - `@pixi/<package>` and the recursive `@pixi` glob cover every subpath.
- * - `@/game` matches the alias Vite resolves to `src/game`; the `..`-relative
- *   globs close the `../../game/...` equivalent so the boundary cannot be
- *   sidestepped by switching to a relative specifier.
+ * - `@/game` matches the alias Vite resolves to `src/game`, and `@/renderers`
+ *   matches the alias Vite resolves to `src/renderers`; the `..`-relative globs
+ *   close the `../../game/...` and `../../renderers/...` equivalents so the
+ *   boundary cannot be sidestepped by switching to a relative specifier.
+ *
+ * Both renderer trees are named, and naming only one of them was a real gap:
+ * `src/game/**` was listed from Phase 2 and `src/renderers/**` was introduced by
+ * Phase 9, and an entry that stops for the tree the current renderer lives in is
+ * not defence in depth. A neutral layer importing `@/renderers/pixi/runtime/...`
+ * or `../renderers/...` was reported by no mechanism except the `writeBundle`
+ * chunk audit, which is a backstop for what *ships* and not a statement about the
+ * layer. The two backstops that remain are unchanged and still armed: the
+ * emitted-graph audit in `vite.config.ts` and the boundary scan in
+ * `tests/phase9/pixi-host-boundary.test.ts`.
  */
 const FORBIDDEN_RENDERER_IMPORTS = [
   // Phaser: the current renderer, replaced through an adapter and removed in Phase 24.
@@ -52,13 +63,22 @@ const FORBIDDEN_RENDERER_IMPORTS = [
   'pixi.js/**',
   '@pixi/*',
   '@pixi/**',
-  // The renderer tree itself, reached through the `@` alias...
+  // The renderer trees themselves, reached through the `@` alias...
   '@/game',
   '@/game/*',
   '@/game/**',
+  // `src/renderers/**` is the Phase 9 PixiJS host, and the reason this rule exists -
+  // keeping a renderer tree unreachable from a neutral layer - is exactly as true of
+  // it as of `src/game/**`. Listed here rather than left to be caught downstream,
+  // because a downstream catch happens only once the leak ships.
+  '@/renderers',
+  '@/renderers/*',
+  '@/renderers/**',
   // ...or through a relative path.
   '**/../game',
   '**/../game/**',
+  '**/../renderers',
+  '**/../renderers/**',
 ];
 
 /**
@@ -68,10 +88,12 @@ const FORBIDDEN_RENDERER_IMPORTS = [
  * `import type { Phaser } from 'phaser'` is renderer coupling too.
  */
 const FORBIDDEN_RENDERER_IMPORT_MESSAGE =
-  '`src/core/**` and `src/application/**` are renderer-neutral and must not import a renderer. ' +
+  'This layer is renderer-neutral and must not import a renderer: ' +
+  '`src/core/**`, `src/application/**`, `src/services/persistence/v2/**`, ' +
+  '`src/services/persistence/products/**`, and `src/theme/**`. ' +
   'Depend on the interfaces in `src/application/contracts/` and let a renderer adapter ' +
-  '(`src/game/**` for Phaser today, the PixiJS host later) bind the concrete engine. ' +
-  'Value and type-only imports are both forbidden.';
+  '(`src/game/**` for Phaser today, `src/renderers/**` for the PixiJS host) bind the ' +
+  'concrete engine. Value and type-only imports are both forbidden.';
 
 export default [
   {
@@ -108,8 +130,9 @@ export default [
     },
   },
   {
-    // Phase 2 renderer boundary: core and application code may describe a world,
-    // but only a renderer adapter may name an engine. Built-in rule only, no plugin.
+    // Renderer boundary, Phase 2 onward. Every layer in RENDERER_NEUTRAL_LAYERS may
+    // describe a world, but only a renderer adapter may name an engine. Built-in
+    // rule only, no plugin.
     name: 'knowledge-dungeon/renderer-boundary',
     files: RENDERER_NEUTRAL_LAYERS,
     rules: {

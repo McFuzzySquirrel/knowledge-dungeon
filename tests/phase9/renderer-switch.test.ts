@@ -1,0 +1,246 @@
+/**
+ * The build-time world-renderer switch, and the Phase 9 hermeticity guard.
+ *
+ * ## The switch
+ *
+ * Plan section 11 lists `VITE_WORLD_RENDERER=phaser|pixi` among the planned build-time
+ * flags, `src/config/runtimeConfig.ts` already parses it, and `FEATURE_FLAG_MATRIX`
+ * already assigns it to Phase 9. This phase adds no second mechanism and changes no
+ * production default, so what needed holding was not the existence of the flag but the
+ * three properties that make it safe to keep:
+ *
+ * 1. **The default is unchanged.** Unset means Phaser, in the parser, in the flag
+ *    matrix, and in the build scripts. Phase 9 explicitly makes "no default renderer
+ *    cutover" a non-goal, so a flag that quietly defaulted to Pixi would be a plan
+ *    violation rather than an improvement.
+ * 2. **Both values parse, and an invalid value fails the build.** A malformed flag
+ *    must stop the build at configuration load, not produce an artifact that silently
+ *    fell back.
+ * 3. **A flag never carries learner data.** The parser deliberately does not echo the
+ *    raw value in its diagnostics; this file asserts that, because the error path is
+ *    exactly where a value that *should* have been a flag could leak something that
+ *    is not.
+ *
+ * ## The hermeticity half
+ *
+ * Phase 8 shipped two gates green in a working tree and red in CI, both because they
+ * depended on state a clean checkout does not have: one baselined against
+ * `git show HEAD:...`, and another only ever ran from a tree under `/tmp`.
+ * `tests/phase8/qa-hermeticity.test.ts` is the guard written afterwards, and this file
+ * carries the same rule for Phase 9 - no Phase 9 gate resolves a commit. What it cannot
+ * cheaply assert for itself is whether a test needs a `dist/`; so the assertion here is
+ * the source-level rule, and the behavioural proof is that this file, and every other
+ * Phase 9 gate, runs a synthetic tree through a `--dist=` override.
+ *
+ * Privacy: this file reads `package.json`, the workflow, the flag parser, and the
+ * Phase 9 sources. It resolves no commit, reads no `dist`, and asserts on no learner
+ * data. The flag parser's own test inputs are flag names and renderer names.
+ */
+
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+  WORLD_RENDERERS,
+} from '../../src/config/runtimeConfig';
+import { FEATURE_FLAG_MATRIX } from '../../src/config/featureFlags';
+
+import { parseWorkflowJobs, REPO_ROOT, sourceOf, stripComments } from './support/phase9Build';
+
+const PHASE9_ROOT = path.join(REPO_ROOT, 'tests', 'phase9');
+
+const npmScripts = (JSON.parse(sourceOf('package.json')) as { scripts: Record<string, string> }).scripts;
+const ciJobs = parseWorkflowJobs(readFileSync(path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml'), 'utf8'));
+
+describe('the renderer flag has one mechanism, and its production default is Phaser', () => {
+  it('accepts exactly the two values the plan names', () => {
+    expect([...WORLD_RENDERERS]).toEqual(['phaser', 'pixi']);
+    expect(RUNTIME_FLAG_ENV_KEYS.worldRenderer).toBe('VITE_WORLD_RENDERER');
+  });
+
+  it('parses both values', () => {
+    expect(parseRuntimeConfig({ VITE_WORLD_RENDERER: 'phaser' }).worldRenderer).toBe('phaser');
+    expect(parseRuntimeConfig({ VITE_WORLD_RENDERER: 'pixi' }).worldRenderer).toBe('pixi');
+    // Trimmed and case-normalised, so a CI matrix cannot fail on shell whitespace.
+    expect(parseRuntimeConfig({ VITE_WORLD_RENDERER: '  PIXI \n' }).worldRenderer).toBe('pixi');
+  });
+
+  it('defaults to Phaser when nothing sets it', () => {
+    expect(parseRuntimeConfig({}).worldRenderer).toBe('phaser');
+    expect(DEFAULT_RUNTIME_CONFIG.worldRenderer).toBe('phaser');
+    expect(FEATURE_FLAG_MATRIX.worldRenderer.productionDefault).toBe('phaser');
+    expect(FEATURE_FLAG_MATRIX.worldRenderer.ownerPhase).toBe(9);
+    expect(FEATURE_FLAG_MATRIX.worldRenderer.valueKind).toBe('enum');
+  });
+
+  it('fails the build on a value that is neither', () => {
+    // Not a fallback: a malformed flag must stop configuration load, because a
+    // silently defaulted flag produces an artifact that does not match what the
+    // operator asked for. An explicitly empty value is malformed rather than unset -
+    // `VITE_WORLD_RENDERER=` in a CI matrix is a mistake worth a red build, not a
+    // silent reversion to the production default.
+    expect(() => parseRuntimeConfig({ VITE_WORLD_RENDERER: 'threejs' })).toThrow(/VITE_WORLD_RENDERER/);
+    expect(() => parseRuntimeConfig({ VITE_WORLD_RENDERER: 'phaser, pixi' })).toThrow(/VITE_WORLD_RENDERER/);
+    expect(() => parseRuntimeConfig({ VITE_WORLD_RENDERER: true })).toThrow(/VITE_WORLD_RENDERER/);
+    expect(() => parseRuntimeConfig({ VITE_WORLD_RENDERER: '' })).toThrow(/VITE_WORLD_RENDERER/);
+  });
+
+  it('never echoes a raw flag value, so a flag cannot become a channel for anything', () => {
+    // The privacy half, asserted on the failure path: the diagnostic names the key
+    // and the allowed values, never what was passed. A value that should not have been
+    // a flag would otherwise appear in a build log through this line.
+    let message = '';
+    try {
+      parseRuntimeConfig({ VITE_WORLD_RENDERER: 'a-note-the-operator-pasted' });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('VITE_WORLD_RENDERER');
+    expect(message).toContain('phaser, pixi');
+    expect(message).not.toContain('a-note-the-operator-pasted');
+  });
+
+  it('leaves the production build script untouched, so no build sets the flag by default', () => {
+    expect(npmScripts['build:web']).toBe('npm run build');
+    expect(npmScripts['build']).not.toContain('VITE_WORLD_RENDERER');
+    // The Pixi build delegates to the production script with one variable changed,
+    // which is what keeps the two builds from drifting apart.
+    expect(npmScripts['build:web:pixi']).toBe('VITE_WORLD_RENDERER=pixi npm run build:web');
+  });
+
+  it('is a build-time variable, not a runtime setting a learner can change', () => {
+    const flag = FEATURE_FLAG_MATRIX.worldRenderer;
+    expect(flag.purpose).toContain('adapter');
+    expect(flag.rollback).toBe('Set VITE_WORLD_RENDERER=phaser or remove the build override.');
+    // Nothing writes it into local storage or into a URL. The one place the flag is
+    // read is the build-time parser and the module that parses it once.
+    const parser = sourceOf('src/config/runtimeConfig.ts');
+    expect(parser).toContain('Build-time environment contract. These values must never contain learner data.');
+    // A build-time flag has no runtime storage and no place in a URL, because both are
+    // readable by the application and either would turn a compile-time decision into
+    // something a learner or a link could change.
+    for (const runtimeChannel of ['sessionStorage', 'URLSearchParams', 'setItem', 'document.cookie']) {
+      expect(parser, runtimeChannel).not.toContain(runtimeChannel);
+    }
+  });
+});
+
+describe('no Phase 9 gate resolves a commit', () => {
+  function phase9Sources(directory: string): string[] {
+    const found: string[] = [];
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const full = path.join(directory, entry.name);
+      if (entry.isDirectory()) found.push(...phase9Sources(full));
+      else if (/\.tsx?$/.test(entry.name)) found.push(full);
+    }
+    return found.sort();
+  }
+
+  const HISTORY_SUBCOMMANDS = [
+    'show', 'log', 'diff', 'cat-file', 'rev-parse', 'ls-tree', 'rev-list',
+    'merge-base', 'describe', 'blame', 'hash-object', 'status', 'checkout', 'stash', 'fetch',
+  ];
+  const HISTORY_READ = new RegExp(
+    `(['"\`]git['"\`][^\\n]{0,200}?\\b(?:${HISTORY_SUBCOMMANDS.join('|')})\\b)` +
+      `|(\\bgit\\s+(?:${HISTORY_SUBCOMMANDS.join('|')})\\b)`,
+    'i',
+  );
+
+  const scanned = phase9Sources(PHASE9_ROOT);
+
+  it('walks a real set of sources, so the scan below is not an empty walk', () => {
+    expect(scanned.length).toBeGreaterThanOrEqual(5);
+    for (const file of scanned) expect(readFileSync(file, 'utf8').length, file).toBeGreaterThan(0);
+    // And at least one of them spawns a process, which is the only way a gate could
+    // read history in the first place.
+    expect(
+      scanned.some((file) => /child_process/.test(stripComments(readFileSync(file, 'utf8')))),
+    ).toBe(true);
+  });
+
+  it('flags a history read and allows a working-tree query, so the rule has teeth', () => {
+    // Assembled from fragments, comment delimiters included: this file scans itself,
+    // and a control written as one literal would either be a real match in its own
+    // source or be eaten by this file's own comment stripper.
+    const controls: ReadonlyArray<{ what: string; code: readonly string[]; flagged: boolean }> = [
+      {
+        what: 'a spawn with a history subcommand in the argument list',
+        code: ["execFileSync('g", "it', ['show', 'HEAD:package.json'])"],
+        flagged: true,
+      },
+      {
+        what: 'a command line inside a string',
+        code: ['await run("g', 'it log --oneline");'],
+        flagged: true,
+      },
+      {
+        what: 'a working-tree ignore query, which resolves no commit',
+        code: ["execFileSync('g", "it', ['check-ignore', '--quiet', '--', 'dist'])"],
+        flagged: false,
+      },
+      {
+        what: 'a line comment that mentions the rule',
+        code: ['// a gate must not read g', 'it history\nconst limit = 1;'],
+        flagged: false,
+      },
+      {
+        what: 'an https URL in a string literal',
+        code: ['const reference = "https://example.invalid/a.js";'],
+        flagged: false,
+      },
+    ];
+    for (const control of controls) {
+      expect(HISTORY_READ.test(stripComments(control.code.join(''))), control.what).toBe(control.flagged);
+    }
+  });
+
+  it('has no offender', () => {
+    const offenders = scanned
+      .filter((file) => HISTORY_READ.test(stripComments(readFileSync(file, 'utf8'))))
+      .map((file) => path.relative(REPO_ROOT, file));
+    expect(offenders, 'a phase 9 gate resolves a commit').toEqual([]);
+  });
+
+  it('depends on no build output, so it passes on a clean checkout before a build', () => {
+    // The behavioural half of the same rule. Every Phase 9 gate that reads an artifact
+    // takes `--dist=` and is exercised against a synthetic tree, so none of them
+    // requires a `dist/` that a clean checkout does not have.
+    const memoryGate = npmScripts['check:memory'];
+    expect(memoryGate).toBe('node scripts/check-memory.mjs');
+    expect(sourceOf('scripts/check-memory.mjs')).toContain('--dist=DIR');
+    expect(sourceOf('scripts/check-welcome-budget.mjs')).toContain('--dist=DIR');
+    // And no Phase 9 gate spawns a build. The check is on the spawn, not on the text:
+    // several of these files assert that a CI step *contains* `npm run build:web`, and
+    // a substring scan would fail on the assertion that is doing the holding.
+    const spawnsABuild =
+      /(?:spawnSync|execFileSync|execSync)\s*\(\s*(?:process\.execPath|'npm'|"npm"|`npm`)[\s\S]{0,160}?(?:build:web|build:storage|vite build)/;
+    for (const file of scanned) {
+      const source = stripComments(readFileSync(file, 'utf8'));
+      expect(spawnsABuild.test(source), file).toBe(false);
+    }
+    // Controls, assembled from fragments because this file scans itself: a positive,
+    // the same spawn reached without `npm`, and the assertion text that must not match.
+    const verb = 'spawn' + 'Sync';
+    const pkg = "'" + 'npm' + "'";
+    const script = 'build' + ':web';
+    expect(spawnsABuild.test(`${verb}(${pkg}, ['run', '${script}'])`)).toBe(true);
+    expect(spawnsABuild.test(`${verb}(process.execPath, ['${'node_modules/npm/bin/npm-cli.js'}', 'run', '${script}'])`)).toBe(
+      true,
+    );
+    expect(spawnsABuild.test(`expect(buildJob).toContain('npm run ${script}')`)).toBe(false);
+  });
+});
+
+describe('the CI wiring and the local commands name the same things', () => {
+  it('the Pixi build and both preflight steps are in the one job that already installs', () => {
+    const buildJob = ciJobs.get('web-build') ?? '';
+    expect(buildJob).toContain('Build the Phase 9 Pixi-flagged artifact');
+    expect(buildJob).toContain('Enforce the renderer memory preflight on the Pixi-flagged artifact');
+    expect(buildJob).toContain('npm run build:web:pixi');
+  });
+});

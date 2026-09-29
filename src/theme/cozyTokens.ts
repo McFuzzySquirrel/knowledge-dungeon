@@ -6,7 +6,10 @@
  * else. React DOM reads it as CSS custom properties (emitted by `cozyCss.ts`,
  * checked into `src/styles/cozy.css` and verified byte-for-byte by the token
  * test). A future PixiJS host reads the same numbers through `cozyColor.ts`
- * (`cozyHexToNumber` / `cozyHexToUnitArray`).
+ * (`cozyHexToNumber` / `cozyHexToUnitArray`), and the non-colour tables below
+ * carry a second, numeric face for it: `COZY_RADIUS_PX` and its siblings are
+ * derived from the CSS string tables at module scope by `cozyNumbers.ts`, so
+ * the two spellings cannot drift and neither consumer has to parse a unit.
  *
  * RENDERER-NEUTRAL BY CONTRACT
  * ----------------------------
@@ -60,6 +63,11 @@
  */
 
 import type { CozyHex } from './cozyColor';
+// Phase 9: the numeric face of the scale tables below. A *value* import, and the
+// only one Phase 9 adds, because a renderer reads these tokens as numbers and the
+// conversion is derived from the string tables rather than written out twice. The
+// module has no imports of its own, so this edge cannot introduce a cycle.
+import { cozyPxMirror, cozyUnitlessMirror } from './cozyNumbers';
 // The one dependency the token source takes, and it is a *value* import: the
 // migration table is the only place that knows which strings a persisted
 // preference can hold, so {@link resolveCozyColors} reads it rather than
@@ -83,6 +91,7 @@ export const COZY_TOKEN_SCHEMA_VERSION = '1.0.0' as const;
 export const RENDERER_NEUTRAL_THEME_MODULES = Object.freeze([
   'cozyColor.ts',
   'cozyCss.ts',
+  'cozyNumbers.ts',
   'cozyScope.ts',
   'cozyTokens.ts',
   'colors.ts',
@@ -565,6 +574,15 @@ export const COZY_RADIUS = Object.freeze({
   pill: '999px',
 } as const);
 
+/**
+ * {@link COZY_RADIUS} as numbers, for a renderer host (Phase 9).
+ *
+ * Derived from the string table at module scope, never written out a second time.
+ * The two therefore cannot disagree: there is one authored value per token, and
+ * the only way to change one is to change {@link COZY_RADIUS}.
+ */
+export const COZY_RADIUS_PX = cozyPxMirror(COZY_RADIUS, 'COZY_RADIUS');
+
 /** A 4-pixel base scale. `COZY_SPACE` values are emitted as CSS lengths. */
 export const COZY_SPACE = Object.freeze({
   '0': '0px',
@@ -580,6 +598,15 @@ export const COZY_SPACE = Object.freeze({
   '12': '48px',
 } as const);
 
+/**
+ * {@link COZY_SPACE} as numbers, for a renderer host (Phase 9).
+ *
+ * The keys are the same numeric *strings* the CSS uses, so a host reads
+ * `COZY_SPACE_PX['4']` and a stylesheet reads `--cozy-s-space-4`: there is no
+ * second key scheme to translate between.
+ */
+export const COZY_SPACE_PX = cozyPxMirror(COZY_SPACE, 'COZY_SPACE');
+
 /** Border weights. The focus ring is deliberately heavier than any state border. */
 export const COZY_BORDER_WIDTH = Object.freeze({
   hairline: '1px',
@@ -587,11 +614,31 @@ export const COZY_BORDER_WIDTH = Object.freeze({
   focus: '3px',
 } as const);
 
-/** Plan 10.1: minimum 44 by 44 CSS-pixel touch targets. */
-export const COZY_TOUCH_TARGET_MIN_PX = 44;
+/** {@link COZY_BORDER_WIDTH} as numbers, for a renderer host (Phase 9). */
+export const COZY_BORDER_WIDTH_PX = cozyPxMirror(COZY_BORDER_WIDTH, 'COZY_BORDER_WIDTH');
 
-/** Numeric mirror of {@link COZY_TOUCH_TARGET_MIN_PX} for a renderer host. */
+/**
+ * Plan 10.1: minimum 44 by 44 CSS-pixel touch targets.
+ *
+ * A bare number rather than a CSS string, because it never had a CSS form to
+ * keep: there is no authored `--cozy-s-target-min` value, and `cozyCss.ts`
+ * composes that custom property *from* this number. So this token is the source
+ * rather than a mirror, and it needs no `_PX` twin of its own.
+ */
 export const COZY_TOUCH_TARGET_MIN = 44 as const;
+
+/**
+ * The pre-Phase-9 name for {@link COZY_TOUCH_TARGET_MIN}, kept because callers
+ * import it.
+ *
+ * Two names for one value used to mean two literals that could drift apart; the
+ * alias is now defined *from* the canonical constant, so a single number is
+ * authored and the two can never disagree. The `_PX` suffix is a slight
+ * misnomer - the value counts CSS pixels, it is not a CSS length - but renaming
+ * it is a call-site change in modules this phase does not own, and the mismatch
+ * is harmless. New code should read `COZY_TOUCH_TARGET_MIN`.
+ */
+export const COZY_TOUCH_TARGET_MIN_PX = COZY_TOUCH_TARGET_MIN;
 
 /**
  * The storybook type scale, in CSS pixels. Long-form note body text uses
@@ -607,6 +654,14 @@ export const COZY_FONT_SIZE = Object.freeze({
   display: '32px',
 } as const);
 
+/**
+ * {@link COZY_FONT_SIZE} as numbers, for a renderer host (Phase 9).
+ *
+ * `TextStyle.fontSize` is a number, so this is the value a canvas text object
+ * takes rather than a string it has to be handed instead of one.
+ */
+export const COZY_FONT_SIZE_PX = cozyPxMirror(COZY_FONT_SIZE, 'COZY_FONT_SIZE');
+
 export const COZY_LINE_HEIGHT = Object.freeze({
   tight: '1.25',
   snug: '1.4',
@@ -614,11 +669,35 @@ export const COZY_LINE_HEIGHT = Object.freeze({
   relaxed: '1.7',
 } as const);
 
+/**
+ * {@link COZY_LINE_HEIGHT} as numbers, for a renderer host (Phase 9).
+ *
+ * Named `_NUMBER` rather than `_PX` on purpose: a line height is a unitless
+ * multiplier, and a `_PX` suffix would claim pixels that are not there.
+ */
+export const COZY_LINE_HEIGHT_NUMBER = cozyUnitlessMirror(
+  COZY_LINE_HEIGHT,
+  'COZY_LINE_HEIGHT',
+);
+
 export const COZY_FONT_WEIGHT = Object.freeze({
   regular: '400',
   medium: '600',
   bold: '700',
 } as const);
+
+/**
+ * {@link COZY_FONT_WEIGHT} as numbers, for a renderer host (Phase 9).
+ *
+ * `TextStyle.fontWeight` is a number and not a CSS keyword, so the string table
+ * forces a conversion at the call site. The suffix matches
+ * {@link COZY_LINE_HEIGHT_NUMBER}: these two tables are already unitless, so
+ * their mirrors are numbers rather than pixel counts.
+ */
+export const COZY_FONT_WEIGHT_NUMBER = cozyUnitlessMirror(
+  COZY_FONT_WEIGHT,
+  'COZY_FONT_WEIGHT',
+);
 
 /**
  * Focus treatment, in CSS pixels.
@@ -632,6 +711,9 @@ export const COZY_FOCUS = Object.freeze({
   ringOffset: '2px',
   haloWidth: '2px',
 } as const);
+
+/** {@link COZY_FOCUS} as numbers, for a renderer host (Phase 9). */
+export const COZY_FOCUS_PX = cozyPxMirror(COZY_FOCUS, 'COZY_FOCUS');
 
 /**
  * The non-colour signal every Cozy state must carry, per plan 10.1
