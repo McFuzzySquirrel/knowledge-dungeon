@@ -714,7 +714,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 6 | complete | Deliver individual subject backup and restore. |
 | 7 | complete | Deliver safe blank reusable templates. |
 | 8 | complete | Establish Cozy design tokens and the CC0 media gate. |
-| 9 | not-started | Build the PixiJS runtime host. |
+| 9 | complete | Build the PixiJS runtime host. |
 | 10 | not-started | Build asset bundles and functional audio. |
 | 11 | not-started | Build the Pixi village world foundation. |
 | 12 | not-started | Build village NPCs, quests, and redesigned panels. |
@@ -4131,7 +4131,7 @@ Phases 9, 10, 11, 13, 17, and 20.
 
 ## Phase 9: PixiJS 8 Runtime Host
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Add a reusable PixiJS host while the world still uses the Phaser adapter.
 
 ### Prerequisites
@@ -4209,6 +4209,302 @@ Run the common gate.
 - The host reads Cozy geometry, typography, and motion as numbers, with no CSS-unit
   parsing in renderer code, and an unknown motion name yields a zero duration rather
   than `NaN`.
+
+### Known limitations and evidence boundaries
+
+- **`check:memory` is a build-level preflight, not a leak measurement**, and says so
+  on every run, including a passing one. It establishes no eager renderer load and
+  the 800 KiB gzip lazy-chunk ceiling, both as properties of the artifact. The
+  20-cycle claim belongs to the browser lane instead.
+- **The browser lane is Chromium-only and a software rasteriser.** The WebGL2
+  context it obtains is real — Chromium logs a GL driver readback during the run —
+  but in a headless Linux container it is SwiftShader, not hardware GPU. There is no
+  Firefox, WebKit or Edge evidence for either lane, and no physical-device result.
+  Plan §10.4's manual device evidence is produced in the later accessibility,
+  performance and cutover phases.
+- **The lane cannot measure GPU texture or buffer memory**, because no headless API
+  reports either. What it asserts is the release-side equivalent: every one of the 20
+  released renderers had its WebGL context explicitly lost at teardown. The lane's
+  `doesNotProve` list states this in the repository rather than only in a report.
+- **One monotonically rising signal in the run is deliberately not gated.** Chromium's
+  own `Nodes` estimate climbs about 5 nodes per cycle. The probe retains every
+  PixiJS `Application` in an array, which is the likely explanation, but the lane
+  **cannot distinguish probe retention from a real leak** on that counter. The
+  JavaScript heap figure is quantised to exactly the same value in all 21 samples
+  and carries no information at all. Both are recorded rather than gated, because a
+  linear leak and a bounded cache are indistinguishable in an estimate that moves
+  by tens between samples, and no gate should be built on a coin flip.
+- **A real PixiJS 8.21.0 defect was found, and the shipped matrix is unaffected.**
+  `CanvasObserver._attachObserver` registers a `Ticker.shared` listener when there
+  is no `ResizeObserver` and never sets the `_tickerAttached` flag its own `destroy`
+  tests, so the listener is unremovable. Reproduced in a real browser at **+1 per
+  application, linear, with the global, and +0 without it**. `destroy()` does null
+  the renderer's fields before the listener is left behind, so what accumulates is an
+  emptied shell and one listener slot per application, bounded rather than a growing
+  retention of GPU state. Every browser in the support matrix has had
+  `ResizeObserver` since 2018, so this affects jsdom and pre-13.1 Safari only. Both
+  lanes assert `ResizeObserver` presence at renderer construction as a production
+  precondition, so a runtime without it fails loudly instead of leaking quietly. The
+  product does not monkey-patch the global, and the defect should be filed upstream.
+- **A canvas action routes through the host or it does not happen.** The first build
+  of this phase had the scene calling its own action verb, so a pointer press changed
+  the world and the DOM mirror — the only place a screen-reader user learns that it
+  changed — never heard about it. The fix inverts the dependency: the host passes
+  the dispatcher to the scene, so no path can activate without publishing. The
+  guarantee is pinned by the type, by a source scan proving no other call site
+  exists, and by a browser lane that clicks the canvas. The source scan is a scan,
+  and is described as one.
+- **A Pixi scene must be presented before a pointer press can hit it**, because
+  PixiJS hit-tests against world transforms a never-rendered scene has not finished
+  computing. Both browser altitudes wait for presentation, and any Phase 11 test that
+  clicks a canvas affordance must do the same.
+- **The Pixi build is a screen-level switch.** On the flagged artifact the game screen
+  is the Phase 9 test world, not the dungeon, and the existing HUD is not shown.
+  Phase 9 forbids implementing the dungeon, and the existing game screen returns
+  nothing Pixi-shaped, so there was no smaller switch that did not pretend a dungeon
+  existed.
+- **The `high` quality profile renders identically to `balanced`.** That is
+  deliberate: a difference with no measured budget behind it would be a claim rather
+  than a decision. The profile exists so a caller can name the choice and so a later
+  measurement can give it content.
+- **The lane hard-fails on a missing artifact rather than skipping**, on the grounds
+  that a green run which measured nothing is the failure the gate exists to prevent.
+  In CI the artifact is downloaded and identity-verified immediately before the lane,
+  so reaching that state means the upload or download chain broke. It is a refusal
+  to certify, not a coverage gap, and the recorded identity check means the lane
+  cannot pass against a stale artifact.
+- **The test world's surface height is a judgement**, not a measurement of intent.
+  Once a resize defect was fixed the surface settled at 42 CSS pixels, which left the
+  scene's own read-out drawn outside the visible area. It is 220 pixels now, the
+  smallest round number above what the scene's layout needs. Phase 11 replaces this
+  screen with the Village viewport at the same seam.
+- **Two specifier forms remain unmatched by the ESLint renderer-boundary rule**:
+  `../../src/renderers/...` and `../../src/game/...`, which walk up past the root and
+  back down, share no prefix with the tree they reach. Nobody writes that form and the
+  identical mistake through the alias is refused, and both are recorded in the
+  repository as reported limitations rather than only in a report.
+- **`playwright.subject-product.config.ts` and several lane declaration files are in
+  no `tsconfig` project**, so ESLint's type-aware rules do not reach them. The new
+  canvas-pointer config is placed under `tests/e2e/` precisely so it and the
+  declaration it reads are covered by the same project.
+
+### Verification evidence
+
+Recorded on 2026-09-28. The status advanced from `in-progress` to `verified`.
+
+#### Baseline before Phase 9
+
+Lint clean, `tsc -b --force` clean, 3420 tests across 162 files, `dist` 4.69 MB across
+147 files, Welcome initial JavaScript and CSS 199.06 KiB gzip, license gate green on
+99 registry entries.
+
+#### Files
+
+- `package.json`, `package-lock.json` (`pixi.js@^8.21.0`), `vite.config.ts` (chunk
+  audit), `scripts/check-memory.mjs` + `.d.mts`, `.github/workflows/ci.yml`,
+  `eslint.config.js`
+- `src/renderers/pixi/runtime/{types,cozyWorldTheme,worldEnvironment,pixiInitOptions,createPixiApplication,createPixiWorldHost,useWorldQuality}.ts`,
+  `runtime/{PixiCanvas,PixiWorldHost}.tsx`,
+  `testworld/{createTestWorld.ts,TestWorldActions.tsx}`
+- `src/theme/cozyNumbers.ts` (new), `src/theme/{cozyTokens,motion,index}.ts`
+- `src/ui/App.tsx` (the dynamic import under the flag)
+- `tests/e2e/{pixi-memory-lane.ts,pixiMemory.spec.ts,playwright.pixi-memory.config.ts,playwright.pixi-pointer.config.ts}`,
+  `tests/phase9/**` (20 files), `tests/phase9/browser/pixi-canvas-pointer.spec.ts`
+
+#### Commands
+
+```text
+npm run lint                              exit 0
+npm run typecheck                         exit 0
+npx tsc -b --force                        exit 0
+npm test                                  184 files / 3806 tests passed
+npm run build:web                         built in 40.62s, vendor-pixi: 0 chunks
+npm run check:bundle-size                 4.69 MB across 147 files
+npm run check:budget:welcome              199.06 KiB of 300.00 KiB
+npm run check:memory                      passed; PixiJS reported NOT measured on this artifact
+npm run test:licenses                     PASSED, 99 entries, 0 media under src/
+VITE_WORLD_RENDERER=phaser npm run build:web    exit 0, vendor-pixi: 0 chunks
+VITE_WORLD_RENDERER=pixi  npm run build:web    exit 0, vendor-pixi: 1 chunk, 0 entry-reachable
+npm run test:e2e                          20 passed (4 Chromium viewport projects)
+npm run test:e2e:pixi-memory:recorded     8 passed
+npm run test:e2e:pixi-pointer:recorded    3 passed
+```
+
+`npx tsc -b --force` is reported alongside the incremental run on purpose. The
+incremental build has been observed reporting success after a run that had errors,
+twice in this phase alone — it hid seven real type errors in the chunk audit and one
+in the lane's wiring test — so the forced run is the one that counts.
+
+#### Exit criteria
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| Pixi does not load on Welcome | met | The default build emits **no** Pixi chunk, and `grep -i pixi` over `dist/assets/*.js` finds only the pre-existing flag-name strings and one error sentence. A static-import mutation fails the build with `Statically reachable Pixi chunk(s)`. `VITE_WORLD_RENDERER=" pixi "` fails loudly rather than falling through. |
+| Repeated mount and unmount leaks nothing | met | 8/8 lane tests. 21 samples over 20 cycles: canvas count exactly 1 at every sample, every previous cycle's canvas detached with its context explicitly lost, PixiJS application retention exactly 1, backing store constant. |
+| Keyboard and DOM mirrors work with Pixi active | met after a blocker fix | 3/3 pointer lane tests plus the memory lane's mirror test. A canvas press now reaches the mirror, which it did not before the fix. |
+| Pixi and Phaser builds both compile | met | Both build. The default and `phaser` artifacts are the same 147 files; the only difference is 58 bytes, localised to Vite serialising a defined `import.meta.env` key, with no behavioural difference. |
+| Cozy geometry, typography and motion read as numbers | met | No `parseFloat` or unit-stripping anywhere in `src/renderers/**`. Verified in a real browser: declared durations honoured, and `durationMs` returns `0`, a number rather than `NaN`, for unknown names, inherited keys, empty and padded strings, `null`, `undefined`, `NaN` and a symbol. |
+
+#### Accessibility result
+
+- The DOM mirror is generated from the same `WorldAction[]` the world declares, so a
+  Pixi interaction cannot exist without a DOM control. Measured at 1440×900, 320×640
+  and 200 % zoom: two controls in declaration order, both ≥44 CSS pixels, both
+  labelled, `Enter` and `Space` operable, the world's own shortcut working with focus
+  off the mirror, and the canvas `aria-hidden` and not a focus stop.
+- Reduced motion is asserted from compositor pixels: changed area falls from 5,138
+  pixels to 848 while the state change survives, and both runs are pixel-stable while
+  idle. The status sentence changes to a words-not-an-icon statement.
+- **The blocker this phase shipped and closed was an accessibility defect**: a
+  pointer press changed the world and the `aria-live` status did not, so it went
+  stale and then jumped to a count the learner never observed. The screen's own copy
+  claiming every canvas action has a control here was false in the shipped build.
+- No `prefers-reduced-motion` change, focus loss, or state-signal regression.
+
+#### Bundle and performance result
+
+| | baseline | default now | phaser | pixi |
+| --- | --- | --- | --- | --- |
+| `dist` | 4.69 MB / 147 | 4.69 MB / 147 | 4.69 MB / 147 | 5.78 MB / 151 |
+| Welcome initial JS+CSS | 199.06 KiB | 199.06 KiB | 199.06 KiB | 199.30 KiB |
+| `vendor-pixi` | absent | absent | absent | 535 kB raw / 153.65 KiB gzip, lazy |
+| `PixiWorldHost` | absent | absent | absent | 29 kB raw / 11.05 KiB gzip, lazy |
+
+The default production build is unchanged: same file count, same budget, and **no
+Pixi bytes at all** rather than a lazily-unfetched chunk. The router's comparison is
+`raw === 'pixi'`, which the bundler folds, so the dead branch and its dynamic import
+are deleted from the default build. The Pixi chunk is 153.65 KiB gzip against the
+800 KiB ceiling.
+
+#### Privacy and license result
+
+No learner data, telemetry, upload, or external network in the Pixi path or its
+evidence. The eight evidence files were audited: the complete key set is 86 numeric
+counters and technical labels, with no subject, note, attachment, statistic,
+progression or preference field, and no absolute path or URL. The lane blocks every
+non-loopback origin before the application runs. The CI upload is sanitized JSON
+only, under an allowlist, and the lanes' own output directories sit outside it with
+that asserted. `test:licenses` stays green and the host adds no media: the test world
+draws procedurally.
+
+One new category of host metadata is recorded unsanitized: the raw
+`WEBGL_debug_renderer_info` string, which on a physical runner is a GPU device
+string in a 14-day artifact. That is host data, not learner data, so plan rule 6 does
+not cover it, and it is noted here rather than assumed benign.
+
+#### Rollback
+
+`VITE_WORLD_RENDERER=phaser`. Verified: the explicit-phaser build and the default
+build emit the same 147 files after hash normalisation, both report `vendor-pixi: 0
+chunks`, and `npm run test:e2e:recorded` passes 20/20 against the explicit-phaser
+build, identical to the default. The 58-byte difference is localised to Vite
+serialising a defined `import.meta.env` key and changes no behaviour. The production
+default is still `phaser` and `FEATURE_FLAG_MATRIX.worldRenderer.productionDefault`
+is unchanged at `ownerPhase: 9`.
+
+#### Gate integrity
+
+Every gate was proven able to fail, by mutation where the gate is structural and by
+reverting the fix where it is behavioural. The build audit fired on the first
+attempt and on a three-hop variant. `check:memory` fires on an eager Pixi chunk, an
+oversized renderer chunk, no renderer chunk, no `assets/` tree, a dangling reference,
+and now an unknown renderer family. The memory lane refuses to skip and refuses to
+pass against a stale artifact. **The pointer lane was shown red on the real defect**:
+reverting one line in the scene — calling its own action verb instead of the host's
+dispatcher — turned two of its three tests red with `the first canvas click did not
+reach the mirror`, against the same artifact, before being restored.
+
+Hermeticity was checked directly, because the Phase 8 guard scans only `tests/phase8`:
+no Phase 9 gate depends on the checkout's git history, on where the checkout lives, or
+on a `dist/` that may not exist. The only gate that needs a build is `check:memory`,
+and it is a build-level gate run immediately after a build. The lane's refusal to skip
+is the opposite of the Phase 8 defect: it cannot pass against a stale artifact.
+
+One load-bearing CI invariant was found to have **no test attached** and now has one:
+the Pixi-flagged build overwrites the `web-build` runner's `dist` after the production
+artifact is uploaded, which is safe only because every consumer downloads the
+artifact. A new assertion pins the ordering and proves the window between the upload
+and the Pixi build contains no `dist` reader.
+
+#### Merge evidence
+
+The maintainer accepted the verified checkpoint on 2026-09-29, so Phase 9 is
+`complete` and Phase 10 remains `not-started` and requires separate authorization.
+
+PR #59, branch `phase-9-pixi-host`, four commits squashed to `5ef98dd`. The pull-request run `36529308416` passed all eleven jobs and the
+post-merge `main` run `36530601431` passed all eleven again, including the four
+cross-engine compatibility lanes. `Deploy Web to GitHub Pages` ran `36530601425` on
+the same commit. The phase was committed as one commit rather than split, and the
+reason is recorded below with the two blockers.
+
+**Three of the four defects this phase shipped were in its gates, and CI found all
+three.** That is the finding, and it is a change from Phase 8 rather than a repeat
+of it. Phase 8's three near-misses were green locally and red on CI because they
+depended on state a clean checkout does not have. Phase 9's first three red runs were
+different: they were gates that were correct in isolation and wrong about the thing
+they were composed with, and two of them were introduced by fixes for earlier
+defects.
+
+The first was a guard for a real diagnostics problem. A missing artifact made the
+lane reach a `vite preview` of a directory that was not there, which Playwright
+reports as a 180-second webServer timeout. Changing the module-scope `console.warn` in
+the lane config to a `throw` fixed the diagnosis and broke `npm test`, because the
+lane's own wiring gate imports that config module to assert its shape — so importing
+it became fatal in any checkout without a build, including the `unit-tests` job,
+which has none and never should. The check now lives in the command, where it runs
+only when a person or CI invokes a lane: a missing artifact costs 41 milliseconds and
+one sentence, and the config module is importable again. This is the Phase 8 defect
+class reintroduced while fixing something else, which is worth recording because it is
+what a local-only verification loop produces.
+
+The second was in the CI wiring this phase added. `actions/download-artifact` extracts
+*into* the working directory rather than replacing what is there, so the flagged
+artifact's download merged into the production tree the earlier download had left
+behind: two builds emitting the same logical chunk names with different content
+hashes, and a 179-file tree that was neither artifact. The identity gate caught it
+and refused to measure it before anything was measured, which is the property worth
+keeping, and the tree is now replaced explicitly. This was not a pre-existing defect
+rediscovered — the gap was created by the change, because Phase 9 is what put a second
+artifact into a job that already had one.
+
+The third was the preflight script written to fix the first, shipped with TypeScript
+syntax — `} as const;` and a parameter annotation — in a file Node loads as an ES
+module. `scripts/` is in no `tsconfig` project and `scripts/**` is in ESLint's ignore
+list, so neither gate could see it, and the only thing that could was running it. The
+cause was procedural and is recorded because it is the second time this phase: the
+lane command was rewritten to `<preflight> && playwright test ...`, the config was
+checked, the wiring assertions were checked, and the full unit suite was run — and
+the composed command was never executed. The lane had been run 8/8 and 3/3, but
+*before* the preflight existed in front of it. A composed command is a new artifact
+and has to be run rather than inferred from its parts. A `node --check` assertion now
+guards it, because a syntax error in a preflight is a red run naming a Node stack
+trace instead of the missing artifact it exists to describe.
+
+**The two blockers the phase's own browser lanes found are recorded above** — a Pixi
+world that had never mounted, and a canvas press that never reached the DOM mirror.
+Neither was visible to a unit test, and the second is why the phase was not split:
+separate lanes from the host would have produced a first commit that was green,
+reviewed, and merging a world that had never rendered.
+
+**The suite is flaky, and it is not this phase's to have caused.** Three consecutive
+identical runs on an unmodified tree gave eight failed, five failed and zero failed,
+every failure in `tests/data/*` Phase 5, 6 and 7 gates that this phase does not touch.
+The Phase 7 merge record already names a wall-clock flake found while sweeping. It
+did not redden any of the four CI runs on this branch or the post-merge run, and it is
+recorded here rather than fixed opportunistically inside a renderer phase, because a
+data gate failing in a renderer PR is a distraction and a real fix needs its own
+investigation.
+
+Recorded and not fixed, because it predates this phase:
+`tests/phase5/seam.test.ts` asserts a file is unmodified via `git status --porcelain`,
+which is safe on a CI runner's clean tree and red in a developer tree where that file
+is locally edited.
+
+The PixiJS 8.21.0 `CanvasObserver` defect recorded above should be filed upstream: it
+is a real leak in a dependency, reproduced at +1 per application in a real browser,
+and the only reason it is not a problem here is that every browser in the support
+matrix has provided `ResizeObserver` since 2018. That is a property of the shipped
+matrix, not of the code, and it will not stay true if the matrix moves.
 
 ### Rollback
 
