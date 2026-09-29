@@ -44,7 +44,12 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { PIXI_POINTER_LANE, PIXI_POINTER_PREVIEW_PORT, PIXI_POINTER_PREVIEW_SCRIPT } from '../e2e/pixi-memory-lane';
+import {
+  PIXI_LANE_PREFLIGHT_COMMAND,
+  PIXI_POINTER_LANE,
+  PIXI_POINTER_PREVIEW_PORT,
+  PIXI_POINTER_PREVIEW_SCRIPT,
+} from '../e2e/pixi-memory-lane';
 
 const REPO_ROOT = process.cwd();
 const PACKAGE_JSON = path.join(REPO_ROOT, 'package.json');
@@ -58,6 +63,7 @@ const packageJson = JSON.parse(readFileSync(PACKAGE_JSON, 'utf8')) as {
 const workflow = readFileSync(WORKFLOW, 'utf8');
 const config = readFileSync(CONFIG, 'utf8');
 const spec = readFileSync(SPEC, 'utf8');
+const preflight = readFileSync(path.join(REPO_ROOT, 'scripts/require-pixi-lane-artifact.mjs'), 'utf8');
 
 /** The body of one named step, so an assertion about it is about that step. */
 function stepBlock(name: string): string {
@@ -79,7 +85,11 @@ function jobBlock(job: string): string {
 
 describe('the canvas-pointer lane is bound and can fail', () => {
   it('has an npm script, and the scripts are the same command CI runs', () => {
-    const command = `playwright test --config=${PIXI_POINTER_LANE.configFile}`;
+    // The preflight runs first, in the command, not as a guard at the top of the
+    // config: a module-scope throw made importing the config fatal in a checkout
+    // without a built artifact, which broke the `unit-tests` job. So a missing
+    // artifact costs a one-line diagnosis here and the config stays importable.
+    const command = `${PIXI_LANE_PREFLIGHT_COMMAND} && playwright test --config=${PIXI_POINTER_LANE.configFile}`;
     expect(packageJson.scripts['test:e2e:pixi-pointer'], 'plain script').toBe(command);
     expect(packageJson.scripts['test:e2e:pixi-pointer:recorded'], 'recorded script').toBe(command);
     // `:full` is the local build-and-record path. The config must never be able to
@@ -89,6 +99,10 @@ describe('the canvas-pointer lane is bound and can fail', () => {
     );
     // The config path is declared once and both the script and the config read it.
     expect(PIXI_POINTER_LANE.configFile).toBe('tests/e2e/playwright.pixi-pointer.config.ts');
+    // And the config module itself must carry no artifact check, or the import that
+    // the wiring gate above performs would fail in a clean checkout.
+    expect(config).not.toMatch(/existsSync/);
+    expect(config).not.toMatch(/throw new Error/);
   });
 
   it('runs in CI, as a step rather than a job of its own', () => {
@@ -141,12 +155,20 @@ describe('the canvas-pointer lane is bound and can fail', () => {
     expect(config).not.toContain('npm run build:web');
     expect(config).not.toMatch(/npm run build:web:pixi/);
     expect(config).not.toMatch(/test\.skip\(/);
-    // The guard throws at config load rather than warning. A warning let the run
-    // reach a `vite preview` of a directory that was not there, and Playwright
-    // reported that as a 180-second timeout instead of the missing build.
-    expect(config).toMatch(/if \(!existsSync\(DIST_DIR\)\) \{\s*throw new Error\(/);
-    expect(config).toMatch(/if \(!existsSync\(MANIFEST_PATH\)\) \{\s*throw new Error\(/);
-    expect(config).not.toContain('console.warn');
+    // The preflight, not the config, is what names a missing artifact. A guard in
+    // the config has two failure modes and both were hit: a `console.warn` let the
+    // run reach a `vite preview` of a directory that was not there, which Playwright
+    // reports as a 180-second timeout; and changing that warn to a `throw` made the
+    // config unimportable, so the gate that asserts its shape failed in every
+    // checkout without a build — including the `unit-tests` CI job, which has none
+    // and never should. The check therefore runs in the command.
+    expect(PIXI_LANE_PREFLIGHT_COMMAND).toBe('node scripts/require-pixi-lane-artifact.mjs');
+    expect(preflight).toMatch(/process\.exit\(1\)/);
+    expect(preflight).toMatch(/existsSync\(distDir\)/);
+    expect(preflight).toMatch(/existsSync\(manifest\)/);
+    // A partial `dist` is a distinct message, because a partial build is a recurring
+    // source of confusing failures elsewhere in this repository.
+    expect(preflight).toMatch(/index\.html/);
     expect(spec).not.toMatch(/test\.skip\(/);
     expect(spec).not.toMatch(/test\.fixme\(/);
   });

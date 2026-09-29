@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig, devices, type Project } from '@playwright/test';
 
@@ -48,8 +47,6 @@ const RUN_ID = process.env.KD_COMPAT_RUN_ID ?? buildLocalRunId(new Date(), proce
 process.env.KD_COMPAT_RUN_ID = RUN_ID;
 
 const REPO_ROOT = process.cwd();
-const DIST_DIR = path.resolve(REPO_ROOT, 'dist');
-const MANIFEST_PATH = path.resolve(REPO_ROOT, PIXI_MEMORY_LANE.manifestPath);
 
 /**
  * Output paths are absolute on purpose.
@@ -63,30 +60,6 @@ const MANIFEST_PATH = path.resolve(REPO_ROOT, PIXI_MEMORY_LANE.manifestPath);
 const RESULTS_DIR = path.join(REPO_ROOT, 'artifacts/pixi-memory-test-results');
 const REPORT_DIR = path.join(REPO_ROOT, 'artifacts/playwright-pixi-memory-report');
 
-// Both of these fail at config load rather than warning. The lane's stance is hard
-// fail and never skip — a run that reports green because it measured nothing is the
-// failure this gate exists to prevent — but a `console.warn` left the run to continue
-// into a `vite preview` of a directory that is not there, and Playwright's webServer
-// readiness check reports that as a 180-second timeout rather than as the missing
-// build it is. Naming the cause at load time costs a second instead of three minutes
-// and tells the reader what to run.
-if (!existsSync(DIST_DIR)) {
-  throw new Error(
-    'The Pixi world memory lane has no built artifact to measure. ' +
-      `Run "npm run ${PIXI_MEMORY_LANE.buildScript}" first, then record and verify its identity with ` +
-      '"npm run record:web-artifact:pixi" and "npm run verify:web-artifact:pixi". In CI the artifact is ' +
-      'downloaded and identity-verified by the two steps immediately before this lane runs, so reaching ' +
-      'this message there means the upload or download chain broke rather than that a build is missing.',
-  );
-}
-if (!existsSync(MANIFEST_PATH)) {
-  throw new Error(
-    'The Pixi world memory lane has no recorded Pixi-flagged artifact identity at ' +
-      `${PIXI_MEMORY_LANE.manifestPath}. Run "npm run ${PIXI_MEMORY_LANE.buildScript}" followed by ` +
-      '"npm run record:web-artifact:pixi". This lane refuses to measure an artifact whose identity it ' +
-      'cannot confirm, so that it cannot pass against a stale dist.',
-  );
-}
 
 const laneProject: Project = {
   name: PIXI_MEMORY_LANE.project,

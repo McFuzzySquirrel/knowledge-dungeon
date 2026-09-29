@@ -77,6 +77,7 @@ import {
   PIXI_MEMORY_FLAG_VALUE,
   PIXI_MEMORY_LANE,
   PIXI_MEMORY_LANE_FULL_SCRIPT,
+  PIXI_LANE_PREFLIGHT_COMMAND,
   PIXI_MEMORY_LANE_SCRIPT,
   PIXI_MEMORY_MANIFEST_PATH,
   PIXI_MEMORY_PLAYWRIGHT_COMMAND,
@@ -121,6 +122,12 @@ function parseWorkflowJobs(text: string): ReadonlyMap<string, string> {
 }
 
 const ciWorkflow = readFileSync(CI_WORKFLOW_PATH, 'utf8');
+// The config as text, so the two assertions that it carries no artifact check can
+// be made without a module-scope check failing in a checkout with no build.
+const pixiMemoryConfigSource = readFileSync(
+  path.join(REPO_ROOT, PIXI_MEMORY_CONFIG_FILE),
+  'utf8',
+);
 const ciJobs = parseWorkflowJobs(ciWorkflow);
 
 /** The text of one named step, up to the next step in the same job. */
@@ -221,13 +228,30 @@ describe('pixi memory npm scripts', () => {
   it('runs exactly the Playwright invocation the lane declares, and cannot widen it', () => {
     // The config this lane owns, bound by the one command both scripts share, so a
     // second spec cannot be reachable through a different `--config`.
+    //
+    // The command is the preflight *and* the Playwright invocation. The preflight is
+    // a separate `&&` term rather than a guard at the top of the config, and that is
+    // not a style choice: this very file imports the config module to assert its
+    // shape, so a module-scope `throw` made importing it fatal in any checkout
+    // without a built artifact — including the `unit-tests` CI job, which has none.
+    // Two terms is also what makes a missing artifact a one-line diagnosis rather
+    // than a 180-second webServer timeout.
     for (const script of [PIXI_MEMORY_LANE_SCRIPT, PIXI_MEMORY_CI_RUN_SCRIPT]) {
-      expect(npmScripts[script]).toBe(PIXI_MEMORY_PLAYWRIGHT_COMMAND);
-      expect(npmScripts[script].split('&&')).toHaveLength(1);
+      expect(npmScripts[script]).toBe(`${PIXI_LANE_PREFLIGHT_COMMAND} && ${PIXI_MEMORY_PLAYWRIGHT_COMMAND}`);
+      expect(npmScripts[script].split('&&')).toHaveLength(2);
     }
     expect(PIXI_MEMORY_PLAYWRIGHT_COMMAND).toBe(
       `playwright test --config=${PIXI_MEMORY_CONFIG_FILE}`,
     );
+    // The preflight establishes that there is something to measure; it cannot build
+    // or record, or it would be the rebuild path this lane exists to avoid.
+    expect(PIXI_LANE_PREFLIGHT_COMMAND).toBe('node scripts/require-pixi-lane-artifact.mjs');
+    expect(PIXI_LANE_PREFLIGHT_COMMAND).not.toContain('build:web');
+    expect(PIXI_LANE_PREFLIGHT_COMMAND).not.toContain('record:web-artifact');
+    // And the config module itself carries no artifact check, so importing it above
+    // cannot fail in a clean checkout.
+    expect(pixiMemoryConfigSource).not.toMatch(/existsSync/);
+    expect(pixiMemoryConfigSource).not.toMatch(/throw new Error/);
     // No other spec, and no `--project` override that could select a project the
     // config does not declare.
     for (const script of [PIXI_MEMORY_LANE_SCRIPT, PIXI_MEMORY_LANE_FULL_SCRIPT, PIXI_MEMORY_CI_RUN_SCRIPT]) {
@@ -254,9 +278,13 @@ describe('pixi memory npm scripts', () => {
     // already has both does not rebuild.
     const full = npmScripts[PIXI_MEMORY_LANE_FULL_SCRIPT] ?? '';
     expect(full).toBe(
-      `npm run ${PIXI_MEMORY_BUILD_SCRIPT} && npm run ${PIXI_MEMORY_RECORD_SCRIPT} && ${PIXI_MEMORY_PLAYWRIGHT_COMMAND}`,
+      `npm run ${PIXI_MEMORY_BUILD_SCRIPT} && npm run ${PIXI_MEMORY_RECORD_SCRIPT} && ` +
+        `${PIXI_LANE_PREFLIGHT_COMMAND} && ${PIXI_MEMORY_PLAYWRIGHT_COMMAND}`,
     );
-    expect(full.split('&&')).toHaveLength(3);
+    // Four terms: build, record, preflight, measure. The preflight is redundant
+    // immediately after a successful build, and is here so that `:full` fails with
+    // the same one-line diagnosis as the other three scripts rather than a timeout.
+    expect(full.split('&&')).toHaveLength(4);
   });
 
   it('records the Pixi-flagged identity through its own record and verify scripts', () => {
@@ -505,7 +533,9 @@ describe('pixi memory CI wiring (ci.yml)', () => {
     // The step runs the same npm script a person runs, so the command CI executes
     // and the command this file asserts are one string rather than two.
     expect(PIXI_MEMORY_CI_RUN_COMMAND).toBe(`npm run ${PIXI_MEMORY_CI_RUN_SCRIPT}`);
-    expect(npmScripts[PIXI_MEMORY_CI_RUN_SCRIPT]).toBe(PIXI_MEMORY_PLAYWRIGHT_COMMAND);
+    expect(npmScripts[PIXI_MEMORY_CI_RUN_SCRIPT]).toBe(
+      `${PIXI_LANE_PREFLIGHT_COMMAND} && ${PIXI_MEMORY_PLAYWRIGHT_COMMAND}`,
+    );
   });
 
   it('uploads sanitized JSON evidence only, and never a report, trace or results tree', () => {

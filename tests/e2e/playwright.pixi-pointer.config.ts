@@ -47,13 +47,11 @@
  * - **A port of its own**, so it cannot contend with the memory lane's preview
  *   server if both ever run in the same job.
  */
-import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { defineConfig, type PlaywrightTestConfig } from '@playwright/test';
 
 import {
-  PIXI_MEMORY_LANE,
   PIXI_POINTER_LANE,
   PIXI_POINTER_PREVIEW_PORT,
   PIXI_POINTER_PREVIEW_SCRIPT,
@@ -63,27 +61,7 @@ import {
 // does not exist. It matches the memory lane's own config, and it is why every npm
 // script that loads a config runs from the repository root.
 const REPO_ROOT = process.cwd();
-const DIST_DIR = path.resolve(REPO_ROOT, 'dist');
-const MANIFEST_PATH = path.resolve(REPO_ROOT, PIXI_MEMORY_LANE.manifestPath);
 
-if (!existsSync(DIST_DIR)) {
-  throw new Error(
-    'The Pixi canvas-pointer gate has no built artifact to test. ' +
-      `Run "npm run ${PIXI_POINTER_LANE.buildScript}" first, then record and verify its identity with ` +
-      `"npm run ${PIXI_POINTER_LANE.recordScript}" and "npm run ${PIXI_POINTER_LANE.verifyScript}". ` +
-      'In CI the artifact is downloaded and identity-verified immediately before this lane runs, so ' +
-      'reaching this message there means the upload or download chain broke rather than that a build ' +
-      'is missing.',
-  );
-}
-if (!existsSync(MANIFEST_PATH)) {
-  throw new Error(
-    'The Pixi canvas-pointer gate has no recorded Pixi-flagged artifact identity at ' +
-      `${PIXI_MEMORY_LANE.manifestPath}. Run "npm run ${PIXI_POINTER_LANE.buildScript}" followed by ` +
-      `"npm run ${PIXI_POINTER_LANE.recordScript}". This lane refuses to test an artifact whose ` +
-      'identity it cannot confirm.',
-  );
-}
 
 export default defineConfig({
   // Relative to this file, which is not at the repository root.

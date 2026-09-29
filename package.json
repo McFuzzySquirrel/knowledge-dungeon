@@ -72,12 +72,12 @@
     "test:e2e:reload-persistence": "playwright test --config=playwright.reload-persistence.config.ts",
     "test:e2e:reload-persistence:full": "npm run build:storage-v2-data-products && npm run record:web-artifact:storage-v2 && playwright test --config=playwright.reload-persistence.config.ts",
     "test:e2e:reload-persistence:recorded": "playwright test --config=playwright.reload-persistence.config.ts",
-    "test:e2e:pixi-memory": "playwright test --config=tests/e2e/playwright.pixi-memory.config.ts",
-    "test:e2e:pixi-memory:full": "npm run build:web:pixi && npm run record:web-artifact:pixi && playwright test --config=tests/e2e/playwright.pixi-memory.config.ts",
-    "test:e2e:pixi-memory:recorded": "playwright test --config=tests/e2e/playwright.pixi-memory.config.ts",
-    "test:e2e:pixi-pointer": "playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
-    "test:e2e:pixi-pointer:full": "npm run build:web:pixi && npm run record:web-artifact:pixi && playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
-    "test:e2e:pixi-pointer:recorded": "playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
+    "test:e2e:pixi-memory": "node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-memory.config.ts",
+    "test:e2e:pixi-memory:full": "npm run build:web:pixi && npm run record:web-artifact:pixi && node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-memory.config.ts",
+    "test:e2e:pixi-memory:recorded": "node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-memory.config.ts",
+    "test:e2e:pixi-pointer": "node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
+    "test:e2e:pixi-pointer:full": "npm run build:web:pixi && npm run record:web-artifact:pixi && node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
+    "test:e2e:pixi-pointer:recorded": "node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

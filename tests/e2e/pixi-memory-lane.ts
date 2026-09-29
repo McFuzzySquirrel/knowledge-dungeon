@@ -307,6 +307,22 @@ export function validatePixiMemoryLane(
   return problems;
 }
 
+/**
+ * The preflight both Pixi lanes run before Playwright starts.
+ *
+ * It exists as a command rather than as a guard at the top of a config, and the
+ * reason is recorded in the script's own header: a module-scope `throw` made
+ * `tests/e2e/pixi-memory-lane.test.ts` — which imports the config to assert its
+ * shape — fail in any checkout without a built artifact, including the
+ * `unit-tests` CI job, which has none and never should. The config modules are
+ * therefore importable and side-effect free, and the check runs only when a person
+ * or CI actually invokes a lane. That is what makes a missing artifact a one-line
+ * diagnosis instead of a 180-second webServer timeout, without making the config
+ * depend on a `dist/`.
+ */
+export const PIXI_LANE_PREFLIGHT_SCRIPT = 'require-pixi-lane-artifact.mjs';
+export const PIXI_LANE_PREFLIGHT_COMMAND = `node scripts/${PIXI_LANE_PREFLIGHT_SCRIPT}`;
+
 /*
  * ── The canvas-pointer gate ───────────────────────────────────────────────────
  *
