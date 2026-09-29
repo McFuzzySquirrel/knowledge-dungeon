@@ -299,6 +299,21 @@ jobs:
       # results and HTML report directories are deliberately outside that
       # allowlist, so the pre-existing failure upload further down does not reach
       # them either.
+      - name: Discard the production dist before the flagged download
+        # `actions/download-artifact` extracts *into* the working directory, so a
+        # second download merges into the tree the first one left behind rather than
+        # replacing it. The two builds emit the same logical chunk names with
+        # different content hashes, so the merged tree is neither artifact: it was
+        # 179 files, the union of a 151-file production dist and the flagged one.
+        #
+        # The identity check caught it, which is the right place for it to be caught:
+        # `dist-does-not-match-recorded-artifact`, before anything was measured. But a
+        # red run is a worse outcome than a correct one, so the tree is replaced
+        # explicitly. This is the mirror of the invariant the build job already
+        # asserts — that nothing between the production upload and the Pixi build
+        # *reads* `dist`. This one is that nothing between the production suite and
+        # the Pixi download *keeps* it.
+        run: rm -rf dist
       - name: Download the Pixi-flagged artifact
         uses: actions/download-artifact@v4
         with:

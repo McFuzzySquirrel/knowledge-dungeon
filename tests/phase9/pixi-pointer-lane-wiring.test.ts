@@ -138,13 +138,43 @@ describe('the canvas-pointer lane is bound and can fail', () => {
     // and a workflow-wide indexOf matches that one first, which inverts the answer.
     const jobScoped = jobBlock(PIXI_POINTER_LANE.ciJob);
     const order = [
+      'Run the current-build viewport suite against the shared artifact',
+      'Discard the production dist before the flagged download',
       'Download the Pixi-flagged artifact',
       'Verify the Pixi-flagged artifact identity',
       'Run the Pixi world mount/unmount memory lane',
       'Run the Pixi canvas-pointer DOM mirror lane',
     ].map((name) => jobScoped.indexOf(`name: ${name}`));
-    expect(order.every((index) => index > -1), 'all four steps are in this job').toBe(true);
+    expect(order.every((index) => index > -1), 'all six steps are in this job').toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('replaces the production dist rather than merging the flagged build into it', () => {
+    // Found the hard way, on the first CI run of this phase.
+    // `actions/download-artifact` extracts *into* the working directory, so the
+    // flagged download merged into the production tree the earlier download left
+    // behind. Both builds emit the same logical chunk names with different content
+    // hashes, so the result was neither artifact: 179 files, the union of a 151-file
+    // production dist and the flagged one. The identity check caught it and refused
+    // to measure it, which is the right place for it to be caught — but a red run is
+    // a worse outcome than a correct one.
+    //
+    // This is the mirror of the invariant the build job already asserts, that
+    // nothing between the production upload and the Pixi build *reads* `dist`. This
+    // one is that nothing between the production suite and the flagged download
+    // *keeps* it.
+    const jobScoped = jobBlock(PIXI_POINTER_LANE.ciJob);
+    const clear = stepBlock('Discard the production dist before the flagged download');
+    expect(clear).toMatch(/rm -rf dist/);
+    // Between the clear and the download, nothing may put a dist back.
+    const after = jobScoped.slice(jobScoped.indexOf('name: Discard the production dist'));
+    const beforeDownload = after.slice(0, after.indexOf('name: Download the Pixi-flagged artifact'));
+    expect(
+      [...beforeDownload.matchAll(/^\s*-\s+(?:run|uses):[^\n]*$/gm)].map((m) => m[0]),
+      'nothing runs between the clear and the download',
+    ).toHaveLength(0);
+    // And the clear is inside this job, not somewhere that never runs.
+    expect(after).toContain('name: Download the Pixi-flagged artifact');
   });
 
   it('cannot rebuild, and cannot skip', () => {

@@ -161,6 +161,41 @@ function namesDist(step: Step): boolean {
 }
 
 /**
+ * Commands that put a `dist` back after removing one.
+ *
+ * A step that clears `dist` and then rebuilds is a `dist` writer even though no
+ * mention of `dist` survives the removal, so it is not exempt.
+ */
+const DIST_PRODUCING_COMMANDS =
+  /\b(?:npm run (?:build:web|build)|vite build|rollup -c|tsc -b)\b/;
+
+/**
+ * A command whose only effect on `dist` is to remove it.
+ *
+ * `actions/download-artifact` extracts *into* the working directory rather than
+ * replacing it, so the flagged artifact's download merged into the production tree
+ * the earlier download had left behind: two builds with the same logical chunk names
+ * and different content hashes, and a 179-file tree that was neither artifact. The
+ * identity check caught it and refused to measure it, which is the right place for
+ * that to be caught, but the fix is a step that clears `dist` first — and that step
+ * mentions `dist` on its command line without reading it.
+ *
+ * The removal match stops at a command separator, so `rm -rf dist && cat dist/x`
+ * still leaves the reader half visible, and a step that also rebuilds is a writer
+ * rather than a remover.
+ */
+function onlyRemovesDist(step: Step): boolean {
+  if (!namesDist(step)) return false;
+  const withoutRemovals = step.command.replace(
+    /\brm\s+(?:-[a-zA-Z]+\s+)*-?[^\n;&|]*?\bdist\b[^\n;&|]*/g,
+    '',
+  );
+  if (/(?:^|[\s'"=/])dist(?:\/|['"\s]|$)/m.test(withoutRemovals)) return false;
+  if (DIST_PRODUCING_COMMANDS.test(withoutRemovals)) return false;
+  return true;
+}
+
+/**
  * npm scripts that read the repository's `dist` without naming it on the command line,
  * because the script's own default argument points there.
  *
@@ -174,6 +209,7 @@ const DIST_BY_DEFAULT_SCRIPTS = ['check:memory', 'check:bundle-size', 'check:bud
 
 /** True when a step reads this runner's build output, by name or by script default. */
 function readsDist(step: Step): boolean {
+  if (onlyRemovesDist(step)) return false;
   if (namesDist(step)) return true;
   return DIST_BY_DEFAULT_SCRIPTS.some(
     (script) => new RegExp(`npm run ${script}(?![\\w:-])`).test(step.command),
@@ -463,12 +499,28 @@ describe('the production artifact is never re-read after the Pixi build overwrit
       'ls dist/assets',
       'cat dist/index.html',
       'rm -rf dist && npm run build:web',
+      'rm -rf dist && cat dist/index.html',
+      'rm -rf ./dist && du -sh dist',
       'du -sh ./dist',
       'test -d dist',
       'sha256sum dist/index.html',
       "node -e \"require('fs').readdirSync('dist')\"",
     ]) {
       expect(reads(offending), offending).toBe(true);
+    }
+    // The one exclusion, pinned from both sides so it cannot widen into a hole: a
+    // step whose *every* mention of `dist` is a removal is not a reader, which is
+    // what lets `browser-smoke` clear the production tree before the flagged
+    // download merges into it. The second entry is the case that would make the
+    // exemption dangerous if it were written as "the command contains `rm`" — a step
+    // that also reads must still count.
+    for (const notAReader of [
+      'rm -rf dist',
+      'rm -rf ./dist',
+      'rm -rf dist && true',
+      'rm -rf dist artifacts',
+    ]) {
+      expect(reads(notAReader), notAReader).toBe(false);
     }
     // By script default: the three gates whose whole job is to read the artifact and
     // whose command line does not say so. A text scan alone would call these clean.
