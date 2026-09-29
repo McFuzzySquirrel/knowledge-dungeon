@@ -40,6 +40,7 @@
  * beyond the assertion failures above.
  */
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -56,6 +57,7 @@ const PACKAGE_JSON = path.join(REPO_ROOT, 'package.json');
 const WORKFLOW = path.join(REPO_ROOT, '.github/workflows/ci.yml');
 const CONFIG = path.join(REPO_ROOT, 'tests/e2e/playwright.pixi-pointer.config.ts');
 const SPEC = path.join(REPO_ROOT, 'tests/phase9/browser/pixi-canvas-pointer.spec.ts');
+const PREFLIGHT_PATH = path.join(REPO_ROOT, 'scripts/require-pixi-lane-artifact.mjs');
 
 const packageJson = JSON.parse(readFileSync(PACKAGE_JSON, 'utf8')) as {
   scripts: Record<string, string>;
@@ -84,6 +86,21 @@ function jobBlock(job: string): string {
 }
 
 describe('the canvas-pointer lane is bound and can fail', () => {
+  it('has a preflight that is valid JavaScript, and says so rather than failing obscurely', () => {
+    // The preflight shipped once with TypeScript syntax - `} as const;` and a
+    // parameter annotation - in a file Node loads as an ES module. It passed `tsc`
+    // because `scripts/` is in no tsconfig project, and it passed `eslint` because
+    // `scripts/**` is in its ignore list, so the only thing that could have caught it
+    // was running it, and the first thing that ran it was CI. `node --check` is the
+    // cheap gate that belongs in the suite, because a syntax error in a preflight is
+    // a red run that names a Node stack trace instead of a missing artifact.
+    const checked = spawnSync(process.execPath, ['--check', PREFLIGHT_PATH], {
+      encoding: 'utf8',
+    });
+    expect(checked.stderr, checked.stderr).toBe('');
+    expect(checked.status, `${PREFLIGHT_PATH} does not parse as JavaScript`).toBe(0);
+  });
+
   it('has an npm script, and the scripts are the same command CI runs', () => {
     // The preflight runs first, in the command, not as a guard at the top of the
     // config: a module-scope throw made importing the config fatal in a checkout

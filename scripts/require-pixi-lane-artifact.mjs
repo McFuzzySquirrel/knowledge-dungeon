@@ -54,9 +54,9 @@ const lanes = {
     label: 'The Pixi canvas-pointer gate',
     config: 'tests/e2e/playwright.pixi-pointer.config.ts',
   },
-} as const;
+};
 
-function fail(lane: (typeof lanes)[keyof typeof lanes], problem: string, remedy: string): never {
+function fail(lane, problem, remedy) {
   console.error(
     `${lane.label} cannot run: ${problem}\n\n` +
       `  ${remedy}\n\n` +
@@ -69,7 +69,10 @@ function fail(lane: (typeof lanes)[keyof typeof lanes], problem: string, remedy:
   process.exit(1);
 }
 
-const lane = lanes.memory;
+// Both lanes share one preflight, so it reports the memory lane's name and points
+// at the pointer gate's config only when that is the one invoked. The command is
+// one script for both so the two cannot drift.
+const lane = process.argv.includes('--pointer') ? lanes.pointer : lanes.memory;
 const distDir = path.join(REPO_ROOT, 'dist');
 const manifest = path.join(REPO_ROOT, 'artifacts/web-artifact-manifest-pixi.json');
 
