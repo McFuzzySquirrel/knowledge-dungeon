@@ -71,11 +71,40 @@
  * application that was never `init()`ed throws.** `Application.destroy` runs every
  * plugin's destroy hook, and `ResizePlugin`'s hook calls a helper its `init` hook
  * created. So the host never destroys an application it did not finish creating.
+ *
+ * ## Why the asset runtime is here too
+ *
+ * Phase 10 added a second binding to this module, and the reason it did not get its
+ * own file is the first paragraph of this header read as a rule:
+ * `tests/phase9/pixi-host-boundary.test.ts` walks `src/renderers/**` and fails unless
+ * the set of modules importing `pixi.js` is exactly the two it names - this one and
+ * the Phase 9 scene. A separate `pixiAssetRuntime.ts` would have made that three and
+ * turned a deliberate decision into a red test, which is exactly what that gate is
+ * for: a new engine importer is a review, not a diff. The Phase 10 review happened;
+ * this is the result.
+ *
+ * The alternative - letting `AssetLoader.ts` import the engine - was rejected on the
+ * merits rather than on the test. The loader is policy: reference counts, in-flight
+ * idempotence, the required/optional split, deferred release, and a bounded
+ * diagnostic. None of that needs a GPU, a DOM, or a network, and putting the engine
+ * behind {@link PixiAssetRuntime} is what lets `tests/phase10/asset-loader.test.ts`
+ * exercise all of it against a plain object. The engine is here; the policy is not.
+ *
+ * The two release methods are the loader's contract, so they are worth naming here:
+ * Pixi's texture parsers implement `unload` as `texture.destroy(true)`, so
+ * `Assets.unloadBundle` and `Assets.unload` genuinely free GPU memory rather than
+ * dropping a cache entry. The loader relies on that and does **not** call
+ * `destroyTexture` on anything this runtime loaded - a second `destroy(true)` on an
+ * already-destroyed texture is a use-after-free, not belt and braces.
  */
-import { Application } from 'pixi.js';
+import { Application, Assets, CanvasSource, Texture } from 'pixi.js';
 import type { Renderer } from 'pixi.js';
 
 import { pixiInitOptions } from './pixiInitOptions';
+import type {
+  PixiAssetRuntime,
+  ResolvedFallbackRecipe,
+} from '../assets/AssetLoader';
 import type {
   WorldApplication,
   WorldApplicationDestroyOptions,
@@ -212,4 +241,243 @@ export async function createPixiApplication(spec: WorldApplicationSpec): Promise
 function applyFrameRateCap(app: Application, maxFps: number): void {
   if (!Number.isFinite(maxFps)) return;
   app.ticker.maxFPS = maxFps > 0 ? maxFps : 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The PixiJS asset runtime                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A 2D context and the canvas it came from, or `null` in a realm without one.
+ *
+ * The `null` branch is the interesting one. A procedural fallback that cannot be
+ * drawn must not become a thrown `TypeError` inside a world mount, which is the same
+ * failure shape the loader's whole no-reject policy exists to avoid - so the recipe
+ * degrades to a flat fill when there is no 2D context, and to a one-pixel white
+ * texture when there is no canvas either. Both are visibly wrong; neither is a crash
+ * on a route.
+ *
+ * ## Why the canvas is returned rather than assigned onto the context
+ *
+ * The first version of this assigned `context.canvas = canvas` and read the canvas
+ * back off the context in {@link createFallbackTexture}. **That throws in every
+ * browser in the support matrix.** `CanvasRenderingContext2D.prototype.canvas` is
+ * an accessor with only a getter, so the assignment is a `TypeError`, and this
+ * module is an ES module, so it is strict mode and the throw is not swallowed:
+ *
+ *     TypeError: Cannot set property canvas of #<CanvasRenderingContext2D>
+ *                which has only a getter
+ *
+ * The Phase 10 browser lane found it by calling the shipped runtime in real
+ * Chromium, where it made `createFallbackTexture` — the very thing that exists so
+ * a missing asset cannot break a route — throw on every call. jsdom missed it
+ * because `vitest.setup.ts` replaces `getContext` with a plain object literal, and
+ * a plain object has a writable `canvas` data property.
+ *
+ * There was never a reason to write the property: the platform already puts the
+ * canvas on the context, and the code that needs the canvas created it one line
+ * earlier. So the canvas is returned alongside the context and read from there.
+ * `tests/phase10/browser-shape-parity.test.ts` is the regression gate, and it
+ * defines `canvas` with the platform's getter-only descriptor so the shape that
+ * matters is the one under test.
+ */
+function fallbackSurface(
+  width: number,
+  height: number,
+): { readonly canvas: HTMLCanvasElement; readonly context: CanvasRenderingContext2D } | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  const context = canvas.getContext('2d');
+  if (context === null) return null;
+  return { canvas, context };
+}
+
+/** `roundRect` is not in every jsdom and not in every browser the matrix names. */
+function roundRectPath(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const r = Math.max(0, Math.min(radius, Math.min(width, height) / 2));
+  context.beginPath();
+  if (typeof context.roundRect === 'function') {
+    context.roundRect(0, 0, width, height, r);
+    return;
+  }
+  context.moveTo(r, 0);
+  context.lineTo(width - r, 0);
+  context.quadraticCurveTo(width, 0, width, r);
+  context.lineTo(width, height - r);
+  context.quadraticCurveTo(width, height, width - r, height);
+  context.lineTo(r, height);
+  context.quadraticCurveTo(0, height, 0, height - r);
+  context.lineTo(0, r);
+  context.quadraticCurveTo(0, 0, r, 0);
+  context.closePath();
+}
+
+function numberToCss(value: number): string {
+  const clamped = Math.max(0, Math.min(0xffffff, Math.round(value)));
+  return `#${clamped.toString(16).padStart(6, '0')}`;
+}
+
+/** Whether a 2D context can express a path at all, as opposed to only boxes. */
+function canDrawPath(context: CanvasRenderingContext2D): boolean {
+  return (
+    typeof context.beginPath === 'function' &&
+    typeof context.moveTo === 'function' &&
+    typeof context.lineTo === 'function' &&
+    typeof context.quadraticCurveTo === 'function'
+  );
+}
+
+/** Whether a 2D context can express an ellipse, by either spelling. */
+function canDrawEllipse(context: CanvasRenderingContext2D): boolean {
+  return (
+    canDrawPath(context) &&
+    (typeof context.ellipse === 'function' || typeof context.arc === 'function')
+  );
+}
+
+/**
+ * Draw one recipe onto a canvas.
+ *
+ * Exported so the *shape* of a procedural fallback is testable without PixiJS: the
+ * assertions are about the geometry and the colours, and `tests/phase10/pixi-asset-runtime.test.ts`
+ * uses it to check that a missing optional entry produces a real, Cozy-coloured draw
+ * rather than an empty texture.
+ *
+ * ## Why every branch is guarded rather than assumed
+ *
+ * The first version of this function called `moveTo`/`lineTo`/`quadraticCurveTo` and
+ * `ellipse` directly, and threw a `TypeError` on any 2D context that lacked one. That
+ * is not a hypothetical: this repository's own jsdom setup installs a stub context
+ * that has `fillRect` and no `quadraticCurveTo`, and the first run of the Phase 10
+ * tests turned a "missing optional art does not break a route" guarantee into a
+ * thrown error on every fallback in a test realm. A procedural fallback is the thing
+ * that is *supposed* to be impossible to fail on, so a shape the context cannot
+ * express degrades to the box the context can always express.
+ */
+export function drawAssetFallback(
+  context: CanvasRenderingContext2D,
+  recipe: ResolvedFallbackRecipe,
+): void {
+  const { widthPx: width, heightPx: height } = recipe;
+  const fill = numberToCss(recipe.fill);
+  const stroke = numberToCss(recipe.stroke);
+  const border = Math.max(1, Math.round(recipe.radiusPx / 2));
+
+  if (typeof context.clearRect === 'function') context.clearRect(0, 0, width, height);
+  context.fillStyle = fill;
+  context.strokeStyle = stroke;
+  context.lineWidth = border;
+
+  // A disc and a rounded panel both need a path. A rule and a tile are boxes, which
+  // every context in the support matrix can draw, so they are the floor rather than
+  // the exception.
+  if (recipe.kind === 'disc' && canDrawEllipse(context)) {
+    context.beginPath();
+    if (typeof context.ellipse === 'function') {
+      context.ellipse(
+        width / 2,
+        height / 2,
+        Math.max(0, width / 2 - border),
+        Math.max(0, height / 2 - border),
+        0,
+        0,
+        Math.PI * 2,
+      );
+    } else {
+      context.arc(width / 2, height / 2, Math.max(0, width / 2 - border), 0, Math.PI * 2);
+    }
+    context.fill();
+    context.stroke();
+    return;
+  }
+
+  if (recipe.kind === 'rounded-panel' && canDrawPath(context)) {
+    roundRectPath(context, width, height, recipe.radiusPx);
+    context.fill();
+    context.stroke();
+    return;
+  }
+
+  if (recipe.kind === 'rule' || !canDrawPath(context)) {
+    // A rule is a bar, not an outlined box: a stroke round an 8px-tall rect is mostly
+    // stroke, and the point of the shape is the fill.
+    context.fillRect(0, 0, width, height);
+    return;
+  }
+
+  context.fillRect(0, 0, width, height);
+  if (typeof context.strokeRect === 'function') {
+    context.strokeRect(border / 2, border / 2, width - border, height - border);
+  }
+}
+
+/**
+ * The PixiJS implementation of the loader's runtime port.
+ *
+ * Three things this deliberately is not:
+ *
+ * - **Not eager.** `Assets.init()` is awaited here, inside the first `registerBundle`
+ *   or `loadAsset`, rather than at module scope and rather than by the application.
+ *   Nothing about an asset bundle is fetched until a route asks for one, which is
+ *   what plan section 10.2's "no eager world asset load" asks for.
+ * - **Not a texture owner for loaded media.** `unloadBundle` and `unloadAsset` hand
+ *   destruction to Pixi, which does it, and `destroyTexture` is reserved for the
+ *   canvases this module drew.
+ * - **Not a sprite registry.** The loader is what decides whether a texture is still
+ *   held, and a texture it is not holding is one it destroys.
+ */
+export function createPixiAssetRuntime(): PixiAssetRuntime<Texture> {
+  let initialized: Promise<void> | null = null;
+
+  function ensureInitialized(): Promise<void> {
+    // `Assets.init` warns and returns on a second call, so it is memoised rather
+    // than called per load. A bundle registered before init would be wiped by
+    // `init`'s own resolver setup.
+    initialized ??= Assets.init().then(() => undefined);
+    return initialized;
+  }
+
+  return {
+    registerBundle(bundleId, members): void {
+      void ensureInitialized();
+      Assets.addBundle(bundleId, { ...members });
+    },
+    async loadBundle(bundleId): Promise<Readonly<Record<string, Texture>>> {
+      await ensureInitialized();
+      return (await Assets.loadBundle(bundleId)) as Readonly<Record<string, Texture>>;
+    },
+    async loadAsset(url: string): Promise<Texture> {
+      await ensureInitialized();
+      return await Assets.load<Texture>(url);
+    },
+    async unloadBundle(bundleId: string): Promise<void> {
+      await ensureInitialized();
+      await Assets.unloadBundle(bundleId);
+    },
+    async unloadAsset(url: string): Promise<void> {
+      await ensureInitialized();
+      await Assets.unload(url);
+    },
+    createFallbackTexture(recipe: ResolvedFallbackRecipe): Texture {
+      const surface = fallbackSurface(recipe.widthPx, recipe.heightPx);
+      if (surface === null) return Texture.WHITE;
+      drawAssetFallback(surface.context, recipe);
+      return new Texture({ source: new CanvasSource({ resource: surface.canvas }) });
+    },
+    destroyTexture(texture: Texture): void {
+      // `destroy(true)` frees the `CanvasSource` underneath, which is the only thing
+      // holding the drawn pixels. `destroyed` is checked because a texture that a
+      // scene already destroyed is still this loader's to release on paper, and a
+      // second `destroy(true)` would throw.
+      if (texture.destroyed) return;
+      texture.destroy(true);
+    },
+  };
 }

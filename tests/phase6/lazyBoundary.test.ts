@@ -32,7 +32,7 @@ import { dirname, extname, join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
+import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
 
 const ROOT = process.cwd();
@@ -145,10 +145,14 @@ describe('Phase 6 verifier V9: the lazy boundary (B1)', () => {
     expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(false);
     expect(parseRuntimeConfig({}).dataProductsV2).toBe(false);
     expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
-    const onByDefault = Object.values(FEATURE_FLAG_MATRIX).filter(
-      (definition) => (definition.productionDefault as boolean) === true,
-    );
-    expect(onByDefault).toEqual([]);
+    // Phase 10's `audioEnabled` defaults on, because it is a kill switch for a service
+    // that phase delivers rather than a gate on an existing behaviour, and it declares
+    // itself in `NON_CUTOVER_FLAG_KEYS`. The property under test is unchanged for
+    // every cutover flag.
+    const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
+      .filter(([, definition]) => (definition.productionDefault as boolean) === true)
+      .map(([key]) => key);
+    expect(onByDefault.sort()).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
   });
 
   it('NON-VACUITY: the walk finds the two sanctioned dynamic callers, so "no eager edge" is not "no edge"', () => {

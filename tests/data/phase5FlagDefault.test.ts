@@ -38,7 +38,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
-import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
+import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
 import { blankComments, walk } from './support/importGraph';
 import { classifySpecifierEdges } from './support/importGraph';
 import {
@@ -187,13 +187,18 @@ describe('Phase 5 gate 8: the owner flag defaults to off and is owned by Phase 5
     // The rollback is a build-time flag, matching the plan's Phase 5 rollback:
     // "Hide the tab and disable import. The format is additive."
     expect(definition.rollback).toContain('VITE_DATA_PRODUCTS_V2=false');
-    // No flag in the matrix may default to on before its cutover phase.
+    // No *cutover* flag may default to on before its cutover phase. Phase 10 adds one
+    // flag that is not a cutover gate - `audioEnabled`, a kill switch for a service
+    // that phase delivers rather than a switch on an existing behaviour - and it
+    // declares that in `NON_CUTOVER_FLAG_KEYS` so the exception is a reviewed list
+    // rather than a quiet hole. The property is still asserted for every other flag,
+    // and the exception itself is asserted below rather than assumed.
     const enabledByDefault = Object.entries(FEATURE_FLAG_MATRIX)
       // `productionDefault` is typed `boolean | string`, so the comparison is made
       // against an explicitly widened boolean rather than relying on inference.
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
       .map(([key]) => key);
-    expect(enabledByDefault).toEqual([]);
+    expect(enabledByDefault.sort()).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
   });
 });
 

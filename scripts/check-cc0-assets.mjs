@@ -42,6 +42,15 @@
  *    still read, still checked against the media signatures, and counted in the summary
  *    when it is skipped, so the skip is a recorded conclusion rather than a name-based
  *    exemption. See `validateSourceMedia`.
+ * 6. **It holds the registry and the Pixi asset manifest to the same bundle set.** The
+ *    registry is the authority on what a bundle is; `src/renderers/pixi/assets/
+ *    assetManifest.ts` is the authority on which bundle ids the application can ask
+ *    for. Those are two files, and nothing about either one keeps the other honest on
+ *    its own: a bundle added to the manifest is not in the registry, so no entry can be
+ *    a member of it and nothing would say so, and a bundle added to the registry is a
+ *    declaration nothing can load. So the gate reads the manifest's `ASSET_BUNDLE_IDS`
+ *    - as text, because this script imports no dependency and no TypeScript - and fails
+ *    on a disagreement in either direction. See `readManifestBundleIds`.
  *
  * Honesty rules this script is built around
  * -----------------------------------------
@@ -93,6 +102,18 @@ const DEFAULT_CREDITS = path.join(DEFAULT_ASSETS_ROOT, 'CREDITS.md');
 const ASSETS_ROOT_REPO_PATH = 'public/assets';
 const SOURCE_ROOT = 'src';
 const REGISTRABLE_ROOTS = [ASSETS_ROOT_REPO_PATH, SOURCE_ROOT];
+
+/**
+ * The module that declares `ASSET_BUNDLE_IDS`, as a repository-relative path.
+ *
+ * The second half of the bundle contract. The registry says what a bundle is and what
+ * may be a member of it; this module says which bundle ids the application knows how
+ * to ask for, and the gate holds the two to the same set in both directions. It is
+ * resolved against the same root as `--registry` so a fixture tree, which has no
+ * source module, reads nothing rather than reading the real one - and a run that read
+ * nothing says so in the summary instead of quietly reporting agreement.
+ */
+const MANIFEST_MODULE_REPO_PATH = 'src/renderers/pixi/assets/assetManifest.ts';
 
 /**
  * Aliases a module can use to reach the source tree, and what they resolve to.
@@ -267,6 +288,7 @@ const CODES = {
   'E-SOURCE-MEDIA-PATH': 'A reference from the source tree resolves outside the registrable roots, so no entry can cover it.',
   'E-PIXI-ELIGIBILITY': 'An entry is marked Pixi-eligible, or is a bundle member, without approved provenance.',
   'E-BUNDLE-UNKNOWN': 'An entry references a bundle the registry does not declare.',
+  'E-BUNDLE-DRIFT': 'The registry and the Pixi asset manifest disagree about which bundle ids exist.',
   'E-BUNDLE-PATH': 'Bundle membership and the bundle\'s declared paths disagree.',
   'E-UNVERIFIED-IN-BUNDLE': 'An unapproved asset sits under an approved bundle path.',
   'E-NONMEDIA-IN-BUNDLE': 'A non-media file is a member of a media bundle.',
@@ -898,9 +920,97 @@ function validateRelationships(registry, assets) {
   return problems;
 }
 
-/** Counts drift detector: a stale count block is a stale registry. */
-function validateCounts(registry, assets) {
+/**
+ * The bundle ids `ASSET_BUNDLE_IDS` declares, or `null` when it declares none.
+ *
+ * Read as text rather than imported, because this script runs on Node built-ins alone
+ * and a TypeScript module cannot be loaded from it. Comments come off first, for the
+ * reason `validateSourceMedia` strips them: the manifest's own header explains the
+ * bundle set in prose, and a prose mention of an id is not a declaration of one.
+ *
+ * The read **fails closed**. `null` means "the declaration could not be found", which
+ * the caller reports as a problem, and never "there are no bundle ids" - a gate that
+ * treated an unreadable declaration as an empty one would switch itself off the moment
+ * the constant was renamed, which is the exact drift this cross-check exists to catch.
+ */
+function readManifestBundleIds(source) {
+  const text = stripComments(source);
+  const anchor = /export const ASSET_BUNDLE_IDS\b/.exec(text);
+  if (anchor === null) return null;
+  // The type annotation carries its own brackets (`readonly AssetBundleId[]`), so the
+  // search for the list starts at the assignment, not at the identifier.
+  const assigned = text.indexOf('=', anchor.index);
+  if (assigned === -1) return null;
+  const open = text.indexOf('[', assigned);
+  const close = open === -1 ? -1 : text.indexOf(']', open);
+  if (close === -1) return null;
+  const ids = [...text.slice(open, close).matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  return ids.length > 0 ? ids : null;
+}
+
+/**
+ * The two bundle id sets, and every way they can disagree.
+ *
+ * Returns the number of ids actually compared so the summary can state that the
+ * cross-check ran: a run that compared nothing has proved nothing, and a green log
+ * that does not say so reads as coverage it does not have.
+ */
+async function validateBundleSet(registry, manifestPath, manifestRepoPath) {
+  const declared = isRecord(registry.bundles) ? Object.keys(registry.bundles) : [];
+  let source;
+  try {
+    source = await readFile(manifestPath, 'utf8');
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      // A fixture tree has no source module. That is not a finding - the gate was not
+      // asked to gate a manifest - but it is reported, because a silent skip is a hole
+      // nobody can see.
+      return { problems: [], compared: 0, manifestRepoPath };
+    }
+    throw error;
+  }
+  const manifestIds = readManifestBundleIds(source);
+  if (manifestIds === null) {
+    return {
+      problems: [
+        problem(
+          'E-BUNDLE-DRIFT',
+          safePath(manifestRepoPath),
+          'The Pixi asset manifest does not declare `ASSET_BUNDLE_IDS` in a form this gate can read, so the registry and the manifest cannot be held to the same bundle set. The read fails closed on purpose.',
+        ),
+      ],
+      compared: 0,
+      manifestRepoPath,
+    };
+  }
   const problems = [];
+  for (const id of manifestIds) {
+    if (!declared.includes(id)) {
+      problems.push(
+        problem(
+          'E-BUNDLE-DRIFT',
+          safeId(id),
+          'The Pixi asset manifest asks for this bundle, but the registry does not declare it, so no media could ever be a member of it. Declare the bundle before the manifest names it.',
+        ),
+      );
+    }
+  }
+  for (const id of declared) {
+    if (!manifestIds.includes(id)) {
+      problems.push(
+        problem(
+          'E-BUNDLE-DRIFT',
+          safeId(id),
+          'The registry declares this bundle, but the Pixi asset manifest does not, so nothing in the application can load it. Either add the bundle to the manifest or drop the declaration.',
+        ),
+      );
+    }
+  }
+  return { problems, compared: Math.max(manifestIds.length, declared.length), manifestRepoPath };
+}
+
+/** Counts drift detector: a stale count block is a stale registry. */
+function validateCounts(registry, assets) {  const problems = [];
   if (!isRecord(registry.counts)) return problems;
   const actual = {};
   for (const entry of assets) {
@@ -1453,7 +1563,7 @@ function printReport(problems, summary, writeMode) {
   console.error('New media cannot ship without registry metadata, and unverified media cannot reach a default bundle.');
 }
 
-function summarize(registry, assets, checksumCount, source) {
+function summarize(registry, assets, checksumCount, source, bundleSet) {
   const counts = {};
   for (const entry of assets) {
     if (!isRecord(entry)) continue;
@@ -1476,7 +1586,13 @@ function summarize(registry, assets, checksumCount, source) {
     source.skippedCount > 0
       ? `, skipping ${source.skippedCount} unclassified file(s) there that no module names, which the bundler cannot emit and whose bytes are not a media container`
       : '';
-  return `${assets.length} registered entries (${classes}); ${checksumCount} checksums recomputed; bundles: ${bundleSizes || 'none'}; ${sourceMedia}${skippedNote}.`;
+  // The cross-check is reported whether it ran or not, for the reason the skip count is
+  // reported: a green run that silently compared nothing reads as a guarantee.
+  const bundleNote =
+    bundleSet.compared > 0
+      ? `Bundle ids cross-checked against ${bundleSet.manifestRepoPath}: ${bundleSet.compared} agree.`
+      : `Bundle ids were not cross-checked: ${bundleSet.manifestRepoPath} is not present in this tree.`;
+  return `${assets.length} registered entries (${classes}); ${checksumCount} checksums recomputed; bundles: ${bundleSizes || 'none'}; ${sourceMedia}${skippedNote}. ${bundleNote}`;
 }
 
 const USAGE = [
@@ -1490,6 +1606,11 @@ const USAGE = [
   '  --assets-root=DIR     Assets tree to gate. Default: public/assets.',
   '  --registry=FILE       Registry to read and write. Default: <assets-root>/asset-licenses.json.',
   '  --credits=FILE        Credits page to cross-check. Default: <assets-root>/CREDITS.md.',
+  '  --manifest=FILE       Pixi asset manifest whose ASSET_BUNDLE_IDS must match the registry',
+  '                        bundle set exactly. Default: src/renderers/pixi/assets/assetManifest.ts',
+  '                        relative to the repository root. A tree with no such file is reported',
+  '                        in the summary as not cross-checked; a file that declares no readable',
+  '                        ASSET_BUNDLE_IDS is a failure.',
   '  -h, --help            Print this help.',
   '',
   'Media under src/ is covered too: a media file there, or one a module under src/ names',
@@ -1509,7 +1630,7 @@ async function main() {
   }
   const unknownFlag = argv.find(
     (arg) =>
-      arg.startsWith('--') && !['--write'].includes(arg) && !/^--(assets-root|registry|credits)=/.test(arg),
+      arg.startsWith('--') && !['--write'].includes(arg) && !/^--(assets-root|registry|credits|manifest)=/.test(arg),
   );
   if (unknownFlag) {
     console.error(`Unknown flag: ${unknownFlag}`);
@@ -1528,6 +1649,10 @@ async function main() {
   const repoRoot = pathRoot;
   const registryPath = path.resolve(REPO_ROOT, readArg('registry', argv) ?? path.relative(REPO_ROOT, DEFAULT_REGISTRY));
   const creditsPath = path.resolve(REPO_ROOT, readArg('credits', argv) ?? path.relative(REPO_ROOT, DEFAULT_CREDITS));
+  // Resolved against the same root as the registry rather than this script's own
+  // location, so a fixture tree reads its own (absent) module instead of the real one.
+  const manifestPath = path.resolve(repoRoot, readArg('manifest', argv) ?? MANIFEST_MODULE_REPO_PATH);
+  const manifestRepoPath = readArg('manifest', argv) ?? MANIFEST_MODULE_REPO_PATH;
 
   let registry;
   try {
@@ -1550,6 +1675,8 @@ async function main() {
     if (isRecord(entry)) problems.push(...validateProvenance(entry, repoRoot));
   }
   problems.push(...validateRelationships(registry, assets));
+  const bundleSet = await validateBundleSet(registry, manifestPath, manifestRepoPath);
+  problems.push(...bundleSet.problems);
   problems.push(...validateCounts(registry, assets));
   problems.push(...validateDiscovery(assets, discovered, sourceDiscovered, repoRoot));
   const sourceMedia = await validateSourceMedia(assets, repoRoot);
@@ -1595,7 +1722,7 @@ async function main() {
   }
   if (creditsText !== null) problems.push(...validateCredits(assets, creditsText));
 
-  const summary = summarize(registry, assets, computed.size, sourceMedia);
+  const summary = summarize(registry, assets, computed.size, sourceMedia, bundleSet);
   // In --write mode the two checksum-shape problems are the ones the tool just fixed,
   // so reporting them would make a successful bootstrap look like a failure. Nothing
   // else is suppressed: a missing field, an unapproved bundle, or an unregistered file

@@ -40,6 +40,27 @@ export interface PersistedPreferencesValue {
   graphicsMode?: string;
   colorTheme?: string;
   activeSpritePack?: string | null;
+  /**
+   * Phase 10 audio preferences, present only on a build that writes them.
+   *
+   * Typed `unknown` on purpose, and that is the only place in this file where a
+   * persisted value is *not* given a precise type. This payload is read from
+   * `localStorage` and from a storage-v2 generation, so a stored value can have any
+   * type at all - and the consumer that reads these keys
+   * (`src/store/preferencesStore.ts`) coerces rather than trusts, so there is no
+   * benefit to claiming here that they are numbers. Typing them as `number` would
+   * assert a guarantee this layer cannot make, and it would make the coercion in the
+   * store look redundant to the next reader.
+   *
+   * All optional, which is what keeps a payload written by an older build readable
+   * and a payload written by this build readable by a rollback build: neither side
+   * has to know about the other's keys.
+   */
+  musicVolume?: unknown;
+  sfxVolume?: unknown;
+  muted?: unknown;
+  musicEnabled?: unknown;
+  sfxEnabled?: unknown;
 }
 
 /** A persisted keyboard shortcut binding, as the legacy key stores it. */

@@ -5,7 +5,7 @@ import {
   type RuntimeConfigKey,
 } from './runtimeConfig';
 
-export type FeatureFlagOwnerPhase = 4 | 5 | 8 | 9 | 11 | 13 | 17 | 19 | 20;
+export type FeatureFlagOwnerPhase = 4 | 5 | 8 | 9 | 10 | 11 | 13 | 17 | 19 | 20;
 export type FeatureFlagValueKind = 'boolean' | 'enum';
 
 export interface FeatureFlagDefinition {
@@ -22,8 +22,32 @@ export type FeatureFlagMatrix = Readonly<
 >;
 
 /**
+ * Flags that are not cutover gates.
+ *
+ * Every other flag in the matrix exists to switch an existing behaviour to a new one
+ * at a reviewed cutover, so its production default is the pre-phase behaviour. A flag
+ * named here instead *enables a service its owning phase delivers*, so it defaults to
+ * `true` and exists to be turned off: `audioEnabled` (Phase 10) is the only one, and
+ * the plan's rollback line for that phase is a build with it off.
+ *
+ * Declared as data rather than left implicit, so a gate can assert both halves and a
+ * carve-out cannot spread silently: this list is exactly the set of flags permitted to
+ * default on, and a cutover flag that defaults on still fails. Adding a name here is a
+ * reviewed act for the same reason adding one to the matrix is.
+ */
+export const NON_CUTOVER_FLAG_KEYS: readonly RuntimeConfigKey[] = Object.freeze([
+  'audioEnabled',
+] as const);
+
+/**
  * Infrastructure contract for phased cutovers. This matrix is not a runtime or
  * user-facing settings surface, and flags must never contain learner data.
+ *
+ * One entry is not a cutover gate. `audioEnabled` (Phase 10) is a kill switch that
+ * defaults on, because there is no pre-phase audio behaviour for a learner to keep and
+ * the plan's rollback for that phase is to turn it off. It is stated here rather than
+ * left to be inferred from a boolean, because "every other flag defaults off" is the
+ * property the rest of this matrix exists to protect.
  */
 export const FEATURE_FLAG_MATRIX = {
   worldRenderer: {
@@ -97,6 +121,22 @@ export const FEATURE_FLAG_MATRIX = {
     ownerPhase: 20,
     purpose: 'Gates explicit-action Web Share after the private share-card preview and local download are verified.',
     rollback: 'Set VITE_WEB_SHARE=false and retain local PNG download.',
+  },
+  audioEnabled: {
+    environmentVariable: RUNTIME_FLAG_ENV_KEYS.audioEnabled,
+    valueKind: 'boolean',
+    productionDefault: true,
+    ownerPhase: 10,
+    // The only flag in this matrix whose production default is `true`, and the reason
+    // is the difference between a cutover gate and a kill switch. Every other flag
+    // defaults to the behaviour that existed before its phase, so that a learner sees
+    // no change until the cutover is reviewed. Audio has no previous behaviour to
+    // preserve - Phase 10 builds the service - so the flag does not gate its arrival,
+    // it gates its use, and the default build is the build the phase delivers.
+    purpose:
+      'Enables the renderer-neutral audio service built in Phase 10: gesture-gated playback, procedural synthesis with no media files, and persisted music and SFX volume. It is a rollback switch, not a cutover gate, so it defaults on and the plan’s rollback line - disable audio independently and retain procedural art fallbacks - is a build with it off.',
+    rollback:
+      'Set VITE_AUDIO_ENABLED=false to disable audio independently and retain the procedural art fallbacks. Nothing else is affected: no media is unloaded, no data is migrated, and the procedural art recipes are untouched.',
   },
 } as const satisfies FeatureFlagMatrix;
 

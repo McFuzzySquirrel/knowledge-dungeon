@@ -18,6 +18,7 @@ describe('runtime feature configuration', () => {
       adaptiveAssistance: false,
       dataProductsV2: false,
       webShare: false,
+      audioEnabled: true,
     });
   });
 
@@ -33,6 +34,7 @@ describe('runtime feature configuration', () => {
         VITE_ADAPTIVE_ASSISTANCE: 'true',
         VITE_DATA_PRODUCTS_V2: 'true',
         VITE_WEB_SHARE: 'true',
+        VITE_AUDIO_ENABLED: 'true',
       }),
     ).toEqual({
       worldRenderer: 'pixi',
@@ -44,6 +46,7 @@ describe('runtime feature configuration', () => {
       adaptiveAssistance: true,
       dataProductsV2: true,
       webShare: true,
+      audioEnabled: true,
     });
   });
 

@@ -14,6 +14,17 @@ export interface RuntimeConfig {
   readonly adaptiveAssistance: boolean;
   readonly dataProductsV2: boolean;
   readonly webShare: boolean;
+  /**
+   * Whether the audio service may construct a context and make sound.
+   *
+   * The one flag here that is not a cutover gate. Every other flag below defaults to
+   * the pre-phase behaviour so that nothing changes for a learner until its cutover is
+   * reviewed; audio has no pre-phase behaviour to keep, so this defaults to `true` and
+   * exists to be turned off. That is what the Phase 10 rollback line asks for -
+   * "Disable audio independently and retain procedural art fallbacks" - which only
+   * means something if there is audio to disable.
+   */
+  readonly audioEnabled: boolean;
 }
 
 export type RuntimeConfigKey = keyof RuntimeConfig;
@@ -29,6 +40,7 @@ export const RUNTIME_FLAG_ENV_KEYS = {
   adaptiveAssistance: 'VITE_ADAPTIVE_ASSISTANCE',
   dataProductsV2: 'VITE_DATA_PRODUCTS_V2',
   webShare: 'VITE_WEB_SHARE',
+  audioEnabled: 'VITE_AUDIO_ENABLED',
 } as const satisfies Readonly<Record<RuntimeConfigKey, string>>;
 
 /**
@@ -45,6 +57,7 @@ export const DEFAULT_RUNTIME_CONFIG: Readonly<RuntimeConfig> = Object.freeze({
   adaptiveAssistance: false,
   dataProductsV2: false,
   webShare: false,
+  audioEnabled: true,
 });
 
 function normalizedRawValue(
@@ -110,6 +123,7 @@ export function parseRuntimeConfig(
     ),
     dataProductsV2: parseBoolean('dataProductsV2', DEFAULT_RUNTIME_CONFIG.dataProductsV2),
     webShare: parseBoolean('webShare', DEFAULT_RUNTIME_CONFIG.webShare),
+    audioEnabled: parseBoolean('audioEnabled', DEFAULT_RUNTIME_CONFIG.audioEnabled),
   };
 
   if (errors.length > 0) {

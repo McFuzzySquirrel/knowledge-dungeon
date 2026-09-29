@@ -229,6 +229,21 @@ describe('Phase 8 flag gate: the off state', () => {
   });
 });
 
+/**
+ * The five preference keys Phase 10 adds.
+ *
+ * Named here so this file's two payload-shape assertions can say "the legacy keys
+ * plus exactly these" rather than "the legacy keys", which is the only thing that
+ * keeps them honest after a later phase adds a sixth field.
+ */
+const PHASE_10_AUDIO_KEYS = [
+  'musicVolume',
+  'sfxVolume',
+  'muted',
+  'musicEnabled',
+  'sfxEnabled',
+] as const;
+
 describe('Phase 8 flag gate: the on state', () => {
   it('emits the Cozy palette onto the selectors the existing screens already use', () => {
     const generated = read(GENERATED_CSS_PATH);
@@ -249,13 +264,25 @@ describe('Phase 8 flag gate: the on state', () => {
       // The store still hydrates the legacy value, so both flag states read the
       // same stored string.
       expect(hydrated.colorTheme).toBe(resolveInitialColorTheme({ colorTheme: value }));
-      expect(hydrated).toEqual({
+      // Phase 10 widened `initialPreferencesState` with the five audio fields, each
+      // at its documented default. This assertion is about the *theme* half of the
+      // payload, so it is compared with `toMatchObject` rather than `toEqual`: the
+      // claim Phase 8 made was "the Cozy system rewrites no stored key", and it is
+      // still exactly that. Audio preferences are covered by their own suite in
+      // `tests/unit/preferencesStore.test.ts`.
+      expect(hydrated).toMatchObject({
         graphicsMode: 'rpg',
         colorTheme: resolveInitialColorTheme({ colorTheme: value }),
         activeSpritePack: null,
       });
-      // And no new persisted key appears.
-      expect(Object.keys(hydrated).sort()).toEqual(['activeSpritePack', 'colorTheme', 'graphicsMode']);
+      // And no *Cozy* persisted key appears. The audio keys are Phase 10's, and they
+      // are the only keys beyond the original three - an assertion that would have to
+      // be widened deliberately, by whoever adds the next field.
+      const audioKeys: readonly string[] = PHASE_10_AUDIO_KEYS;
+      const nonAudioKeys = Object.keys(hydrated)
+        .filter((key) => !audioKeys.includes(key))
+        .sort();
+      expect(nonAudioKeys).toEqual(['activeSpritePack', 'colorTheme', 'graphicsMode']);
     }
   });
 });
@@ -266,12 +293,18 @@ describe('Phase 8 preferences store', () => {
     usePreferencesStore.setState({ graphicsMode: 'rpg', colorTheme: 'dark', activeSpritePack: null });
   });
 
-  it('persists only the three legacy preference keys', () => {
+  it('persists the legacy preference keys, plus the Phase 10 audio keys and nothing else', () => {
     usePreferencesStore.getState().setColorTheme('aurora');
     const raw = window.localStorage.getItem(__testing.PREFERENCES_STORAGE_KEY);
     expect(raw).not.toBeNull();
     const parsed = JSON.parse(raw ?? '{}') as Record<string, unknown>;
-    expect(Object.keys(parsed).sort()).toEqual(['activeSpritePack', 'colorTheme', 'graphicsMode']);
+    // Phase 10 owns the five audio keys; the three legacy ones are unchanged. The
+    // assertion stays a closed list rather than a subset check on purpose: a payload
+    // that quietly grew a ninth key should fail here.
+    const audioKeys: readonly string[] = PHASE_10_AUDIO_KEYS;
+    expect(Object.keys(parsed).sort()).toEqual(
+      ['activeSpritePack', 'colorTheme', 'graphicsMode', ...audioKeys].sort(),
+    );
     expect(parsed.colorTheme).toBe('aurora');
   });
 

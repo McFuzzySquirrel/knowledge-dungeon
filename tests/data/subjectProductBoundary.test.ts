@@ -401,10 +401,14 @@ describe('Phase 6 gate 8: nothing outside the product tree reaches it eagerly, a
     expect(parseRuntimeConfig({}).dataProductsV2).toBe(false);
     expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'true' }).dataProductsV2).toBe(true);
     expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
-    // The flag set is unchanged in size, so a product cannot quietly acquire a flag
-    // of its own - plan section 11's list is closed and Phase 1 owns it.
+    // The flag set still holds no per-product flag, so a data product cannot quietly
+    // acquire one - plan section 11's list is closed and Phase 1 owns it. Phase 10
+    // added one flag to that closed set, `audioEnabled`, for the audio service; it is a
+    // service flag, not a product flag, and naming it here keeps the list closed rather
+    // than opening it: an eleventh flag still fails this assertion.
     expect(Object.keys(FEATURE_FLAG_MATRIX).sort()).toEqual([
       'adaptiveAssistance',
+      'audioEnabled',
       'cozyVisuals',
       'dataProductsV2',
       'pixiDungeon',

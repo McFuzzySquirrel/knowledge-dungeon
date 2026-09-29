@@ -24,7 +24,9 @@ to the release artifact.
 has a verified CC0 grant.** That is the honest state of the repository, not a gap in the
 search: the CC0 media policy in plan section 10.3 and ADR 002 Decision 5 says only CC0 or
 procedurally generated media may enter the default PixiJS bundle, and nothing in the sprite
-set can currently claim CC0. Phase 10 replaces the placeholder set with media that can.
+set can currently claim CC0. Phase 10 declared the five further bundle sets and, as its
+non-goals require, produced no world-specific media for them — so the number is still 0
+after Phase 10, and it will only rise when a genuinely CC0 file is registered here.
 
 ## The four classes
 
@@ -190,7 +192,8 @@ are inert under `prefers-reduced-motion`.
 These six are the only members of the `pixi-default` bundle today. Their colours are
 drawn from the `paletteFamilies` block in the registry, which mirrors the shipped Cozy
 tokens, so the procedural development art reads as the same world the Cozy UI is
-painted in. Phase 10 replaces both the art and these colours.
+painted in. Phase 10 did not replace this art — see the bundle sets below — and these
+colours remain provisional until a later phase produces real media.
 
 - `public/assets/cozy/cozy-berry-bush.svg` — Prop placeholder: a berry bush sprite.
 - `public/assets/cozy/cozy-firelight-torch.svg` — Prop placeholder: a lit torch, the only firelight source in the set.
@@ -198,6 +201,38 @@ painted in. Phase 10 replaces both the art and these colours.
 - `public/assets/cozy/cozy-ink-signpost.svg` — Prop placeholder: a village signpost, for in-world wayfinding.
 - `public/assets/cozy/cozy-moss-grass.svg` — Ground tile placeholder for mossy outdoor surfaces.
 - `public/assets/cozy/cozy-parchment-floor.svg` — Ground tile placeholder for the village and dungeon floors.
+
+## PixiJS asset bundle sets
+
+The registry declares six PixiJS asset bundles, and the application declares the same six
+bundle ids in `src/renderers/pixi/assets/assetManifest.ts`. The gate fails if the two
+disagree in either direction, so a bundle cannot be added to one file and forgotten in
+the other.
+
+| Bundle | Members today | Reserved path on disk |
+| --- | --- | --- |
+| `pixi-default` | 6 procedural placeholders | exists — the Cozy placeholder set above |
+| `common` | 0 | not created yet |
+| `village` | 0 | not created yet |
+| `dungeon` | 0 | not created yet |
+| `fishing` | 0 | not created yet |
+| `share-card` | 0 | not created yet |
+
+The five empty sets are declared on purpose. Phase 10 defines the bundles, their keys,
+and their procedural fallback recipes, and its non-goals exclude final world-specific
+asset production; with no verified CC0 grant anywhere in the repository, there is
+nothing to admit. A bundle with no media is not a gap in the search — it is the honest
+state, and the corresponding entries in the manifest carry keys rather than filenames.
+
+Each empty bundle still reserves a path under this directory. That is a policy
+declaration, not a provenance claim: it says where the bundle's media may live, so the
+gate's tripwire is armed *before* the first file lands. Drop an unverified file under a
+reserved path and `npm run test:licenses` fails with `E-UNVERIFIED-IN-BUNDLE`; drop an
+unregistered file anywhere under this directory and it fails with
+`E-UNREGISTERED-MEDIA`. The reserved directories are deliberately *not* under the
+`sprites/` tree, where the 90 unverified legacy files live, and they are not a
+place to relicense anything: MIT is not CC0-1.0, and re-licensing the legacy set is a
+copyright-holder decision, not a build step.
 
 ### Generated build inputs
 
@@ -250,5 +285,6 @@ The legacy set was intended as temporary stand-ins from the start. See
 art, and note that anything you swap in is subject to the same registry rule: CC0 or
 procedural, with a recorded provenance, or it stays out of the default PixiJS bundle.
 
-Approved (CC0) entries: **0**. That number is the one to watch, and it is
-expected to rise in Phase 10.
+Approved (CC0) entries: **0**. That number is the one to watch, and it is expected to
+rise in a later phase that can point at a real grant — not in Phase 10, which declared
+the bundle sets without producing media.

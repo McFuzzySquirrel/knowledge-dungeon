@@ -24,9 +24,10 @@
       "repositoryOrigin": "Most of the legacy SVGs were first committed by an in-repository feature commit rather than by the repo-dungeon import commit, so they are not claimed as imported material. They are still not approved: the repository LICENSE is MIT, and MIT is not CC0-1.0, so there is no verified CC0 provenance. The copyright holder can make an asset Pixi-eligible either by re-licensing it to CC0-1.0 and recording that grant here, or by replacing it. This registry never records a license that was not actually stated."
     },
     "pixiBundleRule": "Only cc0-approved and procedural entries may be members of a bundle, and only entries in an approved bundle path may declare membership. Anything else fails, which is what keeps unverified legacy media out of the default PixiJS bundle.",
+    "declaredEmptyBundleRule": "A bundle may be declared before it has any media, and five are: common, village, dungeon, fishing, and share-card. A declared-empty bundle has zero members today and the path it reserves does not exist on disk, which is the honest state of Phase 10 - its non-goals exclude final world-specific asset production, and cc0-approved is 0, so there is no verified grant to admit. The reserved path is a policy, not a provenance claim: it declares where the bundle's media may live, so that the gate's unapproved-media tripwire (an unverified or unregistered file appearing under an approved bundle path fails) is armed before the first file lands rather than being retrofitted afterwards. It is deliberately not public/assets/sprites/, where the 90 legacy-unverified files live: admitting that tree to any bundle would fail the gate, and it must keep failing.",
     "dateKindRule": "created and retrieved are the plan's creation and retrieval dates and are mandatory for approved classes. legacy-unverified entries use introduced-in-repository, because the upstream creation or retrieval date is unknown and recording a guess would be a false provenance claim."
   },
-  "paletteNote": "PROVISIONAL placeholder values for the Phase 8 procedural set only. src/theme/ is the source of truth, and these are art inputs rather than a second token declaration: every family and token name below is a verbatim copy of the matching COZY_COLOR_FAMILIES entry in src/theme/cozyTokens.ts, for the families the plan names (parchment, moss, berry, ink, firelight) and only for the tokens the generator actually reads. The generator paints from this block, so a generated file cannot drift from the shipped Cozy palette, and tests/phase8/cozy-palette-alignment.test.ts fails if a value here stops matching the token module. Tokens the token module defines but this placeholder set does not read (parchment.ink, ink.base, ink.raised, ink.sunken, ink.line, ink.text, firelight.spark) are deliberately absent rather than approximated. Phase 10 replaces this placeholder art with the real bundle sets, and these art colours with them.",
+  "paletteNote": "PROVISIONAL placeholder values for the Phase 8 procedural set only. src/theme/ is the source of truth, and these are art inputs rather than a second token declaration: every family and token name below is a verbatim copy of the matching COZY_COLOR_FAMILIES entry in src/theme/cozyTokens.ts, for the families the plan names (parchment, moss, berry, ink, firelight) and only for the tokens the generator actually reads. The generator paints from this block, so a generated file cannot drift from the shipped Cozy palette, and tests/phase8/cozy-palette-alignment.test.ts fails if a value here stops matching the token module. Tokens the token module defines but this placeholder set does not read (parchment.ink, ink.base, ink.raised, ink.sunken, ink.line, ink.text, firelight.spark) are deliberately absent rather than approximated. Phase 10 declared the five further bundle sets - common, village, dungeon, fishing, and share-card - and, as its non-goals require, produced no world-specific media for them, so this placeholder art and these provisional colours are still the only art a Pixi bundle may ship. The real art is later work, and a phase that produces it must record the recipe here, keep the tokens aligned with src/theme/cozyTokens.ts, and never reclassify the 90 legacy-unverified files to get there.",
   "paletteFamilies": {
     "parchment": {
       "base": "#f7ecd8",
@@ -58,6 +59,41 @@
       "description": "The default PixiJS asset bundle. Phase 8 opens it with the procedural Cozy placeholder set; Phase 10 builds the real bundle sets. Membership is lazy-loaded and explicitly unloaded.",
       "paths": [
         "public/assets/cozy/"
+      ],
+      "admission": "cc0-approved or procedural only. An unverified asset appearing under one of these paths fails the gate."
+    },
+    "common": {
+      "description": "Declared, empty, lazily-loaded PixiJS asset bundle. Phase 10 declares the set - its keys and procedural fallback recipes - and produces no media for it, because its non-goals exclude final world-specific asset production and cc0-approved is 0. It has zero members and the reserved path does not exist yet; it is filled in a later phase only by newly authored procedural art or by media with a genuine CC0 grant recorded in this registry. Loaded on demand and explicitly unloaded when the last holder releases it.",
+      "paths": [
+        "public/assets/common/"
+      ],
+      "admission": "cc0-approved or procedural only. An unverified asset appearing under one of these paths fails the gate."
+    },
+    "village": {
+      "description": "Declared, empty, lazily-loaded PixiJS asset bundle for the village world. Phase 10 declares the set and produces no media for it, so it has zero members and its reserved path does not exist yet. It is filled by newly authored procedural art or genuinely CC0 media in the Pixi Village phase. Loaded on demand and explicitly unloaded when the last holder releases it.",
+      "paths": [
+        "public/assets/village/"
+      ],
+      "admission": "cc0-approved or procedural only. An unverified asset appearing under one of these paths fails the gate."
+    },
+    "dungeon": {
+      "description": "Declared, empty, lazily-loaded PixiJS asset bundle for the dungeon world. Phase 10 declares the set and produces no media for it, so it has zero members and its reserved path does not exist yet. It is filled by newly authored procedural art or genuinely CC0 media in the Pixi Dungeon phase. Loaded on demand and explicitly unloaded when the last holder releases it.",
+      "paths": [
+        "public/assets/dungeon/"
+      ],
+      "admission": "cc0-approved or procedural only. An unverified asset appearing under one of these paths fails the gate."
+    },
+    "fishing": {
+      "description": "Declared, empty, lazily-loaded PixiJS asset bundle for the fishing world. Phase 10 declares the set and produces no media for it, so it has zero members and its reserved path does not exist yet. It is filled by newly authored procedural art or genuinely CC0 media in the Pixi Fishing phase. Loaded on demand and explicitly unloaded when the last holder releases it.",
+      "paths": [
+        "public/assets/fishing/"
+      ],
+      "admission": "cc0-approved or procedural only. An unverified asset appearing under one of these paths fails the gate."
+    },
+    "share-card": {
+      "description": "Declared, empty, lazily-loaded PixiJS asset bundle for the share card. Phase 10 declares the set and produces no media for it, so it has zero members and its reserved path does not exist yet. It is filled by newly authored procedural art or genuinely CC0 media in the share-card phase. Loaded on demand and explicitly unloaded when the last holder releases it.",
+      "paths": [
+        "public/assets/share-card/"
       ],
       "admission": "cc0-approved or procedural only. An unverified asset appearing under one of these paths fails the gate."
     }
@@ -92,9 +128,10 @@
         "subject": "feat: add repo-dungeon SVG assets, class-themed player sprite, signpost, welcome logo, and refreshed screenshots"
       },
       "modifications": [
-        "Rewritten in Phase 8 to mirror the registry: every registered path is listed by its classification, and the unverified group is stated as unverified."
+        "Rewritten in Phase 8 to mirror the registry: every registered path is listed by its classification, and the unverified group is stated as unverified.",
+        "Phase 10: added the PixiJS asset bundle sets section (six bundles, five of them declared and empty) and corrected three statements that Phase 10 made false - that Phase 10 replaces the placeholder art and palette, and that the CC0-approved count is expected to rise in Phase 10. No path was added or removed, so the coverage contract is unchanged."
       ],
-      "sha256": "9bca14377db061a6036631912a94a999f46b145ac45ef4d53baf5555094712b7"
+      "sha256": "7e822c8f2844cd18732062670ea098439b2079392f94e002882f7d0637f295d2"
     },
     {
       "id": "repo-asset-licenses",
@@ -122,7 +159,8 @@
         "checksum": "A pinned checksum is impossible: this registry is the file that carries the checksums, so any digest of it would have to contain itself. The gate substitutes what a self-checksum cannot do: it recomputes every other registered checksum from the bytes on disk, so a change here has to be justified by a corresponding change to a real asset."
       },
       "modifications": [
-        "Initial registry written in Phase 8."
+        "Initial registry written in Phase 8.",
+        "Phase 10: declared the common, village, dungeon, fishing, and share-card bundle sets, each with zero members and a reserved assets path, plus policy.declaredEmptyBundleRule explaining why a declared bundle may have no media yet. No entry was added, removed, reclassified, re-licensed, or made a member of a bundle, and cc0-approved is still 0."
       ]
     },
     {

@@ -78,6 +78,9 @@
     "test:e2e:pixi-pointer": "node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
     "test:e2e:pixi-pointer:full": "npm run build:web:pixi && npm run record:web-artifact:pixi && node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
     "test:e2e:pixi-pointer:recorded": "node scripts/require-pixi-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.pixi-pointer.config.ts",
+    "test:e2e:phase10-media": "node scripts/require-phase10-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.phase10-media.config.ts",
+    "test:e2e:phase10-media:full": "npm run build:web && npm run record:web-artifact && npm run verify:web-artifact && node scripts/require-phase10-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.phase10-media.config.ts",
+    "test:e2e:phase10-media:recorded": "node scripts/require-phase10-lane-artifact.mjs && playwright test --config=tests/e2e/playwright.phase10-media.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

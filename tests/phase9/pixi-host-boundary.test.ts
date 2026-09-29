@@ -47,6 +47,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { isEditableElement } from '../../src/ui/utils/editableElement';
+import { ASSET_BUNDLE_IDS } from '../../src/renderers/pixi/assets/assetManifest';
 import { isHandledElsewhere } from '../../src/renderers/pixi/runtime/createPixiWorldHost';
 import { REPO_ROOT, sourceOf, stripComments } from './support/phase9Build';
 
@@ -323,17 +324,53 @@ describe('no renderer code parses a CSS unit', () => {
     );
   });
 
-  it('no renderer module names an asset file, because Phase 10 owns those', () => {
+  it('the only renderer module that names an asset file is the Phase 10 manifest, and it names only registered media', () => {
+    // The Phase 9 rule, restated after the hand-off its own title predicted. Phase 9
+    // added no media and named none; Phase 10 added the asset manifest, which is the
+    // one place in the renderer tree that is *supposed* to name a file - a bundle
+    // manifest is a list of filenames, and refusing to name them would make it
+    // useless. What must not become true is a second namer, or a namer that names a
+    // file the media registry has never heard of. So the rule is narrowed to one exact
+    // path rather than loosened, and the manifest is held to the registry here rather
+    // than only in `tests/phase10/asset-manifest.test.ts`, so this gate cannot be
+    // satisfied by a manifest nobody checked.
+    const MANIFEST = 'src/renderers/pixi/assets/assetManifest.ts';
+    const namesAssetFile = (entry: { readonly source: string }): boolean =>
+      /['"`][^'"`]*\.(png|jpg|jpeg|svg|webp|mp3|ogg|wav|woff2?|ttf)['"`]/i.test(stripComments(entry.source));
     const offenders = rendererSources
-      .filter((entry) => {
-        const code = stripComments(entry.source);
-        return /['"`][^'"`]*\.(png|jpg|jpeg|svg|webp|mp3|ogg|wav|woff2?|ttf)['"`]/i.test(code);
-      })
-      .map((entry) => entry.relative);
+      .filter((entry) => namesAssetFile(entry))
+      .map((entry) => entry.relative)
+      .filter((relative) => relative !== MANIFEST);
     expect(
       offenders,
       'Phase 9 adds no media, and the CC0 gate covers src/** - an unregistered file would fail it',
     ).toEqual([]);
+
+    // And the one namer that is allowed names only media the registry admits to the
+    // bundle it declares. `ASSET_BUNDLE_IDS` is read from the manifest module rather
+    // than hard-coded here, so adding a bundle to the manifest cannot quietly widen
+    // what this gate allows, and a bundle the registry has never heard of fails here.
+    const registry = JSON.parse(
+      readFileSync(path.join(REPO_ROOT, 'public', 'assets', 'asset-licenses.json'), 'utf8'),
+    ) as { bundles: Record<string, { paths: string[] }>; assets: Array<{ path: string; classification: string; bundles: string[]; pixiEligible: boolean }> };
+    const unknownToRegistry = ASSET_BUNDLE_IDS.filter((id) => !Object.hasOwn(registry.bundles, id));
+    expect(
+      unknownToRegistry,
+      'the manifest declares bundle ids the media registry does not',
+    ).toEqual([]);
+    const named = [
+      ...readFileSync(path.join(REPO_ROOT, MANIFEST), 'utf8').matchAll(
+        /entry\(\s*'[^']+'\s*,\s*'(assets\/[^']+\.(?:png|jpg|jpeg|svg|webp))'/g,
+      ),
+    ].map((match) => `public/${match[1] as string}`);
+    expect(named.length, 'the manifest names no admitted media file').toBeGreaterThan(0);
+    for (const assetPath of named) {
+      const entry = registry.assets.find((candidate) => candidate.path === assetPath);
+      expect(entry, `${assetPath} is not in the media registry`).toBeDefined();
+      expect(['cc0-approved', 'procedural'], assetPath).toContain(entry?.classification);
+      expect(entry?.pixiEligible, assetPath).toBe(true);
+      expect(entry?.bundles.length, assetPath).toBeGreaterThan(0);
+    }
   });
 });
 

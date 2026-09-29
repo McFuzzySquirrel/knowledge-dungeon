@@ -22,7 +22,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
-import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
+import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
 
 const ROOT = process.cwd();
 const SRC = join(ROOT, 'src');
@@ -246,11 +246,15 @@ describe('V7.2: the default build', () => {
     expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
   });
 
-  it('no flag in the matrix is on by default before its cutover phase', () => {
+  it('no cutover flag in the matrix is on by default before its cutover phase', () => {
+    // Phase 10 added `audioEnabled`, which defaults on because it is a kill switch for
+    // a service that phase delivers rather than a gate on an existing behaviour. It
+    // declares itself in `NON_CUTOVER_FLAG_KEYS`, so the exception is a reviewed list
+    // and the property is still asserted for every other flag.
     const enabled = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
       .map(([key]) => key);
-    expect(enabled).toEqual([]);
+    expect(enabled.sort()).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
   });
 
   it('tests/unit/defaultBuildRendering.test.tsx is unmodified by this phase', () => {

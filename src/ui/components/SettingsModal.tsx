@@ -4,6 +4,7 @@ import { useShortcutStore, type ShortcutBinding } from '@/store/shortcutStore';
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '@/i18n';
 import i18n from '@/i18n';
 import { useTranslation } from 'react-i18next';
+import { AudioSettingsTab } from '@/ui/components/AudioSettingsTab';
 import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
 
 interface SettingsModalProps {
@@ -31,17 +32,26 @@ const THEME_OPTIONS: { id: ColorTheme; title: string; description: string }[] = 
 ];
 
 /** Tab definition for the settings modal. */
-type SettingsTab = 'theme' | 'language' | 'shortcuts';
+type SettingsTab = 'theme' | 'language' | 'shortcuts' | 'audio';
 
 interface TabDef {
   id: SettingsTab;
+  /**
+   * The English label, kept as the i18next fallback.
+   *
+   * Every tab carries a key so the strip is translatable like the rest of the
+   * settings strings. The fallbacks are the literal labels this file has always
+   * rendered, so English is unchanged by the addition.
+   */
   label: string;
+  labelKey: string;
 }
 
 const SETTINGS_TABS: TabDef[] = [
-  { id: 'theme', label: 'Theme' },
-  { id: 'language', label: 'Language' },
-  { id: 'shortcuts', label: 'Shortcuts' },
+  { id: 'theme', label: 'Theme', labelKey: 'settings.tabs.theme' },
+  { id: 'language', label: 'Language', labelKey: 'settings.tabs.language' },
+  { id: 'shortcuts', label: 'Shortcuts', labelKey: 'settings.tabs.shortcuts' },
+  { id: 'audio', label: 'Audio', labelKey: 'settings.tabs.audio' },
 ];
 
 export function SettingsModal({ currentTheme, onThemeChange, onClose }: SettingsModalProps): JSX.Element {
@@ -134,7 +144,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
               className={activeTab === tab.id ? 'settings-tab active' : 'settings-tab'}
               onClick={() => setActiveTab(tab.id)}
             >
-              {tab.label}
+              {t(tab.labelKey, tab.label)}
             </button>
           ))}
         </div>
@@ -207,6 +217,9 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
             </div>
           </div>
         )}
+
+        {/* Audio Tab - Phase 10: music, sound effects, and mute */}
+        {activeTab === 'audio' && <AudioSettingsTab />}
 
         <div className="onboarding-actions">
           <button type="button" className="ghost" onClick={() => setMakeItYoursOpen(true)}>

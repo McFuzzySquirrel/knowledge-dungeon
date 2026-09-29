@@ -1,0 +1,259 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Phase 10: the audio settings panel's own visual language.
+ *
+ * ## Why this is a separate file
+ *
+ * `src/styles.css` below its theme blocks is byte-frozen by
+ * `tests/phase8/qa-verification.test.ts` - the rollback claim is that a
+ * `VITE_COZY_VISUALS=false` build renders the pre-Phase-8 file exactly - so the
+ * panel cannot add a rule there. `src/ui/data/dataCenter.css` set the precedent for
+ * a component that ships its own scoped stylesheet, and this file follows it: every
+ * selector is rooted at `.kd-audio-settings`, so nothing here can reach another
+ * surface, and the whole file is fetched with the chunk that renders the settings
+ * modal.
+ *
+ * ## Colours come from the theme, not from here
+ *
+ * Every colour below is an existing custom property - `--control-bg`,
+ * `--control-border`, `--control-selected-bg`, `--text-primary`,
+ * `--text-secondary`, `--accent` - which the four legacy theme blocks in
+ * `src/styles.css` and the four Cozy blocks in `src/styles/cozy-tokens.css` both
+ * define. This file therefore introduces **no new colour pair**, so there is no new
+ * contrast figure to keep in step: the switch and the slider are painted from the
+ * same values the tab strip and the language buttons beside them are painted from.
+ * A settings panel is the future home of the theme picker, and a panel that hard
+ * coded its own palette would be a panel that had to be repainted by hand when the
+ * picker lands.
+ *
+ * The Cozy *scale* tokens (`--cozy-s-space-*`, `--cozy-s-radius-*`,
+ * `--cozy-s-target-min`) are read with a fallback, because they only exist when
+ * `VITE_COZY_VISUALS=true`. The fallback is the same number the token holds, so the
+ * two flag states lay the panel out identically and only the palette differs.
+ *
+ * ## State is never colour alone
+ *
+ * Three channels for the "on" state, in the same vocabulary
+ * `COZY_STATE_SIGNALS.selected` in `src/theme/cozyTokens.ts` declares - 700 weight
+ * and a 3px underline bar - plus the 2px state border the control can carry because
+ * it already has a 1px one. And the fourth channel is in the document rather than
+ * the stylesheet: the switch renders the word "On" or "Off" in its own face, so the
+ * state survives greyscale, a colour-vision deficiency, a forced-colours mode, and a
+ * monochrome print. These rules are unscoped for the same reason
+ * `src/styles/state-signals.css` is: the flag-off build is the one learners get, and
+ * a state signal that only exists behind a flag is not delivered.
+ *
+ * ## Focus
+ *
+ * A 3px ring at a 2px offset, the same geometry `src/styles/cozy.css` draws from the
+ * Cozy tokens, declared here so the default build has it too. Under
+ * `forced-colors: active` the ring switches to `CanvasText`, which is the one thing
+ * that mode still honours.
+ *
+ * ## Specificity
+ *
+ * The shell stylesheet ends with `:root[data-graphics='rpg'] button`, which is
+ * (0,2,1) and beats a plain `.kd-audio-settings .kd-audio-switch` at (0,2,0) - the
+ * same collision `tests/unit/dataCenter.test.tsx` found by measuring a real build.
+ * Every control rule here repeats its class, as `.kd-button.kd-button` does, so it
+ * lands at (0,3,0) and wins without `!important`.
+ *
+ * ## Touch, zoom, and 320 pixels
+ *
+ * Every control is at least 44 by 44 CSS pixels in both flag states - the Cozy layer
+ * grants that to `input` and `button` under the flag, and these rules grant it
+ * without it - and the layout is wrapping flex with no fixed widths, so a 320-pixel
+ * viewport and a 200% zoom work by construction rather than by a media query
+ * somebody tried.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+.kd-audio-settings {
+  display: grid;
+  gap: var(--cozy-s-space-4, 16px);
+  font: inherit;
+  color: var(--text-primary);
+}
+
+.kd-audio-settings *,
+.kd-audio-settings *::before,
+.kd-audio-settings *::after {
+  box-sizing: border-box;
+}
+
+.kd-audio-settings .kd-audio-intro.kd-audio-intro,
+.kd-audio-settings .kd-audio-summary.kd-audio-summary,
+.kd-audio-settings .kd-audio-help.kd-audio-help {
+  margin: 0;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.kd-audio-settings .kd-audio-intro.kd-audio-intro {
+  font-size: 13px;
+}
+
+.kd-audio-settings .kd-audio-help.kd-audio-help {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/*
+ * The three groups.
+ *
+ * A `fieldset`/`legend` pair, so the grouping is in the accessibility tree rather
+ * than being a box the stylesheet draws. `min-inline-size: 0` is what stops a long
+ * help sentence from widening the fieldset past a 320-pixel viewport.
+ */
+.kd-audio-settings .kd-audio-group.kd-audio-group {
+  display: grid;
+  gap: var(--cozy-s-space-3, 12px);
+  min-inline-size: 0;
+  margin: 0;
+  padding: var(--cozy-s-space-3, 12px);
+  border: 1px solid var(--control-border);
+  border-radius: var(--cozy-s-radius-md, 10px);
+}
+
+.kd-audio-settings .kd-audio-legend.kd-audio-legend {
+  padding: 0 6px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/*
+ * One control and its help text.
+ *
+ * The head is a wrapping flex row so the label and the control share a line when
+ * there is room and stack when there is not, which is the 320-pixel case.
+ */
+.kd-audio-settings .kd-audio-row.kd-audio-row {
+  display: grid;
+  gap: 6px;
+  min-inline-size: 0;
+}
+
+.kd-audio-settings .kd-audio-row-head.kd-audio-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kd-audio-settings .kd-audio-label.kd-audio-label {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ── The on/off switch ─────────────────────────────────────────────────── */
+
+/*
+ * A button with `role="switch"`, so the platform gives it Enter and Space and the
+ * stylesheet never has to reimplement either. The visible state word is a child
+ * span, which is why the width is `min-inline-size` rather than a fixed one: the
+ * longest word in any supported language has to fit.
+ */
+.kd-audio-settings .kd-audio-switch.kd-audio-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--cozy-s-target-min, 44px);
+  min-inline-size: var(--cozy-s-target-min, 44px);
+  padding: 6px 14px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--cozy-s-radius-pill, 999px);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.kd-audio-settings .kd-audio-switch.kd-audio-switch:hover {
+  border-color: var(--accent);
+}
+
+/*
+ * The "on" state: three non-colour signals plus the palette.
+ *
+ * The bar and the weight are the two shapes `COZY_STATE_SIGNALS.selected` declares,
+ * the 2px border is the third the control can carry, and the colour is last - so a
+ * greyscale print of this panel still says which switches are on.
+ */
+.kd-audio-settings .kd-audio-switch.kd-audio-switch[aria-checked='true'] {
+  border-width: var(--cozy-s-border-state, 2px);
+  border-color: var(--control-selected-border);
+  background: var(--control-selected-bg);
+  color: var(--control-selected-text);
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 0 var(--control-selected-border);
+}
+
+.kd-audio-settings .kd-audio-switch.kd-audio-switch:focus-visible {
+  outline: var(--cozy-s-focus-ring-width, 3px) solid var(--accent);
+  outline-offset: var(--cozy-s-focus-ring-offset, 2px);
+}
+
+.kd-audio-settings .kd-audio-switch-state.kd-audio-switch-state {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The volume sliders ────────────────────────────────────────────────── */
+
+/*
+ * A native range.
+ *
+ * `min-block-size` and `min-inline-size` are the 44-pixel floor in the flag-off
+ * build (the Cozy layer grants it under the flag), and the extra block padding gives
+ * the thumb a comfortable grab area on a touch screen without changing the control's
+ * own geometry. `accent-color` tints the platform-drawn track and thumb; it is the
+ * only declaration here that reaches into native rendering, and the visible number
+ * beside the slider is what carries the value for anyone who cannot see it.
+ */
+.kd-audio-settings .kd-audio-range.kd-audio-range {
+  inline-size: 100%;
+  min-block-size: var(--cozy-s-target-min, 44px);
+  min-inline-size: var(--cozy-s-target-min, 44px);
+  margin: 0;
+  padding: 8px 0;
+  accent-color: var(--accent);
+}
+
+.kd-audio-settings .kd-audio-range.kd-audio-range:focus-visible {
+  outline: var(--cozy-s-focus-ring-width, 3px) solid var(--accent);
+  outline-offset: var(--cozy-s-focus-ring-offset, 2px);
+}
+
+/* The number in plain sight. `tabular-nums` so the readout does not jitter sideways
+   while a learner holds an arrow key down. */
+.kd-audio-settings .kd-audio-value.kd-audio-value {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Focus, forced colours, and motion ─────────────────────────────────── */
+
+@media (forced-colors: active) {
+  .kd-audio-settings .kd-audio-switch.kd-audio-switch:focus-visible,
+  .kd-audio-settings .kd-audio-range.kd-audio-range:focus-visible {
+    outline-color: CanvasText;
+  }
+}
+
+/*
+ * Reduced motion.
+ *
+ * The panel's only motion is the 120ms background and border transition the shell
+ * stylesheet puts on every button, which `src/styles/cozy.css` already collapses
+ * under the flag. This block is the same collapse for the flag-off build, which is
+ * the build learners get.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .kd-audio-settings,
+  .kd-audio-settings * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

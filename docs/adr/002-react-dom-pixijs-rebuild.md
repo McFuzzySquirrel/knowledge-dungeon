@@ -198,6 +198,31 @@ The immediate rollback controls are `VITE_WORLD_RENDERER=phaser` and
 `VITE_STORAGE_REPOSITORY=legacy`, with per-world Pixi flags disabled as needed.
 Rollback must not delete migrated or legacy data.
 
+### Amendment: `VITE_AUDIO_ENABLED` (Phase 10)
+
+Phase 10 added a tenth flag, which the list above does not contain:
+
+```text
+VITE_AUDIO_ENABLED=true|false
+```
+
+It is the one flag that is **not** a cutover gate. Every flag above switches an
+existing behaviour to a new one at a reviewed cutover, so its production default is
+the pre-phase behaviour. Audio has no pre-phase behaviour to preserve — Phase 10
+builds the service — so this flag does not gate its arrival, it gates its use:
+`productionDefault` is `true`, and the Phase 10 rollback line ("disable audio
+independently and retain procedural art fallbacks") is a build with it off. A
+flag-off build constructs no `AudioContext`, arms no gesture gate, and schedules
+nothing, so there is no runtime path that can produce sound with it off.
+
+The default is the one exception to "all future booleans false", so it is declared
+as data in `NON_CUTOVER_FLAG_KEYS` (`src/config/featureFlags.ts`) rather than left
+implicit: the set of flags permitted to default on is that list, and a cutover
+flag that defaults on still fails the Phase 5, Phase 6, and Phase 7 flag gates.
+The plan document's flag list has not been updated, because a plan is not a place
+to record a decision taken later than the plan; the plan's Phase 10 rollback line
+is what this flag implements.
+
 ## Decision 7: Accessibility, performance, and release targets
 
 Accessibility is a release requirement, not a renderer enhancement:

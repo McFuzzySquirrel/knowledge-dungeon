@@ -240,7 +240,18 @@ jobs:
     name: Browser Smoke (Chromium Matrix)
     runs-on: ubuntu-latest
     needs: [web-build]
-    timeout-minutes: 20
+    # Raised from 20 when the Phase 10 lane became a third browser suite in this
+    # job, and the reason is about evidence rather than about the new step's own
+    # cost. A job-level timeout cancels the job, and it cancels it *after* the two
+    # lanes that already ran and after the evidence step that is otherwise
+    # unconditional, so a ceiling that the new step can reach would destroy the
+    # Pixi lanes' measurements too - a slower lane turning a reportable red test
+    # into a lost run. The Phase 10 lane's per-test ceiling is three times this
+    # job's other lanes', because its accessibility scan boots the Phaser world and
+    # runs two axe analyses at four viewports, and that margin is what pays for it.
+    # Measured locally end to end at 80 seconds including the artifact preflight
+    # and verification, on a machine faster than a two-core runner.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -275,6 +286,52 @@ jobs:
         # one. It gates, and the wiring gate
         # `tests/e2e/welcome-narrow-viewport.test.ts` asserts that it does.
         run: npm run test:e2e:recorded
+      # Phase 10 audio and asset lane, as a step in this job, and *before* the
+      # flagged download below rather than after it.
+      #
+      # `browser-smoke` is the only lawful job, and not only for the reason the two
+      # Pixi lanes above already give. This job installs exactly one Chromium and
+      # runs `npm ci` exactly once, and the existing wiring gates assert that no
+      # job other than `web-build` runs any `build:web*` script - so a job of this
+      # lane's own would have to either build a second artifact or download a
+      # second one, and the two artifact downloads already in this job are counted
+      # and pinned, so a third would break a gate that is currently working. The
+      # artifact this lane measures is the *production* one, which is the artifact
+      # this job already downloaded and already verified above.
+      #
+      # The placement *within* the job is forced, and it is the mirror of the Pixi
+      # lanes' placement. This lane previews the production artifact deliberately:
+      # the audio service has no engine import at all and the asset runtime is
+      # reached by importing the module under test rather than by mounting a route,
+      # so the production build is the one whose privacy, persistence and
+      # accessibility claims are worth making - `tests/e2e/phase10-media-lane.ts`
+      # records that choice and its boundaries. The two steps below deliberately
+      # clear this job's production tree and replace it with the flagged build, so
+      # a step placed after them would preview a Pixi-flagged tree while its own
+      # preflight and its first test verified the production identity: a green run
+      # describing something other than what it claims, which is the same shape of
+      # defect the clear step below exists to prevent. The Phase 9 pointer wiring
+      # gate independently requires that nothing at all run between the clear and
+      # the download, and this step sits before the clear for that reason as well.
+      #
+      # It gates. The gesture check, the settings-persistence check, the
+      # no-off-origin-request check and the four-viewport accessibility scan had no
+      # browser evidence in CI at all before this step, and the Phase 9 record is
+      # the reason that matters: three of that phase's four shipped defects were
+      # found by CI and by nothing else. A lane that only ever runs locally is the
+      # gap this closes. The step is not exempt from failing, and no step in this
+      # job is; the wording here avoids naming the exemption key, because several
+      # wiring gates assert on the raw text of a job whose comments are part of what
+      # they check.
+      #
+      # Evidence is the same sanitized JSON the allowlisted upload below already
+      # takes, written under `artifacts/compatibility-evidence/`. The lane records
+      # no trace, screenshot or video, and its own results directory sits
+      # deliberately outside that allowlisted root, so the pre-existing failure
+      # upload further down does not reach it either. It adds a step and nothing
+      # else: no build, no download, no browser install, no second `npm ci`.
+      - name: Run the Phase 10 audio and asset lane
+        run: npm run test:e2e:phase10-media:recorded
       # Phase 9 Pixi world-host mount/unmount memory lane, as a step in this job.
       #
       # The same reasoning as the 320-pixel gate above - the browser and the preview
