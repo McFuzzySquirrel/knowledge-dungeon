@@ -1,16 +1,64 @@
-import { useEffect, useState, type JSX } from 'react';
+import { lazy, Suspense, useEffect, useState, type JSX } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { WelcomeScreen } from '@/ui/screens/WelcomeScreen';
 import { VillageScreen } from '@/ui/screens/VillageScreen';
 import { GameScreen } from '@/ui/screens/GameScreen';
 import { MigrationStateSurface, type MigrationAction } from '@/ui/components/MigrationStateSurface';
+import { runtimeConfig } from '@/config/featureFlags';
 import {
   bootstrapApplication,
   pendingBootstrap,
   type BootstrapResult,
   type MigrationState,
 } from '@/application/bootstrap';
+
+/**
+ * The build-time renderer switch (plan 11, Phase 9).
+ *
+ * ## Why the comparison is against a literal
+ *
+ * `import.meta.env.VITE_WORLD_RENDERER` is replaced by its value as a string
+ * literal at build time, so a *literal* comparison lets the bundler see that one
+ * branch is dead and delete the other - along with the `import()` in it, and
+ * therefore along with the whole PixiJS chunk. That is the difference between a
+ * default build that ships no PixiJS bytes at all and one that ships 1.1 MB of
+ * vendor chunk that Welcome never requests. A comparison that normalises first
+ * (`String(raw).trim().toLowerCase() === 'pixi'`) is equally correct at run time
+ * and defeats the folding, because no bundler evaluates a method call on a string
+ * constant; this was measured rather than assumed.
+ *
+ * The run-time value that decides anything is `runtimeConfig.worldRenderer`, which
+ * is the *parsed* flag - trimmed, lower-cased, and validated. The two are used for
+ * two different jobs and the split is deliberate:
+ *
+ * - this literal decides what the bundler may delete, and must be exactly the value
+ *   the build script passes, which `build:web:pixi` does;
+ * - `runtimeConfig.worldRenderer` decides what the application does, and is total
+ *   over every spelling the parser accepts.
+ *
+ * So `VITE_WORLD_RENDERER=" pixi "` parses to `pixi`, requests the Pixi host at run
+ * time, and is caught by the build-time chunk audit as a build that asked for Pixi
+ * and emitted none - a loud, accurate failure rather than a silent fallback. The
+ * screen below reports the same condition in words if it is ever reached.
+ *
+ * ## Why the switch is at the screen level
+ *
+ * The world host is chosen here rather than inside `GameScreen`, and that is what
+ * keeps the Phaser path byte-for-byte untouched: `GameScreen`'s mount effect, its
+ * dungeon adapter, and its HUD are not read, not conditionalised, and not
+ * restructured. Phase 11 replaces `PixiWorldHost` with the Village host at this same
+ * seam, and Phase 13 and 17 follow.
+ *
+ * The cost is honest and worth stating: on the flagged build, the game screen is
+ * the Phase 9 *test world* rather than the dungeon, because Phase 9's non-goals rule
+ * out implementing the dungeon. `GameScreen` returns nothing Pixi-shaped today, so
+ * there was no smaller switch available that did not pretend a dungeon existed.
+ */
+const pixiWorldHostFactory =
+  import.meta.env.VITE_WORLD_RENDERER === 'pixi'
+    ? () => import('@/renderers/pixi/runtime/PixiWorldHost')
+    : null;
 
 export function App(): JSX.Element {
   const snapshot = useSubjectStore((state) => state.snapshot);
@@ -100,10 +148,43 @@ export function App(): JSX.Element {
       {activeScreen === 'village' ? (
         <VillageScreen />
       ) : activeScreen === 'game' && snapshot && selectedClass && activeSubjectId ? (
-        <GameScreen />
+        <WorldRoute />
       ) : (
         <WelcomeScreen />
       )}
     </div>
+  );
+}
+
+/**
+ * The world route: Phaser's dungeon, or the PixiJS host.
+ *
+ * A component rather than an inline ternary because `React.lazy` needs a component
+ * type, and because a `lazy` boundary needs a `Suspense` boundary - the fallback
+ * below is what a learner sees for the one or two frames it takes to fetch and
+ * evaluate a renderer that was deliberately not in the first paint.
+ */
+function WorldRoute(): JSX.Element {
+  const requested = runtimeConfig.worldRenderer === 'pixi';
+  if (!requested) {
+    return <GameScreen />;
+  }
+  if (pixiWorldHostFactory === null) {
+    // Reachable only when the parsed flag is `pixi` while the build-time literal
+    // comparison said otherwise, which means the environment value was not
+    // literally `pixi`. Named in words rather than by echoing the raw value, so a
+    // build-time string can never become a channel for anything.
+    return (
+      <p role="alert">
+        This build was asked for the PixiJS world renderer but contains no PixiJS chunk. Build it with
+        VITE_WORLD_RENDERER=pixi.
+      </p>
+    );
+  }
+  const PixiWorldHost = lazy(pixiWorldHostFactory);
+  return (
+    <Suspense fallback={<p role="status">Loading the world…</p>}>
+      <PixiWorldHost />
+    </Suspense>
   );
 }

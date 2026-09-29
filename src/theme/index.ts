@@ -18,6 +18,7 @@ export type { CozyHex, CozyRgb255, CozyRgbaUnit } from './cozyColor';
 
 export {
   COZY_BORDER_WIDTH,
+  COZY_BORDER_WIDTH_PX,
   COZY_COLOR_FAMILIES,
   COZY_COLOR_TOKEN_KINDS,
   COZY_COLOR_TOKENS,
@@ -26,13 +27,19 @@ export {
   COZY_DEFAULT_THEME,
   COZY_FILL_PARTNER_TOKENS,
   COZY_FOCUS,
+  COZY_FOCUS_PX,
   COZY_FONT_SIZE,
+  COZY_FONT_SIZE_PX,
   COZY_FONT_WEIGHT,
+  COZY_FONT_WEIGHT_NUMBER,
   COZY_LEGACY_VARIABLE_BRIDGE,
   COZY_LINE_HEIGHT,
+  COZY_LINE_HEIGHT_NUMBER,
   COZY_NON_TEXT_PARTNER_TOKENS,
   COZY_RADIUS,
+  COZY_RADIUS_PX,
   COZY_SPACE,
+  COZY_SPACE_PX,
   COZY_STATE_SIGNALS,
   COZY_SURFACE_TOKENS,
   COZY_THEMES,
@@ -54,6 +61,15 @@ export type {
   CozyTokenKind,
   RendererNeutralThemeModule,
 } from './cozyTokens';
+
+export {
+  cozyEasingCurve,
+  cozyPxMirror,
+  cozyPxNumber,
+  cozyUnitlessMirror,
+  cozyUnitlessNumber,
+} from './cozyNumbers';
+export type { CozyEasingCurve, CozyNumberMirror } from './cozyNumbers';
 
 export {
   COZY_CONTRAST_ATTRIBUTE,
@@ -79,7 +95,9 @@ export {
 export {
   COZY_MOTION_DURATION_MS,
   COZY_MOTION_EASING,
+  COZY_MOTION_EASING_CURVE,
   COZY_MOTION_TRAVEL_PX,
+  COZY_MOTION_UNKNOWN_VALUE,
   FULL_MOTION_SCALE,
   REDUCED_MOTION_DURATION_MS,
   REDUCED_MOTION_SCALE,
@@ -88,6 +106,7 @@ export {
 } from './motion';
 export type {
   CozyMotionDuration,
+  CozyMotionEasing,
   CozyMotionProfile,
   CozyMotionTravel,
 } from './motion';

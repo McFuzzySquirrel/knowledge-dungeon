@@ -20,7 +20,12 @@
  * on every frame and shared with React: a host that edited a duration in place
  * would silently change it for every other consumer. See the integrity contract
  * in `cozyTokens.ts`.
+ *
+ * Phase 9 added two things here, both additive: the numeric easing curves a
+ * tween library needs, and a defined answer for a name this module does not know.
  */
+
+import { cozyEasingCurve, type CozyEasingCurve } from './cozyNumbers';
 
 /** Named durations in milliseconds. A host multiplies by `MotionProfile.scale`. */
 export const COZY_MOTION_DURATION_MS = Object.freeze({
@@ -42,6 +47,33 @@ export const COZY_MOTION_EASING = Object.freeze({
   /** For something leaving. Accelerates away. */
   exit: 'cubic-bezier(0.3, 0, 1, 1)',
 } as const);
+
+export type CozyMotionEasing = keyof typeof COZY_MOTION_EASING;
+
+/**
+ * The same curves as four numbers each, for a renderer host (Phase 9).
+ *
+ * `cubic-bezier(...)` is a CSS function, and a WebGL or canvas tween cannot be
+ * handed one: it wants `(x1, y1, x2, y2)`. Phase 8 recorded that gap rather than
+ * papering over it - "there is no `COZY_MOTION_EASING_CURVE` accessor", in
+ * `tests/phase8/pixi-token-consumption.test.ts` - and the derivation closes it.
+ *
+ * Derived from {@link COZY_MOTION_EASING} at module scope, so the tuple and the
+ * string cannot drift: there is no second list of curves to keep in step, and
+ * `cozyEasingCurve` throws rather than guessing if a curve is authored in a shape
+ * it cannot read. Each tuple is frozen, which matters more here than elsewhere -
+ * a tween that received a live array could sort it in place and change the curve
+ * for every later animation in the session.
+ */
+export const COZY_MOTION_EASING_CURVE: Readonly<Record<CozyMotionEasing, CozyEasingCurve>> =
+  Object.freeze(
+    Object.fromEntries(
+      (Object.keys(COZY_MOTION_EASING) as CozyMotionEasing[]).map((name) => [
+        name,
+        cozyEasingCurve(COZY_MOTION_EASING[name], `COZY_MOTION_EASING.${name}`),
+      ]),
+    ) as Record<CozyMotionEasing, CozyEasingCurve>,
+  );
 
 /**
  * Named travel distances in pixels. A host multiplies by `MotionProfile.scale`;
@@ -75,6 +107,22 @@ export const REDUCED_MOTION_DURATION_MS = 0;
 export const REDUCED_MOTION_TRAVEL_PX = 0;
 
 /**
+ * What a profile substitutes for a name it does not know (Phase 9).
+ *
+ * `0`, and defined at all, because the alternative is worse than a wrong number:
+ * `undefined` reaches a host that computes `durationMs(name) / 1000` from a name
+ * it read out of data, and that host gets `NaN` seconds - a tween that never
+ * settles, or a `setTimeout` that fires immediately, depending on the library.
+ * `0` is a real answer in the same units as the table it stands in for: no time,
+ * and no distance, which is also the reduced-motion answer.
+ *
+ * The name is a constant rather than a bare `0` at each call site so the
+ * fallback is something a test can name, a host can log, and a future change has
+ * to be made in one place.
+ */
+export const COZY_MOTION_UNKNOWN_VALUE = 0;
+
+/**
  * What a renderer host reads. Immutable, plain data, no DOM.
  *
  * `reduceAll` is a convenience for a host that wants to skip its animation
@@ -85,9 +133,19 @@ export interface CozyMotionProfile {
   readonly reduced: boolean;
   readonly scale: number;
   readonly reduceAll: boolean;
-  /** Milliseconds for a named duration, already scaled. */
+  /**
+   * Milliseconds for a named duration, already scaled.
+   *
+   * Total: a name the table does not hold answers {@link COZY_MOTION_UNKNOWN_VALUE}
+   * rather than `undefined`, because a host computes seconds from this by dividing
+   * by 1000 and `undefined` would become `NaN`. Every declared name is unaffected.
+   */
   durationMs(name: CozyMotionDuration): number;
-  /** Pixels for a named travel, already scaled. */
+  /**
+   * Pixels for a named travel, already scaled.
+   *
+   * Total in the same way as {@link durationMs}, for the same reason.
+   */
   travelPx(name: CozyMotionTravel): number;
   /** The same profile as plain data, for a store or a worker message. */
   readonly serialized: Readonly<{
@@ -97,6 +155,23 @@ export interface CozyMotionProfile {
     durations: Readonly<Record<CozyMotionDuration, number>>;
     travel: Readonly<Record<CozyMotionTravel, number>>;
   }>;
+}
+
+/**
+ * The value for `name`, or `undefined` when the table does not have that key.
+ *
+ * `Object.hasOwn` rather than a bare index, because the tables are built by
+ * `Object.fromEntries` and therefore carry `Object.prototype`: `durations
+ * ['toString']` returns a *function*, which `?? COZY_MOTION_UNKNOWN_VALUE` would
+ * wave straight through, and a host would then multiply a function by a delta.
+ * The same defence `cozyThemeForInput` uses in `cozyTokens.ts`, for the same
+ * reason.
+ *
+ * Costs a property read and no allocation, so a per-frame read stays a per-frame
+ * read.
+ */
+function known<T, K extends PropertyKey>(table: Readonly<Record<K, T>>, name: K): T | undefined {
+  return Object.hasOwn(table, name) ? table[name] : undefined;
 }
 
 function buildProfile(reduced: boolean): CozyMotionProfile {
@@ -121,8 +196,20 @@ function buildProfile(reduced: boolean): CozyMotionProfile {
     reduced,
     scale,
     reduceAll: reduced,
-    durationMs: (name: CozyMotionDuration) => durations[name],
-    travelPx: (name: CozyMotionTravel) => travel[name],
+    // `?? COZY_MOTION_UNKNOWN_VALUE` rather than a bare index: a name that is not
+    // a `CozyMotionDuration` can still arrive at runtime - from JSON, from a
+    // content table, from a typo in a renderer that has not been type-checked
+    // against this module - and the contract here is that a profile answers with
+    // a number. The typed behaviour for every declared name is unchanged, because
+    // `known` returns exactly what the index would have returned for a key the
+    // table owns.
+    durationMs: (name: CozyMotionDuration) =>
+      known(durations, name) ?? COZY_MOTION_UNKNOWN_VALUE,
+    // The same guard on travel, for the same reason and the same per-frame read.
+    // Not in the Phase 9 contract, and deliberately not a separate policy: a
+    // displacement that resolves to a function is the same defect as a duration
+    // that resolves to `undefined`.
+    travelPx: (name: CozyMotionTravel) => known(travel, name) ?? COZY_MOTION_UNKNOWN_VALUE,
     serialized: Object.freeze({ reduced, scale, reduceAll: reduced, durations, travel }),
   });
 }
