@@ -728,7 +728,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 8 | complete | Establish Cozy design tokens and the CC0 media gate. |
 | 9 | complete | Build the PixiJS runtime host. |
 | 10 | complete | Build asset bundles and functional audio. |
-| 11 | not-started | Build the Pixi village world foundation. |
+| 11 | verified | Build the Pixi village world foundation. |
 | 12 | not-started | Build village NPCs, quests, and redesigned panels. |
 | 13 | not-started | Build the Pixi dungeon world and navigation. |
 | 14 | not-started | Redesign the Creator flow. |
@@ -4943,7 +4943,7 @@ Phase 9 record is the precedent for what replaces it.
 
 ## Phase 11: Pixi Village World Foundation
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Replace the village Phaser world layer while preserving layout, structures, portals, and navigation.
 
 ### Prerequisites
@@ -5000,6 +5000,118 @@ Manual checks:
 - Verify all six subject portal slots.
 - Verify resize, portrait, and landscape.
 - Verify keyboard and touch produce equivalent actions.
+
+### Verification evidence
+
+Recorded on 2026-09-30. The status advanced from `in-progress` to `verified` after the
+maintainer accepted the village-scoped reading of the fourth exit criterion (see
+"Exit-criteria assessment" below); `GameScreen.tsx` is deferred to Phase 13. No commit
+has been made.
+
+#### Baseline before Phase 11
+
+Working tree clean at `4070e71` (Phase 10 complete). Lint clean, typecheck clean, 195
+test files / 4016 tests passed, `dist` 4.75 MB across 147 files, `check:bundle-size`
+green.
+
+#### Files
+
+- New renderer modules: `src/renderers/pixi/camera/CameraRig.ts`,
+  `src/renderers/pixi/input/WorldInputController.ts`,
+  `src/renderers/pixi/village/{createVillageScene.ts,VillageRenderer.ts,VillageWorld.tsx}`.
+- `src/data/villageLayout.ts` (renderer-neutral depth/proximity/path/spawn helpers,
+  +242 lines), `src/game/scenes/VillageScene.ts` (consumes the extracted data only,
+  −56 lines).
+- `src/ui/screens/VillageScreen.tsx` (build-time `VITE_PIXI_VILLAGE === 'true'` switch,
+  dynamic Phaser factory, lazy `VillageWorld`, throttled compass).
+- `vite.config.ts` (additive `pixiVillage` chunk gate), `package.json`
+  (`build:web:pixi-village`), `.env.example`.
+- Tests: `tests/phase11/**` (5 files) and deliberate updates to
+  `tests/phase9/{pixi-host-boundary,renderer-chunk-boundary,renderer-switch}.test.ts`
+  and `tests/e2e/currentBuild.spec.ts`.
+
+#### Commands
+
+```text
+npm run lint                                   exit 0
+npm run typecheck                              exit 0
+npm test                                       200 files / 4081 tests passed
+npm run build:web                              exit 0, vendor-pixi: 0 chunks (default)
+npm run check:bundle-size                      4.75 MB across 149 files
+npm run build:web:pixi-village                 exit 0, lazy VillageWorld + vendor-pixi, 0 entry-reachable
+npm run check:memory (default)                 passed; PixiJS NOT measured on this artifact
+npm run check:memory (flagged)                 passed; Pixi lazy, within the 800 KiB ceiling
+VITE_PIXI_VILLAGE=true npm run test:e2e        24 passed (desktop-chromium, chromebook, tablet, tablet-landscape)
+npm run test:e2e -- --project=tablet           6 passed (default build; Phaser village)
+```
+
+#### Device checks
+
+All browser evidence is Chromium (the four Phase-1 viewport projects). `tablet` and
+`tablet-landscape` run with touch emulation. No Firefox, WebKit, Edge, or physical
+device evidence is produced here; those belong to the compatibility and Phase 21 gates.
+
+#### Migration/data result
+
+None. Phase 11 changes no storage, schema, or migration; the subject schema stays
+`1.1.0`. The only persisted read/write is the pre-existing one-shot `kd-village-spawn`
+localStorage key, read and cleared exactly once per mount.
+
+#### Performance/accessibility/license result
+
+- Chunk audit: the flagged build emits `vendor-pixi` (573 kB / 166 kB gzip) and
+  `VillageWorld` (57 kB / 20 kB gzip) as lazy chunks, none statically reachable from the
+  entry. The default build emits zero Pixi chunks.
+- `check:memory` is a build-level preflight and does not measure mount/unmount cycles.
+- The village surface keeps the Phase 9 accessibility pattern: `aria-hidden`
+  non-focusable canvas, a labelled ≥44 px keyboard-operable interact control, a polite
+  status sentence in words, no colour-only state;
+  `tests/phase11/village-world-dom.test.tsx` pins it. A village-specific axe scan is not
+  run here.
+- License: no media is added or loaded; the village is drawn procedurally. The CC0 gate
+  is unaffected and no `legacy-unverified` file enters a bundle.
+
+#### Exit-criteria assessment
+
+1. Every current village structure is approachable and interactive — mechanism proven
+   (`tests/phase11/village-scene.test.ts` approach + interact against the shared
+   `VILLAGE_MAP`/`getDungeonPortalSlots` data); an exhaustive walk of all ~70 structures
+   is not automated.
+2. Touch and keyboard navigation are equivalent — proven at the controller level
+   (drag ≡ WASD, tap ≡ interact, pinch ≡ zoom), in the scene, and keyboard end-to-end in
+   the browser; a real touch gesture against the village is not driven in-browser.
+3. Pixi Village can be disabled without affecting other routes — proven: the default and
+   `VITE_PIXI_VILLAGE=false` builds emit no Pixi chunk, mount the Phaser village, and
+   request no Pixi script.
+4. No current UI component imports Phaser types — met for the village route.
+   `VillageScreen.tsx` names no Phaser type and reaches `@/game/createVillageGame` only
+   through a dynamic `import()`; the new gate in
+   `tests/phase9/pixi-host-boundary.test.ts` enforces this. `src/ui/screens/GameScreen.tsx`
+   (the Phaser dungeon route, migrated in Phase 13) still statically imports
+   `@/game/createGame` and `PhaserDungeonRenderer`; it is the single enumerated exception.
+   On 2026-09-30 the maintainer accepted the village-scoped reading: the criterion governs
+   the migrated village UI, and `GameScreen.tsx` migrates in Phase 13. The exception is
+   pinned by the gate, so no second file can join it without a red run.
+
+#### Known limitations
+
+- NPCs are deferred to Phase 12 by the plan's non-goals; the Pixi scene accepts the
+  `onNpc*` callbacks but never emits them, so the Pixi village has no NPC dialogue.
+- Custom-sprite blob leasing (`retainCustomSpriteUrl`) is left unwired in Phase 11; the
+  Phase 10 marker gate still passes deliberately.
+- The village is drawn procedurally (Graphics/Text); there is no final Cozy asset set, so
+  custom sprite overrides do not appear in the Pixi village yet.
+- `check:memory` does not measure the village's runtime mount/unmount cycles or GPU
+  residency; that runtime measurement exists only for the Phase 9
+  `VITE_WORLD_RENDERER=pixi` test-world lane.
+- Fishing on the Pixi village path is Phase 17; `isMounted()` is false so `enterFishing`
+  no-ops rather than failing.
+
+#### Rollback
+
+Set `VITE_PIXI_VILLAGE=false` (or leave it unset). The default build mounts the Phaser
+village unchanged, emits no Pixi chunk, and makes no Pixi request; verified by
+`npm run build:web` and `npm run test:e2e -- --project=tablet`.
 
 ### Exit criteria
 
