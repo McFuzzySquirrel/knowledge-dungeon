@@ -111,6 +111,12 @@ describe('the renderer flag has one mechanism, and its production default is Pha
     // The Pixi build delegates to the production script with one variable changed,
     // which is what keeps the two builds from drifting apart.
     expect(npmScripts['build:web:pixi']).toBe('VITE_WORLD_RENDERER=pixi npm run build:web');
+    // The Phase 11 village build is the same delegation for the renderer-neutral
+    // village switch: it leaves the world renderer on Phaser, so the village is the
+    // only thing switched on and the Phase 9 renderer check cannot cover it.
+    expect(npmScripts['build:web:pixi-village']).toBe(
+      'VITE_PIXI_VILLAGE=true npm run build:web',
+    );
   });
 
   it('is a build-time variable, not a runtime setting a learner can change', () => {
@@ -127,6 +133,82 @@ describe('the renderer flag has one mechanism, and its production default is Pha
     for (const runtimeChannel of ['sessionStorage', 'URLSearchParams', 'setItem', 'document.cookie']) {
       expect(parser, runtimeChannel).not.toContain(runtimeChannel);
     }
+  });
+});
+
+/**
+ * The Phase 11 village switch, and how it relates to the Phase 9 renderer switch.
+ *
+ * ## The property that matters
+ *
+ * `VITE_PIXI_VILLAGE` is a second, independent build-time contract. A build can set
+ * it while `VITE_WORLD_RENDERER` stays `phaser`, which is exactly what
+ * `build:web:pixi-village` does: the village is the only thing switched on. So the
+ * flag cannot be folded into the renderer enum, and the chunk audit needed its own
+ * additive check.
+ *
+ * What is asserted here is the parser side - default off, both booleans parse, a
+ * malformed value fails configuration load - and the bundler-visible shape on the
+ * screen: a literal comparison with no normalising call before it, and two dynamic
+ * imports, so the default build can delete the Pixi arm and its chunk. The plugin's
+ * own truth table lives in `tests/phase9/renderer-chunk-boundary.test.ts`.
+ */
+describe('the village switch is additive to the renderer switch, and defaults off', () => {
+  const dynamicImports = (source: string): string[] =>
+    [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map((match) => match[1]);
+
+  it('parses with the safe default, and never moves the renderer switch', () => {
+    expect(RUNTIME_FLAG_ENV_KEYS.pixiVillage).toBe('VITE_PIXI_VILLAGE');
+    expect(parseRuntimeConfig({}).pixiVillage).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.pixiVillage).toBe(false);
+    expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'true' }).pixiVillage).toBe(true);
+    expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'false' }).pixiVillage).toBe(false);
+    expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: ' TRUE ' }).pixiVillage).toBe(true);
+    // Adding the village flag does not move the world renderer: the two are
+    // independent contracts, and a build that set both would be an explicit choice.
+    expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'true' }).worldRenderer).toBe('phaser');
+    expect(() => parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'yes' })).toThrow(/VITE_PIXI_VILLAGE/);
+  });
+
+  it('is registered against this phase and documents its rollback', () => {
+    expect(FEATURE_FLAG_MATRIX.pixiVillage.environmentVariable).toBe('VITE_PIXI_VILLAGE');
+    expect(FEATURE_FLAG_MATRIX.pixiVillage.valueKind).toBe('boolean');
+    expect(FEATURE_FLAG_MATRIX.pixiVillage.productionDefault).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.pixiVillage.ownerPhase).toBe(11);
+    expect(FEATURE_FLAG_MATRIX.pixiVillage.rollback).toContain('VITE_PIXI_VILLAGE=false');
+  });
+
+  it('is compared against a literal, so the default build can delete the Pixi branch', () => {
+    const screen = sourceOf('src/ui/screens/VillageScreen.tsx');
+    expect(screen).toContain("import.meta.env.VITE_PIXI_VILLAGE === 'true'");
+    // A normalisation step before the comparison defeats dead-branch elimination and
+    // leaves the default build carrying a Pixi chunk it will never fetch. Measured,
+    // not assumed, in `src/ui/App.tsx` for the renderer switch; the same rule applies.
+    const branch = screen.slice(screen.indexOf("import.meta.env.VITE_PIXI_VILLAGE === 'true'"));
+    const beforeNextStatement = branch.split('\n').slice(1, 6).join('\n');
+    expect(
+      beforeNextStatement,
+      'normalise the flag in runtimeConfig, not in the bundler-visible comparison',
+    ).not.toMatch(/\.(trim|toLowerCase|toUpperCase)\s*\(/);
+    // Both arms are dynamic imports: the flagged arm is the Pixi chunk, the default
+    // arm is the Phaser village. A static import of either would put an engine in the
+    // village route's first paint.
+    const imports = dynamicImports(screen);
+    expect(imports).toContain('@/renderers/pixi/village/VillageWorld');
+    expect(imports).toContain('@/game/createVillageGame');
+    // And no *value* static import names either engine's module. A type-only import
+    // is erased at build time and cannot put an engine in a chunk, so the Pixi type
+    // import (asserted separately in `pixi-host-boundary.test.ts`) is not a value
+    // reach and is deliberately not matched here.
+    expect(screen).not.toMatch(/^\s*import\s+(?!type\b)[^\n]*['"]@\/renderers\/pixi\/village\/VillageWorld['"]/m);
+    expect(screen).not.toMatch(/^\s*import\s+(?!type\b)[^\n]*['"]@\/game\/createVillageGame['"]/m);
+  });
+
+  it('documents the flag as build-time only, with the Phaser default', () => {
+    const example = sourceOf('.env.example');
+    expect(example).toContain('VITE_PIXI_VILLAGE');
+    expect(example).toMatch(/Default: false/i);
+    expect(example).toMatch(/build-time only/i);
   });
 });
 

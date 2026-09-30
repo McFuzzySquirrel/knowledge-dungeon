@@ -327,6 +327,21 @@ export interface RendererChunkBoundaryOptions {
    * reported as a failure rather than as a passing run that measured nothing.
    */
   readonly worldRenderer: WorldRenderer;
+  /**
+   * Whether this build was asked for the PixiJS Village, from `VITE_PIXI_VILLAGE`.
+   *
+   * Optional and additive, so every existing caller - including the Phase 9
+   * switch tests, which construct options with `worldRenderer` alone - keeps
+   * compiling and keeps its current behaviour. `undefined` is treated exactly as
+   * `false`: the default production build is unaffected.
+   *
+   * Used for the same single check as `worldRenderer`, independent of it: a build
+   * that asks for the Pixi village and emits no Pixi chunk has not been switched,
+   * it has only had a variable set. `VITE_WORLD_RENDERER` stays `phaser` for that
+   * build (the village is the only thing turned on), so the renderer check cannot
+   * cover it.
+   */
+  readonly pixiVillage?: boolean;
 }
 
 /**
@@ -338,10 +353,13 @@ export interface RendererChunkBoundaryOptions {
  *    rule the phase is about. Vite emits a `modulepreload` for every such chunk,
  *    so the Welcome route would fetch the Pixi runtime before running a line of
  *    application code.
- * 2. **A `VITE_WORLD_RENDERER=pixi` build with no Pixi chunk in the graph at
- *    all.** The renderer switch is a build-time contract that Phase 9 has to
- *    exercise in CI, and a switched build that contains no switched renderer is
- *    the shape of that check that reports success because it measured nothing.
+ * 2. **A build that asked for Pixi and emitted no Pixi chunk.** Reached by
+ *    `VITE_WORLD_RENDERER=pixi` (the Phase 9 renderer switch) and, additively, by
+ *    `VITE_PIXI_VILLAGE=true` (the Phase 11 village switch). Each is a build-time
+ *    contract that CI has to exercise, and a switched build that contains no
+ *    switched renderer is the shape of a check that reports success because it
+ *    measured nothing. The two are independent because `build:web:pixi-village`
+ *    leaves `VITE_WORLD_RENDERER=phaser`: the village is the only thing switched on.
  *
  * The Phaser side is reported rather than enforced. `vendor-phaser-*` is already
  * named by the entry document's `modulepreload` links in the current production
@@ -437,6 +455,26 @@ export function rendererChunkBoundaryPlugin(options: RendererChunkBoundaryOption
           ].join('\n'),
         );
       }
+
+      // The Phase 11 village switch, enforced independently of the renderer one.
+      //
+      // Guarded on `worldRenderer !== 'pixi'` only to keep the two checks from
+      // printing the same finding twice on a hypothetical build that sets both. On
+      // `build:web:pixi-village` this is the check that fires: that script leaves
+      // `VITE_WORLD_RENDERER=phaser`, so the renderer check above cannot cover it.
+      if (
+        options.pixiVillage === true &&
+        options.worldRenderer !== 'pixi' &&
+        audit.rendererChunks.every((entry) => entry.family !== 'pixi')
+      ) {
+        this.error(
+          [
+            '[renderer-chunks] VITE_PIXI_VILLAGE=true, but this build contains no Pixi chunk.',
+            'The village switch set a build-time variable and nothing read it, so there is no Pixi village artifact to verify.',
+            'Wire the Pixi village host into the village route under the flag, or build without VITE_PIXI_VILLAGE until the host exists.',
+          ].join('\n'),
+        );
+      }
     },
   };
 }
@@ -464,7 +502,10 @@ export default defineConfig(({ mode }) => {
         modernPolyfills: true,
       }),
       spriteManifestPlugin(),
-      rendererChunkBoundaryPlugin({ worldRenderer: runtimeConfig.worldRenderer }),
+      rendererChunkBoundaryPlugin({
+        worldRenderer: runtimeConfig.worldRenderer,
+        pixiVillage: runtimeConfig.pixiVillage,
+      }),
     ],
     resolve: {
       alias: {

@@ -350,6 +350,248 @@ export function getDungeonPortalSlots(): { gridX: number; gridY: number }[] {
   ];
 }
 
+/* -------------------------------------------------------------------------- */
+/* Phase 11: shared village navigation constants and deterministic layout data */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Everything in this section was extracted from `src/game/scenes/VillageScene.ts`
+ * so the temporary Phaser scene and the PixiJS village scene read one set of
+ * numbers rather than two copies that drift. The module stays dependency-free:
+ * no renderer, no React, no service. A `Storage` below is the ambient DOM
+ * interface, read structurally, and nothing is imported to name it.
+ */
+
+/** Player movement speed in world pixels per second. */
+export const PLAYER_SPEED = 120;
+/** Wandering-NPC movement speed in world pixels per second. Phase 12 consumes it. */
+export const NPC_SPEED = 45;
+/** Distance within which an NPC can be interacted with, in world pixels. Phase 12. */
+export const INTERACT_RADIUS = 32;
+/** Distance within which a structure becomes the "nearby" one, in world pixels. */
+export const STRUCTURE_APPROACH_RADIUS = 48;
+/** Distance the compass keeps showing a point of interest from, in world pixels. */
+export const COMPASS_HIDE_DISTANCE = 96;
+/** Camera zoom floor. */
+export const ZOOM_MIN = 0.6;
+/** Camera zoom ceiling. */
+export const ZOOM_MAX = 2.4;
+/** Camera zoom a world starts at. */
+export const ZOOM_DEFAULT = 1.2;
+/** Longest press that still counts as a tap rather than a drag, in milliseconds. */
+export const TAP_MAX_MS = 300;
+/** Shortest travel that turns a press into a drag rather than a tap, in world pixels. */
+export const DRAG_THRESHOLD = 10;
+/** One wheel notch, in zoom units. */
+export const WHEEL_ZOOM_STEP = 0.1;
+
+/**
+ * The deterministic scene-graph depths.
+ *
+ * Deliberately a flat record of named layers rather than four local `Set`s in a
+ * scene, because "which thing draws in front of which" is a layout fact both
+ * renderers share and a set that only one of them reads is a set that drifts.
+ * The values are the ones the Phaser scene has always used.
+ */
+export const VILLAGE_DEPTH = Object.freeze({
+  ground: 0,
+  path: 0.5,
+  portalStone: 1,
+  building: 2,
+  portalLabelBanner: 4.9,
+  portalLabelText: 5,
+  groundDecor: 9,
+  player: 10,
+  foreground: 11,
+  bird: 12,
+});
+
+/**
+ * Structure types drawn in front of the player.
+ *
+ * `Set<string>` rather than `Set<VillageStructure['type']>` because the Phaser
+ * scene's own list names `lamp`, which the content union does not declare, and
+ * narrowing this to the union would silently drop it from the classification.
+ */
+const FOREGROUND_STRUCTURE_TYPES: ReadonlySet<string> = new Set([
+  'tree',
+  'bush',
+  'torch',
+  'lamp',
+  'signpost',
+  'waysign',
+]);
+
+/** Structure types the player walks in front of: ground-level decoration. */
+const GROUND_DECOR_STRUCTURE_TYPES: ReadonlySet<string> = new Set([
+  'fountain',
+  'pond',
+  'bench',
+  'flower',
+  'fishing-pond',
+]);
+
+/**
+ * The depth a structure draws at.
+ *
+ * Total over any string: a type this module has never heard of is a building,
+ * which is the same default the Phaser scene uses.
+ */
+export function resolveStructureDepth(type: string): number {
+  if (FOREGROUND_STRUCTURE_TYPES.has(type)) return VILLAGE_DEPTH.foreground;
+  if (GROUND_DECOR_STRUCTURE_TYPES.has(type)) return VILLAGE_DEPTH.groundDecor;
+  return VILLAGE_DEPTH.building;
+}
+
+/** One axis-aligned stone path segment, in grid coordinates. */
+export interface VillagePathSegment {
+  readonly x1: number;
+  readonly y1: number;
+  readonly x2: number;
+  readonly y2: number;
+}
+
+/** One path junction circle, in grid coordinates. */
+export interface VillagePathJunction {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * The village path, as axis-aligned segments in grid coordinates.
+ *
+ * Extracted verbatim from `VillageScene.renderGround`. A segment endpoint is the
+ * centre of the named tile, so a scene multiplies by the tile size and adds half
+ * a tile; that conversion stays in each scene because it is a rendering choice,
+ * while the grid geometry is the layout.
+ */
+export const VILLAGE_PATH_SEGMENTS: readonly VillagePathSegment[] = Object.freeze([
+  // Entrance
+  { x1: 3,  y1: 22, x2: 6,  y2: 22 },
+  { x1: 4,  y1: 22, x2: 4,  y2: 16 },
+  { x1: 4,  y1: 16, x2: 4,  y2: 14 },
+  // East-west spine
+  { x1: 4,  y1: 14, x2: 6,  y2: 14 },
+  { x1: 6,  y1: 14, x2: 16, y2: 14 },
+  { x1: 16, y1: 14, x2: 24, y2: 14 },
+  { x1: 24, y1: 14, x2: 26, y2: 14 },
+  { x1: 26, y1: 14, x2: 30, y2: 14 },
+  // North-south spine
+  { x1: 16, y1: 14, x2: 16, y2: 8  },
+  { x1: 16, y1: 8,  x2: 16, y2: 5  },
+  { x1: 16, y1: 14, x2: 16, y2: 17 },
+  { x1: 16, y1: 17, x2: 16, y2: 22 },
+  { x1: 16, y1: 22, x2: 16, y2: 24 },
+  // Library branch
+  { x1: 12, y1: 8,  x2: 16, y2: 8  },
+  { x1: 12, y1: 5,  x2: 12, y2: 8  },
+  // Training gate
+  { x1: 6,  y1: 14, x2: 6,  y2: 8  },
+  { x1: 6,  y1: 8,  x2: 6,  y2: 7  },
+  // Fountain
+  { x1: 16, y1: 17, x2: 18, y2: 17 },
+  // Guild hall
+  { x1: 30, y1: 14, x2: 30, y2: 11 },
+  // Trophy hall
+  { x1: 16, y1: 24, x2: 30, y2: 24 },
+  // East connector
+  { x1: 24, y1: 14, x2: 24, y2: 18 },
+  // Portal connections
+  { x1: 4,  y1: 14, x2: 4,  y2: 4  },
+  { x1: 4,  y1: 4,  x2: 3,  y2: 4  },
+  { x1: 4,  y1: 16, x2: 7,  y2: 16 },
+  { x1: 7,  y1: 16, x2: 7,  y2: 17 },
+  { x1: 16, y1: 22, x2: 12, y2: 22 },
+  { x1: 12, y1: 22, x2: 12, y2: 24 },
+  { x1: 16, y1: 22, x2: 23, y2: 22 },
+  { x1: 23, y1: 22, x2: 23, y2: 23 },
+  { x1: 24, y1: 14, x2: 24, y2: 5  },
+  { x1: 24, y1: 5,  x2: 25, y2: 5  },
+  { x1: 30, y1: 14, x2: 30, y2: 15 },
+]);
+
+/** The path intersections, in grid coordinates. Extracted verbatim. */
+export const VILLAGE_PATH_JUNCTIONS: readonly VillagePathJunction[] = Object.freeze([
+  { x: 4,  y: 14 }, { x: 6,  y: 14 }, { x: 16, y: 14 }, { x: 24, y: 14 },
+  { x: 26, y: 14 }, { x: 30, y: 14 }, { x: 16, y: 8  }, { x: 16, y: 17 },
+  { x: 16, y: 22 }, { x: 16, y: 24 }, { x: 12, y: 8  }, { x: 4,  y: 16 },
+  { x: 4,  y: 22 }, { x: 6,  y: 8  }, { x: 24, y: 18 },
+]);
+
+/* -------------------------------------------------------------------------- */
+/* Spawn persistence                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where the one-time village spawn override is stored.
+ *
+ * The same key the Phaser path has always used. It holds the grid coordinates a
+ * returning learner should be placed at - the portal they left from - so it is
+ * written on a subject-portal interaction and read on the next mount.
+ */
+export const VILLAGE_SPAWN_STORAGE_KEY = 'kd-village-spawn';
+
+/** A grid coordinate pair read back from storage. */
+export interface VillageSpawnGrid {
+  readonly gridX: number;
+  readonly gridY: number;
+}
+
+/**
+ * Read the stored spawn override, or `null`.
+ *
+ * Total: a missing storage, a `getItem` that throws (private-mode browsers), an
+ * empty string, malformed JSON, and a record whose fields are not finite numbers
+ * all answer `null` rather than throwing on a world mount. The caller decides
+ * what a missing override means; this function only reads one.
+ */
+export function readVillageSpawn(
+  storage: Pick<Storage, 'getItem'> | null | undefined,
+): VillageSpawnGrid | null {
+  if (!storage || typeof storage.getItem !== 'function') return null;
+  let raw: string | null;
+  try {
+    raw = storage.getItem(VILLAGE_SPAWN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  try {
+    const parsed = JSON.parse(raw) as { gridX?: unknown; gridY?: unknown };
+    if (
+      typeof parsed?.gridX === 'number' &&
+      typeof parsed?.gridY === 'number' &&
+      Number.isFinite(parsed.gridX) &&
+      Number.isFinite(parsed.gridY)
+    ) {
+      return { gridX: parsed.gridX, gridY: parsed.gridY };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write the spawn override, ignoring any storage failure.
+ *
+ * Storage is a best-effort convenience here: a browser that refuses `setItem`
+ * must not take down the interaction that triggered the write, which is why the
+ * catch is silent rather than rethrown. The Phaser path has always swallowed it.
+ */
+export function writeVillageSpawn(
+  storage: Pick<Storage, 'setItem'> | null | undefined,
+  gridX: number,
+  gridY: number,
+): void {
+  if (!storage || typeof storage.setItem !== 'function') return;
+  try {
+    storage.setItem(VILLAGE_SPAWN_STORAGE_KEY, JSON.stringify({ gridX, gridY }));
+  } catch {
+    /* A browser that refuses storage does not fail the interaction. */
+  }
+}
+
 /**
  * Fisher's Rest: Map each fishing pond id to its nearest dungeon portal slot.
  *

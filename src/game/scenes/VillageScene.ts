@@ -1,5 +1,15 @@
 import Phaser from 'phaser';
-import { VILLAGE_MAP, type VillageStructure } from '@/data/villageLayout';
+import {
+  INTERACT_RADIUS,
+  NPC_SPEED,
+  PLAYER_SPEED,
+  STRUCTURE_APPROACH_RADIUS,
+  VILLAGE_MAP,
+  VILLAGE_PATH_JUNCTIONS,
+  VILLAGE_PATH_SEGMENTS,
+  resolveStructureDepth,
+  type VillageStructure,
+} from '@/data/villageLayout';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 import { type PlayerClassId, type PlayerDirection, getPlayerSpritePath } from '@/game/systems/playerClasses';
 import type {
@@ -34,11 +44,6 @@ export type VillageSceneEvents = {
 
 /** Payload of `village:npc-dialog-position`. */
 export type VillageNpcDialogAnchor = WorldEventPayload<'village:npc-dialog-position'>;
-
-const PLAYER_SPEED = 120;
-const NPC_SPEED = 45;
-const INTERACT_RADIUS = 32;
-const STRUCTURE_APPROACH_RADIUS = 48;
 
 const SPRITE_PATHS = {
   ground: 'sprites/village/ground-tile.svg',
@@ -370,60 +375,10 @@ export class VillageScene extends Phaser.Scene {
       }
     }
 
-    // Axis-aligned stone paths - every segment is horizontal or vertical
-    const pathSegments: { x1: number; y1: number; x2: number; y2: number }[] = [
-      // ── Entrance ──────────────────────────────────
-      { x1: 3,  y1: 22, x2: 6,  y2: 22 },  // gate approach
-      { x1: 4,  y1: 22, x2: 4,  y2: 16 },  // up from gate
-      { x1: 4,  y1: 16, x2: 4,  y2: 14 },  // continue north to cross
-
-      // ── East-west spine (y=14) ────────────────────
-      { x1: 4,  y1: 14, x2: 6,  y2: 14 },
-      { x1: 6,  y1: 14, x2: 16, y2: 14 },
-      { x1: 16, y1: 14, x2: 24, y2: 14 },
-      { x1: 24, y1: 14, x2: 26, y2: 14 },
-      { x1: 26, y1: 14, x2: 30, y2: 14 },  // extend to east edge
-
-      // ── North-south spine (x=16) ──────────────────
-      { x1: 16, y1: 14, x2: 16, y2: 8  },  // north to library/keeper split
-      { x1: 16, y1: 8,  x2: 16, y2: 5  },  // continue to keeper
-      { x1: 16, y1: 14, x2: 16, y2: 17 },  // south to fountain
-      { x1: 16, y1: 17, x2: 16, y2: 22 },  // continue to trophy split
-      { x1: 16, y1: 22, x2: 16, y2: 24 },  // continue south
-
-      // ── Library branch ────────────────────────────
-      { x1: 12, y1: 8,  x2: 16, y2: 8  },  // west from north spine
-      { x1: 12, y1: 5,  x2: 12, y2: 8  },  // north to library
-
-      // ── Training gate ─────────────────────────────
-      { x1: 6,  y1: 14, x2: 6,  y2: 8  },  // north from cross
-      { x1: 6,  y1: 8,  x2: 6,  y2: 7  },  // continue to training entrance
-
-      // ── Fountain ──────────────────────────────────
-      { x1: 16, y1: 17, x2: 18, y2: 17 },  // east spur
-
-      // ── Guild hall ────────────────────────────────
-      { x1: 30, y1: 14, x2: 30, y2: 11 },  // south from cross
-
-      // ── Trophy hall ───────────────────────────────
-      { x1: 16, y1: 24, x2: 30, y2: 24 },  // east from south spine
-
-      // ── East connector ────────────────────────────
-      { x1: 24, y1: 14, x2: 24, y2: 18 },  // south from cross
-
-      // ── Portal connections (L-shaped, axis-aligned) ──
-      { x1: 4,  y1: 14, x2: 4,  y2: 4  },  // NW portal: north
-      { x1: 4,  y1: 4,  x2: 3,  y2: 4  },  // NW portal: west
-      { x1: 4,  y1: 16, x2: 7,  y2: 16 },  // W portal: east
-      { x1: 7,  y1: 16, x2: 7,  y2: 17 },  // W portal: north
-      { x1: 16, y1: 22, x2: 12, y2: 22 },  // SW portal: west
-      { x1: 12, y1: 22, x2: 12, y2: 24 },  // SW portal: south
-      { x1: 16, y1: 22, x2: 23, y2: 22 },  // SE portal: east
-      { x1: 23, y1: 22, x2: 23, y2: 23 },  // SE portal: south
-      { x1: 24, y1: 14, x2: 24, y2: 5  },  // NE portal: north
-      { x1: 24, y1: 5,  x2: 25, y2: 5  },  // NE portal: east
-      { x1: 30, y1: 14, x2: 30, y2: 15 },  // E portal: south
-    ];
+    // Axis-aligned stone paths - every segment is horizontal or vertical. The grid
+    // geometry lives in `villageLayout.ts` so the Phaser and PixiJS scenes read one
+    // list; the colour, the line width, and the tile-centre conversion stay here.
+    const pathSegments = VILLAGE_PATH_SEGMENTS;
 
     const pathG = this.add.graphics().setDepth(0.5);
     const pathColor = Phaser.Display.Color.HexStringToColor('#5a4a3a').color;
@@ -442,14 +397,9 @@ export class VillageScene extends Phaser.Scene {
       pathG.strokePath();
     }
 
-    // Junctions - circles at every intersection point
+    // Junctions - circles at every intersection point. Same shared layout list.
     const junctionColor = Phaser.Display.Color.HexStringToColor('#4a3a2a').color;
-    const junctionCoords = [
-      { x: 4,  y: 14 }, { x: 6,  y: 14 }, { x: 16, y: 14 }, { x: 24, y: 14 },
-      { x: 26, y: 14 }, { x: 30, y: 14 }, { x: 16, y: 8  }, { x: 16, y: 17 },
-      { x: 16, y: 22 }, { x: 16, y: 24 }, { x: 12, y: 8  }, { x: 4,  y: 16 },
-      { x: 4,  y: 22 }, { x: 6,  y: 8  }, { x: 24, y: 18 },
-    ];
+    const junctionCoords = VILLAGE_PATH_JUNCTIONS;
     for (const j of junctionCoords) {
       pathG.fillStyle(junctionColor, 0.5);
       pathG.fillCircle(j.x * ts + ts / 2, j.y * ts + ts / 2, ts * 0.28);
@@ -466,16 +416,10 @@ export class VillageScene extends Phaser.Scene {
       }
       const cx = (struct.gridX + struct.width / 2) * ts;
       const cy = (struct.gridY + struct.height / 2) * ts;
-      // Depth ordering: buildings at depth 2 (below player), ground-level
-      // decorations at depth (player walks in front), tall foreground objects at
-      // depth 11 (player walks behind).
-      const foregroundTypes = new Set(['tree', 'bush', 'torch', 'lamp', 'signpost', 'waysign']);
-      const groundDecorTypes = new Set(['fountain', 'pond', 'bench', 'flower', 'fishing-pond']);
-      let depth: number;
-      if (foregroundTypes.has(struct.type)) depth = 11;
-      else if (groundDecorTypes.has(struct.type)) depth = 9;
-      else depth = 2;
-      const sprite = this.add.image(cx, cy, texKey).setDepth(depth);
+      // Depth ordering is the shared table in `villageLayout.ts`: buildings below
+      // the player, ground-level decorations above, tall foreground objects in
+      // front of the player.
+      const sprite = this.add.image(cx, cy, texKey).setDepth(resolveStructureDepth(struct.type));
       this.structureSprites.push(sprite);
 
       // Stone circle under portal icons

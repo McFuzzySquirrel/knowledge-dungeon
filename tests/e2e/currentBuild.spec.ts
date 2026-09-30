@@ -1,4 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test, type Browser, type Page, type Request, type TestInfo } from '@playwright/test';
 
 import {
@@ -29,6 +31,12 @@ import {
   assertNoRemoteFontRequests,
   countRemoteFontRequests,
 } from '../phase8/support/remoteFontGate';
+// The sanctioned tablet viewports, read from the one support matrix rather than
+// re-typed here. The narrow-viewport guard in `welcome-narrow-viewport.test.ts`
+// forbids an inline `setViewportSize({ width: <not 320> })`, and using the matrix's
+// own records is the honest shape: these two are the portrait/landscape pair the
+// village resize check exercises, not a second definition of the 320px gate.
+import { supportEntryForProject } from './support-matrix';
 
 const WCAG_22_AA_TAGS = [
   'wcag2a',
@@ -217,7 +225,15 @@ test('Welcome introduces no new serious or critical automated accessibility viol
   ).toEqual([]);
 });
 
-test('safe tutorial action renders the default Phaser world with static-only network traffic', async ({
+/**
+ * The dungeon route, which is Phaser in both build variants.
+ *
+ * `VITE_PIXI_VILLAGE` switches only the village route, so this journey is the same
+ * on the default and the flagged artifact and its "no Pixi request" claim is a true
+ * statement about the Welcome-to-dungeon path in both. The village route's own
+ * variant-aware coverage is the next test.
+ */
+test('safe tutorial action renders the Phaser dungeon world with static-only network traffic', async ({
   page,
   baseURL,
 }, testInfo) => {
@@ -316,6 +332,208 @@ test('safe tutorial action renders the default Phaser world with static-only net
     ].sort(),
   });
   assertNoRemoteFontRequests(privacyReport.blockedLegacyFontRequests);
+});
+
+/*
+ * ── The village route, in whichever renderer this build was asked for ──────
+ *
+ * `VITE_PIXI_VILLAGE=true` switches the village route to the lazy PixiJS world and
+ * leaves the dungeon route on Phaser. The Phase 11 verification commands run this
+ * file twice - once as the flagged build (all projects) and once as the default
+ * build (the tablet project) - so this test has to pass on both artifacts. It
+ * detects the mounted world from the DOM rather than assuming, and asserts the
+ * variant it actually found matches the flag the build was made with, so a build
+ * whose flag and artifact disagree fails instead of quietly passing.
+ *
+ * On the flagged build the claim is the deliverable itself: the Pixi surface
+ * mounts, the DOM interact control exists, keyboard movement reaches the world
+ * (read from the live scene graph through PixiJS's own `__PIXI_APP_INIT__` hook),
+ * six subject slots are drawn, and a portrait/landscape resize does not raise.
+ */
+
+const VILLAGE_FIXTURE = path.join(
+  process.cwd(),
+  'tests/fixtures/persistence/subject/subject-1.1.0-full-unknown-fields.json',
+);
+
+/** Six synthetic subjects, so all six authored portal slots have an occupant. */
+const VILLAGE_SUBJECT_NAMES = ['Algebra', 'Biology', 'Calculus', 'Drama', 'Ecology', 'French'] as const;
+
+/**
+ * Seeds several synthetic subjects into the legacy storage the default build reads.
+ *
+ * A local copy of `seedLegacySubject`'s storage shape rather than an extension of it:
+ * the narrowed helper seeds exactly one, and the village needs the full six-slot set
+ * to show what the data model can hold. Every value is synthetic.
+ */
+async function seedLegacySubjects(page: Page, names: readonly string[]): Promise<void> {
+  const template = JSON.parse(readFileSync(VILLAGE_FIXTURE, 'utf8')) as {
+    dungeon: Record<string, unknown>;
+  };
+  const entries = names.map((name, index) => {
+    const id = `e2e-village-subject-${index}`;
+    const snapshot = {
+      ...template,
+      dungeon: { ...template.dungeon, dungeonId: id, subjectName: name },
+    };
+    return { id, snapshot: JSON.stringify(snapshot) };
+  });
+  await page.addInitScript((payload: ReadonlyArray<{ id: string; snapshot: string }>) => {
+    window.localStorage.setItem(
+      'knowledge-dungeon:v1:subjects',
+      JSON.stringify(payload.map((entry) => entry.id)),
+    );
+    for (const entry of payload) {
+      window.localStorage.setItem(`knowledge-dungeon:v1:subject:${entry.id}`, entry.snapshot);
+    }
+  }, entries);
+}
+
+/**
+ * Captures every PixiJS `Application` through the library's own documented hook.
+ *
+ * Read rather than replaced: if another tool installed the hook, it is still called.
+ */
+async function installVillageProbe(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const scope = globalThis as unknown as Record<string, unknown>;
+    const applications: unknown[] = [];
+    scope['__KD_E2E_PIXI_APPS__'] = applications;
+    const previous = scope['__PIXI_APP_INIT__'];
+    scope['__PIXI_APP_INIT__'] = (application: unknown) => {
+      applications.push(application);
+      if (typeof previous === 'function') (previous as (value: unknown) => void)(application);
+    };
+  });
+}
+
+interface VillageSceneReading {
+  /** The player marker's world position, or `null` if the scene is not on the stage. */
+  readonly player: { x: number; y: number } | null;
+  /** Every `Text` value in the village layer, so the drawn labels can be asserted. */
+  readonly labels: readonly string[];
+}
+
+/** Reads the live Pixi scene graph: the player position and every drawn text. */
+async function readVillageScene(page: Page): Promise<VillageSceneReading> {
+  return page.evaluate(() => {
+    interface SceneNode {
+      readonly text?: unknown;
+      readonly x?: number;
+      readonly y?: number;
+      readonly children?: readonly SceneNode[];
+      getChildByLabel?(label: string): SceneNode | null;
+    }
+    const scope = globalThis as unknown as Record<string, unknown>;
+    const applications = (scope['__KD_E2E_PIXI_APPS__'] as unknown[] | undefined) ?? [];
+    const application = applications[applications.length - 1] as { stage?: SceneNode } | undefined;
+    const root = application?.stage?.getChildByLabel?.('village-world') ?? null;
+    const layer = root?.getChildByLabel?.('village-world-layer') ?? null;
+    const player = layer?.getChildByLabel?.('village-player') ?? null;
+    const labels: string[] = [];
+    const visit = (node: SceneNode): void => {
+      if (typeof node.text === 'string') labels.push(node.text);
+      for (const child of node.children ?? []) visit(child);
+    };
+    if (layer) visit(layer);
+    return {
+      player:
+        player && typeof player.x === 'number' && typeof player.y === 'number'
+          ? { x: player.x, y: player.y }
+          : null,
+      labels,
+    };
+  });
+}
+
+test('the village route mounts the renderer this build was asked for', async ({ page }, testInfo) => {
+  const expectedPixi = process.env.VITE_PIXI_VILLAGE === 'true';
+  const scriptRequests: string[] = [];
+  page.on('request', (request) => {
+    if (request.resourceType() === 'script') {
+      scriptRequests.push(new URL(request.url()).pathname);
+    }
+  });
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await installVillageProbe(page);
+  await seedLegacySubjects(page, VILLAGE_SUBJECT_NAMES);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Knowledge Dungeon' })).toBeVisible();
+  await waitForSubjectListEntry(page, VILLAGE_SUBJECT_NAMES[0]);
+
+  const continueButton = page.getByRole('button', { name: 'Continue to Village' });
+  await expect(continueButton).toBeVisible();
+  await continueButton.click();
+
+  const pixiSurface = page.locator('.pixi-village-world');
+  const phaserCanvas = page.locator('.village-canvas canvas');
+  await expect
+    .poll(
+      async () =>
+        (await pixiSurface.count()) > 0 ? 'pixi' : (await phaserCanvas.count()) > 0 ? 'phaser' : 'none',
+      { timeout: 30_000 },
+    )
+    .not.toBe('none');
+  const mounted = (await pixiSurface.count()) > 0 ? 'pixi' : 'phaser';
+  const pixiScriptRequests = scriptRequests.filter((pathname) => /pixi/i.test(pathname));
+
+  if (expectedPixi) {
+    expect(mounted, 'VITE_PIXI_VILLAGE=true, but the Phaser village mounted').toBe('pixi');
+    await expect(pixiSurface).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Interact (E or Space)' })).toBeVisible();
+    expect(
+      pixiScriptRequests,
+      'the flagged village route requested no Pixi chunk, so the switch was not exercised',
+    ).not.toEqual([]);
+
+    // Six subject portal slots: one drawn label per seeded subject, read from the
+    // live scene graph rather than from a DOM the canvas does not have.
+    await expect
+      .poll(async () => (await readVillageScene(page)).labels.length, { timeout: 15_000 })
+      .toBeGreaterThan(0);
+    const reading = await readVillageScene(page);
+    for (const subject of VILLAGE_SUBJECT_NAMES) {
+      expect(reading.labels, subject).toContain(subject);
+    }
+
+    // Movement reaches the world: the player marker's world position changes.
+    const before = reading.player;
+    expect(before, 'the player marker was not on the real stage').not.toBeNull();
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('ArrowRight');
+    const after = (await readVillageScene(page)).player;
+    expect(after, 'the player marker was not on the real stage after movement').not.toBeNull();
+    const travelled =
+      Math.abs((after?.x ?? 0) - (before?.x ?? 0)) + Math.abs((after?.y ?? 0) - (before?.y ?? 0));
+    expect(travelled, 'keyboard movement did not reach the Pixi scene').toBeGreaterThan(1);
+
+    // Portrait then landscape: the world resizes rather than throwing. The two
+    // viewports are the support matrix's own tablet records, so this is the
+    // sanctioned portrait/landscape pair rather than a third inline size.
+    await page.setViewportSize({ ...supportEntryForProject('tablet').viewport });
+    await expect(pixiSurface).toBeVisible();
+    await page.setViewportSize({ ...supportEntryForProject('tablet-landscape').viewport });
+    await expect(pixiSurface).toBeVisible();
+    expect(pageErrors, `page errors during the Pixi village run: ${pageErrors.join(' | ')}`).toEqual([]);
+  } else {
+    expect(mounted, 'the default build mounted the Pixi village').toBe('phaser');
+    await expect(phaserCanvas).toBeVisible({ timeout: 30_000 });
+    expect(
+      pixiScriptRequests,
+      'the default village route requested a Pixi chunk',
+    ).toEqual([]);
+  }
+
+  await attachJson(testInfo, 'village-renderer-variant.json', {
+    expectedPixi,
+    mounted,
+    pixiScriptRequests,
+    scriptRequestCount: scriptRequests.length,
+    pageErrors,
+  });
 });
 
 /*

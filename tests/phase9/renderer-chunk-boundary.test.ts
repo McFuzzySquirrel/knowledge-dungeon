@@ -418,7 +418,13 @@ describe('the boundary is wired into the build, not only into this file', () => 
 
   it('the plugin is registered in the plugin list the build uses', () => {
     const viteConfig = sourceOf('vite.config.ts');
-    expect(viteConfig).toContain('rendererChunkBoundaryPlugin({ worldRenderer: runtimeConfig.worldRenderer })');
+    // Phase 11 made the options object multi-line, so the assertion is on the call
+    // shape and each argument rather than on one exact line. Both keys are asserted,
+    // because a call that dropped `pixiVillage` would silently disable the Phase 11
+    // village check while every Phase 9 gate still passed.
+    expect(viteConfig).toContain('rendererChunkBoundaryPlugin({');
+    expect(viteConfig).toContain('worldRenderer: runtimeConfig.worldRenderer');
+    expect(viteConfig).toContain('pixiVillage: runtimeConfig.pixiVillage');
     // After the legacy plugin, so the ES5 pass is audited too, and the ES5 pass
     // happens first - which is why the audit splits the two bundles rather than
     // reporting "no entry chunk" on the bundle it happens to see.
@@ -483,5 +489,80 @@ describe('the boundary is wired into the build, not only into this file', () => 
     });
     runWriteBundle(rendererChunkBoundaryPlugin({ worldRenderer: 'phaser' }), legacyOnly, context);
     expect(errors).toEqual([]);
+  });
+
+  /*
+   * ── The Phase 11 additive option ──────────────────────────────────────────
+   *
+   * `pixiVillage` is a second build-time contract, independent of `worldRenderer`:
+   * `build:web:pixi-village` sets `VITE_PIXI_VILLAGE=true` while leaving
+   * `VITE_WORLD_RENDERER=phaser`, so the Phase 9 renderer check cannot cover it. The
+   * four cases below are the whole truth table that matters: absent/false changes
+   * nothing, true-with-a-chunk passes, true-without-a-chunk fails by name, and
+   * both-switches-on does not print the same finding twice.
+   */
+
+  it('the additive option changes nothing when it is unset or false', () => {
+    const phaserOnly = bundleOf({
+      'assets/index-a1.js': { isEntry: true, imports: ['assets/vendor-phaser-b2.js'] },
+      'assets/vendor-phaser-b2.js': {},
+    });
+    const { context, errors } = recordingContext();
+    // Unset: the shape every Phase 9 caller constructs.
+    runWriteBundle(rendererChunkBoundaryPlugin({ worldRenderer: 'phaser' }), phaserOnly, context);
+    expect(errors).toEqual([]);
+    // Explicitly false is the production default stated out loud.
+    runWriteBundle(
+      rendererChunkBoundaryPlugin({ worldRenderer: 'phaser', pixiVillage: false }),
+      phaserOnly,
+      context,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it('a village-flagged build that emitted a lazy Pixi chunk passes', () => {
+    const { context, errors } = recordingContext();
+    runWriteBundle(
+      rendererChunkBoundaryPlugin({ worldRenderer: 'phaser', pixiVillage: true }),
+      lazyPixiModuleBundle(),
+      context,
+    );
+    expect(errors, 'a lazy village chunk is the intended Phase 11 shape').toEqual([]);
+  });
+
+  it('a village-flagged build with no Pixi chunk fails, naming VITE_PIXI_VILLAGE=true', () => {
+    const { context, errors } = recordingContext();
+    const phaserOnly = bundleOf({
+      'assets/index-a1.js': { isEntry: true, imports: ['assets/vendor-phaser-b2.js'] },
+      'assets/vendor-phaser-b2.js': {},
+    });
+    runWriteBundle(
+      rendererChunkBoundaryPlugin({ worldRenderer: 'phaser', pixiVillage: true }),
+      phaserOnly,
+      context,
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('VITE_PIXI_VILLAGE=true');
+    // The renderer check must not have fired: the village build leaves the world
+    // renderer on Phaser, and a second finding for it would blame the wrong switch.
+    expect(errors[0]).not.toContain('VITE_WORLD_RENDERER=pixi');
+  });
+
+  it('both switches on with no Pixi chunk produce exactly one finding', () => {
+    const { context, errors } = recordingContext();
+    const phaserOnly = bundleOf({
+      'assets/index-a1.js': { isEntry: true, imports: ['assets/vendor-phaser-b2.js'] },
+      'assets/vendor-phaser-b2.js': {},
+    });
+    runWriteBundle(
+      rendererChunkBoundaryPlugin({ worldRenderer: 'pixi', pixiVillage: true }),
+      phaserOnly,
+      context,
+    );
+    // One fact, one sentence. The renderer check owns it because it is the stronger
+    // switch; the village check is guarded so it cannot restate it.
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('VITE_WORLD_RENDERER=pixi');
+    expect(errors[0]).not.toContain('VITE_PIXI_VILLAGE=true');
   });
 });

@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { useSessionStore, QUEST_LABELS, QUEST_ORDER, MANUAL_QUESTS, type QuestStep } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
-import { createVillageGame, type PhaserVillageRenderer, type VillageSceneEvents } from '@/game/createVillageGame';
 import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
 import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
-import type { FishingWorldModel, VillageWorldModel } from '@/application/contracts/world';
+import type { FishingWorldModel, VillageWorldModel, WorldPointOfInterest } from '@/application/contracts/world';
+import type { VillageRendererCapabilities, WorldRenderer } from '@/application/contracts/renderer';
+import type { VillageWorldHandle } from '@/renderers/pixi/village/VillageWorld';
+import { runtimeConfig } from '@/config/featureFlags';
 import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/core/biomes';
 import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
@@ -28,6 +30,116 @@ import {
   type StudyFlowFishCaught,
   type StudyFlowVillageInfoPanel,
 } from '@/application/studyFlow';
+
+/**
+ * The build-time village renderer switch (Phase 11).
+ *
+ * ## Why the comparison is against a literal
+ *
+ * `import.meta.env.VITE_PIXI_VILLAGE` is substituted as a string literal at build
+ * time, so a *literal* `=== 'true'` lets the bundler fold the branch and delete
+ * the other arm - along with the dynamic `import()` inside it, and therefore with
+ * the whole renderer chunk that import pulls in. A normalising call first
+ * (`String(raw).trim().toLowerCase()`) reads the same at run time and defeats the
+ * folding, so the default build keeps a Pixi village chunk it would never fetch.
+ * This mirrors `src/ui/App.tsx`'s `VITE_WORLD_RENDERER` switch exactly.
+ *
+ * The parsed run-time value is `runtimeConfig.pixiVillage`. The two are used for
+ * two jobs, as in App.tsx: this literal decides what the bundler may delete, and
+ * the parsed flag produces a defined mismatch message below instead of a silent
+ * fallback when the environment value was not literally `true`.
+ */
+const pixiVillageFactory =
+  import.meta.env.VITE_PIXI_VILLAGE === 'true'
+    ? () => import('@/renderers/pixi/village/VillageWorld')
+    : null;
+
+const phaserVillageFactory =
+  import.meta.env.VITE_PIXI_VILLAGE === 'true'
+    ? null
+    : () => import('@/game/createVillageGame');
+
+/**
+ * The lazy Pixi village chunk, or `null` on a build that did not request it.
+ *
+ * Computed once at module scope: a `lazy()` call inside the component would mint a
+ * new component type on every render and remount the world.
+ */
+const LazyPixiVillageWorld = pixiVillageFactory !== null ? lazy(pixiVillageFactory) : null;
+
+/**
+ * The fishing world host a Phaser village renderer owns.
+ *
+ * Expressed structurally rather than by importing the Phaser adapter's type, so
+ * this UI module names no engine. The Phase 11 Pixi host does not implement
+ * fishing (Phase 17 does), which is why it is optional on the handle below.
+ */
+interface VillageFishingHost {
+  enter(
+    model: FishingWorldModel,
+    handlers: {
+      onFishCaught: (data: StudyFlowFishCaught) => void;
+      onReturnToVillage: () => void;
+      onReady: () => void;
+    },
+  ): void;
+  returnToVillage(): void;
+}
+
+/**
+ * The renderer handle this screen drives, in renderer-neutral terms.
+ *
+ * It is the Phase 2 lifecycle plus the village capability port. `onReady` and
+ * `fishing` are the Phaser adapter's additions, stated as optional members so the
+ * type is structural rather than a static import of a renderer module. The Pixi
+ * path reports readiness through `VillageWorld`'s `onReady` prop instead and does
+ * not mount a `rendererRef` at all.
+ */
+type VillageRendererHandle = WorldRenderer &
+  VillageRendererCapabilities & {
+    onReady?: (listener: () => void) => () => void;
+    fishing?: () => VillageFishingHost;
+  };
+
+/**
+ * The eight village callbacks, with every member required.
+ *
+ * Stated locally so this UI module imports no renderer type: the shape is
+ * structurally assignable to both the Phaser `VillageSceneEvents` and the Pixi
+ * `VillageSceneCallbacks` (whose `onNpc*` members are optional), which is what
+ * lets one bag feed either renderer.
+ */
+interface VillageCallbacks {
+  onStructureApproached: (structureId: string) => void;
+  onStructureLeft: (structureId: string) => void;
+  onStructureInteract: (structureId: string) => void;
+  onNpcApproached: (npcId: string) => void;
+  onNpcLeft: (npcId: string) => void;
+  onNpcInteract: (npcId: string) => void;
+  onNpcDialogPosition: (anchor: { npcId: string; clientX: number; clientY: number }) => void;
+  onReady: () => void;
+}
+
+/**
+ * Read and clear the one-shot village spawn override.
+ *
+ * Consumed exactly once per screen mount, so both renderer paths receive the same
+ * point and the key is removed before either can mount.
+ */
+function readVillageSpawnPoint(): { gridX: number | null; gridY: number | null } {
+  let gridX: number | null = null;
+  let gridY: number | null = null;
+  try {
+    const raw = localStorage.getItem('kd-village-spawn');
+    if (raw) {
+      const parsed = JSON.parse(raw) as { gridX?: number | null; gridY?: number | null };
+      gridX = parsed.gridX ?? null;
+      gridY = parsed.gridY ?? null;
+      localStorage.removeItem('kd-village-spawn');
+    }
+  } catch { /* ignore */ }
+  return { gridX, gridY };
+}
 
 interface SubjectSummary {
   id: string;
@@ -59,7 +171,26 @@ export function VillageScreen(): JSX.Element {
   const sessionStats = useMemo(() => computeSessionStats(), []);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const rendererRef = useRef<PhaserVillageRenderer | null>(null);
+  // The Phaser path's own handle. Null when the Pixi path is active, because
+  // `VillageWorld` owns its renderer behind `pixiVillageRef` below.
+  const rendererRef = useRef<VillageRendererHandle | null>(null);
+  const pixiVillageRef = useRef<VillageWorldHandle | null>(null);
+
+  // Build-time branch: `pixiVillageFactory` is non-null only on a build whose
+  // `VITE_PIXI_VILLAGE` was literally `true`. `pixiVillageMismatch` distinguishes
+  // that build-time fact from the parsed run-time flag, so a spelled-differently
+  // value produces a visible message rather than a silent Phaser fallback.
+  const pixiVillage = pixiVillageFactory !== null;
+  const pixiVillageMismatch = runtimeConfig.pixiVillage && pixiVillageFactory === null;
+
+  // The one-shot spawn override, read once and shared by whichever renderer
+  // mounts. The ref guard keeps StrictMode's double render from consuming it on
+  // the first pass and seeing an already-cleared key on the second.
+  const spawnRef = useRef<{ gridX: number | null; gridY: number | null } | null>(null);
+  if (spawnRef.current === null) {
+    spawnRef.current = readVillageSpawnPoint();
+  }
+  const spawn = spawnRef.current;
 
   const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
   const [infoPanel, setInfoPanel] = useState<StudyFlowVillageInfoPanel | null>(null);
@@ -245,6 +376,59 @@ export function VillageScreen(): JSX.Element {
     }));
   }, [subjects]);
 
+  // The renderer-neutral model this screen presents, shared by the Pixi `world`
+  // prop and the Phaser mount below. `VillageWorld` syncs changes to this prop in
+  // place, so it is the single source of truth for either renderer.
+  const worldModel = useMemo<VillageWorldModel>(
+    () => ({ kind: 'village', structures: dynamicStructures, playerClass: selectedClass }),
+    [dynamicStructures, selectedClass],
+  );
+
+  /**
+   * The active renderer, whichever one is mounted.
+   *
+   * The compass, restart, world sync, and touch interact read through these so the
+   * rest of the screen does not branch on the renderer. On the Pixi path the
+   * renderer lives behind `VillageWorld`'s ref; on the Phaser path it is this
+   * screen's own. Each returns/does nothing until its renderer has mounted.
+   */
+  const readPoi = useCallback((): WorldPointOfInterest | null => {
+    if (pixiVillage) return pixiVillageRef.current?.readPoi() ?? null;
+    return rendererRef.current?.readPoi() ?? null;
+  }, [pixiVillage]);
+
+  const triggerInteract = useCallback((): void => {
+    if (pixiVillage) {
+      pixiVillageRef.current?.triggerInteract();
+      return;
+    }
+    rendererRef.current?.triggerInteract();
+  }, [pixiVillage]);
+
+  const restart = useCallback((): void => {
+    if (pixiVillage) {
+      pixiVillageRef.current?.restart();
+      return;
+    }
+    rendererRef.current?.restart();
+  }, [pixiVillage]);
+
+  const setDynamicStructures = useCallback((structures: readonly VillageStructure[]): void => {
+    if (pixiVillage) {
+      pixiVillageRef.current?.setDynamicStructures(structures);
+      return;
+    }
+    rendererRef.current?.setDynamicStructures(structures);
+  }, [pixiVillage]);
+
+  const setPlayerClass = useCallback((playerClass: PlayerClassId | null): void => {
+    if (pixiVillage) {
+      pixiVillageRef.current?.setPlayerClass(playerClass);
+      return;
+    }
+    rendererRef.current?.setPlayerClass(playerClass);
+  }, [pixiVillage]);
+
   // Ref-based callbacks: the world captures the ref, always reads fresh values
   const subjectsRef = useRef(subjects);
   subjectsRef.current = subjects;
@@ -361,8 +545,10 @@ export function VillageScreen(): JSX.Element {
         fishing: {
           isMounted: () => rendererRef.current !== null,
           enter: ({ playerClass, hasClearedRooms, onFishCaught, onReturnToVillage, onReady }) => {
-            const renderer = rendererRef.current;
-            if (!renderer) return;
+            // Fishing is a Phaser-host capability in Phase 11; the Pixi path has
+            // no fishing world yet and `isMounted` above reports false there.
+            const fishing = rendererRef.current?.fishing?.();
+            if (!fishing) return;
             // One explicit subject context for the whole session, so catch
             // resolution and persistence cannot disagree about the subject.
             const world: FishingWorldModel = {
@@ -373,10 +559,10 @@ export function VillageScreen(): JSX.Element {
               hasClearedRooms,
               subjectId: useProgressionStore.getState().activeSubjectId,
             };
-            renderer.fishing().enter(world, { onFishCaught, onReturnToVillage, onReady });
+            fishing.enter(world, { onFishCaught, onReturnToVillage, onReady });
           },
           exit: () => {
-            rendererRef.current?.fishing().returnToVillage();
+            rendererRef.current?.fishing?.().returnToVillage();
           },
         },
       },
@@ -384,7 +570,7 @@ export function VillageScreen(): JSX.Element {
   }
   const flow = flowRef.current;
 
-  const callbacksRef = useRef<VillageSceneEvents>({
+  const callbacksRef = useRef<VillageCallbacks>({
     onStructureApproached: () => {},
     onStructureLeft: () => {},
     onStructureInteract: () => {},
@@ -397,7 +583,7 @@ export function VillageScreen(): JSX.Element {
 
   // Keep callbacks ref in sync with latest React state
   useEffect(() => {
-    const cb: VillageSceneEvents = {
+    const cb: VillageCallbacks = {
       onStructureApproached: (structureId) => flow.structureApproached(structureId),
       onStructureLeft: (structureId) => flow.structureLeft(structureId),
       onStructureInteract: (structureId) => flow.structureInteract(structureId),
@@ -458,77 +644,81 @@ export function VillageScreen(): JSX.Element {
         setNpcDialogPos({ x: pos.clientX, y: pos.clientY });
       },
       onReady: () => {
-        if (rendererRef.current) {
-          setVillageReady(true);
-        }
+        // The Pixi path signals readiness through `VillageWorld`'s `onReady` prop;
+        // the Phaser scene calls this bag. There is no renderer ref guard because
+        // on the Pixi path there is deliberately no `rendererRef`.
+        setVillageReady(true);
       },
     };
     Object.assign(callbacksRef.current, cb);
   }, [flow, subjects, dynamicStructures, selectedClass]);
 
-  // Mount the village world once - it reads from callbacksRef
+  // Mount the Phaser village world once - it reads from callbacksRef. Only the
+  // Phaser path mounts here; the Pixi component manages its own mount/unmount in
+  // React through the JSX below, so the two can never be mounted at once.
   useEffect(() => {
-    if (!containerRef.current || rendererRef.current) return;
+    if (phaserVillageFactory === null) return;
+    const container = containerRef.current;
+    if (!container || rendererRef.current) return;
     const ref = callbacksRef;
-    let spawnGridX: number | null = null;
-    let spawnGridY: number | null = null;
-    try {
-      const raw = localStorage.getItem('kd-village-spawn');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        spawnGridX = parsed.gridX;
-        spawnGridY = parsed.gridY;
-        localStorage.removeItem('kd-village-spawn');
-      }
-    } catch { /* ignore */ }
-    // The renderer-neutral model of the world this screen presents. The
-    // adapter turns it into engine calls at mount time.
-    const world: VillageWorldModel = {
-      kind: 'village',
-      structures: dynamicStructures,
-      playerClass: selectedClass,
-    };
-    const renderer = createVillageGame({
-      parent: containerRef.current,
-      world,
-      callbacks: {
-        onStructureApproached: (id) => ref.current.onStructureApproached(id),
-        onStructureLeft: (id) => ref.current.onStructureLeft(id),
-        onStructureInteract: (id) => ref.current.onStructureInteract(id),
-        onNpcApproached: (id) => ref.current.onNpcApproached(id),
-        onNpcLeft: (id) => ref.current.onNpcLeft(id),
-        onNpcInteract: (id) => ref.current.onNpcInteract(id),
-        onNpcDialogPosition: (p) => ref.current.onNpcDialogPosition?.(p),
-        onReady: () => ref.current.onReady(),
-      },
-      spawn: { gridX: spawnGridX, gridY: spawnGridY },
+    let cancelled = false;
+    let renderer: VillageRendererHandle | null = null;
+    let stopWaitingForReady: (() => void) | null = null;
+    // The build-time literal factory resolves asynchronously, so a cleanup that
+    // arrives before it settles is honoured rather than mounting after unmount.
+    void phaserVillageFactory().then((mod) => {
+      if (cancelled) return;
+      renderer = mod.createVillageGame({
+        parent: container,
+        world: worldModel,
+        callbacks: {
+          onStructureApproached: (id) => ref.current.onStructureApproached(id),
+          onStructureLeft: (id) => ref.current.onStructureLeft(id),
+          onStructureInteract: (id) => ref.current.onStructureInteract(id),
+          onNpcApproached: (id) => ref.current.onNpcApproached(id),
+          onNpcLeft: (id) => ref.current.onNpcLeft(id),
+          onNpcInteract: (id) => ref.current.onNpcInteract(id),
+          onNpcDialogPosition: (p) => ref.current.onNpcDialogPosition(p),
+          onReady: () => ref.current.onReady(),
+        },
+        spawn,
+      });
+      rendererRef.current = renderer;
+      stopWaitingForReady = renderer.onReady?.(() => setVillageReady(true)) ?? null;
+      renderer.mount();
     });
-    rendererRef.current = renderer;
-    const stopWaitingForReady = renderer.onReady(() => setVillageReady(true));
-    renderer.mount();
     return () => {
-      stopWaitingForReady();
-      renderer.unmount();
+      cancelled = true;
+      stopWaitingForReady?.();
+      renderer?.unmount();
       rendererRef.current = null;
     };
+    // Mount once, with the spawn and initial world captured deliberately; later
+    // structure and class changes flow through the sync effect and `worldModel`.
   }, []);
 
   // Restart the village world when the user saves custom sprites and clicks "Apply Changes"
   useEffect(() => {
     if (sceneRestartCounter === 0) return;
-    if (!rendererRef.current) return;
+    if (pixiVillage) {
+      if (!pixiVillageRef.current) return;
+    } else if (!rendererRef.current) {
+      return;
+    }
     setVillageReady(false);
     // The adapter revokes the old blob URLs and restarts the scene in place.
-    rendererRef.current.restart();
-  }, [sceneRestartCounter]);
+    restart();
+  }, [sceneRestartCounter, pixiVillage, restart]);
 
-  // Sync world state whenever the world is ready OR the data changes
+  // Sync world state whenever the world is ready OR the data changes. The Pixi
+  // component syncs its `world` prop in place, so this stays a Phaser-path effect
+  // and the two renderers are never driven twice.
   useEffect(() => {
-    const renderer = rendererRef.current;
-    if (!renderer) return;
-    renderer.setDynamicStructures(dynamicStructures);
-    renderer.setPlayerClass(selectedClass);
-  }, [villageReady, dynamicStructures, selectedClass]);
+    if (pixiVillage) return;
+    if (!rendererRef.current) return;
+    setDynamicStructures(dynamicStructures);
+    setPlayerClass(selectedClass);
+  }, [pixiVillage, villageReady, dynamicStructures, selectedClass, setDynamicStructures, setPlayerClass]);
 
   // Show welcome message on village entry
   const handleStartTutorial = async () => {
@@ -655,16 +845,47 @@ export function VillageScreen(): JSX.Element {
       )}
 
       <div className="village-game-area">
-        <div className="village-canvas" ref={containerRef} />
-        <CompassOverlay rendererRef={rendererRef} />
-        <button type="button" className="touch-interact-btn"
-          aria-label="Interact" style={{ zIndex: 150 }}
-          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-          onClick={() => {
-            rendererRef.current?.triggerInteract();
-          }}>
-          ⚔
-        </button>
+        {pixiVillage && LazyPixiVillageWorld !== null ? (
+          // The Pixi chunk is lazy, so a build that requested it shows this status
+          // sentence for the frames before it evaluates. `VillageWorld` supplies
+          // its own labelled interact control, so the Phaser touch button below is
+          // deliberately not rendered here.
+          <Suspense
+            fallback={
+              <p role="status" className="village-renderer-status">
+                Loading the village…
+              </p>
+            }
+          >
+            <LazyPixiVillageWorld
+              ref={pixiVillageRef}
+              world={worldModel}
+              callbacks={callbacksRef.current}
+              spawn={spawn}
+              colorTheme={colorTheme}
+              onReady={() => setVillageReady(true)}
+            />
+          </Suspense>
+        ) : (
+          <>
+            <div className="village-canvas" ref={containerRef} />
+            <button type="button" className="touch-interact-btn"
+              aria-label="Interact" style={{ zIndex: 150 }}
+              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={() => {
+                triggerInteract();
+              }}>
+              ⚔
+            </button>
+          </>
+        )}
+        {pixiVillageMismatch ? (
+          <p role="alert" className="village-renderer-status">
+            This build was asked for the PixiJS village renderer but contains no PixiJS
+            village chunk. Build it with VITE_PIXI_VILLAGE=true.
+          </p>
+        ) : null}
+        <CompassOverlay readPoi={readPoi} />
       </div>
 
       {infoPanel?.type === 'dungeon' && infoPanel.subject ? (
@@ -1299,19 +1520,33 @@ export function VillageScreen(): JSX.Element {
   );
 }
 
-/* ── React compass overlay reads the current POI from the world renderer ── */
-function CompassOverlay({ rendererRef }: { rendererRef: React.MutableRefObject<PhaserVillageRenderer | null> }): JSX.Element {
-  const [poi, setPoi] = useState<{ name: string; angle: number; distance: number } | null>(null);
+/* ── React compass overlay reads the current POI from whichever renderer ── */
+function CompassOverlay({ readPoi }: { readPoi: () => WorldPointOfInterest | null }): JSX.Element {
+  const [poi, setPoi] = useState<WorldPointOfInterest | null>(null);
 
+  // Throttled, not per-frame. Plan Phase 11 asks for a throttled update in place
+  // of the old `requestAnimationFrame` poll: a point of interest only changes when
+  // the player crosses a proximity boundary, so four reads a second is more than
+  // the display needs and the old 60 Hz loop was a React update per frame for a
+  // value that almost never changed. `setPoi` returns the same object when the
+  // value is unchanged, so React bails out and an idle village does not re-render.
   useEffect(() => {
-    let frame: number;
-    const poll = () => {
-      setPoi(rendererRef.current?.readPoi() ?? null);
-      frame = requestAnimationFrame(poll);
-    };
-    frame = requestAnimationFrame(poll);
-    return () => cancelAnimationFrame(frame);
-  }, [rendererRef]);
+    const interval = window.setInterval(() => {
+      const next = readPoi();
+      setPoi((current) => {
+        if (current === null || next === null) return current === next ? current : next;
+        if (
+          current.name === next.name &&
+          current.angle === next.angle &&
+          current.distance === next.distance
+        ) {
+          return current;
+        }
+        return next;
+      });
+    }, 250);
+    return () => window.clearInterval(interval);
+  }, [readPoi]);
 
   if (!poi || poi.distance < 96) return <></>;
 
