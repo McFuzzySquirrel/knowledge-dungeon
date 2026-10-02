@@ -728,8 +728,8 @@ Phase 24 Remove Phaser and legacy renderer
 | 8 | complete | Establish Cozy design tokens and the CC0 media gate. |
 | 9 | complete | Build the PixiJS runtime host. |
 | 10 | complete | Build asset bundles and functional audio. |
-| 11 | verified | Build the Pixi village world foundation. |
-| 12 | not-started | Build village NPCs, quests, and redesigned panels. |
+| 11 | complete | Build the Pixi village world foundation. |
+| 12 | complete | Build village NPCs, quests, and redesigned panels. |
 | 13 | not-started | Build the Pixi dungeon world and navigation. |
 | 14 | not-started | Redesign the Creator flow. |
 | 15 | not-started | Redesign the Scribe flow. |
@@ -5005,12 +5005,16 @@ Manual checks:
 
 Recorded on 2026-09-30. The status advanced from `in-progress` to `verified` after the
 maintainer accepted the village-scoped reading of the fourth exit criterion (see
-"Exit-criteria assessment" below); `GameScreen.tsx` is deferred to Phase 13. No commit
-has been made.
+"Exit-criteria assessment" below); `GameScreen.tsx` is deferred to Phase 13. The work
+shipped in commit `ed1f09f`; at the moment this evidence was first written it was still
+uncommitted.
 
 The maintainer then accepted the `verified` checkpoint on 2026-09-30, and the status
-advanced to `complete`, unblocking Phase 12. The accepted exit-criteria scope and the
-uncommitted-work caveat above both carry forward into Phase 12's rollback boundary.
+advanced to `complete`, unblocking Phase 12. The accepted exit-criteria scope carries
+forward into Phase 12's rollback boundary. The uncommitted-work caveat this paragraph
+originally recorded was resolved when Phase 12 shipped its work in commit `4944032`; at
+that checkpoint the Phase 11 village renderer was committed alongside it, so neither
+phase carries uncommitted work into Phase 13.
 
 #### Baseline before Phase 11
 
@@ -5136,7 +5140,7 @@ Phase 12.
 
 ## Phase 12: Village NPC Social Layer and Redesigned Panels
 
-**Status:** verified
+**Status:** complete
 **Objective:** Preserve the Keeper, wandering NPCs, quests, and social interactions using React DOM and Pixi.
 
 ### Prerequisites
@@ -5199,7 +5203,11 @@ Manual checks:
 
 ### Verification evidence
 
-Recorded on 2026-10-02. `in-progress` -> `verified`. No commit has been made.
+Recorded on 2026-10-02. `in-progress` -> `verified`. The maintainer accepted the
+`verified` checkpoint on 2026-10-02, so the status advanced to `complete` and Phase 13
+became the next authorized phase. The implementation shipped in commit `4944032`, which
+supersedes the "no commit has been made" state that was true when this evidence was first
+written.
 
 #### Baseline before Phase 12
 
