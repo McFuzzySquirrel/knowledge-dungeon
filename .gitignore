@@ -35,3 +35,9 @@ public/assets/sprite-manifest.json
 .opencode/*.json
 .opencode/*.jsonc
 .opencode/*.log
+
+# Local CodeGraph index: a 58 MB SQLite database plus daemon state (log, pid,
+# socket), local to each machine. CodeGraph self-ignores those four files but not
+# its own .gitignore, so the directory still surfaces as untracked and `git add -A`
+# would commit the database. Nothing in the build, the test suite, or CI reads it.
+.codegraph/
