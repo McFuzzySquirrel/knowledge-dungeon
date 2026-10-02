@@ -277,13 +277,19 @@ function filesIn(directory: string): string[] {
 describe('src/application/contracts names no renderer, in code or in type', () => {
   it('the contract sources reach no renderer and leave no directory', () => {
     const contracts = filesIn(CONTRACTS_DIR);
-    // Non-vacuity: the walk found the five Phase 2 files, so an empty result below is a
+    // Non-vacuity: the walk found the six contract files, so an empty result below is a
     // clean scan rather than a scan that reached nothing.
+    //
+    // Phase 12 WP-1 added `villageNpc.ts`, the renderer-neutral village NPC surface.
+    // The list is still enumerated rather than asserted by count, because this gate
+    // exists to make "the contract layer gained a file" a red run: the sixth entry is
+    // a decision somebody made here, not a file that appeared.
     expect(contracts.map((file) => path.basename(file))).toEqual([
       'commands.ts',
       'events.ts',
       'index.ts',
       'renderer.ts',
+      'villageNpc.ts',
       'world.ts',
     ]);
 
@@ -319,15 +325,31 @@ describe('src/application/contracts names no renderer, in code or in type', () =
     expect(escapes, 'a contract module reaches outside src/application/contracts').toEqual([]);
   });
 
-  it('the contract surface is exactly the Phase 2 shape, and names no engine', () => {
+  it('the contract surface is exactly the declared shape, and names no engine', () => {
     const renderer = sourceOf('src/application/contracts/renderer.ts');
-    // The exact Phase 2 surface, in the order the file declares it. Two names appear
+    // The exact declared surface, in the order the file declares it. Two names appear
     // twice because two of the three capability ports genuinely declare them -
     // `triggerInteract` on the dungeon and village ports, `setPlayerClass` on the
     // village and fishing ports - so a deduplicated list would be the wrong assertion.
-    const members = [...stripComments(renderer).matchAll(/^\s{2}(?:readonly\s+)?([a-zA-Z]+)(?:\(|:|;)/gm)].map(
-      (match) => match[1],
-    );
+    //
+    // Phase 12 WP-1 added `readNpcSnapshot` and `invokeAction` to the village port:
+    // the NPC snapshot a React panel reads, and the one route by which a DOM control
+    // asks the village to act. Both are optional on the base port (the Phaser and
+    // Pixi adapters wire them in WP-2), which is why `VillageNpcHost` re-declares
+    // them as required rather than the base port requiring them today.
+    //
+    // The capture keeps the `?`, so the two lists below are distinguishable: the
+    // `?`-suffixed entries are `VillageRendererCapabilities` (optional, still being
+    // wired) and the bare ones immediately after are `VillageNpcHost` (the same two
+    // members, required). The previous pattern had no `?` in it, which meant it
+    // skipped the optional declarations entirely and every NPC entry in the list
+    // below came from `VillageNpcHost` instead - so a *third* optional member added
+    // to the base port left this gate green. Widening the capture to `([a-zA-Z]+\??)`
+    // is what closes that; it matches a superset of the old pattern, so it can only
+    // find more members, never fewer.
+    const members = [
+      ...stripComments(renderer).matchAll(/^\s{2}(?:readonly\s+)?([a-zA-Z]+\??)(?:\(|:|;)/gm),
+    ].map((match) => match[1]);
     expect(members).toEqual([
       'mount',
       'unmount',
@@ -345,6 +367,13 @@ describe('src/application/contracts names no renderer, in code or in type', () =
       'setPlayerClass',
       'triggerInteract',
       'readPoi',
+      // `VillageRendererCapabilities`, optional pending adapter wiring (WP-2).
+      'readNpcSnapshot?',
+      'invokeAction?',
+      // `VillageNpcHost`, the same two members required.
+      'readNpcSnapshot',
+      'invokeAction',
+      // `FishingRendererCapabilities` resumes here.
       'setPlayerClass',
       'getCaughtCount',
       'returnToVillage',

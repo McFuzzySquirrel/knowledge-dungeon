@@ -46,7 +46,8 @@ import {
 import { PixiCanvas } from '@/renderers/pixi/runtime/PixiCanvas';
 import { resolveCozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
 import { useWorldQuality } from '@/renderers/pixi/runtime/useWorldQuality';
-import type { VillageRendererCapabilities } from '@/application/contracts/renderer';
+import type { VillageNpcHost } from '@/application/contracts/renderer';
+import { createVillageNpcSnapshot } from '@/application/contracts/villageNpc';
 import type { WorldPointOfInterest, VillageWorldModel } from '@/application/contracts/world';
 import type { VillageStructure } from '@/data/villageLayout';
 import {
@@ -74,13 +75,35 @@ export interface VillageWorldProps {
  * It is the renderer's capability port plus the two lifecycle reads a React screen
  * needs but the port does not carry, so a caller can drive the world through a ref
  * without ever naming PixiJS.
+ *
+ * Extends {@link VillageNpcHost} rather than the base `VillageRendererCapabilities`
+ * because the handle is *this component's* declaration of what a screen may ask the
+ * world. Typed against the base port, the object literal below compiled while
+ * silently omitting `readNpcSnapshot` and `invokeAction`: a nearby-action panel that
+ * feature-detected read `undefined` and rendered its rows permanently disabled, with
+ * no type error anywhere and nothing in the build to say so. That was found in a
+ * real browser, not by reading the code. The narrowed port is what turns a missing
+ * member into a `typecheck` failure.
  */
-export interface VillageWorldHandle extends VillageRendererCapabilities {
+export interface VillageWorldHandle extends VillageNpcHost {
   isReady(): boolean;
   restart(): void;
 }
 
 const DEFAULT_SURFACE_ID = 'pixi-village-world';
+
+/**
+ * The snapshot a panel gets before the renderer exists.
+ *
+ * One frozen shared value rather than a fresh allocation per call: this runs in a
+ * React effect that a panel can re-run freely, and the answer is the same "nothing
+ * is in reach" every time. `createVillageNpcSnapshot` still builds it, so the shape
+ * is the contract's and not a hand-written literal that could drift from it.
+ */
+const EMPTY_NPC_SNAPSHOT = createVillageNpcSnapshot({
+  candidates: [],
+  anchor: null,
+});
 
 const px = (value: number): string => `${value}px`;
 
@@ -218,6 +241,12 @@ const VillageWorld = forwardRef<VillageWorldHandle, VillageWorldProps>(function 
       setPlayerClass: (playerClass) => rendererRef.current?.setPlayerClass(playerClass),
       triggerInteract: () => rendererRef.current?.triggerInteract(),
       readPoi: (): WorldPointOfInterest | null => rendererRef.current?.readPoi() ?? null,
+      // Phase 12's NPC surface, forwarded like every other member. A DOM
+      // nearby-action panel reads the snapshot and sends an invocation; the scene
+      // measures and the contract decides what a row means.
+      readNpcSnapshot: () =>
+        rendererRef.current?.readNpcSnapshot() ?? EMPTY_NPC_SNAPSHOT,
+      invokeAction: (invocation) => rendererRef.current?.invokeAction(invocation),
     }),
     [],
   );

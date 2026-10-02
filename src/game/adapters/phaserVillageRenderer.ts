@@ -18,6 +18,26 @@
  * React screen never names Phaser. Replacing Phaser means replacing this
  * directory (and the two `createGame*` seams that construct it) and nothing
  * else.
+ *
+ * ## Phase 12: the NPC surface is not optional here
+ *
+ * `readNpcSnapshot` and `invokeAction` are declared `?` on the base
+ * `VillageRendererCapabilities` because both adapters still had to be wired when the
+ * contract was written. A screen that feature-detects therefore sees `undefined`
+ * rather than a type error, and a DOM nearby-action control quietly does nothing -
+ * on *this* adapter, which is the default build until Phase 24, and it would do so
+ * at runtime with nothing in the build to say so. Both are implemented below,
+ * sourced from the Phaser scene's own state.
+ *
+ * The scene keeps no new state. An earlier version of this adapter also published a
+ * `dialogue` on the snapshot, computed here by wrapping the NPC callbacks and
+ * running the contract's line selection against an empty quest step. Nothing read
+ * that field - the bubble a learner sees comes from the screen's own state - and a
+ * renderer could not have filled it correctly in any case, because it does not know
+ * the learner's quest step and the Phase 9 rule is that it does not reach into a
+ * store to find out. The line is chosen by the application layer; the snapshot now
+ * carries measurements and an anchor, which are the two things a renderer *can* know,
+ * and this adapter forwards the scene's callbacks untouched.
  */
 import Phaser from 'phaser';
 import { VillageScene, type VillageSceneEvents } from '@/game/scenes/VillageScene';
@@ -26,9 +46,15 @@ import {
   createPhaserFishingRenderer,
   type PhaserFishingRenderer,
 } from '@/game/adapters/phaserFishingRenderer';
-import type { VillageRendererCapabilities, WorldRenderer } from '@/application/contracts/renderer';
+import {
+  createVillageNpcSnapshot,
+  VILLAGE_ACTION_INTERACT,
+  type VillageActionInvocation,
+  type VillageNpcSnapshot,
+} from '@/application/contracts/villageNpc';
+import type { VillageNpcHost, WorldRenderer } from '@/application/contracts/renderer';
 import type { VillageWorldModel } from '@/application/contracts/world';
-import type { VillageStructure } from '@/data/villageLayout';
+import { type VillageStructure } from '@/data/villageLayout';
 
 /** Phaser scene key the village world runs in. */
 const VILLAGE_SCENE_KEY = 'VillageScene';
@@ -63,11 +89,19 @@ export interface PhaserVillageRendererOptions {
 
 /**
  * The village world renderer as the application layer sees it: the neutral
- * `WorldRenderer` lifecycle, the neutral `VillageRendererCapabilities` port,
- * one renderer-neutral readiness subscription, and the fishing world renderer
- * that shares this host's canvas.
+ * `WorldRenderer` lifecycle, the neutral `VillageNpcHost` port, one
+ * renderer-neutral readiness subscription, and the fishing world renderer that
+ * shares this host's canvas.
+ *
+ * `VillageNpcHost` and not the base `VillageRendererCapabilities`, because this
+ * adapter implements `readNpcSnapshot` and `invokeAction` and the whole point of
+ * implementing them is that a consumer should not have to feature-detect: with the
+ * optional base port, a DOM nearby-action control compiles fine and does nothing at
+ * runtime on the default build. Extending the narrowed port makes the object literal
+ * below fail `npm run typecheck` if either member is ever removed, and lets a screen
+ * that depends on `VillageNpcHost` accept this renderer directly.
  */
-export interface PhaserVillageRenderer extends WorldRenderer, VillageRendererCapabilities {
+export interface PhaserVillageRenderer extends WorldRenderer, VillageNpcHost {
   /**
    * Subscribe to the first-frame notification. Returns an unsubscribe
    * function; listeners added after readiness are not replayed.
@@ -97,6 +131,21 @@ export function createPhaserVillageRenderer(
   let scene: VillageScene | null = null;
   let ready = false;
   let readyListeners: (() => void)[] = [];
+
+  /**
+   * The scene's callbacks, forwarded unwrapped.
+   *
+   * This adapter used to wrap the three NPC events so it could maintain its own
+   * conversation cursor and publish the snapshot's `dialogue`. Both are gone: nothing
+   * read that field, and a renderer has no quest step to select the right line with -
+   * which is why it could only ever have produced a quest-agnostic answer. The
+   * application layer selects the line, through the one pure function both renderers
+   * used to duplicate.
+   *
+   * The callbacks object is therefore passed straight through, so the screen receives
+   * the identical payloads in the identical order from this adapter and from Pixi.
+   */
+  const observedCallbacks: VillageSceneEvents = { ...callbacks };
 
   const fishing = createPhaserFishingRenderer({ game: () => game });
 
@@ -128,7 +177,7 @@ export function createPhaserVillageRenderer(
       game = created;
 
       created.scene.start(VILLAGE_SCENE_KEY, {
-        callbacks,
+        callbacks: observedCallbacks,
         // An empty list is equivalent to omitting the key: the scene only
         // merges dynamic structures when it receives a non-empty array.
         dynamicStructures: world.structures,
@@ -190,6 +239,44 @@ export function createPhaserVillageRenderer(
       const poi = scene?.lastPoi;
       if (!poi || poi.distance >= 1e9) return null;
       return { name: poi.name, angle: poi.angle, distance: poi.distance };
+    },
+
+    /**
+     * One coherent read of the village's NPC surface, from the Phaser scene's state.
+     *
+     * Three reads composed into one value, and the composition is the contract's:
+     * `createVillageNpcSnapshot` applies `selectVillageNearbyTargets` to the
+     * measurements, so `nearby` here cannot disagree with `candidates`. Before a
+     * scene exists the answer is the empty snapshot - a *value*, not `undefined`, so
+     * a panel that polls before readiness renders nothing instead of branching on a
+     * missing method.
+     */
+    readNpcSnapshot(): VillageNpcSnapshot {
+      return createVillageNpcSnapshot({
+        candidates: scene?.readNpcSnapshotCandidates() ?? [],
+        // The anchor follows the NPC in range, recomputed from the live camera rather
+        // than replayed from the approach, so a panel positioned from the snapshot
+        // tracks a wandering villager. `village:npc-dialog-position` still fires once
+        // per approach exactly as before.
+        anchor: scene?.readNpcDialogAnchor() ?? null,
+      });
+    },
+
+    /**
+     * The one route from a DOM control into the Phaser village.
+     *
+     * Phaser has no host-side dispatcher the way the Pixi host does, so the equivalent
+     * of "one action" here is the scene's own `triggerInteract` family - the same
+     * function the touch button and the `E` key already call. A named target is
+     * honoured when it is in range and otherwise falls back to that bare verb, which
+     * `VillageActionInvocation` explicitly permits.
+     *
+     * An unrecognised action id is ignored rather than forced through: the scene owns
+     * the action table, and a second one here would be a second source of truth.
+     */
+    invokeAction(invocation: VillageActionInvocation): void {
+      if (invocation.actionId !== VILLAGE_ACTION_INTERACT) return;
+      scene?.triggerInteractWithTarget(invocation.target);
     },
 
     fishing(): PhaserFishingRenderer {

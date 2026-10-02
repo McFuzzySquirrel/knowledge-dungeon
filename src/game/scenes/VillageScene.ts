@@ -1,9 +1,7 @@
 import Phaser from 'phaser';
 import {
-  INTERACT_RADIUS,
   NPC_SPEED,
   PLAYER_SPEED,
-  STRUCTURE_APPROACH_RADIUS,
   VILLAGE_MAP,
   VILLAGE_PATH_JUNCTIONS,
   VILLAGE_PATH_SEGMENTS,
@@ -12,6 +10,11 @@ import {
 } from '@/data/villageLayout';
 import { resolveSpriteUrl, getAnimationConfig, applySpriteAnimation } from '@/services/customSprites';
 import { type PlayerClassId, type PlayerDirection, getPlayerSpritePath } from '@/game/systems/playerClasses';
+import {
+  VILLAGE_NEARBY_RANGES,
+  type VillageActionTarget,
+  type VillageNearbyCandidate,
+} from '@/application/contracts/villageNpc';
 import type {
   WorldEventHandler,
   WorldEventPayload,
@@ -756,7 +759,7 @@ export class VillageScene extends Phaser.Scene {
   private checkStructureProximity(): void {
     if (!this.player) return;
     const ts = VILLAGE_MAP.tileSize;
-    const approachThreshold = STRUCTURE_APPROACH_RADIUS;
+    const approachThreshold = VILLAGE_NEARBY_RANGES.structure;
 
     let closestId: string | null = null;
     let closestDist = approachThreshold;
@@ -792,7 +795,7 @@ export class VillageScene extends Phaser.Scene {
     if (!this.player) return;
 
     let closestId: string | null = null;
-    let closestDist = INTERACT_RADIUS;
+    let closestDist = VILLAGE_NEARBY_RANGES.npc;
 
     for (const npcData of VILLAGE_MAP.npcs) {
       const state = this.npcStates.get(npcData.id);
@@ -811,34 +814,151 @@ export class VillageScene extends Phaser.Scene {
       this.currentNpcId = closestId;
       if (closestId) {
         this.callbacks?.onNpcApproached(closestId);
-        const state = this.npcStates.get(closestId);
-        if (state) {
-          const camera = this.cameras.main;
-          const screenX = (state.sprite.x - camera.worldView.x) * camera.zoom;
-          const screenY = (state.sprite.y - camera.worldView.y) * camera.zoom;
-          const canvasRect = this.game.canvas?.getBoundingClientRect();
-          this.callbacks?.onNpcDialogPosition?.({
-            npcId: closestId,
-            clientX: (canvasRect?.left ?? 0) + screenX,
-            clientY: (canvasRect?.top ?? 0) + screenY,
-          });
+        const anchor = this.npcDialogAnchor(closestId);
+        if (anchor) {
+          this.callbacks?.onNpcDialogPosition?.(anchor);
         }
       }
     }
   }
 
+  /**
+   * The dialog anchor for an NPC, in CSS viewport pixels, or `null`.
+   *
+   * Extracted from `checkNpcProximity` so the *emitted* anchor and the *read* anchor
+   * are one projection. Two copies of the camera maths would be free to disagree, and
+   * a dialog that is positioned somewhere the villager is not drawn is a bug a
+   * learner sees immediately and neither renderer could explain.
+   *
+   * Pure read of scene state: no event, no state change.
+   */
+  private npcDialogAnchor(npcId: string): VillageNpcDialogAnchor | null {
+    const state = this.npcStates.get(npcId);
+    if (!state) return null;
+    const camera = this.cameras.main;
+    const screenX = (state.sprite.x - camera.worldView.x) * camera.zoom;
+    const screenY = (state.sprite.y - camera.worldView.y) * camera.zoom;
+    const canvasRect = this.game.canvas?.getBoundingClientRect();
+    return {
+      npcId,
+      clientX: (canvasRect?.left ?? 0) + screenX,
+      clientY: (canvasRect?.top ?? 0) + screenY,
+    };
+  }
+
+  /**
+   * Raw proximity measurement for everything the interact verb can reach.
+   *
+   * The read half of Phase 12's `readNpcSnapshot`. Measurements and not rows, with
+   * the shared radii attached, because `selectVillageNearbyTargets` is what decides
+   * which of these become a nearby-action row and in what order - and it is the same
+   * function the Pixi scene's snapshot goes through, which is what makes the two
+   * builds produce the same list from the same world.
+   *
+   * Every zone and every NPC is reported, in range or not. A host that pre-filtered
+   * would move that policy into a renderer, and a policy that lives in two renderers
+   * is a policy that will differ between them.
+   */
+  readNpcSnapshotCandidates(): readonly VillageNearbyCandidate[] {
+    const candidates: VillageNearbyCandidate[] = [];
+    if (!this.player) return candidates;
+    const ts = VILLAGE_MAP.tileSize;
+
+    for (const zone of this.structureZones) {
+      const structureId = zone.getData('structureId') as string;
+      if (!structureId) continue;
+      const struct = this.allStructures.find((s) => s.id === structureId);
+      if (!struct) continue;
+      const cx = (struct.gridX + struct.width / 2) * ts;
+      const cy = (struct.gridY + struct.height / 2) * ts;
+      candidates.push({
+        kind: 'structure',
+        id: struct.id,
+        label: struct.label || struct.type,
+        distance: Math.hypot(this.player.x - cx, this.player.y - cy),
+        range: VILLAGE_NEARBY_RANGES.structure,
+      });
+    }
+
+    for (const npcData of VILLAGE_MAP.npcs) {
+      const state = this.npcStates.get(npcData.id);
+      if (!state) continue;
+      candidates.push({
+        kind: 'npc',
+        id: npcData.id,
+        label: npcData.label,
+        distance: Math.hypot(this.player.x - state.sprite.x, this.player.y - state.sprite.y),
+        range: VILLAGE_NEARBY_RANGES.npc,
+      });
+    }
+
+    return candidates;
+  }
+
+  /**
+   * The dialog anchor for the NPC currently in range, or `null` when none is.
+   *
+   * Recomputed from the NPC's live position rather than replayed from the approach,
+   * so a panel that positions its dialog from the snapshot follows a wandering
+   * villager. `village:npc-dialog-position` is still emitted once per approach, as
+   * before; only the *read* is live.
+   */
+  readNpcDialogAnchor(): VillageNpcDialogAnchor | null {
+    if (this.currentNpcId === null) return null;
+    return this.npcDialogAnchor(this.currentNpcId);
+  }
+
+  /**
+   * Act on one structure: write the portal spawn override, then report the interact.
+   *
+   * Split out of `handleInteract` so a named-target request reaches the *same* side
+   * effect rather than a second copy of it.
+   */
+  private interactStructure(structureId: string): void {
+    const struct = this.allStructures.find((s) => s.id === structureId);
+    if (struct?.type === 'portal-icon' && struct.subjectId) {
+      try {
+        localStorage.setItem('kd-village-spawn', JSON.stringify({ gridX: struct.gridX, gridY: struct.gridY }));
+      } catch { /* ignore */ }
+    }
+    this.callbacks?.onStructureInteract(structureId);
+  }
+
   private handleInteract(): void {
     if (this.currentStructureId) {
-      const struct = this.allStructures.find((s) => s.id === this.currentStructureId);
-      if (struct?.type === 'portal-icon' && struct.subjectId) {
-        try {
-          localStorage.setItem('kd-village-spawn', JSON.stringify({ gridX: struct.gridX, gridY: struct.gridY }));
-        } catch { /* ignore */ }
-      }
-      this.callbacks?.onStructureInteract(this.currentStructureId);
+      this.interactStructure(this.currentStructureId);
     } else if (this.currentNpcId) {
       this.callbacks?.onNpcInteract(this.currentNpcId);
     }
+  }
+
+  /**
+   * The interact verb, with an optional named target.
+   *
+   * `target` is a named *intent*, not a guarantee: `VillageActionInvocation` says so
+   * explicitly, because this scene's single interact verb resolves a structure first
+   * and an NPC only when no structure is in range. A target that is genuinely in
+   * range is therefore honoured here - which the bare verb would not do when both are
+   * - and a target that is not falls back to the bare verb, because a learner who
+   * pressed a labelled control and saw nothing happen learns that the control lies.
+   *
+   * Called by `phaserVillageRenderer.invokeAction`, which is what makes a DOM
+   * nearby-action row reach the world on the default Phaser build. Without it, the
+   * row would feature-detect to nothing and silently do nothing at runtime, with no
+   * compiler error to say so.
+   */
+  triggerInteractWithTarget(target: VillageActionTarget | null): void {
+    if (target !== null) {
+      if (target.kind === 'structure' && target.id === this.currentStructureId) {
+        this.interactStructure(target.id);
+        return;
+      }
+      if (target.kind === 'npc' && target.id === this.currentNpcId) {
+        this.callbacks?.onNpcInteract(target.id);
+        return;
+      }
+    }
+    this.handleInteract();
   }
 
   /** Programmatic interact, called from the on-screen touch button. */

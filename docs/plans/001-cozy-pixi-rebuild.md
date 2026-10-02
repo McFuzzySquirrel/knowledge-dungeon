@@ -4943,7 +4943,7 @@ Phase 9 record is the precedent for what replaces it.
 
 ## Phase 11: Pixi Village World Foundation
 
-**Status:** verified
+**Status:** complete
 **Objective:** Replace the village Phaser world layer while preserving layout, structures, portals, and navigation.
 
 ### Prerequisites
@@ -5007,6 +5007,10 @@ Recorded on 2026-09-30. The status advanced from `in-progress` to `verified` aft
 maintainer accepted the village-scoped reading of the fourth exit criterion (see
 "Exit-criteria assessment" below); `GameScreen.tsx` is deferred to Phase 13. No commit
 has been made.
+
+The maintainer then accepted the `verified` checkpoint on 2026-09-30, and the status
+advanced to `complete`, unblocking Phase 12. The accepted exit-criteria scope and the
+uncommitted-work caveat above both carry forward into Phase 12's rollback boundary.
 
 #### Baseline before Phase 11
 
@@ -5132,7 +5136,7 @@ Phase 12.
 
 ## Phase 12: Village NPC Social Layer and Redesigned Panels
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Preserve the Keeper, wandering NPCs, quests, and social interactions using React DOM and Pixi.
 
 ### Prerequisites
@@ -5192,6 +5196,130 @@ Manual checks:
 - Complete the tutorial through the village.
 - Reach every structure using touch only.
 - Complete a quest using keyboard and DOM controls.
+
+### Verification evidence
+
+Recorded on 2026-10-02. `in-progress` -> `verified`. No commit has been made.
+
+#### Baseline before Phase 12
+
+Working tree clean at `fac4c85` (Phase 11 complete). Lint clean, typecheck clean, 200
+test files / 4081 tests passed, `dist` 4.75 MB across 149 files, `check:bundle-size`
+green, 0 `vendor-pixi` chunks on the default build.
+
+#### Files
+
+- Contract: `src/application/contracts/villageNpc.ts` (new), `renderer.ts` (+`readNpcSnapshot`,
+  `invokeAction`, `VillageNpcHost`), `index.ts`.
+- Renderer: `src/renderers/pixi/village/{VillageNpc,NpcController}.ts` (new);
+  `createVillageScene.ts`, `VillageRenderer.ts`, `VillageWorld.tsx`, and
+  `src/game/{scenes/VillageScene.ts,adapters/phaserVillageRenderer.ts}`.
+- UI: `src/ui/village/**` (18 files), `src/ui/screens/VillageScreen.tsx` 1798 -> 809 lines.
+- Tests: `tests/phase12/**` (7 files), `tests/e2e/currentBuild.spec.ts` (+1349/-1).
+- Gates updated by enumeration, never loosened: `tests/phase9/{pixi-host-boundary,
+  qa-independent-verification}.test.ts`, `tests/contracts/phase-2-adapter-lifecycle.test.ts`,
+  `tests/data/localDownloadOnly.test.ts`.
+
+#### Commands
+
+```text
+npm run lint                                   exit 0
+npm run typecheck                              exit 0
+npm test                                       208 files / 4306 tests passed
+npm run build:web                              exit 0, vendor-pixi: 0 chunks (default)
+npm run check:bundle-size                      4.80 MB across 149 files
+npm run test:licenses                          PASSED, 99 entries, 6 bundle ids agree
+npm run test:e2e (default)                     32 passed / 12 skipped x10 consecutive
+VITE_PIXI_VILLAGE=true npm run test:e2e        36 passed / 12 skipped
+```
+
+Acceptance bar: **10 consecutive green default-lane e2e runs — met 10/10**, verified against
+all 10 raw logs. The Pixi spec defect that caused a prior 9/10 bar was a real assertion error
+(`fishing-pond` asserted a canvas teardown, but fishing shares the village's Phaser canvas),
+now `swaps-scene`; the corrected spec passed 40/40.
+
+#### Device checks
+
+Chromium only, the four Phase-1 viewport projects. `tablet`/`tablet-landscape` touch-emulated.
+Verified in-browser: 6 NPCs on the live Pixi stage; wander ~44 px/s against `NPC_SPEED = 45`;
+keyboard-only traversal reaches an enabled row and opens a panel without touching the canvas;
+quest-scripted dialogue reaches the DOM on both lanes. No Firefox, WebKit, Edge, or physical
+device evidence — those belong to Phase 21.
+
+#### Migration/data result
+
+None. No storage, schema, or migration change; subject schema stays `1.1.0`. `localStorage`:
+`kd-village-spawn` (unchanged) and a literal `'1'` fishing-hint flag.
+
+#### Performance/accessibility/license result
+
+- Default build emits **0** `vendor-pixi` chunks; Pixi chunks stay lazy and entry-unreachable.
+- `check:memory` passes both lanes but is a build-level preflight only — canvas count over 20
+  mount/unmount cycles and GPU residency are **not** measured. Plan section 10.2 is unverified.
+- License gate PASSED; no media added (0 files under `src/`), 90 `legacy-unverified` entries
+  correctly excluded from every bundle.
+- Privacy: 0 `console.*`, 0 network calls, 0 off-origin requests in Phase 12 files. The fishing
+  live region is a **fixed literal with no interpolation**, so the privacy guarantee is the
+  pinned literal.
+- Accessibility: side panels do not steal focus (a panel opened by walking must not rip a
+  keyboard user out of the world); sheets move and restore focus, trap Tab, and honour Escape;
+  44px targets asserted in three spellings; no colour-only state.
+
+#### Exit-criteria assessment
+
+1. **Quest and NPC dialogue matches current data** — met. Verified against `VILLAGE_MAP` for
+   the Keeper (10 quest steps) and a wanderer (quotes pool). Line selection has exactly one
+   owner (the application layer); the renderers no longer select lines.
+2. **No Pixi object is required to understand or invoke a village action** — met on the Pixi
+   lane, keyboard-only verified in-browser. Recorded scope reading: the DOM cannot *move* the
+   player, only invoke; rows exist only within proximity.
+3. **Village screens no longer directly import Phaser types** — met for the village route.
+   `VillageScreen.tsx` reaches Phaser only through a dynamic `import()`; `src/ui/village/**`
+   has zero Phaser or Pixi imports. `GameScreen.tsx` remains the enumerated exception until
+   Phase 13.
+4. **Dialogs and bottom sheets meet focus and touch-target requirements** — met for everything
+   Phase 12 introduced. Seven pre-existing HUD controls remain under 44px (see limitations).
+
+#### Defects found and fixed during the phase
+
+- **Renderer dialogue was a dead field.** Both renderers computed `VillageNpcSnapshot.dialogue`
+  quest-agnostically; nothing read it. Line-selection policy existed in three disagreeing places.
+  Fixed by narrowing the contract and making the application layer the single caller.
+- **Silent no-op on the Pixi path.** `VillageWorld.tsx` forwarded only the base port, leaving
+  nearby-action rows permanently disabled. Compiled cleanly; caught by reading an `aria-live`
+  sentence in a browser. Both renderers now `extend VillageNpcHost`, so it fails `typecheck`.
+- **Optional members are invisible to the Phase 9 gate.** Its regex could not match `?`-suffixed
+  members, so the two new port members were unenumerated. Regex hardened; proved strictly
+  stronger (same mutation green before, red after).
+- **`fishing-pond` asserted a canvas teardown it never performs** (see Commands).
+- Two empty-string/deep-freeze defects in the contract's pure functions, both pinned.
+
+#### Known limitations
+
+- Pixi-lane **fishing is inert**: `readPhaserHandle()?.fishing?.()` is undefined and
+  `isMounted()` is false, so a pond row does nothing. Pinned by a `GAP (Phase 17)` test marked
+  "must be inverted in Phase 17, do not relax".
+- `isMounted()` checks for a *handle*, not a fishing host, so a handle carrying no `fishing()`
+  would publish the signal and start nothing. A trap in Phase 17's path; left unfixed (outside
+  authorised scope).
+- Seven pre-existing HUD controls under 44px inside a surface Phase 12 declares a
+  `role="dialog"`; the fish-catch and welcome overlays have no Escape.
+- The app layer uses `Math.random()` inline — the `NpcRandomness.quoteIndex` injection seam was
+  removed, so a component test asserts pool membership rather than an exact quote string.
+- Two-agent structural risk: concurrent agents share one mutable worktree, `dist/`, and port
+  43173. This produced misleading numbers twice. **Serialize builds.** `dist` is single-slot:
+  always `rm -rf dist && npm run build:web` before a lane, or a Pixi artifact will be tested as
+  the default build.
+- Deferred: the `src/__privacy_probe__` race (only 2 files contend, not 6, and it could not be
+  reproduced in 8 attempts) to `infrastructure-engineer`.
+
+#### Rollback
+
+Set `VITE_PIXI_VILLAGE=false` (or leave it unset). The default build mounts the Phaser village
+unchanged and emits no Pixi chunk. The `src/ui/village/**` panels are renderer-neutral and are
+retained either way, which is what the plan's "retaining shared React panels where compatible"
+requires. Note the Phaser lane is now the *better*-covered lane: 10/10 stable against the
+Pixi lane's single run.
 
 ### Exit criteria
 

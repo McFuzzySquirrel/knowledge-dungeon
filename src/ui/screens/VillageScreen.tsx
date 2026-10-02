@@ -1,35 +1,51 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { useSessionStore, QUEST_LABELS, QUEST_ORDER, MANUAL_QUESTS, type QuestStep } from '@/store/sessionStore';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useSessionStore, type QuestStep } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
-import { VILLAGE_MAP, type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
-import { PLAYER_CLASSES, type PlayerClassId } from '@/game/systems/playerClasses';
-import type { FishingWorldModel, VillageWorldModel, WorldPointOfInterest } from '@/application/contracts/world';
+import { type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
+import type { PlayerClassId } from '@/game/systems/playerClasses';
+import type { VillageWorldModel, WorldPointOfInterest } from '@/application/contracts/world';
 import type { VillageRendererCapabilities, WorldRenderer } from '@/application/contracts/renderer';
+import type { VillageNpcSnapshot } from '@/application/contracts/villageNpc';
 import type { VillageWorldHandle } from '@/renderers/pixi/village/VillageWorld';
-import { runtimeConfig } from '@/config/featureFlags';
-import { FLOOR_BIOME_IDS, type FloorBiomeId } from '@/core/biomes';
-import { listSubjectIds, loadSubjectSnapshot, exportSubjectToJson, importSubjectFromJson, saveSubjectSnapshot } from '@/services/persistence/subjectPersistence';
-import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
-import { GAME_GUIDE_MARKDOWN } from '@/data/gameGuide';
-import { Markdown } from '@/ui/utils/markdown';
-import { StudyStatsPanel } from '@/ui/components/StudyStatsPanel';
-import { computeSessionStats } from '@/services/sessionTracker';
-import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
-import { SettingsModal } from '@/ui/components/SettingsModal';
-import { FishingRecallModal } from '@/ui/components/FishingRecallModal';
-import { pullRecallQuestion, getClearedRooms } from '@/core/fishing/fishingMechanics';
+import type { StudyFlowVillageInfoPanel } from '@/application/studyFlow';
 import type { SelfCheckPrompt } from '@/core/review/types';
+import type { FloorBiomeId } from '@/core/biomes';
 import type { FishRarity } from '@/core/fishing/fishingTypes';
-import { FishStandPanel } from '@/ui/components/FishStandPanel';
+import { runtimeConfig } from '@/config/featureFlags';
+import { listSubjectIds, loadSubjectSnapshot } from '@/services/persistence/subjectPersistence';
+import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
+import { computeSessionStats } from '@/services/sessionTracker';
+import { pullRecallQuestion, getClearedRooms } from '@/core/fishing/fishingMechanics';
+import type { StudyFlowController } from '@/application/studyFlow';
 import {
-  createStudyFlowController,
-  type StudyFlowController,
-  type StudyFlowFishCaught,
-  type StudyFlowVillageInfoPanel,
-} from '@/application/studyFlow';
+  createVillageStudyFlow,
+  type VillageFishingHost,
+} from '@/ui/village/villageStudyFlow';
+import { keeperLineFor, useVillageSceneCallbacks } from '@/ui/village/villageSceneCallbacks';
+
+import { CompassOverlay } from '@/ui/village/CompassOverlay';
+import { CreateSubjectDialog } from '@/ui/village/CreateSubjectDialog';
+import { DataManagementDialog } from '@/ui/village/DataManagementDialog';
+import { NpcDialog } from '@/ui/village/NpcDialog';
+import { QuestBoard } from '@/ui/village/QuestBoard';
+import {
+  StructurePanel,
+  structureAnnouncement,
+  useVillageFishingHint,
+} from '@/ui/village/StructurePanel';
+import { useVillageActionHandler } from '@/ui/village/NearbyActionList';
+import { useVillageNpcSurface, type VillageActionBridge } from '@/ui/village/useVillageNpcSurface';
+import { useVillageSurfaceMode } from '@/ui/village/useVillageSurfaceMode';
+import { VillageHud } from '@/ui/village/VillageHud';
+import { VillageLaunchers } from '@/ui/village/VillageLaunchers';
+import type { VillageCollectionTotals, VillageStudyTotals, VillageSubjectSummary } from '@/ui/village/villageTypes';
+
+// The panel-arrival announcement this screen renders is the only thing here that
+// needs a village stylesheet directly; the panels import it themselves.
+import '@/ui/village/villagePanels.css';
 
 /**
  * The build-time village renderer switch (Phase 11).
@@ -68,25 +84,6 @@ const phaserVillageFactory =
 const LazyPixiVillageWorld = pixiVillageFactory !== null ? lazy(pixiVillageFactory) : null;
 
 /**
- * The fishing world host a Phaser village renderer owns.
- *
- * Expressed structurally rather than by importing the Phaser adapter's type, so
- * this UI module names no engine. The Phase 11 Pixi host does not implement
- * fishing (Phase 17 does), which is why it is optional on the handle below.
- */
-interface VillageFishingHost {
-  enter(
-    model: FishingWorldModel,
-    handlers: {
-      onFishCaught: (data: StudyFlowFishCaught) => void;
-      onReturnToVillage: () => void;
-      onReady: () => void;
-    },
-  ): void;
-  returnToVillage(): void;
-}
-
-/**
  * The renderer handle this screen drives, in renderer-neutral terms.
  *
  * It is the Phase 2 lifecycle plus the village capability port. `onReady` and
@@ -101,24 +98,15 @@ type VillageRendererHandle = WorldRenderer &
     fishing?: () => VillageFishingHost;
   };
 
-/**
- * The eight village callbacks, with every member required.
- *
- * Stated locally so this UI module imports no renderer type: the shape is
- * structurally assignable to both the Phaser `VillageSceneEvents` and the Pixi
- * `VillageSceneCallbacks` (whose `onNpc*` members are optional), which is what
- * lets one bag feed either renderer.
- */
-interface VillageCallbacks {
-  onStructureApproached: (structureId: string) => void;
-  onStructureLeft: (structureId: string) => void;
-  onStructureInteract: (structureId: string) => void;
-  onNpcApproached: (npcId: string) => void;
-  onNpcLeft: (npcId: string) => void;
-  onNpcInteract: (npcId: string) => void;
-  onNpcDialogPosition: (anchor: { npcId: string; clientX: number; clientY: number }) => void;
-  onReady: () => void;
-}
+/** The glyph each NPC is drawn with in the dialogue bubble. */
+const NPC_ICONS: Readonly<Record<string, string>> = Object.freeze({
+  keeper: '🧙',
+  'villager-1': '📚',
+  'villager-2': '🧭',
+  'villager-3': '❓',
+  'villager-4': '🦉',
+  'villager-5': '📜',
+});
 
 /**
  * Read and clear the one-shot village spawn override.
@@ -141,13 +129,56 @@ function readVillageSpawnPoint(): { gridX: number | null; gridY: number | null }
   return { gridX, gridY };
 }
 
-interface SubjectSummary {
-  id: string;
-  subjectName: string;
-  roomCount: number;
-  clearedRoomCount: number;
-}
-
+/**
+ * The village screen: the composition root for the whole village route.
+ *
+ * ## What this file owns now, and what it delegates
+ *
+ * Phase 12 split this screen, which was 1798 lines, into `src/ui/village/**`. What
+ * is left here is the composition root and nothing else:
+ *
+ * | Concern                                        | Owner                                     |
+ * |------------------------------------------------|-------------------------------------------|
+ * | The build-time Phaser/Pixi switch                | here, deliberately                         |
+ * | The imperative handles for whichever renderer     | here                                       |
+ * | The study-flow controller and its store ports     | here (the flow is application logic)       |
+ * | Subject loading and the portal-slot projection    | here (a renderer-neutral world model)      |
+ * | HUD, structure panel, quest board, NPC dialogue   | `src/ui/village/**`                        |
+ * | The compass, nearby actions, the surface shape    | `src/ui/village/**`                        |
+ * | The four modal launchers and the two dialogs      | `src/ui/village/**`                        |
+ *
+ * The switch stays here for two reasons that are not about tidiness. It is the
+ * module the bundler folds, and it must be a *literal* `=== 'true'` comparison in
+ * one place (see the comment above). And the `VITE_PIXI_VILLAGE` switch decides
+ * which of two renderer handles exists, which is a fact about the whole screen and
+ * not about any one panel.
+ *
+ * ## The three renderer reads, and the one that is not polled any more
+ *
+ * `readPoi`, `readNpcSnapshot`, and `invokeAction` are read through this screen so
+ * no panel has to know which renderer is mounted. Two different models sit on top
+ * of them:
+ *
+ * - **`readPoi` no longer reaches React.** `CompassOverlay` holds it in a ref and
+ *   samples it on a throttled interval, writing the needle's transform and the
+ *   label straight to the DOM. The component has no state at all, so a moving
+ *   player cannot cause a render. That is the phase's "no animation-frame React
+ *   updates caused by transient scene state" deliverable, and the reasoning is in
+ *   `CompassOverlay.tsx`.
+ * - **`readNpcSnapshot` is sampled, not polled, and only the selected rows reach
+ *   React.** It returns a *value* - at most two derived rows - rather than a scene
+ *   reference, and `useVillageNpcSurface` compares the rows before committing, so
+ *   walking costs a comparison and crossing a proximity boundary costs one render.
+ *   An NPC event is a nudge that samples immediately, never the source of truth.
+ *
+ * ## Feature detection, and what happens when an adapter has not caught up
+ *
+ * `readNpcSnapshot` and `invokeAction` are optional on the capability port. This
+ * screen passes them down **as functions or as `undefined`**, never as a stub that
+ * does nothing, and the DOM decides what to say about it: no snapshot means an
+ * empty list with a sentence, no dispatcher means the rows are present, disabled,
+ * and described. There is no state in which a village button silently does nothing.
+ */
 export function VillageScreen(): JSX.Element {
   const setPhase = useSessionStore((s) => s.setPhase);
   const setSelectedClass = useSessionStore((s) => s.setSelectedClass);
@@ -165,9 +196,6 @@ export function VillageScreen(): JSX.Element {
   const bySubject = useProgressionStore((s) => s.bySubject);
   const xpTotal = useProgressionStore((s) => s.xpTotal);
   const rank = useProgressionStore((s) => s.rank);
-  const totalBadges = Object.values(bySubject).reduce((sum, s) => sum + s.badges.length, 0);
-  const totalInventory = Object.values(bySubject).reduce((sum, s) => sum + s.inventory.length, 0);
-  const totalNotes = Object.values(bySubject).reduce((sum, s) => sum + s.collectedNotes.length, 0);
   const sessionStats = useMemo(() => computeSessionStats(), []);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -192,46 +220,17 @@ export function VillageScreen(): JSX.Element {
   }
   const spawn = spawnRef.current;
 
-  const [subjects, setSubjects] = useState<SubjectSummary[]>([]);
+  const [subjects, setSubjects] = useState<VillageSubjectSummary[]>([]);
   const [infoPanel, setInfoPanel] = useState<StudyFlowVillageInfoPanel | null>(null);
   const [keeperDialogue, setKeeperDialogue] = useState<string | null>(null);
-  const [, setKeeperDialogueIndex] = useState(0);
   const [activeNpcId, setActiveNpcId] = useState<string | null>(null);
   const [activeNpcLabel, setActiveNpcLabel] = useState<string | null>(null);
-  const [npcDialogPos, setNpcDialogPos] = useState<{ x: number; y: number } | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const [anchoredStyle, setAnchoredStyle] = useState<React.CSSProperties | null>(null);
+  const [npcDialogAnchor, setNpcDialogAnchor] = useState<
+    { npcId: string; clientX: number; clientY: number } | null
+  >(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createName, setCreateName] = useState('');
-  const [hudOpen, setHudOpen] = useState(true);
-  const [isMobile, setIsMobile] = useState(() => {
-    try { return window.matchMedia('(max-width: 768px)').matches; }
-    catch { return false; }
-  });
-
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 768px)');
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  const [createTopic, setCreateTopic] = useState('');
-  const [createBiome, setCreateBiome] = useState<FloorBiomeId>(FLOOR_BIOME_IDS[0]);
-  const [submitting, setSubmitting] = useState(false);
-  const NPC_ICONS: Record<string, string> = {
-    keeper: '🧙',
-    'villager-1': '📚',
-    'villager-2': '🧭',
-    'villager-3': '❓',
-    'villager-4': '🦉',
-    'villager-5': '📜',
-  };
-
-  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
   const [villageReady, setVillageReady] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
-  const [dungeonBiome, setDungeonBiome] = useState<string | null>(null);
-  const [showFullGuide, setShowFullGuide] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [makeItYoursOpen, setMakeItYoursOpen] = useState(false);
@@ -243,22 +242,58 @@ export function VillageScreen(): JSX.Element {
   const [recallQuestionData, setRecallQuestionData] = useState<{
     prompt: SelfCheckPrompt; roomId: string;
   } | null>(null);
+  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
-  const FISHING_HINT_KEY = 'knowledge-dungeon:ui:fishing-hint:v1';
-  const [fishingHintVisible, setFishingHintVisible] = useState(() => {
-    try { return window.localStorage.getItem(FISHING_HINT_KEY) !== '1'; }
-    catch { return false; }
-  });
+  /**
+   * Whether a fishing session has been started from this screen.
+   *
+   * This exists because fishing had **no** DOM-observable signal at all: the
+   * fishing world is a Phaser scene swap inside the village's own canvas
+   * (`phaserFishingRenderer.ts`), so the only "you are fishing now" surface was
+   * a `Text` object drawn inside the canvas - unreachable by a screen reader,
+   * by a keyboard user, and by any DOM assertion. Everything else the world
+   * swaps (a dungeon) *is* a screen change, which is what made the absence go
+   * unnoticed.
+   *
+   * It is set from `prepareFishingSession`, which the study flow calls **only**
+   * after its own mount guard has passed (`studyFlow.ts:672`) and which the Phaser
+   * handle is what makes reachable. On the Pixi lane `isMounted()` is false -
+   * `readPhaserHandle()` returns `null` - so `enterFishing` returns before that
+   * call and this flag is never set. That is the intended asymmetry: the Pixi
+   * village has no fishing world yet (Phase 17), and the signal must not claim
+   * one exists.
+   *
+   * The announcement below is a **fixed string**. It carries no subject name, no
+   * pond id, no fish, and no count, because a live region is exactly the kind of
+   * surface a learner value must never reach.
+   */
+  const [fishingActive, setFishingActive] = useState(false);
 
-  // Track previous info panel type to detect when the fishing pond panel closes
-  const prevInfoPanelTypeRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!infoPanel && prevInfoPanelTypeRef.current === 'fishing-pond' && fishingHintVisible) {
-      try { window.localStorage.setItem(FISHING_HINT_KEY, '1'); } catch { /* ignore */ }
-      setFishingHintVisible(false);
-    }
-    prevInfoPanelTypeRef.current = infoPanel?.type ?? null;
-  }, [infoPanel, fishingHintVisible]);
+  const surfaceMode = useVillageSurfaceMode();
+  const showFishingHint = useVillageFishingHint(infoPanel?.type ?? null);
+
+  const totals = useMemo<VillageCollectionTotals>(
+    () => ({
+      badges: Object.values(bySubject).reduce((sum, entry) => sum + entry.badges.length, 0),
+      artifacts: Object.values(bySubject).reduce((sum, entry) => sum + entry.inventory.length, 0),
+      notes: Object.values(bySubject).reduce((sum, entry) => sum + entry.collectedNotes.length, 0),
+      dungeons: subjects.length,
+    }),
+    [bySubject, subjects],
+  );
+
+  const studyTotals = useMemo<VillageStudyTotals>(
+    () => ({
+      totalSessions: sessionStats.totalSessions,
+      totalMinutesStudied: sessionStats.totalMinutesStudied,
+      totalNotesSubmitted: sessionStats.totalNotesSubmitted,
+      totalReviewsCompleted: sessionStats.totalReviewsCompleted,
+      recentStreak: sessionStats.recentStreak,
+      rank,
+      xpTotal,
+    }),
+    [sessionStats, rank, xpTotal],
+  );
 
   const addFishToCollection = useProgressionStore((s) => s.addFish);
 
@@ -269,17 +304,11 @@ export function VillageScreen(): JSX.Element {
     const subjectId = subjectIds.length > 0 ? subjectIds[subjectIds.length - 1] : 'village';
     const subjectName = useSubjectStore.getState().snapshot?.dungeon.subjectName || subjectId;
     const rarity = data.rarity as FishRarity;
-    addFishToCollection({
-      name: data.fishName,
-      rarity,
-      subjectId,
-      subjectName,
-    });
+    addFishToCollection({ name: data.fishName, rarity, subjectId, subjectName });
     // Award XP for correctly answering the recall question
     const progression = useProgressionStore.getState();
     const xpResult = progression.awardFishingXp(rarity);
     console.log(`[Fishing] XP gained: ${xpResult.xpGained} (${rarity}), rank: ${xpResult.newRank}${xpResult.rankChanged ? ' ⬆' : ''}`);
-    // Check for newly earned fishing badges
     const newBadges = progression.checkFishingBadges();
     if (newBadges.length > 0) {
       console.log(`[Fishing] New badges earned: ${newBadges.join(', ')}`);
@@ -319,7 +348,7 @@ export function VillageScreen(): JSX.Element {
     try {
       const ids = await listSubjectIds();
       const snapshots = await Promise.all(ids.map((id) => loadSubjectSnapshot(id)));
-      const summaries: SubjectSummary[] = ids.map((id, i) => {
+      const summaries: VillageSubjectSummary[] = ids.map((id, i) => {
         const s = snapshots[i];
         return {
           id,
@@ -337,20 +366,6 @@ export function VillageScreen(): JSX.Element {
   useEffect(() => {
     void refreshSubjects();
   }, [refreshSubjects]);
-
-  // Reset biome when create modal opens
-  useEffect(() => {
-    if (createOpen) setCreateBiome(FLOOR_BIOME_IDS[0]);
-  }, [createOpen]);
-
-  // Load biome when inspecting a dungeon
-  useEffect(() => {
-    if (infoPanel?.type === 'dungeon' && infoPanel.subject) {
-      void loadSubjectSnapshot(infoPanel.subject.id).then((snap) => {
-        if (snap) setDungeonBiome(snap.dungeon.biome ?? FLOOR_BIOME_IDS[0]);
-      });
-    }
-  }, [infoPanel]);
 
   // Advance quest when archetype selected
   useEffect(() => {
@@ -387,15 +402,66 @@ export function VillageScreen(): JSX.Element {
   /**
    * The active renderer, whichever one is mounted.
    *
-   * The compass, restart, world sync, and touch interact read through these so the
-   * rest of the screen does not branch on the renderer. On the Pixi path the
-   * renderer lives behind `VillageWorld`'s ref; on the Phaser path it is this
-   * screen's own. Each returns/does nothing until its renderer has mounted.
+   * The restart, world sync, and touch interact read through these so the rest of
+   * the screen does not branch on the renderer. On the Pixi path the renderer
+   * lives behind `VillageWorld`'s ref; on the Phaser path it is this screen's own.
+   * Each returns/does nothing until its renderer has mounted.
    */
   const readPoi = useCallback((): WorldPointOfInterest | null => {
     if (pixiVillage) return pixiVillageRef.current?.readPoi() ?? null;
     return rendererRef.current?.readPoi() ?? null;
   }, [pixiVillage]);
+
+  /**
+   * The mounted handle, or `null`.
+   *
+   * One named function rather than the same ternary twice, because the two reads
+   * below must never disagree about *which* renderer they are talking to - a
+   * snapshot from one adapter and an invocation routed to the other would produce
+   * a list whose rows name targets the other world does not have.
+   */
+  const activeCapabilities = useCallback((): VillageRendererCapabilities | null => {
+    return pixiVillage ? pixiVillageRef.current : rendererRef.current;
+  }, [pixiVillage]);
+
+  /**
+   * The mounted handle's NPC snapshot read, or `undefined` if it has none.
+   *
+   * The optional-chaining chain is the feature detection, and it is *here* rather
+   * than in the panel so no panel has to name the capability port. `undefined` is
+   * passed all the way down rather than a no-op function, because "the world cannot
+   * answer" and "the world answered with nothing" have to stay distinguishable.
+   */
+  const readNpcSnapshot = useCallback((): VillageNpcSnapshot | undefined => {
+    return activeCapabilities()?.readNpcSnapshot?.();
+  }, [activeCapabilities]);
+
+  /**
+   * The live route from a DOM control to a world action.
+   *
+   * Both members ask the *live* handle, and neither is memoized against the
+   * handle's existence, because the handle arrives through a ref during the child
+   * component's commit - after this screen's last render. A `useCallback` that
+   * captured "the renderer is not mounted yet" would have made the DOM list report
+   * a permanent `false` and the rows permanently disabled, which is the silent
+   * no-op the exit criterion forbids in the other direction.
+   *
+   * `canInvoke` is the whole reason this is an object rather than a bare callback:
+   * the screen *always* has a function to hand down, so "can the world act?" has
+   * to be a question asked of the handle, not a fact about this screen.
+   */
+  const villageActionBridge = useMemo<VillageActionBridge>(
+    () => ({
+      canInvoke: () => activeCapabilities()?.invokeAction != null,
+      invoke: (invocation) => {
+        const handle = activeCapabilities();
+        if (handle?.invokeAction == null) return false;
+        handle.invokeAction(invocation);
+        return true;
+      },
+    }),
+    [activeCapabilities],
+  );
 
   const triggerInteract = useCallback((): void => {
     if (pixiVillage) {
@@ -435,223 +501,43 @@ export function VillageScreen(): JSX.Element {
   const dynamicStructuresRef = useRef(dynamicStructures);
   dynamicStructuresRef.current = dynamicStructures;
 
-  // The shared renderer-neutral learning flow. Every dependency below reads
-  // live state through a ref or a store getter, so the controller is created
-  // once and the scene callbacks below always see fresh village content.
+  // The shared renderer-neutral learning flow, created exactly once: a second
+  // controller would reset the interaction bookkeeping the tutorial depends on.
+  // Its thirty-odd ports live in `villageStudyFlow.ts`; this screen supplies the
+  // five setters and two live getters they need.
   const flowRef = useRef<StudyFlowController | null>(null);
   if (flowRef.current === null) {
-    flowRef.current = createStudyFlowController({
-      store: {
-        getSnapshot: () => useSubjectStore.getState().snapshot,
-        getPhase: () => useSessionStore.getState().phase,
-        persistActiveSubjectId: () => {},
-        setFocusedRoomId: (roomId) => {
-          useSessionStore.getState().setFocusedRoomId(roomId);
-        },
-        setActiveSubjectId: (subjectId) => {
-          useSessionStore.getState().setActiveSubjectId(subjectId);
-        },
-        setActiveScreen: (screen) => {
-          useSessionStore.getState().setActiveScreen(screen);
-        },
-        openNoteEditor: (roomId) => {
-          useSessionStore.getState().openNoteEditor(roomId);
-        },
-        closeMapView: () => {
-          useSessionStore.getState().closeMapView();
-        },
-        cancelTeleportMode: () => {
-          useSessionStore.getState().cancelTeleportMode();
-        },
-        setMobileHudOpen: (open) => {
-          useSessionStore.getState().setMobileHudOpen(open);
-        },
-        setProgressionActiveSubject: (subjectId) => {
-          useProgressionStore.getState().setActiveSubject(subjectId);
-        },
-        collectArtifactNote: (entry) =>
-          useProgressionStore.getState().collectArtifactNote(entry),
-        awardReviewPass: () => useProgressionStore.getState().awardReviewPass(),
-        awardBadge: (badgeId) => {
-          useProgressionStore.getState().awardBadge(badgeId);
-        },
-        readProgressionBadges: () => useProgressionStore.getState().badges,
-        recordReviewPass: (roomId) => useSubjectStore.getState().recordReviewPass(roomId),
-      },
-      renderer: {
-        setFloorVisibility: () => {},
-        teleportToRoom: () => {},
-      },
-      teleport: {
-        remainingMs: () => 0,
-        markConsumed: () => {},
-      },
-      dungeonUi: {
-        pushToast: () => {},
-        requestRoomPanelTab: () => {},
-        setInfoPanelOpen: () => {},
-        isInfoPanelOpen: () => false,
-        clearNpcDialog: () => {},
-        openJournalForCollectedNote: () => {},
-        getCurrentFloorId: () => null,
-        setCurrentFloorId: () => {},
-      },
-      village: {
-        content: {
-          getDynamicStructures: () => dynamicStructuresRef.current,
-        },
-        store: {
-          getSelectedClass: () => useSessionStore.getState().selectedClass,
-          getVillageSubjects: () => subjectsRef.current,
-          loadSubject: (subjectId) => useSubjectStore.getState().loadSubject(subjectId),
-          importSubjectSnapshot: (snapshot) =>
-            useSubjectStore.getState().importSnapshot(snapshot),
-          setActiveSubjectId: (subjectId) => {
-            useSessionStore.getState().setActiveSubjectId(subjectId);
-          },
-          setProgressionActiveSubject: (subjectId) => {
-            useProgressionStore.getState().setActiveSubject(subjectId);
-          },
-          setActiveScreen: (screen) => {
-            useSessionStore.getState().setActiveScreen(screen);
-          },
-          setPhase: (phase) => {
-            useSessionStore.getState().setPhase(phase);
-          },
-          setSelectedClass: (playerClass) => {
-            useSessionStore.getState().setSelectedClass(playerClass);
-          },
-          setQuestStep: (step) => {
-            useSessionStore.getState().setQuestStep(step);
-          },
-          advanceQuestStep: () => {
-            useSessionStore.getState().advanceQuestStep();
-          },
-        },
-        ui: {
-          setInfoPanel,
-          setWelcomeMessage,
-          setCreateOpen,
-          setMakeItYoursOpen,
-          setShowStats,
-          setFishCaught: (data: StudyFlowFishCaught | null) => setFishCaughtData(data),
-          prepareFishingSession: () => {
-            setInfoPanel(null);
-            setFishCaughtData(null);
-            setShowRecallModal(false);
-            setRecallQuestionData(null);
-          },
-        },
-        fishing: {
-          isMounted: () => rendererRef.current !== null,
-          enter: ({ playerClass, hasClearedRooms, onFishCaught, onReturnToVillage, onReady }) => {
-            // Fishing is a Phaser-host capability in Phase 11; the Pixi path has
-            // no fishing world yet and `isMounted` above reports false there.
-            const fishing = rendererRef.current?.fishing?.();
-            if (!fishing) return;
-            // One explicit subject context for the whole session, so catch
-            // resolution and persistence cannot disagree about the subject.
-            const world: FishingWorldModel = {
-              kind: 'fishing',
-              // The flow resolves this from the session store, so it is one of
-              // the three archetypes; the port types it loosely as a string.
-              playerClass: playerClass as PlayerClassId,
-              hasClearedRooms,
-              subjectId: useProgressionStore.getState().activeSubjectId,
-            };
-            fishing.enter(world, { onFishCaught, onReturnToVillage, onReady });
-          },
-          exit: () => {
-            rendererRef.current?.fishing?.().returnToVillage();
-          },
-        },
+    flowRef.current = createVillageStudyFlow({
+      readPhaserHandle: () => rendererRef.current,
+      readDynamicStructures: () => dynamicStructuresRef.current,
+      readSubjects: () => subjectsRef.current,
+      setInfoPanel,
+      setWelcomeMessage,
+      setCreateOpen,
+      setMakeItYoursOpen,
+      setShowStats,
+      setFishCaught: (data) => setFishCaughtData(data),
+      prepareFishingSession: () => {
+        setInfoPanel(null);
+        setFishCaughtData(null);
+        setShowRecallModal(false);
+        setRecallQuestionData(null);
+        // The one DOM-observable consequence of starting a fishing session. The
+        // flow has already proved a world host is mounted, so by here "fishing is
+        // starting" is true rather than attempted.
+        setFishingActive(true);
       },
     });
   }
   const flow = flowRef.current;
 
-  const callbacksRef = useRef<VillageCallbacks>({
-    onStructureApproached: () => {},
-    onStructureLeft: () => {},
-    onStructureInteract: () => {},
-    onNpcApproached: () => {},
-    onNpcLeft: () => {},
-    onNpcInteract: () => {},
-    onNpcDialogPosition: () => {},
-    onReady: () => {},
+  const { callbacks: callbacksRef, resetConversation } = useVillageSceneCallbacks(flow, {
+    setActiveNpcId,
+    setActiveNpcLabel,
+    setKeeperDialogue,
+    setNpcDialogAnchor,
+    setVillageReady,
   });
-
-  // Keep callbacks ref in sync with latest React state
-  useEffect(() => {
-    const cb: VillageCallbacks = {
-      onStructureApproached: (structureId) => flow.structureApproached(structureId),
-      onStructureLeft: (structureId) => flow.structureLeft(structureId),
-      onStructureInteract: (structureId) => flow.structureInteract(structureId),
-      onNpcApproached: (npcId) => {
-        const npc = VILLAGE_MAP.npcs.find((n) => n.id === npcId);
-        if (!npc) return;
-        setActiveNpcId(npcId);
-        setActiveNpcLabel(npc.label);
-        if (npcId === 'keeper') {
-          const session = useSessionStore.getState();
-          if (session.questStep === 'intro' || session.questStep === 'meet-keeper') {
-            session.setQuestStep('meet-keeper');
-          }
-          const questLines = npc.questDialogue?.[session.questStep];
-          if (questLines && questLines.length > 0) {
-            setKeeperDialogue(questLines[0]);
-          } else {
-            setKeeperDialogue(npc.greeting);
-          }
-        } else {
-          // Wandering NPC - show random quote
-          const quotes = npc.quotes ?? [];
-          const quote = quotes.length > 0 ? quotes[Math.floor(Math.random() * quotes.length)] : npc.greeting;
-          setKeeperDialogue(quote);
-        }
-        setKeeperDialogueIndex(0);
-      },
-      onNpcLeft: () => { setKeeperDialogue(null); setKeeperDialogueIndex(0); setActiveNpcId(null); setActiveNpcLabel(null); },
-      onNpcInteract: (npcId) => {
-        const npc = VILLAGE_MAP.npcs.find((n) => n.id === npcId);
-        if (!npc) return;
-        if (npcId === 'keeper') {
-          const session = useSessionStore.getState();
-          const questLines = npc.questDialogue?.[session.questStep];
-          if (questLines && questLines.length > 0) {
-            setKeeperDialogueIndex((prev) => {
-              const next = (prev + 1) % questLines.length;
-              setKeeperDialogue(questLines[next]);
-              return next;
-            });
-          } else {
-            setKeeperDialogueIndex((prev) => {
-              const next = (prev + 1) % npc.dialogue.length;
-              setKeeperDialogue(npc.dialogue[next]);
-              return next;
-            });
-          }
-        } else {
-          const quotes = npc.quotes ?? npc.dialogue;
-          setKeeperDialogueIndex((prev) => {
-            const next = (prev + 1) % quotes.length;
-            setKeeperDialogue(quotes[next]);
-            return next;
-          });
-        }
-      },
-      onNpcDialogPosition: (pos) => {
-        setNpcDialogPos({ x: pos.clientX, y: pos.clientY });
-      },
-      onReady: () => {
-        // The Pixi path signals readiness through `VillageWorld`'s `onReady` prop;
-        // the Phaser scene calls this bag. There is no renderer ref guard because
-        // on the Pixi path there is deliberately no `rendererRef`.
-        setVillageReady(true);
-      },
-    };
-    Object.assign(callbacksRef.current, cb);
-  }, [flow, subjects, dynamicStructures, selectedClass]);
 
   // Mount the Phaser village world once - it reads from callbacksRef. Only the
   // Phaser path mounts here; the Pixi component manages its own mount/unmount in
@@ -721,7 +607,7 @@ export function VillageScreen(): JSX.Element {
   }, [pixiVillage, villageReady, dynamicStructures, selectedClass, setDynamicStructures, setPlayerClass]);
 
   // Show welcome message on village entry
-  const handleStartTutorial = async () => {
+  const handleStartTutorial = useCallback(async () => {
     const tutorial = createTutorialSubject();
     await importSnapshot(tutorial);
     setPhase('scribe');
@@ -729,120 +615,77 @@ export function VillageScreen(): JSX.Element {
     setQuestStep('enter-dungeon');
     await loadSubjectFlow(TUTORIAL_SUBJECT_ID);
     setActiveScreen('game');
-  };
+  }, [importSnapshot, loadSubjectFlow, setActiveScreen, setPhase, setQuestStep, setSelectedClass]);
 
-  const handleCreateSubject = async () => {
-    if (!createName.trim() || !createTopic.trim()) return;
-    setSubmitting(true);
-    try {
-      await initSubject({
-        subjectName: createName.trim(),
-        rootTopic: createTopic.trim(),
-        biome: createBiome,
-      });
+  const handleCreateSubject = useCallback(
+    async (input: { name: string; topic: string; biome: FloorBiomeId }) => {
+      // The dialog already refuses to submit an empty pair, so this guard is the
+      // screen's own defence against a caller that is not the dialog.
+      if (input.name.trim() === '' || input.topic.trim() === '') return;
+      await initSubject({ subjectName: input.name, rootTopic: input.topic, biome: input.biome });
       await refreshSubjects();
       advanceQuestStep();
-      setCreateName('');
-      setCreateTopic('');
-      setCreateBiome(FLOOR_BIOME_IDS[0]);
       setCreateOpen(false);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+    [advanceQuestStep, initSubject, refreshSubjects],
+  );
 
-  useLayoutEffect(() => {
-    if (!npcDialogPos) {
-      setAnchoredStyle(null);
-      return;
-    }
+  // The one conversation identity the nearby surface is nudged by. It changes when
+  // a different NPC is being talked to, which is the only NPC event that moves the
+  // nearby list. See `useVillageNpcSurface` for why it is a nudge and not the truth.
+  const conversationKey = keeperDialogue === null ? null : activeNpcId;
 
-    const margin = 12;
-    const updatePosition = () => {
-      const dialog = dialogRef.current;
-      if (!dialog) return;
+  const npcSurface = useVillageNpcSurface({
+    readNpcSnapshot,
+    action: villageActionBridge,
+    conversationKey,
+  });
+  const onInvokeNearby = useVillageActionHandler(npcSurface.invoke);
 
-      const dialogWidth = dialog.offsetWidth || 360;
-      const dialogHeight = dialog.offsetHeight || 140;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-
-      const preferRight = npcDialogPos.x + dialogWidth + 24 <= vw - margin;
-      const preferredLeft = preferRight
-        ? npcDialogPos.x + 24
-        : npcDialogPos.x - dialogWidth - 24;
-
-      const preferredTopAbove = npcDialogPos.y - dialogHeight - 8;
-      const preferredTop =
-        preferredTopAbove >= margin ? preferredTopAbove : npcDialogPos.y + 8;
-
-      const maxLeft = Math.max(margin, vw - dialogWidth - margin);
-      const maxTop = Math.max(margin, vh - dialogHeight - margin);
-
-      const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
-      const top = Math.min(Math.max(preferredTop, margin), maxTop);
-
-      setAnchoredStyle({ left: `${left}px`, top: `${top}px` });
-    };
-
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
-  }, [npcDialogPos]);
-
-  useLayoutEffect(() => {
-    if (!keeperDialogue) {
-      setNpcDialogPos(null);
-    }
-  }, [keeperDialogue]);
+  const handleSelectQuestStep = useCallback(
+    (step: QuestStep) => {
+      setQuestStep(step);
+      // Choosing a step begins a *new* conversation with the Keeper, so it resets
+      // the same cursor a fresh approach resets. The screen holds no cursor of its
+      // own; it lives beside the callback bag that advances it.
+      resetConversation();
+      setKeeperDialogue(keeperLineFor(step));
+    },
+    [keeperLineFor, resetConversation, setQuestStep],
+  );
 
   return (
-    <>
-    <div className="village-screen ui-skin screen-fade-in" data-theme={colorTheme}>
-      {isMobile ? (
-        <>
-          <button type="button" className="village-hud-toggle" onClick={() => setHudOpen(!hudOpen)}
-            aria-label={hudOpen ? 'Close HUD' : 'Open HUD'}>
-            {hudOpen ? '✕' : '☰'}
-          </button>
-          <div className={`village-hud ui-skin village-hud--mobile${hudOpen ? ' village-hud--open' : ' village-hud--hidden'}`}
-            data-theme={colorTheme}>
-            <VillageHudContent questStep={questStep} subjects={subjects}
-              selectedClass={selectedClass}               setSelectedClass={(c) => setSelectedClass(c as PlayerClassId ?? null)}
-              setCreateOpen={setCreateOpen} setDataOpen={setDataOpen}
-              colorTheme={colorTheme} setColorTheme={(t) => setColorTheme(t as ColorTheme)}
-              onQuestClick={(step: string) => {
-                setQuestStep(step as QuestStep);
-                const keeper = VILLAGE_MAP.npcs.find((n) => n.id === 'keeper');
-                if (keeper) {
-                  const lines = keeper.questDialogue?.[step];
-                  if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
-                }
-              }}
-              onStatsClick={() => setShowStats(true)}
-              onSettingsClick={() => setSettingsOpen(true)} />
-          </div>
-        </>
-      ) : (
-        <div className="village-hud-wrapper">
-          <div className="village-hud ui-skin" data-theme={colorTheme}>
-            <VillageHudContent questStep={questStep} subjects={subjects}
-              selectedClass={selectedClass} setSelectedClass={(c) => setSelectedClass(c as PlayerClassId ?? null)}
-              setCreateOpen={setCreateOpen} setDataOpen={setDataOpen}
-              colorTheme={colorTheme} setColorTheme={(t) => setColorTheme(t as ColorTheme)}
-              onQuestClick={(step: string) => {
-                setQuestStep(step as QuestStep);
-                const keeper = VILLAGE_MAP.npcs.find((n) => n.id === 'keeper');
-                if (keeper) {
-                  const lines = keeper.questDialogue?.[step];
-                  if (lines?.length) { setKeeperDialogue(lines[0]); setKeeperDialogueIndex(0); }
-                }
-              }}
-              onStatsClick={() => setShowStats(true)}
-              onSettingsClick={() => setSettingsOpen(true)} />
-          </div>
-        </div>
-      )}
+    <div
+      className="village-screen ui-skin screen-fade-in"
+      data-theme={colorTheme}
+      // Which world this screen is currently presenting. `fishing` is not a
+      // screen change - it is a Phaser scene swap inside the same canvas - so
+      // without this the DOM could not tell a learner (or a test) that the
+      // village they walked into had become the pond they are fishing in.
+      data-world={fishingActive ? 'fishing' : 'village'}
+    >
+      <VillageHud
+        questStep={questStep}
+        subjects={subjects}
+        selectedClass={selectedClass}
+        onSelectClass={(cls) => setSelectedClass(cls as PlayerClassId ?? null)}
+        onCreateSubject={() => setCreateOpen(true)}
+        onOpenData={() => setDataOpen(true)}
+        colorTheme={colorTheme}
+        onColorThemeChange={(theme) => setColorTheme(theme as ColorTheme)}
+        onQuestClick={handleSelectQuestStep}
+        onStatsClick={() => setShowStats(true)}
+        onSettingsClick={() => setSettingsOpen(true)}
+        nearbyTargets={npcSurface.targets}
+        nearbyListAvailable={npcSurface.listAvailable}
+        nearbyInvokeAvailable={npcSurface.invokeAvailable}
+        onInvokeNearby={onInvokeNearby}
+        // Two surfaces that both want the bottom of a touch viewport: opening one
+        // closes the other. A wide viewport has room for both and never fires this.
+        onDrawerOpenChange={(open) => {
+          if (open) setInfoPanel(null);
+        }}
+      />
 
       <div className="village-game-area">
         {pixiVillage && LazyPixiVillageWorld !== null ? (
@@ -875,7 +718,7 @@ export function VillageScreen(): JSX.Element {
               onClick={() => {
                 triggerInteract();
               }}>
-              ⚔
+              <span aria-hidden="true">⚔</span>
             </button>
           </>
         )}
@@ -888,911 +731,134 @@ export function VillageScreen(): JSX.Element {
         <CompassOverlay readPoi={readPoi} />
       </div>
 
-      {infoPanel?.type === 'dungeon' && infoPanel.subject ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🌀</span>
-            <div>
-              <h3>{infoPanel.subject.subjectName}</h3>
-              <p className="village-info-meta">
-                {infoPanel.subject.clearedRoomCount}/{infoPanel.subject.roomCount} rooms cleared
-              </p>
-            </div>
-          </div>
-          {dungeonBiome !== null ? (
-            <div style={{ padding: '0 4px' }}>
-              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Biome</label>
-              <select
-                value={dungeonBiome}
-                onChange={(e) => {
-                  const newBiome = e.target.value;
-                  setDungeonBiome(newBiome);
-                  void loadSubjectSnapshot(infoPanel.subject!.id).then((snap) => {
-                    if (snap) {
-                      snap.dungeon.biome = newBiome;
-                      return saveSubjectSnapshot(snap.dungeon.dungeonId, snap);
-                    }
-                  });
-                }}
-                style={{ width: '100%', padding: '6px 10px', borderRadius: 6, fontSize: 12 }}
-              >
-                {FLOOR_BIOME_IDS.map((biome) => (
-                  <option key={biome} value={biome}>
-                    {biome.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
-          <div className="village-info-actions">
-            <button
-              type="button"
-              className="village-enter-btn"
-              disabled={!selectedClass}
-              onClick={() => {
-                if (infoPanel.subject) {
-                  setPhase('scribe');
-                  setSelectedClass(selectedClass ?? 'scholar');
-                  void loadSubjectFlow(infoPanel.subject.id).then(() => {
-                    setActiveScreen('game');
-                  });
-                }
-              }}
-            >
-              Enter Dungeon
-            </button>
-            {!selectedClass ? (
-              <p className="village-info-hint">Select an archetype above first</p>
-            ) : null}
-          </div>
-        </div>
+      {infoPanel !== null ? (
+        infoPanel.type === 'quest-board' ? (
+          <QuestBoard
+            questStep={questStep}
+            mode={surfaceMode}
+            onClose={() => setInfoPanel(null)}
+            onSelectStep={handleSelectQuestStep}
+            onCompleteManualStep={() => advanceQuestStep()}
+            nearbyTargets={npcSurface.targets}
+            invoke={npcSurface.invoke}
+            onInvoke={onInvokeNearby}
+            colorTheme={colorTheme}
+          />
+        ) : (
+          <StructurePanel
+            infoPanel={infoPanel}
+            onClose={() => setInfoPanel(null)}
+            mode={surfaceMode}
+            colorTheme={colorTheme}
+            subjects={subjects}
+            totals={totals}
+            studyTotals={studyTotals}
+            selectedClass={selectedClass}
+            onEnterDungeon={(subjectId) => {
+              setPhase('scribe');
+              setSelectedClass(selectedClass ?? 'scholar');
+              void loadSubjectFlow(subjectId).then(() => {
+                setActiveScreen('game');
+              });
+            }}
+            onCreateSubject={() => setCreateOpen(true)}
+            onStartTutorial={() => { void handleStartTutorial(); }}
+            onOpenSpriteEditor={() => setMakeItYoursOpen(true)}
+            onOpenFishCollection={() => { setInfoPanel(null); setShowFishStand(true); }}
+            onCastLine={(structureId) => flow.enterFishing(structureId)}
+            showFishingHint={showFishingHint}
+          />
+        )
       ) : null}
 
-      {infoPanel?.type === 'keeper' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🏛</span>
-            <div>
-              <h3>Keeper's Tower</h3>
-              <p className="village-info-meta">Home of the guide NPC</p>
-            </div>
-          </div>
-          <p className="village-info-desc">
-            The Keeper of Knowledge resides here. Approach them to receive guidance
-            on creating and clearing your first dungeon.
-          </p>
-          <div className="village-info-actions">
-            <button type="button" className="village-action-btn" onClick={() => setCreateOpen(true)}>
-              Create New Subject
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'guild' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">⚒</span>
-            <div>
-              <h3>Guild Hall</h3>
-              <p className="village-info-meta">Create and manage subjects</p>
-            </div>
-          </div>
-          <p className="village-info-desc">
-            Here you can create new subjects to study. Each subject becomes a new
-            dungeon to explore and conquer.
-          </p>
-          <div className="village-info-actions" style={{ flexDirection: 'column', gap: 8 }}>
-            {subjects.length > 0 ? (
-              <div className="village-subject-list">
-                <strong>Your dungeons:</strong>
-                {subjects.map((subj) => (
-                  <div key={subj.id} className="village-subject-item">
-                    <span>{subj.subjectName}</span>
-                    <span className="village-info-meta">
-                      {subj.clearedRoomCount}/{subj.roomCount} cleared
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="village-info-meta">No dungeons yet. Create your first!</p>
-            )}
-            <button type="button" className="village-action-btn" onClick={() => setCreateOpen(true)}>
-              + Create New Subject
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'training' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🎓</span>
-            <div>
-              <h3>Training Grounds</h3>
-              <p className="village-info-meta">Learn the basics</p>
-            </div>
-          </div>
-          <p className="village-info-desc">
-            New to Knowledge Dungeon? The training grounds offer a guided 3-room
-            tutorial covering notes, attachments, navigation, and more.
-          </p>
-          <div className="village-info-actions">
-            <button
-              type="button"
-              className="village-action-btn village-action-btn--tutorial"
-              onClick={() => { void handleStartTutorial(); }}
-            >
-              Start Tutorial
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'trophy' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🏆</span>
-            <div>
-              <h3>Trophy Hall</h3>
-              <p className="village-info-meta">Your collection across all dungeons</p>
-            </div>
-          </div>
-          <div className="village-subject-list" style={{ gap: 6 }}>
-            <div className="village-subject-item">
-              <span>🏅 Badges</span>
-              <strong>{totalBadges}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>🎒 Artifacts</span>
-              <strong>{totalInventory}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>📚 Journal entries</span>
-              <strong>{totalNotes}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>🌀 Dungeons</span>
-              <strong>{subjects.length}</strong>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'library' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">📖</span>
-            <div>
-              <h3>Library of Knowledge</h3>
-              <p className="village-info-meta">Game guide & help</p>
-            </div>
-          </div>
-          <div className="village-info-actions" style={{ marginBottom: 8 }}>
-            <button
-              type="button"
-              className="village-action-btn"
-              onClick={() => setShowFullGuide((v) => !v)}
-            >
-              {showFullGuide ? 'Quick Reference' : 'Full Guide'}
-            </button>
-          </div>
-          {showFullGuide ? (
-            <div className="markdown-body" style={{ maxHeight: '60vh', overflowY: 'auto', padding: '0 4px', fontSize: 13 }}>
-              <Markdown source={GAME_GUIDE_MARKDOWN} />
-            </div>
-          ) : (
-            <div className="village-subject-list" style={{ gap: 6 }}>
-            <div className="village-subject-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-              <strong>🎮 Controls</strong>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / Arrow keys - Move<br/>
-                <kbd>E</kbd> - Interact with buildings & NPCs<br/>
-                <kbd>M</kbd> - Open dungeon map<br/>
-                <kbd>I</kbd> - Toggle room info panel<br/>
-                <kbd>H</kbd> - Return to village<br/>
-                <kbd>?</kbd> - Help overlay
-              </span>
-            </div>
-            <div className="village-subject-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-              <strong>📋 Gameplay Loop</strong>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                <strong>Creator</strong> - Build your topic map by adding rooms<br/>
-                <strong>Scribe</strong> - Clear rooms by writing structured notes<br/>
-                <strong>Archaeologist</strong> - Review cleared rooms for badges & XP
-              </span>
-            </div>
-            <div className="village-subject-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-              <strong>🏅 Archetypes</strong>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Each class has a unique perk. Scholar gets quality bonus, Cartographer gets cross-link suggestions, Archivist gets higher self-check cap.
-              </span>
-            </div>
-          </div>
-          )}
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'workshop' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🎨</span>
-            <div>
-              <h3>Artisan Workshop</h3>
-              <p className="village-info-meta">Customize game sprites</p>
-            </div>
-          </div>
-          <p className="village-info-desc">
-            Personalize the look and feel of your dungeon adventure. Edit character
-            sprites, icons, decorations, and more.
-          </p>
-          <div className="village-info-actions">
-            <button type="button" className="village-enter-btn" onClick={() => setMakeItYoursOpen(true)}>
-              Open Editor
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'fountain' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">⛲</span>
-            <div>
-              <h3>Central Fountain</h3>
-              <p className="village-info-meta">Your study statistics</p>
-            </div>
-          </div>
-          <div className="village-subject-list" style={{ gap: 6 }}>
-            <div className="village-subject-item">
-              <span>📊 Total sessions</span>
-              <strong>{sessionStats.totalSessions}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>⏱ Study time</span>
-              <strong>{sessionStats.totalMinutesStudied < 60
-                ? `${sessionStats.totalMinutesStudied}m`
-                : `${Math.floor(sessionStats.totalMinutesStudied / 60)}h ${sessionStats.totalMinutesStudied % 60}m`}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>📝 Notes submitted</span>
-              <strong>{sessionStats.totalNotesSubmitted}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>🔄 Reviews completed</span>
-              <strong>{sessionStats.totalReviewsCompleted}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>⭐ Rank</span>
-              <strong>{rank}</strong>
-            </div>
-            <div className="village-subject-item">
-              <span>✨ Total XP</span>
-              <strong>{xpTotal}</strong>
-            </div>
-            {sessionStats.recentStreak > 1 && (
-              <div className="village-subject-item">
-                <span>🔥 Daily streak</span>
-                <strong>{sessionStats.recentStreak} days</strong>
-              </div>
-            )}
-          </div>
-          <p className="village-info-desc">
-            Press <kbd>E</kbd> to view detailed statistics.
-          </p>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'quest-board' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">📜</span>
-            <div>
-              <h3>Keeper's Quest Board</h3>
-              <p className="village-info-meta">{'Click a quest to hear guidance. ✓ marks it done.'}</p>
-            </div>
-          </div>
-          <div className="village-subject-list" style={{ gap: 6 }}>
-            {QUEST_ORDER.filter((s) => s !== 'intro').map((step) => {
-              const idx = QUEST_ORDER.indexOf(step);
-              const currentIdx = QUEST_ORDER.indexOf(questStep);
-              const done = idx < currentIdx;
-              const active = step === questStep;
-              const isManual = MANUAL_QUESTS.has(step);
-              return (
-                <div key={step} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div
-                    className="village-subject-item"
-                    style={{
-                      borderColor: active ? 'var(--accent)' : done ? 'var(--good)' : 'var(--border-soft)',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => {
-                      setQuestStep(step);
-                      const keeper = VILLAGE_MAP.npcs.find((n) => n.id === 'keeper');
-                      if (keeper) {
-                        const lines = keeper.questDialogue?.[step];
-                        if (lines && lines.length > 0) {
-                          setKeeperDialogue(lines[0]);
-                          setKeeperDialogueIndex(0);
-                        }
-                      }
-                    }}
-                  >
-                    <span>{done ? '✅' : active ? '▶' : '⬜'}</span>
-                    <span style={{ fontWeight: active ? 700 : done ? 400 : 300, fontSize: 13 }}>
-                      {QUEST_LABELS[step].label}
-                    </span>
-                    <span className="village-info-meta" style={{ fontSize: 10 }}>
-                      {done ? 'Done' : active && isManual ? 'Needs confirm' : active ? 'Active' : 'Locked'}
-                    </span>
-                  </div>
-                  {active && isManual ? (
-                    <button
-                      type="button"
-                      className="village-action-btn"
-                      style={{ fontSize: 11, padding: '4px 8px', alignSelf: 'flex-end' }}
-                      onClick={() => { advanceQuestStep(); }}
-                    >
-                      ✓ Mark Complete
-                    </button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'fishing-pond' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🎣</span>
-            <div>
-              <h3>Fishing Pond</h3>
-              <p className="village-info-meta">Cast a line and reel in some knowledge</p>
-            </div>
-          </div>
-          <p className="village-info-desc">
-            Take a break from studying and try your luck at the fishing pond.
-            Catch fish, test your recall, and build your collection.
-          </p>
-          {fishingHintVisible ? (
-            <div className="fishing-tutorial-hint">
-              💡 Cast a line, catch fish, and test your recall! Press E to start fishing.
-            </div>
-          ) : null}
-          <div className="village-info-actions">
-            <button
-              type="button"
-              className="village-enter-btn"
-              onClick={() => flow.enterFishing(infoPanel.structureId)}
-            >
-              Cast Line
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'fish-stand' ? (
-        <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🐟</span>
-            <div>
-              <h3>Fish Stand</h3>
-              <p className="village-info-meta">View your fish collection</p>
-            </div>
-          </div>
-          <p className="village-info-desc">
-            All the fish you have caught across every subject are displayed here.
-            Visit a fishing pond to start your collection!
-          </p>
-          <div className="village-info-actions">
-            <button
-              type="button"
-              className="village-enter-btn"
-              onClick={() => { setInfoPanel(null); setShowFishStand(true); }}
-            >
-              View Collection
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {infoPanel?.type === 'signpost' ? (
-        <SignpostPanel structureId={infoPanel.structureId} colorTheme={colorTheme} />
-      ) : null}
-
-      {keeperDialogue ? (
-        <div className={`village-npc-dialog ui-skin${npcDialogPos ? ' village-npc-dialog--anchored' : ''}`} data-theme={colorTheme} ref={dialogRef} style={npcDialogPos ? anchoredStyle ?? undefined : undefined}>
-          <div className="village-npc-dialog-header">
-            <span className="village-npc-dialog-icon">{activeNpcId ? (NPC_ICONS[activeNpcId] ?? '🧙') : '🧙'}</span>
-            <strong>{activeNpcLabel ?? 'Villager'}</strong>
-          </div>
-          <p className="village-npc-dialog-text village-npc-dialog-text--typing" key={keeperDialogue}>{keeperDialogue}</p>
-          <p className="village-npc-dialog-hint">Press E to continue</p>
-        </div>
-      ) : null}
-
-      {dataOpen ? (
-        <div className="modal-backdrop" onClick={() => setDataOpen(false)}>
-          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}
-            style={{ width: 'min(480px, 92vw)', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <h2>Data Management</h2>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Your data is stored locally on this device. Use the tools below to back up
-              your subjects or transfer them between devices.
-            </p>
-            <div className="village-subject-list" style={{ gap: 6 }}>
-              {subjects.map((subj) => (
-                <div key={subj.id} className="village-subject-item">
-                  <span>{subj.subjectName}</span>
-                   <button type="button" className="village-action-btn" style={{ fontSize: 10, padding: '2px 8px' }}
-                    onClick={() => {
-                      void (async () => {
-                        const snapshot = await loadSubjectSnapshot(subj.id);
-                        if (!snapshot) return;
-                        const json = exportSubjectToJson(snapshot);
-                        const blob = new Blob([json], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${subj.subjectName.replace(/[^a-z0-9]+/gi, '-')}.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      })();
-                    }}>
-                    Export
-                  </button>
-                </div>
-              ))}
-            </div>
-            <input type="file" accept=".json" style={{ fontSize: 12 }}
-              onChange={(e) => {
-                void (async () => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    const text = await file.text();
-                    const snapshot = importSubjectFromJson(text);
-                    await saveSubjectSnapshot(snapshot.dungeon.dungeonId, snapshot);
-                    window.location.reload();
-                  } catch (err) {
-                    alert('Import failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
-                  }
-                })();
-              }} />
-            <div className="modal-actions">
-              <button type="button" onClick={() => setDataOpen(false)}>Close</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {createOpen ? (
-        <div className="modal-backdrop" onClick={() => setCreateOpen(false)}>
-          <div className="modal village-create-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <h2>Create New Subject</h2>
-            <div className="village-create-form">
-              <label>
-                Subject name
-                <input
-                  type="text"
-                  placeholder="e.g. Linear Algebra"
-                  value={createName}
-                  onChange={(e) => setCreateName(e.target.value)}
-                />
-              </label>
-              <label>
-                Root topic
-                <input
-                  type="text"
-                  placeholder="e.g. Vector Spaces"
-                  value={createTopic}
-                  onChange={(e) => setCreateTopic(e.target.value)}
-                />
-              </label>
-              <label>
-                Dungeon theme
-                <select
-                  value={createBiome}
-                  onChange={(e) => setCreateBiome(e.target.value as FloorBiomeId)}
-                >
-                  {FLOOR_BIOME_IDS.map((biome) => (
-                    <option key={biome} value={biome}>
-                      {biome.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="modal-actions">
-                <button type="button" onClick={() => setCreateOpen(false)}>Cancel</button>
-                <button
-                  type="button"
-                  onClick={() => { void handleCreateSubject(); }}
-                  disabled={!createName.trim() || !createTopic.trim() || submitting}
-                >
-                  {submitting ? 'Creating…' : 'Create'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {showStats ? <StudyStatsPanel onClose={() => setShowStats(false)} /> : null}
-
-      {settingsOpen ? (
-        <SettingsModal
-          currentTheme={colorTheme}
-          onThemeChange={(t) => setColorTheme(t as ColorTheme)}
-          onClose={() => setSettingsOpen(false)}
+      {keeperDialogue !== null ? (
+        <NpcDialog
+          line={keeperDialogue}
+          npcId={activeNpcId}
+          label={activeNpcLabel}
+          anchor={npcDialogAnchor}
+          icon={activeNpcId === null ? undefined : NPC_ICONS[activeNpcId] ?? '🧙'}
+          colorTheme={colorTheme}
         />
       ) : null}
 
-      {makeItYoursOpen ? (
-        <MakeItYoursModal onClose={() => setMakeItYoursOpen(false)} />
+      {/*
+        The structure panel is opened by *walking*, not by activating a control, and
+        a side panel deliberately never takes focus. So the change is announced in
+        words instead - the structure's name and what it is for - which is what
+        plan 10.1's "no state by colour alone" means for a surface that arrives on
+        its own.
+      */}
+      {infoPanel !== null ? (
+        <p className="village-visually-hidden" role="status" aria-live="polite">
+          {structureAnnouncement(infoPanel)}
+        </p>
       ) : null}
 
-      {showFishStand ? (
-        <FishStandPanel onClose={() => setShowFishStand(false)} />
+      {/*
+        Starting a fishing session is a scene swap, not a route change, so nothing
+        in the DOM moves and focus stays exactly where it was - on the very button
+        that was pressed, which by then has been unmounted with its panel. The one
+        way a screen-reader user learns the world changed is a live region, so
+        this is the whole of the fishing world's accessibility surface on the DOM
+        side, and it says only that fishing began and how to leave.
+
+        Deliberately a literal, with no interpolation: this text is read aloud,
+        and a subject name or a fish name here would be learner data in a place
+        plan 10.1's privacy boundary does not exempt.
+      */}
+      {fishingActive ? (
+        <p className="village-visually-hidden" role="status" aria-live="polite">
+          You have started fishing. Use the Return to Village control in the world to come back.
+        </p>
       ) : null}
 
-      {fishCaughtData ? (
-        <div className="modal-backdrop" style={{ zIndex: 350, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="village-info-panel ui-skin screen-slide-up" data-theme={colorTheme}
-            style={{ maxWidth: 420, width: '90%' }}>
-            <div className="village-info-panel-header">
-              <span className="village-info-portal-icon">🎣</span>
-              <div>
-                <h3>{fishCaughtData.fishName}</h3>
-                <p className="village-info-meta">{fishCaughtData.rarity.charAt(0).toUpperCase() + fishCaughtData.rarity.slice(1)} Fish</p>
-              </div>
-              <span className="fish-rarity-badge" data-rarity={fishCaughtData.rarity}>
-                {fishCaughtData.rarity.toUpperCase()}
-              </span>
-            </div>
-            <p className="village-info-desc">{fishCaughtData.description}</p>
-            <div className="village-info-actions">
-              <button type="button" className="village-enter-btn"
-                onClick={() => { void handleKeepFishClicked(fishCaughtData); }}
-              >
-                Keep Fish
-              </button>
-              <button type="button" className="village-action-btn"
-                onClick={() => setFishCaughtData(null)}
-              >
-                Release
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <DataManagementDialog
+        open={dataOpen}
+        subjects={subjects}
+        onClose={() => setDataOpen(false)}
+      />
 
-      {showRecallModal && fishCaughtData ? (
-        <FishingRecallModal
-          fishName={fishCaughtData.fishName}
-          rarity={fishCaughtData.rarity as 'common' | 'rare' | 'epic'}
-          catalogId={fishCaughtData.catalogId}
-          description={fishCaughtData.description}
-          recallQuestion={recallQuestionData}
-          onSelfEvaluate={(result) => {
-            if (result === 'correct') {
-              handleKeepFish(fishCaughtData);
-            } else {
-              setFishCaughtData(null);
-              setShowRecallModal(false);
-              setRecallQuestionData(null);
-            }
-          }}
-          onCancel={() => {
+      <CreateSubjectDialog
+        open={createOpen}
+        onCreate={handleCreateSubject}
+        onClose={() => setCreateOpen(false)}
+      />
+
+      <VillageLaunchers
+        colorTheme={colorTheme}
+        showStats={showStats}
+        onCloseStats={() => setShowStats(false)}
+        settingsOpen={settingsOpen}
+        onThemeChange={(theme) => setColorTheme(theme)}
+        onCloseSettings={() => setSettingsOpen(false)}
+        spriteEditorOpen={makeItYoursOpen}
+        onCloseSpriteEditor={() => setMakeItYoursOpen(false)}
+        fishStandOpen={showFishStand}
+        onCloseFishStand={() => setShowFishStand(false)}
+        fishCatch={fishCaughtData}
+        onKeepFish={() => {
+          if (fishCaughtData !== null) void handleKeepFishClicked(fishCaughtData);
+        }}
+        onReleaseFish={() => setFishCaughtData(null)}
+        recallQuestion={showRecallModal ? recallQuestionData : null}
+        onSelfEvaluate={(result) => {
+          if (result === 'correct') {
+            if (fishCaughtData !== null) handleKeepFish(fishCaughtData);
+          } else {
             setFishCaughtData(null);
             setShowRecallModal(false);
             setRecallQuestionData(null);
-          }}
-        />
-      ) : null}
-    </div>
-
-    {welcomeMessage ? (
-      <div className="modal-backdrop" onClick={() => setWelcomeMessage(null)}
-        style={{ zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="village-info-panel ui-skin screen-fade-in" data-theme={colorTheme}
-          style={{ maxWidth: 420, position: 'relative', zIndex: 301, left: 'auto', transform: 'none' }}>
-          <div className="village-info-panel-header">
-            <span className="village-info-portal-icon">🏘</span>
-            <div>
-              <h3>Welcome to the Dungeon Village</h3>
-              <p className="village-info-meta">Your knowledge adventure begins here</p>
-            </div>
-          </div>
-          <p className="village-info-desc">{welcomeMessage}</p>
-          <div className="village-info-actions" style={{ marginTop: 8 }}>
-            <button type="button" className="village-action-btn" onClick={() => setWelcomeMessage(null)}>
-              Begin your journey
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null}
-    </>
-  );
-}
-
-/* ── React compass overlay reads the current POI from whichever renderer ── */
-function CompassOverlay({ readPoi }: { readPoi: () => WorldPointOfInterest | null }): JSX.Element {
-  const [poi, setPoi] = useState<WorldPointOfInterest | null>(null);
-
-  // Throttled, not per-frame. Plan Phase 11 asks for a throttled update in place
-  // of the old `requestAnimationFrame` poll: a point of interest only changes when
-  // the player crosses a proximity boundary, so four reads a second is more than
-  // the display needs and the old 60 Hz loop was a React update per frame for a
-  // value that almost never changed. `setPoi` returns the same object when the
-  // value is unchanged, so React bails out and an idle village does not re-render.
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      const next = readPoi();
-      setPoi((current) => {
-        if (current === null || next === null) return current === next ? current : next;
-        if (
-          current.name === next.name &&
-          current.angle === next.angle &&
-          current.distance === next.distance
-        ) {
-          return current;
-        }
-        return next;
-      });
-    }, 250);
-    return () => window.clearInterval(interval);
-  }, [readPoi]);
-
-  if (!poi || poi.distance < 96) return <></>;
-
-  const angleDeg = (poi.angle * 180) / Math.PI + 90; // 0=up in CSS
-
-  return (
-    <div className="village-compass" title={poi.name}>
-      <div className="village-compass-ring">
-        <div className="village-compass-needle" style={{ transform: `rotate(${angleDeg}deg)` }} />
-      </div>
-      <span className="village-compass-label">{poi.name.slice(0, 10)}</span>
-    </div>
-  );
-}
-
-/* ── Reusable HUD content (used in both desktop sidebar & mobile drawer) ── */
-function VillageHudContent({
-  questStep, subjects, selectedClass, setSelectedClass, setCreateOpen, setDataOpen,
-  colorTheme, setColorTheme, onQuestClick, onStatsClick, onSettingsClick,
-}: {
-  questStep: QuestStep; subjects: Array<{ id: string; subjectName: string; roomCount: number; clearedRoomCount: number }>;
-  selectedClass: string | null; setSelectedClass: (cls: string | null) => void;
-  setCreateOpen: React.Dispatch<React.SetStateAction<boolean>>; setDataOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  colorTheme: string; setColorTheme: (t: string) => void;
-  onQuestClick: (step: string) => void;
-  onStatsClick: () => void;
-  onSettingsClick: () => void;
-}): JSX.Element {
-  const QL = QUEST_LABELS as Record<string, { label: string; hint: string }>;
-  const QO = QUEST_ORDER;
-
-  return (
-    <>
-      <div className="village-hud-header">
-        <div className="village-hud-title">
-          <span className="village-hud-icon">🏘</span>
-          <span>Dungeon Village</span>
-        </div>
-        <div className="village-hud-subtitle">
-          <ThemePicker current={colorTheme} onChange={setColorTheme} />
-        </div>
-      </div>
-
-      <div className="village-hud-stats">
-        <div className="village-stat">
-          <span className="village-stat-label">Dungeons</span>
-          <strong className="village-stat-value">{subjects.length}</strong>
-        </div>
-        <div className="village-stat">
-          <span className="village-stat-label">Archetype</span>
-          <strong className="village-stat-value">
-            {selectedClass ? PLAYER_CLASSES.find((c) => c.id === selectedClass)?.name ?? 'None' : 'Not set'}
-          </strong>
-        </div>
-      </div>
-
-      <div className="village-hud-classes">
-        <span className="village-hud-section-label">Study Archetype</span>
-        <div className="village-class-grid">
-          {PLAYER_CLASSES.map((cls) => (
-            <button key={cls.id} type="button"
-              className={`village-class-btn${selectedClass === cls.id ? ' village-class-btn--selected' : ''}`}
-              aria-pressed={selectedClass === cls.id}
-              onClick={() => setSelectedClass(cls.id)}>
-              <strong>{cls.name}</strong>
-              <span className="village-class-tagline">{cls.tagline}</span>
-            </button>
-          ))}
-        </div>
-        {(() => {
-          const activeClass = PLAYER_CLASSES.find((c) => c.id === selectedClass);
-          if (!activeClass) return null;
-          return (
-            <div className="village-class-detail">
-              <p className="village-class-desc">{activeClass.description}</p>
-              <div className="village-class-perk">✨ <strong>Perk:</strong> {activeClass.perk}</div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Clickable quest log */}
-      <div className="village-quest-log">
-        <span className="village-hud-section-label">Quest (click to select)</span>
-        <div className="village-quest-step" style={{ cursor: 'pointer' }} onClick={() => onQuestClick(questStep)}>
-          <span className="village-quest-icon">{questStep === 'complete' ? '✅' : '▶'}</span>
-          <div>
-            <strong>{QL[questStep]?.label ?? questStep}</strong>
-            <p className="village-quest-hint">{QL[questStep]?.hint ?? ''}</p>
-          </div>
-        </div>
-        <div className="village-quest-progress">
-          {QO.filter((s) => s !== 'intro').map((step) => {
-            const idx = QO.indexOf(step);
-            const currentIdx = QO.indexOf(questStep);
-            const done = idx <= currentIdx;
-            return (
-              <span key={step} onClick={() => onQuestClick(step)}
-                className={`village-quest-dot${done ? ' village-quest-dot--done' : ''}${step === questStep ? ' village-quest-dot--current' : ''}`}
-                title={QL[step]?.label ?? step} style={{ cursor: 'pointer' }} />
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="village-hud-info">
-        <p className="village-hint">
-          Walk with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows.
-          Press <kbd>E</kbd> to interact.
-        </p>
-      </div>
-
-      <div className="village-hud-actions">
-        <button type="button" className="village-action-btn" onClick={() => setCreateOpen(true)}>
-          + Create New
-        </button>
-        <button type="button" className="village-action-btn" onClick={onStatsClick}>
-          📊 Stats
-        </button>
-        <button type="button" className="village-action-btn" onClick={() => setDataOpen(true)}
-          style={{ fontSize: 11, opacity: 0.7 }}>
-          🛡 Data
-        </button>
-        <button type="button" className="village-action-btn" onClick={onSettingsClick}
-          style={{ fontSize: 11, opacity: 0.7 }}>
-          ⚙ Settings
-        </button>
-      </div>
-    </>
-  );
-}
-
-/* ── Signpost panel shows directional info when player approaches ───── */
-const SIGNPOST_INFO: Record<string, { icon: string; title: string; lines: string[] }> = {
-  'sign-entrance': {
-    icon: '🚪',
-    title: 'Village Entrance',
-    lines: [
-      '↑ Straight ahead - Fountain & Market Square',
-      '→ East - Guild Hall & Portals',
-      '↖ Northwest - Training Grounds',
-    ],
-  },
-  'sign-center': {
-    icon: '📍',
-    title: 'Central Crossroads',
-    lines: [
-      '↑ North - Keeper\'s Tower & Library',
-      '→ East - Guild Hall & East Portals',
-      '↓ South - Fountain, Trophy Hall & South Portals',
-      '← West - Training Grounds & West Portals',
-    ],
-  },
-  'sign-library': {
-    icon: '📍',
-    title: 'North Path Split',
-    lines: [
-      '↑ North - Library of Knowledge',
-      '→ East - Keeper\'s Tower',
-    ],
-  },
-  'sign-south': {
-    icon: '📍',
-    title: 'South Path Split',
-    lines: [
-      '← West - South Portals',
-      '→ East - Trophy Hall',
-      '↓ South - Village Gate (Exit)',
-    ],
-  },
-  'sign-east': {
-    icon: '📍',
-    title: 'East Path Split',
-    lines: [
-      '→ East - Guild Hall',
-      '← West - Central Square & North Portals',
-    ],
-  },
-};
-
-function SignpostPanel({ structureId, colorTheme }: { structureId: string; colorTheme: string }): JSX.Element {
-  const info = SIGNPOST_INFO[structureId];
-
-  if (!info || structureId === 'signpost-welcome') {
-    return (
-      <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-        <div className="village-info-panel-header">
-          <span className="village-info-portal-icon">📋</span>
-          <div>
-            <h3>Welcome to Dungeon Village</h3>
-            <p className="village-info-meta">Your knowledge adventure begins here</p>
-          </div>
-        </div>
-        <p className="village-info-desc">
-          This village is your home base. Explore the buildings to create subjects,
-          enter dungeons, and track your progress.
-        </p>
-        <div className="village-info-actions" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          <span>🏛 Keeper's Tower - Meet your guide</span>
-          <span>⚒ Guild Hall - Create new subjects</span>
-          <span>🌀 Portals - Enter your dungeons</span>
-          <span>🎓 Training Grounds - Learn the basics</span>
-          <span>🏆 Trophy Hall - View collections</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="village-info-panel ui-skin" data-theme={colorTheme}>
-      <div className="village-info-panel-header">
-        <span className="village-info-portal-icon">{info.icon}</span>
-        <div>
-          <h3>{info.title}</h3>
-          <p className="village-info-meta">Approach to read directions</p>
-        </div>
-      </div>
-      <div className="village-subject-list" style={{ gap: 4 }}>
-        {info.lines.map((line, i) => (
-          <div key={i} className="village-subject-item" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-            {line}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ThemePicker({ current, onChange }: { current: string; onChange: (t: string) => void }): JSX.Element {
-  const themes = [
-    { id: 'dark', label: 'Night' },
-    { id: 'colorful', label: 'Arcade' },
-    { id: 'aurora', label: 'Aurora' },
-  ];
-  return (
-    <div className="village-theme-picker">
-      {themes.map((t) => (
-        <button
-          key={t.id}
-          type="button"
-          className={current === t.id ? 'active' : ''}
-          onClick={() => onChange(t.id)}
-        >
-          {t.label}
-        </button>
-      ))}
+          }
+        }}
+        onCancelRecall={() => {
+          setFishCaughtData(null);
+          setShowRecallModal(false);
+          setRecallQuestionData(null);
+        }}
+        welcomeMessage={welcomeMessage}
+        onDismissWelcome={() => setWelcomeMessage(null)}
+      />
     </div>
   );
 }

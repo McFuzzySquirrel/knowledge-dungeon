@@ -1,0 +1,535 @@
+/* ──────────────────────────────────────────────────────────────────────────
+ * Phase 12 village panels: Cozy side panels and bottom sheets.
+ *
+ * ## Where this file sits, and why it is not `src/styles.css`
+ *
+ * The village panels are the one surface in this application that must be laid
+ * out two *different* ways depending on the input device, and that difference is
+ * a component-tree branch (`useVillageSurfaceMode`) rather than a media query:
+ * a sheet is a dialog - it takes focus, contains Tab, and closes on Escape -
+ * while a side panel is a labelled `region` that must not steal focus from a
+ * learner walking around with the arrow keys. The stylesheet only consumes the
+ * `data-village-surface` value that branch produces.
+ *
+ * It is colocated under `src/ui/village/` for the reason
+ * `src/ui/components/audioSettings.css` already is: the rules belong to one
+ * component family, and colocating them means a future extraction moves the CSS
+ * with the JSX instead of leaving a village rule behind in a 5900-line global
+ * sheet. `scripts/check-cc0-assets.mjs` already classifies `.css` as non-media,
+ * so a stylesheet here needs no registry entry.
+ *
+ * ## What every rule below obeys
+ *
+ * 1. **No layout-affecting state signal.** A state is carried by a text word, a
+ *    glyph, an `aria-*` attribute, or a border *width* on a control that already
+ *    has a border. A new border on a `width: fit-content` strip is how a
+ *    320-CSS-pixel viewport grows a horizontal scrollbar, so the quest-state
+ *    rules use `box-shadow: inset` and weight only - the same two shapes
+ *    `COZY_STATE_SIGNALS.selected` declares, and the same two
+ *    `src/styles/state-signals.css` already ships unscoped for the Welcome
+ *    controls. Those two state rules are deliberately **unscoped** here for the
+ *    reason that file records: `VITE_COZY_VISUALS` is false in the production
+ *    default, and a state signal that only exists behind the flag is a state
+ *    signal the shipped artifact does not have.
+ * 2. **44 by 44 CSS pixels on every new control.** `COZY_TOUCH_TARGET_MIN`, as
+ *    `min-inline-size` / `min-block-size`, plus the `data-village-touch-target`
+ *    attribute that `tests/phase12/village-panels.test.tsx` reads so the floor is
+ *    asserted rather than assumed.
+ * 3. **Reader-neutral under reduced motion.** The sheet's slide-in and the
+ *    panel's fade-in are both removed by the `prefers-reduced-motion` block, and
+ *    neither carried information, so removing them removes nothing.
+ * 4. **`dvh` with a `vh` fallback**, because the sheet is anchored to the bottom
+ *    of the viewport and a mobile browser's collapsing address bar moves `vh`
+ *    while it is open.
+ */
+
+/* === The panel-arrival announcement '===================================== */
+
+/*
+ * A sentence a screen reader hears and nobody sees. The structure panel opens
+ * because the *player walked*, not because a control was activated, and a side
+ * panel deliberately never takes focus - so without this, a learner using a screen
+ * reader has no way to learn that the panel changed. It is a live region, so it is
+ * the announcement and not the text that matters; the text is a full noun phrase
+ * rather than a "1" or a bullet.
+ *
+ * The clip technique is the standard one, and it is here rather than a `display:
+ * none` because a hidden live region does not announce.
+ */
+.village-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* === The shared frame '=================================================== */
+
+/*
+ * `.village-info-panel` is the pre-Phase-12 rule in `src/styles.css` and stays
+ * the class the legacy look hangs off. These two modifiers re-seat that same
+ * box in the two Cozy positions, so nothing that depended on the old
+ * bottom-centred overlay has to be re-declared.
+ */
+.ui-skin .village-info-panel.village-panel {
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* The header holds the icon, the heading, and the dismiss control. The dismiss
+ * control is a sibling of the heading rather than nested inside it, so a screen
+ * reader's heading rotor is not polluted by a control and the button's own
+ * accessible name - "Close Guild Hall" - can name the surface it closes. */
+.ui-skin .village-panel-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ui-skin .village-panel-header > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ui-skin .village-panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.village-panel-close {
+  flex: 0 0 auto;
+  inline-size: var(--village-target-min, 44px);
+  block-size: var(--village-target-min, 44px);
+  min-inline-size: var(--village-target-min, 44px);
+  min-block-size: var(--village-target-min, 44px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+}
+
+.village-panel-close:hover {
+  background: var(--control-hover-bg);
+  color: var(--text-primary);
+}
+
+/* A visible focus ring is a shape, not a tint, so it survives a colour-vision
+ * deficiency, a forced-colours mode, and greyscale printing alike. */
+.ui-skin .village-panel-close:focus-visible,
+.ui-skin .village-nearby-btn:focus-visible,
+.ui-skin .village-quest-row > button:focus-visible {
+  outline: 3px solid var(--control-selected-border);
+  outline-offset: 2px;
+}
+
+/* === Shape 1: the Cozy side panel '======================================= */
+
+/*
+ * Docked to the trailing edge of the village game area, full height, its own
+ * scroll. A `region`, not a dialog: it never takes focus, so a learner who is
+ * walking with the arrow keys is not yanked out of the world every time they
+ * brush past a building.
+ */
+.ui-skin .village-info-panel.village-panel--side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: auto;
+  right: 0;
+  inline-size: min(340px, 42%);
+  min-inline-size: 280px;
+  max-inline-size: 100%;
+  block-size: auto;
+  transform: none;
+  border-radius: 14px 0 0 14px;
+  border-right: 0;
+  animation: village-panel-side-in 180ms ease-out;
+}
+
+@keyframes village-panel-side-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* === Shape 2: the Cozy bottom sheet '===================================== */
+
+/*
+ * Anchored to the bottom of the viewport, inside the margin, rounded on the top
+ * corners, and capped at 62dvh so the world above it stays visible and the
+ * learner's own position in the village is never fully hidden. A dialog: it
+ * takes focus, contains Tab, and closes on Escape or on its dismiss control.
+ */
+.ui-skin .village-info-panel.village-panel--sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  inline-size: auto;
+  max-block-size: 62vh;
+  max-block-size: 62dvh;
+  block-size: auto;
+  transform: none;
+  margin: 0;
+  border-radius: 16px 16px 0 0;
+  border-bottom: 0;
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  animation: village-panel-sheet-in 200ms ease-out;
+}
+
+@keyframes village-panel-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* A grab bar is the touch affordance that says "this slides". It is decorative -
+ * the sheet is not actually dragged, and pretending otherwise would be a control
+ * that lies - so it is a pseudo-element with no hit area of its own. */
+.ui-skin .village-info-panel.village-panel--sheet::before {
+  content: '';
+  display: block;
+  inline-size: 44px;
+  block-size: 4px;
+  border-radius: 2px;
+  background: var(--control-border);
+  margin: 0 auto 4px;
+  flex: 0 0 auto;
+}
+
+/* Every control inside a panel or the nearby list, floored in one rule.
+ *
+ * The inline `min-inline-size` / `min-block-size` on the handful of controls a
+ * test addresses by name is what makes the floor *assertable* - jsdom does not
+ * compute a stylesheet - and this rule is what makes it true for the panel bodies'
+ * own buttons, which are pre-Phase-12 classes reused as-is. Two places, one
+ * number; `villageTypes.ts` holds the third spelling, and
+ * `tests/phase12/village-shell-split.test.ts` checks the three against each other.
+ */
+.ui-skin .village-panel button,
+.ui-skin .village-panel select,
+.ui-skin .village-nearby button {
+  min-block-size: var(--village-target-min, 44px);
+  min-inline-size: var(--village-target-min, 44px);
+}
+
+/* === The DOM nearby-action list '========================================= */
+
+.village-nearby {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.village-nearby-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/*
+ * One row per nearby target. The whole row is the target: a 44-pixel-tall
+ * button whose left edge carries the kind as a glyph and whose accessible name
+ * is the verb plus the label, so a learner who cannot see the canvas still knows
+ * that this row means "Talk to the Keeper" and not "the nearest thing".
+ */
+.ui-skin .village-nearby-btn {
+  inline-size: 100%;
+  min-inline-size: var(--village-target-min, 44px);
+  min-block-size: var(--village-target-min, 44px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  text-align: start;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+}
+
+.ui-skin .village-nearby-btn:hover:not(:disabled) {
+  background: var(--control-hover-bg);
+}
+
+.ui-skin .village-nearby-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.village-nearby-btn__kind {
+  flex: 0 0 auto;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.village-nearby-btn__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.village-nearby-note,
+.village-nearby-empty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* === The quest board and the quest overview '============================= */
+
+.village-quest-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.village-quest-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.ui-skin .village-quest-row > button {
+  inline-size: 100%;
+  min-inline-size: var(--village-target-min, 44px);
+  min-block-size: var(--village-target-min, 44px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  text-align: start;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+}
+
+.ui-skin .village-quest-row > button:hover {
+  background: var(--control-hover-bg);
+}
+
+.village-quest-row__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.village-quest-row__state {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.village-quest-row__complete {
+  align-self: flex-end;
+  min-block-size: var(--village-target-min, 44px);
+  min-inline-size: var(--village-target-min, 44px);
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+}
+
+.village-quest-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.village-quest-overview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ui-skin .village-quest-overview-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  background: var(--control-bg);
+}
+
+.village-quest-overview-row__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.village-quest-overview-row__who {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.village-quest-overview-row__state {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.village-quest-overview-row__steps {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.village-quest-overview-row__hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* A native `<details>`, so the disclosure is keyboard-operable with no
+ * JavaScript and no roving-tabindex bookkeeping. */
+.village-quest-disclosure > summary {
+  cursor: pointer;
+  min-block-size: var(--village-target-min, 44px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.village-quest-disclosure > summary:focus-visible {
+  outline: 3px solid var(--control-selected-border);
+  outline-offset: 2px;
+}
+
+/* === Non-colour state signals, in BOTH flag states '===================== */
+
+/*
+ * The quest row's state is already a word in the markup ("Done", "Active",
+ * "Needs confirm", "Locked"), which is the whole signal. These two rules add the
+ * two non-colour shapes `COZY_STATE_SIGNALS.selected` declares so the row is
+ * also distinguishable at a glance - and they are unscoped for the reason
+ * `src/styles/state-signals.css` records: the production default has
+ * `VITE_COZY_VISUALS=false`, and a signal that only exists behind a flag is a
+ * signal the shipped artifact does not have.
+ *
+ * `box-shadow: inset` and `font-weight` are both drawn *inside* the control's
+ * existing box and border, so neither can widen a `fit-content` track and
+ * reintroduce horizontal overflow at 320 CSS pixels.
+ */
+.ui-skin .village-quest-row > button[aria-current='step'] {
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 0 var(--control-selected-border);
+}
+
+.ui-skin .village-quest-row > button[data-quest-state='done'] {
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 0 var(--accent-cool);
+}
+
+/* The same bar, one step down, for a quest the learner has not reached. A lower
+ * contrast token *and* a different shape class, so the two are not told apart by
+ * hue: the active row's bar is on the bottom edge and 3px, and a locked row is
+ * identified by a dotted border instead. */
+.ui-skin .village-quest-row > button[data-quest-state='locked'] {
+  border-style: dashed;
+}
+
+/* === Reduced motion '==================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-skin .village-info-panel.village-panel--side,
+  .ui-skin .village-info-panel.village-panel--sheet {
+    animation: none;
+  }
+}
+
+/* === 320 CSS pixels and 200% zoom '====================================== */
+
+/*
+ * Below 360 CSS pixels a 340-pixel side panel is impossible, so the sheet is
+ * forced regardless of what the pointer says - the same reason the Cozy layer
+ * tightens its own padding at this width. `min-inline-size: 0` on the sheet's
+ * children is what keeps a long structure label from producing the horizontal
+ * scrollbar the 320-pixel gate exists to catch.
+ */
+@media (max-width: 360px) {
+  .ui-skin .village-info-panel.village-panel--side {
+    position: absolute;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    inline-size: auto;
+    min-inline-size: 0;
+    max-block-size: 62vh;
+    max-block-size: 62dvh;
+    block-size: auto;
+    border-radius: 16px 16px 0 0;
+    border-right: 1px solid var(--control-border);
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .ui-skin .village-nearby-btn,
+  .ui-skin .village-quest-row > button,
+  .ui-skin .village-quest-overview-row,
+  .village-panel-close {
+    border-color: CanvasText;
+  }
+
+  .ui-skin .village-quest-row > button[aria-current='step'],
+  .ui-skin .village-quest-row > button[data-quest-state='done'] {
+    box-shadow: none;
+    outline: 3px solid Highlight;
+    outline-offset: -3px;
+  }
+}

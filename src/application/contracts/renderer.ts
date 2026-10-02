@@ -9,6 +9,10 @@
  */
 import type { VillageStructure } from '@/data/villageLayout';
 import type { FloorVisibilityModel, PlayerClassId, WorldPointOfInterest } from './world';
+import type {
+  VillageActionInvocation,
+  VillageNpcSnapshot,
+} from './villageNpc';
 
 /** Lifecycle every world renderer adapter implements. */
 export interface WorldRenderer {
@@ -55,6 +59,50 @@ export interface VillageRendererCapabilities {
   triggerInteract(): void;
   /** Read the current point of interest for a compass/HUD read-out. */
   readPoi(): WorldPointOfInterest | null;
+  /**
+   * Read the village's NPC state as one value: proximity measurements, the
+   * selected nearby-action rows, and the dialogue currently on show.
+   *
+   * This is the read a React panel uses to render a nearby-action list and a quest
+   * overview without reaching into a renderer object. It is deliberately *data out
+   * of a port* rather than a second way to get at the scene: `readPoi()` set the
+   * pattern and the answer to "how do I watch the world from React" is one
+   * renderer-neutral read, not a handle.
+   *
+   * Optional while both adapters are still being wired. `src/game/**` and
+   * `src/renderers/**` were outside the contract work package that introduced it, and
+   * making this required before an adapter implements it would be a build break
+   * rather than a statement about the contract. The fully-wired form is
+   * {@link VillageNpcHost}; the `?` comes off when both adapters implement it.
+   */
+  readNpcSnapshot?(): VillageNpcSnapshot;
+  /**
+   * Perform a renderer-neutral village action on behalf of a DOM control.
+   *
+   * The one route from DOM to world. An adapter forwards it into its own dispatch
+   * rather than acting directly, so a button click, a canvas tap, and the world's
+   * keyboard shortcut stay one action and the state republishes once - the Phase 9
+   * rule, restated for the village.
+   *
+   * Optional for the same reason and with the same promotion as
+   * {@link VillageRendererCapabilities.readNpcSnapshot}.
+   */
+  invokeAction?(invocation: VillageActionInvocation): void;
+}
+
+/**
+ * A village host that has wired Phase 12's NPC surface.
+ *
+ * Declared as the narrowing of {@link VillageRendererCapabilities} rather than as a
+ * fourth capability port, so it cannot drift from the members it requires: a member
+ * that disappears or changes type here fails `npm run typecheck` at the adapters and
+ * not silently at a call site. A screen that needs the NPC surface depends on this;
+ * a screen that must work against a not-yet-wired adapter keeps using
+ * {@link VillageRendererCapabilities} and feature-detects.
+ */
+export interface VillageNpcHost extends VillageRendererCapabilities {
+  readNpcSnapshot(): VillageNpcSnapshot;
+  invokeAction(invocation: VillageActionInvocation): void;
 }
 
 /** Capability port of the fishing renderer. */

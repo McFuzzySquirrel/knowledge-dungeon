@@ -39,7 +39,12 @@ import { resolveCozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
 import { resolveWorldQualityProfile, type WorldApplication, type WorldQualityId } from '@/renderers/pixi/runtime/types';
 import { readWorldQuality } from '@/renderers/pixi/runtime/useWorldQuality';
 import { currentWorldEnvironment } from '@/renderers/pixi/runtime/worldEnvironment';
-import type { VillageRendererCapabilities, WorldRenderer } from '@/application/contracts/renderer';
+import type { VillageNpcHost, WorldRenderer } from '@/application/contracts/renderer';
+import {
+  createVillageNpcSnapshot,
+  type VillageActionInvocation,
+  type VillageNpcSnapshot,
+} from '@/application/contracts/villageNpc';
 import type { VillageWorldModel, WorldPointOfInterest } from '@/application/contracts/world';
 import { createVillageScene, type VillageScene } from './createVillageScene';
 
@@ -75,8 +80,16 @@ export interface VillageSceneCallbacks {
 /**
  * The village renderer as the application layer sees it: the Phase 2 lifecycle,
  * the village capability port, and one renderer-neutral readiness subscription.
+ *
+ * Extends {@link VillageNpcHost} rather than the base
+ * `VillageRendererCapabilities` because the scene now implements `readNpcSnapshot`
+ * and `invokeAction`, and this is what turns that from an implementation detail
+ * into a typechecked fact: the object literal below cannot drop either member
+ * without failing `npm run typecheck` here, and a screen that depends on
+ * `VillageNpcHost` can take this renderer without a feature detection that would
+ * quietly be `undefined` on a build where nothing is implemented.
  */
-export interface PixiVillageRenderer extends WorldRenderer, VillageRendererCapabilities {
+export interface PixiVillageRenderer extends WorldRenderer, VillageNpcHost {
   /**
    * Subscribe to the first-frame notification. Returns an unsubscribe function;
    * listeners added after readiness are not replayed.
@@ -122,7 +135,7 @@ export function createPixiVillageRenderer(
   let loader: ReturnType<typeof createAssetLoader> | null = null;
   let bundleHeld = false;
 
-  const host = createPixiWorldHost<WorldApplication, VillageScene, VillageRendererCapabilities>({
+  const host = createPixiWorldHost<WorldApplication, VillageScene, VillageNpcHost>({
     host: options.host,
     createApplication: createPixiApplication,
     createScene: (application, init) =>
@@ -185,5 +198,40 @@ export function createPixiVillageRenderer(
     readPoi(): WorldPointOfInterest | null {
       return host.capabilities?.readPoi() ?? null;
     },
+
+    /**
+     * The scene's NPC snapshot, forwarded.
+     *
+     * Before a mount there is no scene and no world, so the answer is the contract's
+     * empty snapshot - a value, so a panel polling early renders nothing instead of
+     * branching on a missing method.
+     */
+    readNpcSnapshot(): VillageNpcSnapshot {
+      return host.capabilities?.readNpcSnapshot() ?? EMPTY_NPC_SNAPSHOT;
+    },
+
+    /**
+     * Forward a DOM control's named intent into the scene, through the host.
+     *
+     * The scene routes it back out through `init.onAction` and reads the intent back
+     * in the activation that dispatch performs, so the button click, the canvas tap,
+     * and the `E` key remain one action through one dispatcher - which is also what
+     * republishes the `aria-live` state once for all three.
+     */
+    invokeAction(invocation: VillageActionInvocation): void {
+      host.capabilities?.invokeAction(invocation);
+    },
   };
 }
+
+/**
+ * The snapshot a caller gets before the scene exists.
+ *
+ * Frozen and shared rather than allocated per call, because it is the same empty
+ * value every time and a panel that polls at 60fps would otherwise allocate sixty
+ * objects a second to learn nothing had changed yet.
+ */
+const EMPTY_NPC_SNAPSHOT: VillageNpcSnapshot = createVillageNpcSnapshot({
+  candidates: [],
+  anchor: null,
+});

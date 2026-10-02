@@ -14,7 +14,7 @@
  * ## The seam, and what this scene is not allowed to do
  *
  * The scene implements the host's {@link WorldScene} lifecycle and exposes
- * {@link VillageRendererCapabilities} through `capabilities`. It never performs an
+ * {@link VillageNpcHost} through `capabilities`. It never performs an
  * action itself: every route into an interaction - the keyboard and touch input
  * controller, the DOM control's `triggerInteract`, and the host's own dispatch -
  * converges on `init.onAction`, so activation and state publication stay in the
@@ -22,13 +22,20 @@
  * `activate`: the object returned below binds it once, exactly as the Phase 9 test
  * world does, and nothing in this module calls it.
  *
- * ## NPCs are Phase 12
+ * ## NPCs, and what this scene is still not allowed to do
  *
- * The callbacks exist and are accepted, but this scene never emits an `onNpc*`
- * event and never animates an NPC. The player's NPC interaction radius is not
- * consulted. Drawing NPCs, pathing them, and emitting proximity for them is the
- * next phase's scope, and a half-implemented NPC layer here would be worse than
- * an honest absence.
+ * Phase 12 gives the scene a real NPC layer: every NPC in `VILLAGE_MAP.npcs` is
+ * drawn, wanders its authored path at `NPC_SPEED`, reports `onNpcApproached` /
+ * `onNpcLeft` / `onNpcInteract` / `onNpcDialogPosition` on the same transitions the
+ * Phaser scene reports, and answers `readNpcSnapshot()` / `invokeAction()`. The
+ * marker and its idle bob live in `./VillageNpc.ts`; the movement, the proximity
+ * measurement, and the conversation cursor live in `./NpcController.ts`.
+ *
+ * What this scene still does not do is *decide* anything about NPCs. It measures
+ * where they are and reports the measurements; `selectVillageNpcLine` chooses the
+ * line, `selectVillageNearbyTargets` chooses the rows, and the study flow owns the
+ * quest step. A scene that ordered a nearby list or picked a dialogue line would be a
+ * second source of truth that could disagree with the Phaser build on the same world.
  *
  * ## This is the third `pixi.js` importer
  *
@@ -44,7 +51,6 @@ import { Container, Graphics, Text } from 'pixi.js';
 
 import {
   PLAYER_SPEED,
-  STRUCTURE_APPROACH_RADIUS,
   VILLAGE_DEPTH,
   VILLAGE_MAP,
   VILLAGE_PATH_JUNCTIONS,
@@ -53,6 +59,7 @@ import {
   readVillageSpawn,
   resolveStructureDepth,
   writeVillageSpawn,
+  type VillageNpc,
   type VillageStructure,
 } from '@/data/villageLayout';
 import { createCameraRig } from '@/renderers/pixi/camera/CameraRig';
@@ -69,8 +76,15 @@ import type {
 } from '@/renderers/pixi/runtime/types';
 import type { CozyMotionProfile } from '@/theme';
 import type { PlayerClassId } from '@/application/contracts/world';
-import type { VillageRendererCapabilities } from '@/application/contracts/renderer';
+import type { VillageNpcHost } from '@/application/contracts/renderer';
+import {
+  VILLAGE_NEARBY_RANGES,
+  type VillageActionTarget,
+  type VillageNearbyCandidate,
+  type VillageNpcDialogAnchor,
+} from '@/application/contracts/villageNpc';
 import type { VillageWorldModel, WorldPointOfInterest } from '@/application/contracts/world';
+import { createNpcController, type NpcController, type NpcRandomness } from './NpcController';
 import type { VillageSceneCallbacks, VillageSpawnPoint } from './VillageRenderer';
 
 /** The one action this world offers. The host mirrors it in a DOM control. */
@@ -149,10 +163,33 @@ export interface CreateVillageSceneOptions {
   readonly spawn?: VillageSpawnPoint;
   /** The storage the spawn override is read from and written to. */
   readonly storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
+  /**
+   * The NPC roster. Defaults to `VILLAGE_MAP.npcs`, which is what ships.
+   *
+   * A parameter rather than a hard-coded read so the *shipped* roster and a one-NPC
+   * roster go through identical code, and so a test can pin a villager who does not
+   * walk and assert an approach/leave transition to the pixel. The default is the
+   * only value the village ever presents.
+   */
+  readonly npcs?: readonly VillageNpc[];
+  /**
+   * Ambient randomness for the NPC layer: the opening pause and the
+   * between-waypoint pause.
+   *
+   * Injected for the same reason `NpcRandomness` exists in `./NpcController.ts` -
+   * a world whose output depends on ambient `Math.random()` cannot be asserted - and
+   * defaulted to the Phaser scene's own behaviour, so leaving it absent changes
+   * nothing a learner can observe.
+   *
+   * A wanderer's opening quote is *not* in here: the application layer chooses the
+   * line now, because it is the only layer that knows the learner's quest step, and
+   * it supplies the randomness along with the choice.
+   */
+  readonly npcRandomness?: NpcRandomness;
 }
 
 /** The scene contract this world exposes. */
-export type VillageScene = WorldScene<VillageRendererCapabilities>;
+export type VillageScene = WorldScene<VillageNpcHost>;
 
 /* -------------------------------------------------------------------------- */
 /* Procedural art                                                              */
@@ -517,6 +554,60 @@ export function createVillageScene(
 
   const input = createWorldInputController({ element: application.canvas as HTMLCanvasElement });
 
+  /**
+   * Project a world point to CSS viewport pixels, for the dialog anchor.
+   *
+   * The anchor the contract wants is in the space the DOM dialog is positioned in, so
+   * the conversion happens here, at the renderer's own edge, rather than the scene
+   * handing Pixi screen space to a panel and asking it to finish the maths. The
+   * projection is the same one `applyCamera` applies to the world layer, read from
+   * the same camera state, so a dialog cannot disagree with where the villager is
+   * drawn except by the two copies of that maths disagreeing - and there is only one
+   * copy, because `applyCamera` and this function both read `camera.getState()`.
+   */
+  function projectToViewport(
+    npcId: string,
+    x: number,
+    y: number,
+  ): VillageNpcDialogAnchor {
+    const state = camera.getState();
+    const canvas = application.canvas as HTMLCanvasElement | undefined;
+    const rect = canvas?.getBoundingClientRect?.();
+    return {
+      npcId,
+      clientX:
+        (rect?.left ?? 0) +
+        x * state.zoom +
+        (state.viewportWidth / 2 - state.centerX * state.zoom),
+      clientY:
+        (rect?.top ?? 0) +
+        y * state.zoom +
+        (state.viewportHeight / 2 - state.centerY * state.zoom),
+    };
+  }
+
+  /**
+   * The roster this scene is presenting.
+   *
+   * Held once and passed to the controller, so the status read-out names the same
+   * villager the markers drew. Two sources would be two rosters, and a custom roster
+   * with a `VILLAGE_MAP` lookup would announce "Exploring the village" while a
+   * villager is standing right there.
+   */
+  const npcRoster = options.npcs ?? VILLAGE_MAP.npcs;
+
+  const npcs: NpcController = createNpcController({
+    parent: world,
+    npcs: npcRoster,
+    tile,
+    theme,
+    callbacks: options.callbacks,
+    readPlayerPosition: () => ({ x: player.x, y: player.y }),
+    projectToViewport,
+    readStructureCandidates: structureCandidates,
+    randomness: options.npcRandomness,
+  });
+
   function resolveStorage(
     app: PixiApplication,
     provided: Pick<Storage, 'getItem' | 'setItem'> | null | undefined,
@@ -670,7 +761,7 @@ export function createVillageScene(
 
   function updateStructureProximity(): void {
     let closestId: string | null = null;
-    let closestDistance = STRUCTURE_APPROACH_RADIUS;
+    let closestDistance = VILLAGE_NEARBY_RANGES.structure;
     for (const structure of interactive) {
       const centerX = (structure.gridX + structure.width / 2) * tile;
       const centerY = (structure.gridY + structure.height / 2) * tile;
@@ -727,26 +818,106 @@ export function createVillageScene(
     }
   }
 
-  function handleInteract(): void {
-    const id = currentStructureId;
-    if (id !== null) {
-      const structure = allStructures.find((candidate) => candidate.id === id) ?? null;
-      if (structure && structure.type === 'portal-icon' && structure.subjectId) {
-        // The spawn override is the portal's grid position, exactly as the Phaser
-        // scene writes it: returning from the dungeon places the learner back at
-        // the portal they left from.
-        writeVillageSpawn(storage, structure.gridX, structure.gridY);
+  /**
+   * Raw proximity measurement for every structure the interact verb can reach.
+   *
+   * Measurements and not rows: `VILLAGE_NEARBY_RANGES.structure` says how close a
+   * building must be, and `selectVillageNearbyTargets` decides which of these become
+   * a nearby-action row and in what order. The scene measures, the contract selects -
+   * which is what makes the Pixi and Phaser builds produce the same list from the
+   * same world.
+   *
+   * Only the interactive types are measured, because a row for a decorative bush
+   * would be a control the world refuses to act on.
+   */
+  function structureCandidates(): readonly VillageNearbyCandidate[] {
+    const candidates: VillageNearbyCandidate[] = [];
+    for (const structure of interactive) {
+      const centerX = (structure.gridX + structure.width / 2) * tile;
+      const centerY = (structure.gridY + structure.height / 2) * tile;
+      candidates.push({
+        kind: 'structure',
+        id: structure.id,
+        label: structure.label || structure.type,
+        distance: Math.hypot(player.x - centerX, player.y - centerY),
+        range: VILLAGE_NEARBY_RANGES.structure,
+      });
+    }
+    return candidates;
+  }
+
+  /**
+   * Act on one structure, exactly as the Phaser scene does.
+   *
+   * Split out of the interact verb so a named-target request reaches the *same*
+   * function rather than a second copy of the portal-spawn side effect.
+   */
+  function interactStructure(structureId: string): void {
+    const structure = allStructures.find((candidate) => candidate.id === structureId) ?? null;
+    if (structure && structure.type === 'portal-icon' && structure.subjectId) {
+      // The spawn override is the portal's grid position, exactly as the Phaser
+      // scene writes it: returning from the dungeon places the learner back at
+      // the portal they left from.
+      writeVillageSpawn(storage, structure.gridX, structure.gridY);
+    }
+    lastInteractedId = structureId;
+    options.callbacks.onStructureInteract(structureId);
+  }
+
+  /**
+   * The one interact verb, with an optional named target.
+   *
+   * `target` is a named *intent*, not a guarantee - `VillageActionInvocation` says so
+   * explicitly - so a request is honoured when the thing it names is genuinely in
+   * range, and otherwise falls back to the whole-village verb, which resolves a
+   * structure first and an NPC only when no structure is in range. A `null` target is
+   * that bare verb, and is what the canvas tap, the `E` key, and the existing
+   * "Interact" button all produce.
+   *
+   * Falling back rather than dropping is the point: a learner who pressed a labelled
+   * control and saw nothing happen learns that the control lies.
+   */
+  function handleInteract(target: VillageActionTarget | null): void {
+    if (target !== null) {
+      if (target.kind === 'structure' && target.id === currentStructureId) {
+        interactStructure(currentStructureId);
+        return;
       }
-      lastInteractedId = id;
-      options.callbacks.onStructureInteract(id);
+      if (target.kind === 'npc' && target.id === npcs.currentNpcId) {
+        npcs.interact();
+        return;
+      }
+      // The named target is not in range. Fall through to the whole-village verb
+      // rather than no-op, and let the status read-out say what actually happened.
+    }
+
+    const structureId = currentStructureId;
+    if (structureId !== null) {
+      interactStructure(structureId);
       return;
     }
-    // No NPC interaction in this phase. Phase 12 fills this branch.
+    npcs.interact();
   }
+
+  /**
+   * The named intent a DOM control asked for, consumed by the activation it triggers.
+   *
+   * `WorldActionDispatcher` is `(actionId, source)` and the Phase 9 rule is that a
+   * scene never calls its own `activate`, so there is no signature to widen: the
+   * target rides beside the dispatch and is read back by the activation that dispatch
+   * performs. `invokeAction` clears it as soon as the dispatch returns, so a host
+   * that dispatched later - or not at all - cannot leave an intent behind to be
+   * honoured by an unrelated interact that happens to come next. The shipped host
+   * dispatches synchronously, which
+   * `tests/phase12/village-npc-renderer.test.ts` asserts rather than assumes.
+   */
+  let pendingTarget: VillageActionTarget | null = null;
 
   function applyAction(actionId: string, _source: WorldActionSource): boolean {
     if (actionId === VILLAGE_INTERACT_ACTION_ID) {
-      handleInteract();
+      const target = pendingTarget;
+      pendingTarget = null;
+      handleInteract(target);
       return true;
     }
     return false;
@@ -758,6 +929,15 @@ export function createVillageScene(
         ? null
         : allStructures.find((structure) => structure.id === currentStructureId) ?? null;
     if (nearest) return `Near ${nearest.label || nearest.type}`;
+    // The NPC in range is named here, not just drawn, because this string is the
+    // `aria-live` line the DOM mirror announces and the only non-visual statement of
+    // who the interact key is about to talk to. A named target that falls back is
+    // exactly the case that needs a learner to hear what they actually got.
+    const npcId = npcs.currentNpcId;
+    if (npcId !== null) {
+      const npc = npcRoster.find((candidate) => candidate.id === npcId);
+      if (npc) return `Near ${npc.label}`;
+    }
     if (lastInteractedId !== null) {
       const interacted = allStructures.find((structure) => structure.id === lastInteractedId);
       if (interacted) return `Left ${interacted.label || interacted.type}`;
@@ -803,6 +983,10 @@ export function createVillageScene(
     camera.update(deltaMs);
     applyCamera();
     updateStructureProximity();
+    // NPC movement and proximity, after the camera has been applied and the player's
+    // position has settled for this frame: the anchor is projected from the camera
+    // state, so it has to be the one that is about to be rendered.
+    npcs.update(deltaMs, motion);
     updatePoi();
     animateBirds(deltaMs);
   }
@@ -810,6 +994,10 @@ export function createVillageScene(
   function onResize(width: number, height: number): void {
     camera.setViewport(width, height);
     applyCamera();
+    // The anchor is a projection through this camera, so a resize invalidates it even
+    // though nothing in the world moved. Re-measuring also re-emits nothing: the NPC
+    // in range has not changed, so `onNpcApproached` does not fire a second time.
+    npcs.sync(motion);
   }
 
   function setMotionProfile(profile: CozyMotionProfile): void {
@@ -836,7 +1024,7 @@ export function createVillageScene(
     return { name: lastPoi.name, angle: lastPoi.angle, distance: lastPoi.distance };
   }
 
-  const capabilities: VillageRendererCapabilities = {
+  const capabilities: VillageNpcHost = {
     setDynamicStructures: (structures) => setDynamicStructures(structures),
     setPlayerClass: (next) => setPlayerClass(next),
     triggerInteract: () => {
@@ -845,10 +1033,45 @@ export function createVillageScene(
       init.onAction(VILLAGE_INTERACT_ACTION_ID, 'dom');
     },
     readPoi: () => readPoi(),
+
+    /**
+     * One coherent read of the NPC surface.
+     *
+     * Data out of a port, not a handle on the scene, for the reason `readPoi` set:
+     * a panel that watched a renderer object would re-create the scene-reference
+     * polling Phase 12 removed for the compass. The controller measures and the
+     * contract selects, so `nearby` here is `selectVillageNearbyTargets(candidates)`
+     * and cannot disagree with it.
+     */
+    readNpcSnapshot: () => npcs.readSnapshot(),
+
+    /**
+     * The one route from a DOM control to the village.
+     *
+     * Through `init.onAction` and not `applyAction`, because answering an action is
+     * also what republishes the state to every `aria-live` mirror - the Phase 9 rule,
+     * restated for the village. A button click, a canvas tap, and the `E` key are
+     * then literally the same call, and the only thing a DOM control adds is the
+     * *named* target, which the activation consumes.
+     *
+     * An action id this scene does not declare is ignored rather than forced: the
+     * scene's own `activate` is the authority on which actions exist, and inventing
+     * one here would be a second action table.
+     */
+    invokeAction: (invocation) => {
+      if (invocation.actionId !== VILLAGE_INTERACT_ACTION_ID) return;
+      pendingTarget = invocation.target;
+      init.onAction(invocation.actionId, invocation.source);
+      // The shipped host dispatches synchronously, so this is already `null`. The
+      // clear is for a host that defers or declines: an intent left standing would be
+      // honoured by whichever unrelated interact happened to arrive next.
+      pendingTarget = null;
+    },
   };
 
   // One initial proximity read, so the world is correct before the first frame.
   updateStructureProximity();
+  npcs.sync(motion);
   updatePoi();
   facingMarker.rotation = FACING_ANGLE[facing];
 
@@ -862,6 +1085,11 @@ export function createVillageScene(
     capabilities,
     destroy(): void {
       input.destroy();
+      // NPCs before the world layer: the markers are children of `world`, and
+      // releasing them first means `root.destroy` is not the thing that has to find
+      // them. The memory gate mounts and unmounts this scene twenty times, so a
+      // marker that outlived its scene would show up as retained display objects.
+      npcs.destroy();
       destroyRendered(dynamicRendered);
       destroyRendered(staticRendered);
       root.removeChildren();

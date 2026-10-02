@@ -633,18 +633,58 @@ describe('Phase 2 Phaser adapter lifecycle', () => {
 
       const game = lastGame();
       expect(game.config.scene).toEqual([StubVillageScene, StubFishingScene]);
-      expect(game.scene.started).toEqual([
-        {
-          key: 'VillageScene',
-          data: {
-            callbacks,
-            dynamicStructures: SYNTHETIC_DUNGEON_STRUCTURES,
-            playerClass: 'cartographer',
-            spawnGridX: null,
-            spawnGridY: null,
-          },
-        },
-      ]);
+      const [started] = game.scene.started as {
+        key: string;
+        data: {
+          callbacks: Record<string, (...args: never[]) => void>;
+          dynamicStructures: unknown;
+          playerClass: string;
+          spawnGridX: number | null;
+          spawnGridY: number | null;
+        };
+      }[];
+      expect(started?.key).toBe('VillageScene');
+      expect(started?.data.dynamicStructures).toEqual(SYNTHETIC_DUNGEON_STRUCTURES);
+      expect(started?.data.playerClass).toBe('cartographer');
+      expect(started?.data.spawnGridX).toBeNull();
+      expect(started?.data.spawnGridY).toBeNull();
+
+      // The bag the scene receives is the caller's, by identity for every handler.
+      //
+      // Phase 12 WP-1.2 removed the last adapter-side wrapping. The adapter used to
+      // rebind `onNpcApproached` / `onNpcLeft` / `onNpcInteract` so it could maintain
+      // a conversation cursor and publish the snapshot's `dialogue` - a field no
+      // consumer read, computed against an empty quest step because a renderer has
+      // none. With that gone there is nothing for the adapter to observe, so the bag
+      // is forwarded whole.
+      //
+      // Identity for *all eight* is the stronger claim than the one it replaces, and it
+      // is the honest one: an adapter that wraps a caller's callback can reorder or
+      // swallow it, and there is no longer a reason for it to.
+      const delivered = started?.data.callbacks ?? {};
+      for (const name of [
+        'onStructureApproached',
+        'onStructureLeft',
+        'onStructureInteract',
+        'onNpcApproached',
+        'onNpcLeft',
+        'onNpcInteract',
+        'onNpcDialogPosition',
+        'onReady',
+      ] as const) {
+        expect(delivered[name], name).toBe(callbacks[name]);
+      }
+      // The scene's handlers reach the caller's mocks. The bag's own members are
+      // already `vi.fn()`s, so calling the forwarded handler *is* calling the
+      // caller's - which identity above proved. No reassignment is needed, and none
+      // would work: the scene holds the function the caller passed, not a closure over
+      // the bag, so a later swap of `callbacks[name]` is correctly not observed.
+      for (const name of ['onNpcApproached', 'onNpcLeft', 'onNpcInteract'] as const) {
+        const mock = vi.mocked(callbacks[name]);
+        mock.mockClear();
+        delivered[name]?.('villager-1' as never);
+        expect(mock, name).toHaveBeenCalledExactlyOnceWith('villager-1');
+      }
     });
 
     it('applies the spawn override and the default scholar archetype', () => {

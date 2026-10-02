@@ -69,11 +69,20 @@ const RENDERER_TREE = path.join(REPO_ROOT, 'src', 'renderers');
  * neutral contract) and drawing the village through a neutral shape abstraction (a
  * second renderer to maintain for one world). The list is compared as a set, so the
  * third entry is only ever added by an edit here.
+ *
+ * Phase 12 added the next two for the same reason, with a smaller surface.
+ * `VillageNpc.ts` draws one villager and nothing else - a marker, a body, a head, a
+ * shadow, and a ring - and `NpcController.ts` is listed for its `Container` *type*.
+ * Both are the same decision as `createVillageScene.ts` taken one level down, and
+ * splitting them is what let the Phase 12 tests drive wander movement and a whole
+ * conversation without constructing a village.
  */
 const PIXIJS_IMPORTERS: readonly string[] = [
   'src/renderers/pixi/runtime/createPixiApplication.ts',
   'src/renderers/pixi/testworld/createTestWorld.ts',
   'src/renderers/pixi/village/createVillageScene.ts',
+  'src/renderers/pixi/village/NpcController.ts',
+  'src/renderers/pixi/village/VillageNpc.ts',
 ];
 
 /** Layers that must not reach a renderer, matching `eslint.config.js`. */
@@ -150,6 +159,8 @@ describe('the renderer tree is walked, so the scans below are not vacuous', () =
       'src/renderers/pixi/camera/CameraRig.ts',
       'src/renderers/pixi/input/WorldInputController.ts',
       'src/renderers/pixi/village/createVillageScene.ts',
+      'src/renderers/pixi/village/NpcController.ts',
+      'src/renderers/pixi/village/VillageNpc.ts',
       'src/renderers/pixi/village/VillageRenderer.ts',
       'src/renderers/pixi/village/VillageWorld.tsx',
     ]) {

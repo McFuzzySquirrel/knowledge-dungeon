@@ -358,9 +358,17 @@ describe('Phase 5 gate 6: the live gate over the real application graph', () => 
       // rather than a new construct, and the number of Data Center downloads is
       // still **one** - a stronger statement than "one in this file".
       'src/ui/data/productAccess.ts:1',
-      'src/ui/screens/VillageScreen.tsx:1',
       'src/ui/screens/WelcomeScreen.tsx:1',
       'src/ui/utils/progressionShareExport.ts:1',
+      // The village's per-subject export. Phase 12 moved it out of
+      // `VillageScreen.tsx` into the dialog that owns it, so the pinned call site
+      // is a new path rather than a new construct - the same kind of change Phase 6
+      // made for the Data Center, and the number of village downloads is still
+      // **one**. It is a `local-download` like every other entry: an object URL
+      // over a Blob built from the product's own bytes, an anchor, and the revoke.
+      // No destination, no header, no request body - the properties that would make
+      // it egress are what this gate checks, and none of them are here.
+      'src/ui/village/DataManagementDialog.tsx:1',
     ]);
 
     // The local-download call sites and the two same-origin asset loads, with
@@ -373,9 +381,9 @@ describe('Phase 5 gate 6: the live gate over the real application graph', () => 
       'src/ui/components/CollectionSwitcher.tsx:local-download',
       'src/ui/components/MakeItYoursTab.tsx:same-origin-fetch',
       'src/ui/data/productAccess.ts:local-download',
-      'src/ui/screens/VillageScreen.tsx:local-download',
       'src/ui/screens/WelcomeScreen.tsx:local-download',
       'src/ui/utils/progressionShareExport.ts:local-download',
+      'src/ui/village/DataManagementDialog.tsx:local-download',
     ]);
 
     expect(scan.findings, describeFindings(scan.findings)).toEqual([]);
