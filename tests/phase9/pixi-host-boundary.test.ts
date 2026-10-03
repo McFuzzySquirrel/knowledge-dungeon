@@ -76,6 +76,19 @@ const RENDERER_TREE = path.join(REPO_ROOT, 'src', 'renderers');
  * Both are the same decision as `createVillageScene.ts` taken one level down, and
  * splitting them is what let the Phase 12 tests drive wander movement and a whole
  * conversation without constructing a village.
+ *
+ * Phase 13 added three more for the dungeon, and the split is sharper than the village's
+ * because each one is separately testable: `createDungeonScene.ts` owns the layer tree,
+ * the camera, and the per-frame update; `RoomNode.ts` draws one room and nothing else
+ * (shell, walls, overlay, portal, artifact, guide, label); `CorridorLayer.ts` draws the
+ * paths and their doors. Splitting them is what let `tests/phase13/**` drive a room's
+ * state contract and a floor's visibility rule without constructing a dungeon, the same
+ * reason Phase 12 split the village.
+ *
+ * `WalkabilityController.ts` is deliberately *absent* from this list: it is the phase's
+ * "pure movement controller" deliverable and imports no renderer at all, which is what
+ * lets `tests/phase13/walkability-controller.test.ts` exercise the hidden-floor rule
+ * headlessly. Its absence is asserted below, so the entry cannot be added by accident.
  */
 const PIXIJS_IMPORTERS: readonly string[] = [
   'src/renderers/pixi/runtime/createPixiApplication.ts',
@@ -83,6 +96,9 @@ const PIXIJS_IMPORTERS: readonly string[] = [
   'src/renderers/pixi/village/createVillageScene.ts',
   'src/renderers/pixi/village/NpcController.ts',
   'src/renderers/pixi/village/VillageNpc.ts',
+  'src/renderers/pixi/dungeon/createDungeonScene.ts',
+  'src/renderers/pixi/dungeon/RoomNode.ts',
+  'src/renderers/pixi/dungeon/CorridorLayer.ts',
 ];
 
 /** Layers that must not reach a renderer, matching `eslint.config.js`. */
@@ -163,6 +179,15 @@ describe('the renderer tree is walked, so the scans below are not vacuous', () =
       'src/renderers/pixi/village/VillageNpc.ts',
       'src/renderers/pixi/village/VillageRenderer.ts',
       'src/renderers/pixi/village/VillageWorld.tsx',
+      // Phase 13. Same reasoning: each is a decision this file exists to review, and the
+      // pure controller is listed because its *absence* from `PIXIJS_IMPORTERS` is a
+      // claim this walk can check.
+      'src/renderers/pixi/dungeon/DungeonRenderer.ts',
+      'src/renderers/pixi/dungeon/DungeonWorld.tsx',
+      'src/renderers/pixi/dungeon/WalkabilityController.ts',
+      'src/renderers/pixi/dungeon/createDungeonScene.ts',
+      'src/renderers/pixi/dungeon/RoomNode.ts',
+      'src/renderers/pixi/dungeon/CorridorLayer.ts',
     ]) {
       expect(relatives, expected).toContain(expected);
     }
@@ -212,6 +237,15 @@ describe('the named renderer files are the only ones that name PixiJS', () => {
       )
       .map((entry) => entry.relative);
     expect(offenders, 'pixi.js 8 is a single package').toEqual([]);
+  });
+
+  it('the pure movement controller is deliberately not an importer', () => {
+    // The list above is a census, so an entry has to be justified - and the dungeon phase
+    // added a module whose whole point is *not* being in it. Asserted here so "pure"
+    // cannot quietly become "imports only types from pixi.js".
+    expect(PIXIJS_IMPORTERS).not.toContain(
+      'src/renderers/pixi/dungeon/WalkabilityController.ts',
+    );
   });
 
   it('no renderer-neutral module in the host lifecycle names the engine', () => {
@@ -323,7 +357,7 @@ describe('the host is reached only through a dynamic import', () => {
  *
  * ## What the criterion means here
  *
- * The village screen stopped statically importing the Phaser adapter in this phase:
+ * The village screen stopped statically importing the Phaser adapter in Phase 11:
  * it reaches `@/game/createVillageGame` through a dynamic `import()`, so the default
  * build never puts Phaser in the village route's first paint and the bundler can fold
  * the branch away. A `from 'phaser'`, a scene, or an adapter reached with a static
@@ -331,17 +365,24 @@ describe('the host is reached only through a dynamic import', () => {
  * A dynamic `import()` is deliberately excluded: it is the form the criterion asks
  * for, and folding it into the static scan would make the rule unstatable.
  *
- * ## The one documented exception, and why it is enumerated rather than ignored
+ * ## Phase 13 closed the one exception, which made this gate stricter
  *
- * `GameScreen.tsx` is the Phaser dungeon route, migrated in Phase 13, not Phase 11.
- * It still statically imports `@/game/createGame` and the `PhaserDungeonRenderer`
- * type (verified when this gate was written). Pretending otherwise would make this
- * gate red for a phase that did not own that file; letting the scan pass over
- * `src/ui/**` entirely would make it vacuous. So the exception is one exact file, and
- * the assertion is on the *file set*: a second UI file that reaches Phaser fails
- * here, and `VillageScreen.tsx` is asserted clean so the phase's own file cannot
- * regress. The dungeon route is a needed change for the Phase 13 owner, recorded in
- * the Phase 11 verification report rather than hidden by a loose pattern.
+ * Phase 11 recorded exactly one tolerated static Phaser reach:
+ * `src/ui/screens/GameScreen.tsx`, the dungeon route, "migrated in Phase 13". Phase 13
+ * did that migration, so the enumeration below is now **empty**.
+ *
+ * An empty enumeration is strictly stronger than the one it replaces, and the reason is
+ * mechanical rather than rhetorical. The previous assertion was
+ * `offendingFiles.filter((file) => !Object.hasOwn(ALLOWED, file))`, so a file *on* the
+ * list produced no failure no matter what it imported - it could not fail for
+ * `GameScreen.tsx` at all, which is precisely why Phase 11 had to write down that the
+ * file was dirty. The current assertion compares the offender list itself to `[]`, so the
+ * very file the Phase 11 evidence named is now the first thing this gate would catch.
+ *
+ * The mutation that demonstrates it: adding one static `import` of `@/game/createGame`
+ * back into `GameScreen.tsx` is green under the old assertion and red under this one.
+ * `tests/phase13/dungeon-flag-boundary.test.ts` re-derives the same scan independently, so
+ * the property does not rest on this file alone.
  *
  * `@/game/systems/playerClasses` is renderer-free data (a class id, a name, a
  * tagline, a perk). It is deliberately not in the forbidden set.
@@ -355,21 +396,19 @@ describe('no current UI component imports Phaser types', () => {
     /^@\/game\/create/,
   ];
   /**
-   * The single tolerated static Phaser reach, keyed by repo-relative file.
+   * No tolerated static Phaser reach remains.
    *
-   * A record rather than a `Set` so the reason travels with the path. There is
-   * exactly one entry, and a test below pins the count to one.
+   * An empty record rather than a deleted check: the *shape* of the exception stays in the
+   * file, so reintroducing one is a deliberate edit with somewhere to write the reason,
+   * and the assertion below can pin that the list is empty rather than merely unused.
    */
-  const ALLOWED_UI_PHASER_FILES: Readonly<Record<string, string>> = Object.freeze({
-    'src/ui/screens/GameScreen.tsx':
-      'The Phaser dungeon route. Phase 11 replaced the village renderer only; the dungeon is Phase 13.',
-  });
+  const ALLOWED_UI_PHASER_FILES: Readonly<Record<string, string>> = Object.freeze({});
 
   it('finds the UI tree, so the scan is not an empty walk', () => {
     expect(sourceFilesIn(UI_TREE).length).toBeGreaterThan(0);
   });
 
-  it('every static Phaser reach under src/ui is the one enumerated dungeon route', () => {
+  it('no static Phaser reach survives anywhere under src/ui', () => {
     const offenders: string[] = [];
     for (const file of sourceFilesIn(UI_TREE)) {
       const relative = repositoryRelative(file);
@@ -379,16 +418,27 @@ describe('no current UI component imports Phaser types', () => {
         }
       }
     }
-    const offendingFiles = [...new Set(offenders.map((entry) => entry.split(' -> ')[0]))].sort();
+    // Compared against the offender list itself, not filtered through the allow-list.
+    // Under the Phase 11 form this assertion could not fail for an allow-listed file.
+    expect(offenders, 'a UI component statically imports Phaser').toEqual([]);
+    // The two migrated screens are named explicitly, so a failure says which route
+    // regressed rather than listing every offender.
+    expect(offenders.join('\n')).not.toContain('src/ui/screens/GameScreen.tsx');
+    expect(offenders.join('\n')).not.toContain('src/ui/screens/VillageScreen.tsx');
+    // And the allow-list is empty, so there is nothing to widen.
+    expect(Object.keys(ALLOWED_UI_PHASER_FILES)).toEqual([]);
+  });
+
+  it('the dungeon screen reaches Phaser and Pixi only through dynamic imports', () => {
+    const game = stripComments(sourceOf('src/ui/screens/GameScreen.tsx'));
+    expect(importSpecifiers(game)).not.toContain('phaser');
     expect(
-      offendingFiles.filter((file) => !Object.hasOwn(ALLOWED_UI_PHASER_FILES, file)),
-      'a UI component other than the enumerated dungeon route statically imports Phaser',
-    ).toEqual([]);
-    // The phase's own screen is clean, which is the half of the criterion this phase
-    // owns. Asserted separately so a failure names the phase's file, not the dungeon.
-    expect(offendingFiles).not.toContain('src/ui/screens/VillageScreen.tsx');
-    // The exception is one file. A second entry has to be a deliberate edit here.
-    expect(Object.keys(ALLOWED_UI_PHASER_FILES)).toEqual(['src/ui/screens/GameScreen.tsx']);
+      importSpecifiers(game).some((specifier) => specifier.startsWith('@/game/create')),
+    ).toBe(false);
+    expect(dynamicImportSpecifiers(game)).toContain('@/game/createGame');
+    // The Pixi arm is a dynamic import too, so a Pixi-dungeon build requests the world
+    // lazily instead of putting PixiJS in the entry closure.
+    expect(dynamicImportSpecifiers(game)).toContain('@/renderers/pixi/dungeon/DungeonWorld');
   });
 
   it('the village screen reaches Phaser only through a dynamic import', () => {
@@ -402,14 +452,24 @@ describe('no current UI component imports Phaser types', () => {
     expect(dynamicImportSpecifiers(village)).toContain('@/game/createVillageGame');
   });
 
-  it('the type-only Pixi import is allowed: it is PixiJS, not Phaser', () => {
+  it('the type-only Pixi imports are allowed: they are PixiJS, not Phaser', () => {
     // The criterion is about Phaser. A type-only import from a Pixi module is a
     // type-position reach into the renderer tree; it is erased at build time, so it
     // cannot pull the engine into a chunk and it is not a Phaser type. Asserted here
-    // explicitly so the decision is on the record rather than inferred from a scan
-    // that never looked at it.
+    // explicitly, for both migrated screens, so the decision is on the record rather
+    // than inferred from a scan that never looked at it.
     const village = sourceOf('src/ui/screens/VillageScreen.tsx');
     expect(village).toContain("import type { VillageWorldHandle } from '@/renderers/pixi/village/VillageWorld';");
+    const game = sourceOf('src/ui/screens/GameScreen.tsx');
+    expect(game).toContain(
+      "import type { DungeonWorldHandle } from '@/renderers/pixi/dungeon/DungeonWorld';",
+    );
+    // The callback bag type comes from the Pixi renderer module too, and is the shape
+    // the Phaser adapter also satisfies - which is what lets one bag drive either
+    // renderer without the screen naming either engine.
+    expect(game).toContain(
+      "import type { DungeonSceneCallbacks } from '@/renderers/pixi/dungeon/DungeonRenderer';",
+    );
   });
 
   it('the renderer-free player-class data stays allowed', () => {

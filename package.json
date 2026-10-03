@@ -18,6 +18,7 @@
     "build:web:profile": "vite build --mode profile",
     "build:web:pixi": "VITE_WORLD_RENDERER=pixi npm run build:web",
     "build:web:pixi-village": "VITE_PIXI_VILLAGE=true npm run build:web",
+    "build:web:pixi-dungeon": "VITE_PIXI_DUNGEON=true npm run build:web",
     "build:electron:web": "tsc -b && vite build --mode electron",
     "build:electron:main": "tsc -p tsconfig.electron.json",
     "build:electron": "npm run build:electron:web && npm run build:electron:main",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { computeFloorVisibility, deriveGraphHierarchy } from '@/core/graph';
 import { isReviewableRoom, summarizeReviewAnalytics } from '@/core/review';
 import {
@@ -10,9 +10,15 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
 import { useShortcutStore } from '@/store/shortcutStore';
-import { createGame, type PhaserDungeonRenderer } from '@/game/createGame';
 import { generateDungeonMap } from '@/core/layout/dungeonGenerator';
+import { runtimeConfig } from '@/config/featureFlags';
+import type {
+  DungeonRendererCapabilities,
+  WorldRenderer,
+} from '@/application/contracts/renderer';
 import type { DungeonWorldModel } from '@/application/contracts/world';
+import type { DungeonSceneCallbacks } from '@/renderers/pixi/dungeon/DungeonRenderer';
+import type { DungeonWorldHandle } from '@/renderers/pixi/dungeon/DungeonWorld';
 import { Hud } from '@/ui/components/Hud';
 import { HudDrawer } from '@/ui/components/HudDrawer';
 import { FloatingActions } from '@/ui/components/FloatingActions';
@@ -38,6 +44,79 @@ import {
 } from '@/ui/utils/onboarding';
 import { setActiveSubjectId as persistActiveSubjectId } from '@/services/persistence/subjectPersistence';
 import { getStorageThreshold } from '@/services/errorRecovery';
+
+/**
+ * The build-time dungeon renderer switch (Phase 13).
+ *
+ * ## Why the comparison is against a literal
+ *
+ * `import.meta.env.VITE_PIXI_DUNGEON` is substituted as a string literal at build time,
+ * so a *literal* `=== 'true'` lets the bundler fold the branch and delete the other arm -
+ * along with the dynamic `import()` inside it, and therefore with the whole PixiJS chunk
+ * that import pulls in. A normalising call first (`String(raw).trim().toLowerCase()`)
+ * reads the same at run time and defeats the folding, so the default build keeps a Pixi
+ * dungeon chunk it would never fetch. This mirrors `src/ui/App.tsx`'s renderer switch and
+ * `src/ui/screens/VillageScreen.tsx`'s village switch exactly.
+ *
+ * The parsed run-time value is `runtimeConfig.pixiDungeon`. The two are used for two
+ * jobs, as in those files: this literal decides what the bundler may delete, and the
+ * parsed flag produces a defined mismatch message below instead of a silent fallback when
+ * the environment value was not literally `true`.
+ */
+const pixiDungeonFactory =
+  import.meta.env.VITE_PIXI_DUNGEON === 'true'
+    ? () => import('@/renderers/pixi/dungeon/DungeonWorld')
+    : null;
+
+const phaserDungeonFactory =
+  import.meta.env.VITE_PIXI_DUNGEON === 'true'
+    ? null
+    : () => import('@/game/createGame');
+
+/**
+ * The lazy Pixi dungeon chunk, or `null` on a build that did not request it.
+ *
+ * Computed once at module scope: a `lazy()` call inside the component would mint a new
+ * component type on every render and remount the world - which for a PixiJS world means
+ * tearing down and rebuilding the `Application`.
+ */
+const LazyPixiDungeonWorld = pixiDungeonFactory !== null ? lazy(pixiDungeonFactory) : null;
+
+/**
+ * The renderer surface this screen drives, in renderer-neutral terms.
+ *
+ * Structural rather than a named adapter type, because naming either adapter would mean
+ * statically importing an engine from a UI module - which is precisely what Phase 11's
+ * boundary gate tolerated in this one file and what Phase 13 closes. `DungeonWorld`'s
+ * handle satisfies it because it declares the whole `DungeonRendererCapabilities` port;
+ * the Phaser adapter satisfies it because it has declared that port since Phase 2.
+ *
+ * `onReady` and `activateFromDom` are optional because they are additive conveniences:
+ * the Phaser adapter has `onReady` but no action dispatcher, and a capability object has
+ * neither.
+ */
+type DungeonRendererPort = DungeonRendererCapabilities & {
+  isReady(): boolean;
+  restart(): void;
+  onReady?: (listener: () => void) => () => void;
+  activateFromDom?: (actionId: string) => void;
+};
+
+/**
+ * The Phaser adapter's full lifecycle, which the mount effect drives.
+ *
+ * Narrower than `WorldRenderer & DungeonRendererPort` on purpose: `DungeonWorld` mounts and
+ * unmounts itself through a React effect, so it exposes no `mount`/`unmount`, and a port
+ * that required them would exclude the very handle the Pixi lane hands back. Only the
+ * Phaser branch below ever calls these two, and it only exists on a build whose flag asks
+ * for Phaser.
+ */
+type MountableDungeonRenderer = DungeonRendererPort &
+  Pick<WorldRenderer, 'mount' | 'unmount'>;
+
+/** The Phaser factory, or `null` on a build that asked for the Pixi dungeon. */
+const phaserDungeonModule =
+  phaserDungeonFactory === null ? null : phaserDungeonFactory;
 
 export function GameScreen(): JSX.Element {
   const snapshot = useSubjectStore((s) => s.snapshot);
@@ -75,7 +154,15 @@ export function GameScreen(): JSX.Element {
   const sceneRestartCounter = useSessionStore((s) => s.sceneRestartCounter);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const rendererRef = useRef<PhaserDungeonRenderer | null>(null);
+  /**
+   * Whichever renderer is mounted, through the neutral port.
+   *
+   * One ref for both lanes on purpose: the capability effects below run against whatever
+   * is live, so a renderer swap cannot leave one of them writing to an object no screen
+   * reads.
+   */
+  const rendererRef = useRef<DungeonRendererPort | null>(null);
+  const pixiDungeonRef = useRef<DungeonWorldHandle | null>(null);
   const npcDialogRoomIdRef = useRef<string | null>(null);
   const roomPanelTabRequestSequenceRef = useRef(0);
   const isInfoPanelOpenRef = useRef(false);
@@ -218,13 +305,6 @@ export function GameScreen(): JSX.Element {
   }
   const flow = flowRef.current;
 
-  const handleRoomInteract = useCallback(
-    (roomId: string) => {
-      flow.roomInteract(roomId);
-    },
-    [flow],
-  );
-
   const closeInfoPanel = useCallback(() => {
     flow.closeInfoPanel();
   }, [flow]);
@@ -239,78 +319,116 @@ export function GameScreen(): JSX.Element {
     return () => window.clearInterval(interval);
   }, [teleportRemainingMs]);
 
-  useEffect(() => {
-    if (!snapshot || !dungeonMap || !hierarchy || !containerRef.current) return;
-    // The renderer-neutral model of the world this screen presents. The
-    // adapter turns it into engine calls at mount time.
-    const world: DungeonWorldModel = {
+  /**
+   * One stable callback bag for the lifetime of the mount.
+   *
+   * Both renderers report through these functions, so a bag that changed identity on
+   * every render would tear the world down and rebuild it on every HUD update. Forwarding
+   * into refs is what makes the bag stable *and* current.
+   *
+   * This is also why `phase` is no longer in the effect's dependency list below: the old
+   * inline `handleRoomInteract` closure captured `phase`, which forced a remount on every
+   * phase change. `flow.roomInteract` reads the live phase from the store, so the closure
+   * no longer needs it - and for the Pixi lane a remount means destroying and rebuilding a
+   * PixiJS `Application`, which is exactly the cost the ref removes.
+   */
+  const stableCallbacks = useMemo<DungeonSceneCallbacks>(
+    () => ({
+      onRoomEntered: (roomId) => setFocusedRoomId(roomId),
+      onNpcInteract: ({ roomId, clientX, clientY }) => {
+        setNpcDialogRoomId(roomId);
+        setNpcDialogAnchor({ x: clientX, y: clientY });
+        setFocusedRoomId(roomId);
+      },
+      onNpcDialogPosition: ({ roomId, clientX, clientY }) => {
+        setNpcDialogAnchor((current) => {
+          if (!current || npcDialogRoomIdRef.current !== roomId) {
+            return { x: clientX, y: clientY };
+          }
+          if (Math.abs(current.x - clientX) < 0.75 && Math.abs(current.y - clientY) < 0.75) {
+            return current;
+          }
+          return { x: clientX, y: clientY };
+        });
+      },
+      onNpcOutOfRange: (roomId) => {
+        setNpcDialogRoomId((current) => (current === roomId ? null : current));
+        setNpcDialogAnchor((current) =>
+          npcDialogRoomIdRef.current === roomId ? null : current,
+        );
+      },
+      onInteract: (roomId) => flow.roomInteract(roomId),
+      onArtifactCollected: (roomId) => flow.collectArtifact(roomId),
+      onFloorTransition: ({ fromRoomId, direction }) => flow.changeFloor(fromRoomId, direction),
+    }),
+    [flow, setFocusedRoomId],
+  );
+  /**
+   * The renderer-neutral world this screen presents.
+   *
+   * Memoised, not rebuilt per render, so a HUD update is not a new world. Floor *changes*
+   * do not come through here: they are pushed through the renderer's `setFloorVisibility`
+   * by the flow, exactly as the pre-Phase-2 screen did, because remounting the world on a
+   * floor change would discard the player's position and the camera.
+   */
+  const worldModel = useMemo<DungeonWorldModel | null>(() => {
+    if (!snapshot || !dungeonMap) return null;
+    return {
       kind: 'dungeon',
       map: dungeonMap,
-      floor: flow.buildFloorVisibilityModel(
-        snapshot,
-        currentFloorId ?? snapshot.dungeon.rootRoomId,
-      ),
+      floor: flow.buildFloorVisibilityModel(snapshot, currentFloorId ?? snapshot.dungeon.rootRoomId),
       playerClass: selectedClass,
     };
-    const renderer = createGame({
-      parent: containerRef.current,
-      world,
-      colorTheme,
-      callbacks: {
-        onRoomEntered: (roomId) => setFocusedRoomId(roomId),
-        onNpcInteract: ({ roomId, clientX, clientY }) => {
-          setNpcDialogRoomId(roomId);
-          setNpcDialogAnchor({ x: clientX, y: clientY });
-          setFocusedRoomId(roomId);
-        },
-        onNpcDialogPosition: ({ roomId, clientX, clientY }) => {
-          setNpcDialogAnchor((current) => {
-            if (!current || npcDialogRoomIdRef.current !== roomId) {
-              return { x: clientX, y: clientY };
-            }
-            if (Math.abs(current.x - clientX) < 0.75 && Math.abs(current.y - clientY) < 0.75) {
-              return current;
-            }
-            return { x: clientX, y: clientY };
-          });
-        },
-        onNpcOutOfRange: (roomId) => {
-          setNpcDialogRoomId((current) => (current === roomId ? null : current));
-          setNpcDialogAnchor((current) =>
-            npcDialogRoomIdRef.current === roomId ? null : current,
-          );
-        },
-        onInteract: (roomId) => handleRoomInteract(roomId),
-        onArtifactCollected: (roomId) => flow.collectArtifact(roomId),
-        onFloorTransition: ({ fromRoomId, direction }) =>
-          flow.changeFloor(fromRoomId, direction),
-      },
-    });
-    rendererRef.current = renderer;
-    const stopWaitingForReady = renderer.onReady(() => setSceneReady(true));
-    renderer.mount();
+  }, [dungeonMap, flow, selectedClass, snapshot]);
+  // Which renderer this build was asked for, and whether the artifact agrees.
+  const pixiDungeon = LazyPixiDungeonWorld !== null;
+  const pixiDungeonMismatch = runtimeConfig.pixiDungeon && pixiDungeonFactory === null;
+
+  /**
+   * Mount the Phaser dungeon, on the lane that asks for it.
+   *
+   * A no-op on the Pixi lane, where the world mounts as a React component instead. The
+   * import is dynamic and guarded by the build-time literal, so this whole effect and the
+   * Phaser chunk behind it are deleted from a Pixi-dungeon artifact - and deleted from the
+   * default artifact too, by the same fold the flag comment describes.
+   */
+  useEffect(() => {
+    if (pixiDungeon || phaserDungeonModule === null) return;
+    if (!snapshot || !dungeonMap || !hierarchy || !containerRef.current || !worldModel) return;
+
+    let cancelled = false;
+    let stopWaitingForReady: (() => void) | null = null;
+    // Held locally rather than read back off `rendererRef`, because on this lane the
+    // ref holds *this* renderer - and a cleanup that read the ref could unmount a
+    // successor mounted by a newer run of the effect.
+    let mounted: MountableDungeonRenderer | null = null;
+
+    void (async () => {
+      const { createGame } = await phaserDungeonModule();
+      const host = containerRef.current;
+      if (cancelled || host === null) return;
+      const renderer: MountableDungeonRenderer = createGame({
+        parent: host,
+        world: worldModel,
+        colorTheme,
+        callbacks: stableCallbacks,
+      });
+      mounted = renderer;
+      rendererRef.current = renderer;
+      stopWaitingForReady = renderer.onReady?.(() => setSceneReady(true)) ?? null;
+      renderer.mount();
+    })();
+
     return () => {
-      stopWaitingForReady();
-      renderer.unmount();
+      cancelled = true;
+      stopWaitingForReady?.();
+      mounted?.unmount();
+      mounted = null;
       rendererRef.current = null;
+      pixiDungeonRef.current = null;
       setSceneReady(false);
     };
-    // We intentionally do NOT depend on `currentFloorId` here — floor changes
-    // are pushed via the renderer's `setFloorVisibility` to avoid tearing down
-    // the world host on every transition. `phase` stays in the list because the
-    // previous inline `handleRoomInteract` closure captured it, which
-    // re-created the host on every phase change; that behaviour is preserved
-    // verbatim.
-  }, [
-    colorTheme,
-    dungeonMap,
-    flow,
-    handleRoomInteract,
-    hierarchy,
-    phase,
-    selectedClass,
-    setFocusedRoomId,
-  ]);
+  }, [colorTheme, dungeonMap, hierarchy, pixiDungeon, snapshot, stableCallbacks, worldModel]);
 
   // Restart the dungeon world when the user saves custom sprites and clicks "Apply Changes"
   useEffect(() => {
@@ -656,7 +774,70 @@ export function GameScreen(): JSX.Element {
 
       <div className="game-area">
         <div className="game-canvas">
-          <div className="game-canvas-host" ref={containerRef} />
+          {pixiDungeon && LazyPixiDungeonWorld !== null && worldModel !== null ? (
+            // The Pixi chunk is lazy, so a build that requested it shows this status
+            // sentence for the frames before it evaluates. `DungeonWorld` supplies its
+            // own labelled interact, ascend, descend, and zoom controls plus the room
+            // list, so the Phaser touch button below is deliberately not rendered here.
+            <Suspense
+              fallback={
+                <p role="status" className="dungeon-renderer-status">
+                  Loading the dungeon…
+                </p>
+              }
+            >
+              <LazyPixiDungeonWorld
+                /*
+                 * A callback ref, and it writes both refs on purpose.
+                 *
+                 * `rendererRef` is what every capability effect above reads, so a Pixi
+                 * world whose handle lived only in `pixiDungeonRef` would leave
+                 * `setFloorVisibility`, `teleportToRoom`, `setArtifactRooms`, and the
+                 * rest silently inert - a floor change that changes nothing, with nothing
+                 * in the build to say so. That is the Phase 12 defect class exactly, and
+                 * the room-list/drawn-room disagreement the browser lane reports is how it
+                 * surfaced.
+                 *
+                 * A callback ref rather than an effect because it runs before the
+                 * capability effects, so a push that happens on the same commit cannot
+                 * land before the handle exists.
+                 */
+                ref={(handle) => {
+                  pixiDungeonRef.current = handle;
+                  rendererRef.current = handle;
+                }}
+                world={worldModel}
+                callbacks={stableCallbacks}
+                colorTheme={colorTheme}
+                onReady={() => setSceneReady(true)}
+                // Room navigation goes through the flow, not straight to the renderer, so
+                // the shared teleport cooldown applies to it exactly as it applies to the
+                // full map.
+                onNavigateToRoom={(roomId) => flow.teleportToRoom(roomId)}
+              />
+            </Suspense>
+          ) : (
+            <>
+              <div className="game-canvas-host" ref={containerRef} />
+              {sceneReady ? (
+                <button
+                  type="button"
+                  className="touch-interact-btn"
+                  aria-label="Interact with current room"
+                  onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+                  onClick={() => rendererRef.current?.triggerInteract()}
+                >
+                  ⚔
+                </button>
+              ) : null}
+            </>
+          )}
+          {pixiDungeonMismatch ? (
+            <p role="alert" className="dungeon-renderer-status">
+              This build was asked for the PixiJS dungeon renderer but contains no PixiJS
+              dungeon chunk. Build it with VITE_PIXI_DUNGEON=true.
+            </p>
+          ) : null}
           <Minimap
             dungeonMap={dungeonMap}
             colorTheme={colorTheme}
@@ -665,17 +846,6 @@ export function GameScreen(): JSX.Element {
             portalUpRoomId={floorVisibility?.portalUpRoomId ?? null}
             portalDownRoomIds={floorVisibility?.portalDownRoomIds}
           />
-          {sceneReady ? (
-            <button
-              type="button"
-              className="touch-interact-btn"
-              aria-label="Interact with current room"
-              onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
-              onClick={() => rendererRef.current?.triggerInteract()}
-            >
-              ⚔
-            </button>
-          ) : null}
           {isMobile ? (
             <FloatingActions
               onOpenMap={() => { setMobileHudOpen(false); openMapView(); }}
@@ -692,7 +862,7 @@ export function GameScreen(): JSX.Element {
               focusedRoom={focusedRoom}
               onInteract={() => {
                 if (!focusedRoom) return;
-                handleRoomInteract(focusedRoom.roomId);
+                flow.roomInteract(focusedRoom.roomId);
               }}
               onClose={closeInfoPanel}
               onTravelToRoom={handleTravelToRoom}

@@ -342,6 +342,19 @@ export interface RendererChunkBoundaryOptions {
    * cover it.
    */
   readonly pixiVillage?: boolean;
+  /**
+   * Whether this build was asked for the PixiJS Dungeon, from `VITE_PIXI_DUNGEON`.
+   *
+   * Optional and additive, for the same reason as `pixiVillage`: every existing caller
+   * keeps compiling and keeps its current behaviour, and `undefined` is treated exactly
+   * as `false`.
+   *
+   * Independent of both other checks, and necessary because of it: `build:web:pixi-dungeon`
+   * leaves `VITE_WORLD_RENDERER=phaser`, so the Phase 9 renderer check cannot cover it, and
+   * a build that asked for the dungeon and emitted no Pixi chunk has set a variable and
+   * read nothing - the shape of a check that measures nothing.
+   */
+  readonly pixiDungeon?: boolean;
 }
 
 /**
@@ -475,6 +488,26 @@ export function rendererChunkBoundaryPlugin(options: RendererChunkBoundaryOption
           ].join('\n'),
         );
       }
+
+      // The Phase 13 dungeon switch, enforced independently of the other two.
+      //
+      // `build:web:pixi-dungeon` leaves both `VITE_WORLD_RENDERER=phaser` and
+      // `VITE_PIXI_VILLAGE` unset, so neither of the checks above can cover it. A build
+      // that asked for the dungeon and emitted no Pixi chunk is the failure mode this
+      // exists for: the flag set a variable nothing read, and the lane verified nothing.
+      if (
+        options.pixiDungeon === true &&
+        options.worldRenderer !== 'pixi' &&
+        audit.rendererChunks.every((entry) => entry.family !== 'pixi')
+      ) {
+        this.error(
+          [
+            '[renderer-chunks] VITE_PIXI_DUNGEON=true, but this build contains no Pixi chunk.',
+            'The dungeon switch set a build-time variable and nothing read it, so there is no Pixi dungeon artifact to verify.',
+            'Wire the Pixi dungeon host into the dungeon route under the flag, or build without VITE_PIXI_DUNGEON until the host exists.',
+          ].join('\n'),
+        );
+      }
     },
   };
 }
@@ -505,6 +538,7 @@ export default defineConfig(({ mode }) => {
       rendererChunkBoundaryPlugin({
         worldRenderer: runtimeConfig.worldRenderer,
         pixiVillage: runtimeConfig.pixiVillage,
+        pixiDungeon: runtimeConfig.pixiDungeon,
       }),
     ],
     resolve: {

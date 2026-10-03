@@ -321,6 +321,35 @@ export interface WorldSceneInit {
    * rather than a reviewer's memory. See {@link WorldActionDispatcher}.
    */
   readonly onAction: WorldActionDispatcher;
+  /**
+   * Publish the current state, for a change that was not an action.
+   *
+   * ## Why this exists, and when it is the wrong call
+   *
+   * The host already publishes after every dispatch, so anything a learner *does* is
+   * announced without a scene asking. What it cannot see is a change the world made to
+   * itself: a scene that walked the player into a room, or whose camera the learner
+   * pinched, changes what its status sentences say, and nothing about that passes
+   * through `onAction`.
+   *
+   * The dungeon is the case that made this necessary, and the failure it fixes is worse
+   * than a missing announcement: availability is part of the sentence, so a stale publish
+   * leaves a control *disabled* with on-page text saying the opposite of the truth. A
+   * learner walks into a room with stairs and is told there are no stairs.
+   *
+   * Three rules, and the third is the one that matters:
+   *
+   * 1. **Call it on change, never per frame.** The dungeon calls it on the branch where
+   *    `currentRoomId` changes and after a zoom gesture. A scene that called it every
+   *    `update` would re-render every `aria-live` region sixty times a second and turn a
+   *    screen reader into a machine-gun.
+   * 2. **Do not call it for an action.** `onAction` already publishes; a scene that also
+   *    called this on the same event would deliver the same state twice.
+   * 3. **It is optional.** A scene with nothing to announce - the Phase 9 test world's
+   *    state changes only through its own actions - omits it, and `undefined` is a normal
+   *    value rather than a silent failure.
+   */
+  readonly publishState?: () => void;
 }
 
 /**

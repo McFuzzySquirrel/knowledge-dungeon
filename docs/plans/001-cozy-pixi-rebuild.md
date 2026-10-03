@@ -730,7 +730,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 10 | complete | Build asset bundles and functional audio. |
 | 11 | complete | Build the Pixi village world foundation. |
 | 12 | complete | Build village NPCs, quests, and redesigned panels. |
-| 13 | not-started | Build the Pixi dungeon world and navigation. |
+| 13 | complete | Build the Pixi dungeon world and navigation. |
 | 14 | not-started | Redesign the Creator flow. |
 | 15 | not-started | Redesign the Scribe flow. |
 | 16 | not-started | Redesign the Archaeologist flow. |
@@ -5348,7 +5348,7 @@ Phase 13.
 
 ## Phase 13: Pixi Dungeon World and Navigation
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Replace the dungeon renderer without changing graph or floor semantics.
 
 ### Prerequisites
@@ -5413,12 +5413,164 @@ Manual checks:
 - Verify hidden-floor corridors cannot be crossed.
 - Verify the full map can navigate every visible room.
 
-### Exit criteria
+### Verification evidence
 
-- Room and floor navigation match current behavior.
-- A 100-room subject remains traversable.
-- Pixi Dungeon can be disabled independently.
-- Every world interaction has a DOM equivalent.
+Recorded on 2026-10-03. `not-started` -> `in-progress` -> `verified` -> `complete`. The
+maintainer authorized commit and push after the N1 remediation round. No commit existed
+when this evidence was first written; the work shipped in the commit recorded below.
+
+#### Baseline before Phase 13
+
+Working tree clean at `07f60c8` (Phase 12 accepted). Lint clean, typecheck clean, 208 test
+files / 4306 tests passed, `dist` 4.80 MB across 149 files, 0 `vendor-pixi` chunks on the
+default build, CC0 gate PASSED.
+
+#### Files
+
+- New renderer: `src/renderers/pixi/dungeon/{WalkabilityController.ts,createDungeonScene.ts,RoomNode.ts,CorridorLayer.ts,DungeonRenderer.ts,DungeonWorld.tsx}`.
+- Runtime seam: `src/renderers/pixi/runtime/types.ts` (+`WorldSceneInit.publishState?`),
+  `createPixiWorldHost.ts` (hands the scene the same hoisted `publishState` closure).
+- UI: `src/ui/screens/GameScreen.tsx` (+344/-126 net) now selects its renderer by build-time
+  flag through two dynamic `import()`s.
+- Tests: `tests/phase13/**` (5 files); `tests/e2e/currentBuild.spec.ts` extended.
+- Gates: `tests/phase9/pixi-host-boundary.test.ts`, strengthened by enumeration only.
+- Build: `vite.config.ts` (additive `pixiDungeon` chunk gate), `package.json`
+  (`build:web:pixi-dungeon`), `.env.example`.
+- `src/game/adapters/phaserDungeonRenderer.ts`, `src/game/createGame.ts`,
+  `src/core/graph/navigation.ts`, `src/core/layout/dungeonGenerator.ts`,
+  `src/ui/components/Minimap.tsx`, and `FullMapView.tsx` are **unchanged**. No renderer-neutral
+  contract was redesigned; the Phase 2 dungeon port and `dungeon:*` events proved sufficient.
+
+#### Commands
+
+```text
+npm run lint                                   exit 0
+npm run typecheck                              exit 0
+npm test                                       213 files / 4410 tests passed
+npm run build:web                              exit 0, vendor-pixi: 0 chunks (default)
+npm run check:bundle-size                      4.80 MB across 153 files
+npm run build:web:pixi-dungeon                 exit 0, vendor-pixi: 1 chunk, 0 entry-reachable
+npm run check:memory (flagged)                 passed, 4 chunks / 2 families, no eager Pixi
+npm run test:licenses                          PASSED, 99 entries, dungeon=0 files
+VITE_PIXI_DUNGEON=true npm run test:e2e        32 passed / 12 skipped (4 viewports)
+npm run test:e2e (default)                     32 passed / 12 skipped
+npm test -- tests/unit/dungeonGenerator.test.ts     6 passed
+npm test -- tests/unit/graphNavigation.test.ts      2 passed
+```
+
+#### Device checks
+
+Chromium only, the four Phase-1 viewport projects; `tablet`/`tablet-landscape`
+touch-emulated. No Firefox, WebKit, Edge, or physical-device evidence — those belong to
+Phase 21. Every number above was reproduced independently by the verifier and again by the
+orchestrator, including three mutation probes (below).
+
+#### Migration/data result
+
+None. No storage, schema, or migration change; subject schema stays `1.1.0`. No
+`services/` or `core/validation/` file was touched.
+
+#### Performance/accessibility/license result
+
+- Default build emits **0** `vendor-pixi` chunks and the Phaser dungeon arm is deleted
+  outright; the flagged build keeps both `DungeonWorld` (67 kB) and `vendor-pixi` lazy with
+  0 entry-reachable edges. The village and dungeon switches are independent: `vendor-phaser`
+  survives on the flagged dungeon build.
+- **Plan section 10.2 frame time and the 20 mount/unmount cycles remain UNVERIFIED and must
+  not be claimed.** `check:memory` says so itself. See the limitation below on why the lane
+  cannot currently be pointed at the dungeon.
+- License gate PASSED; 0 media files and 0 media references under `src/` — the dungeon is
+  drawn procedurally, as the village is.
+- Accessibility: `aria-hidden` canvas; every control carries `aria-describedby` → hint +
+  a visible polite status sentence; refused controls are `disabled` **and** state why in
+  visible text (a disabled button is not focusable, so a reason carried only in
+  `aria-describedby` would be unreachable exactly when it matters); ≥44 px targets; no
+  colour-only state; reduced motion honoured at mount.
+
+#### Exit-criteria assessment
+
+1. **Room and floor navigation match current behavior** — met. The walkability mask is a
+   line-for-line faithful port of `DungeonScene.rebuildActiveWalkable`/`isWalkableAt`,
+   independently diffed against the Phaser source, including the "both corridor endpoints or
+   nothing" rule. Floor visibility, portal targets, and the cooldown stay owned by
+   `createStudyFlowController` and `computeFloorVisibility`; the renderer never decides.
+2. **A 100-room subject remains traversable** — met, and now pinned geometrically rather
+   than by request count. A tile-level BFS flood over `buildActiveWalkability` on a real
+   `generateDungeonMap` output (100 rooms, 99 corridors, 198 doors, 229,500 mask cells)
+   reaches 100/100 room centres unfiltered and on the root floor, with a non-vacuity control:
+   hiding every room but the root collapses the reachable set to exactly `['root']`.
+3. **Pixi Dungeon can be disabled independently** — met, proven three ways rather than by a
+   flag constant: build shape (0 Pixi chunks by default, `vendor-phaser` still present on the
+   flagged build), a distinct `pixiDungeon` chunk gate in `vite.config.ts`, and a browser lane
+   that detects the mounted world from the DOM and fails if it disagrees with the flag.
+4. **Every world interaction has a DOM equivalent** — met except for two actions recorded as
+   a Phase 14 gap below (guide conversation, artifact pickup). Tap/keys, drag, interact,
+   ascend, descend, zoom in/out, and travel-to-room all have DOM routes, and the room list
+   plus the React/SVG full map remain in React.
+
+#### Defects found and fixed during the phase
+
+- **`rendererRef` was never written on the Pixi lane**, so `setFloorVisibility`,
+  `teleportToRoom`, and the rest were silently inert — a floor change that changed nothing.
+  Found because the browser lane reported a 3-vs-4 disagreement between drawn rooms and DOM
+  room rows. The same Phase 12 defect class.
+- **Zoom order bug in the new scene**: the zoom tween resolved before `camera.addZoom`, so
+  the tween pulled zoom back and the button did nothing.
+- **`readState()` was dead in production.** `PixiDungeonRenderer` had no `onState` member,
+  so the port structurally could not deliver state to the DOM; `Ascend`/`Descend` were
+  permanently enabled and silently did nothing, while tests asserted sentences ("No stairs up
+  in this room") that no learner ever heard. The module header claimed the opposite of the
+  code. Fixed by adding `onState` plus a republish after every capability call, rendering
+  availability as one published sentence so the `disabled` attribute and the announced words
+  cannot disagree.
+- **Walking published nothing**, so the floor-navigation controls and their visible sentence
+  went stale after moving on foot, and the stale sentence was false — a learner walking into a
+  room with stairs was told there were none. Invisible to every gate because the tutorial
+  root floor has no portals. Fixed with `WorldSceneInit.publishState?`, wired to the same
+  hoisted closure, called only on the room-change and wheel branches of `update()`.
+- Three tests were vacuous or self-policing and were replaced: an action-id test whose two
+  "ends" were the same module; a constants check that never read the Phaser source it claimed
+  to police (now line-scans it, and was proven to go red when `PLAYER_SPEED` drifted); and a
+  "parity" test whose header described two recorders when only one existed.
+
+#### Known limitations
+
+- **Guide dialogue and artifact pickup have no DOM route.** Interaction radii are 28 px and
+  22 px; the guide's chosen anchor sits ~46 px from room centre and the artifact marker is
+  lifted 30 px, and spawn/teleport place the player at centre. This is **parity-correct** —
+  `src/game/scenes/DungeonScene.ts:141` and `:691` use the same radii against the same
+  geometry — so it is preserved behaviour, not a regression, but criterion 4 is not literally
+  met for these two verbs. **Owned by Phase 14**, which builds the dungeon workspace.
+- **The plan-10.2 memory lane cannot currently be pointed at the dungeon.**
+  `scripts/require-pixi-lane-artifact.mjs` hardwires `build:web:pixi` →
+  `VITE_WORLD_RENDERER=pixi`, which renders the Phase 9 *test world*; and
+  `DungeonWorld`'s mount deps exclude reduced motion, so the lane's cycle mechanism would not
+  remount it. Nothing in the product navigates back to Welcome from the dungeon either. Until
+  a dungeon-targeted lane exists, "no canvas/GPU growth over 20 cycles" is uncheckable by
+  anyone. **Blocks a Phase 14 performance claim, not this phase's acceptance.**
+- Frame time at 100 rooms is unmeasured. A tutorial-scale reading (16.6 ms mean, 16.7 ms p95)
+  is vsync-bound at 3 rooms and is not 100-room evidence.
+- **There is no differential Phaser-vs-Pixi parity test**, and one cannot be built against the
+  flow port: it has two members that both engines implement structurally, so two doubles would
+  behave identically. The walkability arithmetic is instead pinned by reading the Phaser
+  source directly.
+- A brief fail-open window before the first publish leaves all five controls enabled for a few
+  ms after mount. The choice is deliberate and documented: an unknown action is not a disabled
+  one, and the control must stay reachable until the scene says otherwise.
+- **Walking due north cannot leave the root room** — the 16 px collider is sampled at four
+  inset corners, so the player straddles two columns and pins on its own doorway; the east
+  corridor works unaided. Also parity with Phaser. Follow-up for the generator/content owner,
+  not this phase.
+- Seven pre-existing sub-44 px HUD controls recorded in Phase 12 are unchanged.
+
+#### Rollback
+
+Set `VITE_PIXI_DUNGEON=false` (or leave it unset). Verified: the default artifact emits 0 Pixi
+chunks, mounts the Phaser dungeon, requests no Pixi script, and `npm run test:e2e` passes
+32/12. `FEATURE_FLAG_MATRIX.pixiDungeon` keeps its Phase 1 default of `false`, and the
+`vite.config.ts` gate is additive and optional.
+
+### Exit criteria
 
 ### Rollback
 

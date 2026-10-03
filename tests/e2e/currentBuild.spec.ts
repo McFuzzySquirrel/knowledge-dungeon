@@ -247,14 +247,25 @@ test('Welcome introduces no new serious or critical automated accessibility viol
 });
 
 /**
- * The dungeon route, which is Phaser in both build variants.
+ * The dungeon route, in whichever renderer this build was asked for.
  *
- * `VITE_PIXI_VILLAGE` switches only the village route, so this journey is the same
- * on the default and the flagged artifact and its "no Pixi request" claim is a true
- * statement about the Welcome-to-dungeon path in both. The village route's own
- * variant-aware coverage is the next test.
+ * `VITE_PIXI_DUNGEON=true` switches the dungeon route to the lazy PixiJS world and leaves
+ * the village route on Phaser; the default artifact is Phaser on both. Phase 13's
+ * verification runs this file twice, so this test has to pass on both artifacts. It
+ * detects the mounted world from the DOM rather than assuming, and asserts the variant it
+ * actually found matches the flag the build was made with - so a build whose flag and
+ * artifact disagree fails instead of quietly passing.
+ *
+ * The two claims that are *lane-specific* are stated per lane, because they are opposites
+ * of each other and asserting both in one build would be asserting a contradiction:
+ *   - default artifact: the Phaser vendor chunk is fetched, and no Pixi chunk is.
+ *   - flagged artifact: the Pixi vendor chunk is fetched, and the Pixi dungeon surface,
+ *     its DOM controls, and its labelled rooms are on screen.
+ * Everything privacy-shaped (no WebSocket, no off-origin request, no remote font) is
+ * asserted for both lanes, because it is a property of the application and not of a
+ * renderer.
  */
-test('safe tutorial action renders the Phaser dungeon world with static-only network traffic', async ({
+test('safe tutorial action renders the dungeon world with static-only network traffic', async ({
   page,
   baseURL,
 }, testInfo) => {
@@ -268,8 +279,131 @@ test('safe tutorial action renders the Phaser dungeon world with static-only net
     webSocketUrls.push(`${url.origin}${url.pathname}`);
   });
 
+  const expectedPixiDungeon = process.env.VITE_PIXI_DUNGEON === 'true';
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  if (expectedPixiDungeon) await installDungeonProbe(page);
   await waitForWelcome(page);
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
+
+  if (expectedPixiDungeon) {
+    // The Pixi chunk is lazy, so the surface appears only after it evaluates.
+    const pixiSurface = page.locator('.pixi-dungeon-world');
+    const phaserSurface = page.locator('.game-canvas-host canvas');
+    await expect
+      .poll(
+        async () =>
+          (await pixiSurface.count()) > 0 ? 'pixi' : (await phaserSurface.count()) > 0 ? 'phaser' : 'none',
+        { timeout: 30_000 },
+      )
+      .not.toBe('none');
+    expect(
+      (await phaserSurface.count()) > 0,
+      'VITE_PIXI_DUNGEON=true, but the Phaser dungeon also mounted',
+    ).toBe(false);
+    await expect(pixiSurface).toBeVisible({ timeout: 30_000 });
+
+    // Every world verb has a DOM equivalent, and they are all real controls.
+    //
+    // The names come from the scene's own action table, which is what `DungeonWorld`
+    // renders the accessible name from, so this cannot drift from the scene's declaration
+    // without failing here.
+    await expect(page.getByRole('button', { name: 'Interact (E or Space)' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ascend' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Descend' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeVisible();
+
+    // A refused action is disabled *and says why on the page*. This is the Phase 13
+    // fix observed in a real browser rather than in jsdom: the tutorial spawns the player
+    // in the root room, which has no stairs up and no stairs down, so both portal controls
+    // are unavailable and both publish the reason.
+    await expect(page.getByRole('button', { name: 'Ascend' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Descend' })).toBeDisabled();
+    await expect(
+      page.getByText('there are no stairs up in this room', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText('there are no stairs down in this room', { exact: true }),
+    ).toBeVisible();
+    // And an action the world always accepts is not disabled by the same machinery.
+    await expect(page.getByRole('button', { name: 'Interact (E or Space)' })).toBeEnabled();
+    // The reasons are *on* the page, not only in an attribute a disabled control cannot
+    // have announced.
+    await expect(
+      page.locator('[data-action-status="dungeon-ascend"]'),
+    ).toBeVisible();
+
+    const roomNavigation = page.getByRole('group', { name: 'Room navigation' });
+    await expect(roomNavigation).toBeVisible();
+    // Scoped to the group: the HUD has its own "Go to Village" control, and a bare
+    // `/^Go to /` selector would silently include it in the count below.
+    await expect(roomNavigation.getByRole('button', { name: /^Go to / }).first()).toBeVisible();
+
+    // Rooms, corridors, and doors are on the real stage, read through the live scene
+    // graph rather than from a DOM the canvas does not have.
+    await expect
+      .poll(
+        async () => (await readDungeonScene(page)).roomLabels.length,
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(0);
+    const reading = await readDungeonScene(page);
+    expect(reading.roomLabels.length, 'no room was drawn on the real stage').toBeGreaterThan(1);
+    expect(
+      reading.roomLabels.every((label) => /^dungeon-room-.+/.test(label)),
+      reading.roomLabels.join(' | '),
+    ).toBe(true);
+    expect(reading.doorLabels.length, 'no door was drawn on the real stage').toBeGreaterThan(0);
+    expect(reading.topics.length, 'no topic label was drawn').toBeGreaterThan(0);
+
+    // The drawn room count equals the DOM room list's count. Both read the same
+    // `FloorVisibilityModel`, so a disagreement is either a renderer that drew a hidden
+    // room or a mirror that offered one - which is the property the floor-visibility rule
+    // exists to protect.
+    const roomRowCount = await roomNavigation.getByRole('button', { name: /^Go to / }).count();
+    expect(reading.roomLabels.length, 'the canvas and the DOM room list disagree').toBe(roomRowCount);
+
+    // Keyboard movement reaches the world.
+    const before = reading.player;
+    expect(before, 'the player marker was not on the real stage').not.toBeNull();
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('ArrowRight');
+    const after = (await readDungeonScene(page)).player;
+    expect(after, 'the player marker was not on the real stage after movement').not.toBeNull();
+    expect(
+      Math.abs((after?.x ?? 0) - (before?.x ?? 0)) + Math.abs((after?.y ?? 0) - (before?.y ?? 0)),
+      'keyboard movement did not reach the Pixi dungeon scene',
+    ).toBeGreaterThan(1);
+
+    // Portrait then landscape: the world resizes rather than throwing.
+    await page.setViewportSize({ ...supportEntryForProject('tablet').viewport });
+    await expect(pixiSurface).toBeVisible();
+    await page.setViewportSize({ ...supportEntryForProject('tablet-landscape').viewport });
+    await expect(pixiSurface).toBeVisible();
+
+    const pixiScriptRequests = observations
+      .filter(({ resourceType }) => resourceType === 'script')
+      .filter(({ url }) => /pixi/i.test(url));
+    expect(
+      pixiScriptRequests,
+      'the flagged dungeon route requested no Pixi chunk, so the switch was not exercised',
+    ).not.toEqual([]);
+    expect(pageErrors, `page errors during the Pixi dungeon run: ${pageErrors.join(' | ')}`).toEqual([]);
+
+    await page.waitForLoadState('networkidle');
+    const privacyReport = inspectPrivacyNetwork(observations, new URL(baseURL).origin);
+    await attachJson(testInfo, 'privacy-network-observations.json', {
+      lane: 'pixi-dungeon',
+      pixiScriptRequests: pixiScriptRequests.length,
+      ...privacyReport,
+    });
+    expect(webSocketUrls, `Unexpected WebSocket destinations: ${webSocketUrls.join(', ')}`).toEqual([]);
+    expect(privacyReport.violations, privacyReport.violations.join('\n')).toEqual([]);
+    return;
+  }
 
   const canvas = page.locator('.game-canvas-host canvas');
   await expect(canvas).toBeVisible({ timeout: 30_000 });
@@ -322,6 +456,7 @@ test('safe tutorial action renders the Phaser dungeon world with static-only net
 
   const privacyReport = inspectPrivacyNetwork(observations, new URL(baseURL).origin);
   await attachJson(testInfo, 'privacy-network-observations.json', {
+    lane: 'default-dungeon',
     canvasSize,
     phaserChunkRequests,
     webSocketUrls,
@@ -439,6 +574,88 @@ async function installVillageProbe(page: Page): Promise<void> {
     scope['__PIXI_APP_INIT__'] = (application: unknown) => {
       applications.push(application);
       if (typeof previous === 'function') (previous as (value: unknown) => void)(application);
+    };
+  });
+}
+
+/**
+ * Captures every PixiJS `Application` for the dungeon lane.
+ *
+ * The same hook the village lane installs, named separately so the two probes can be read
+ * apart when both a dungeon and a village Pixi world are live in one page - which is
+ * exactly what a build with both flags on would produce.
+ */
+async function installDungeonProbe(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const scope = globalThis as unknown as Record<string, unknown>;
+    const applications: unknown[] = [];
+    scope['__KD_E2E_PIXI_APPS__'] = applications;
+    const previous = scope['__PIXI_APP_INIT__'];
+    scope['__PIXI_APP_INIT__'] = (application: unknown) => {
+      applications.push(application);
+      if (typeof previous === 'function') (previous as (value: unknown) => void)(application);
+    };
+  });
+}
+
+interface DungeonSceneReading {
+  /** The player marker's world position, or `null` if the scene is not on the stage. */
+  readonly player: { x: number; y: number } | null;
+  /** Every room container label on the stage, so the drawn rooms can be asserted. */
+  readonly roomLabels: readonly string[];
+  /** Every door label on the stage. */
+  readonly doorLabels: readonly string[];
+  /** Every room topic drawn as a `Text`. */
+  readonly topics: readonly string[];
+}
+
+/** Reads the live Pixi scene graph: the player, the rooms, the doors, and the labels. */
+async function readDungeonScene(page: Page): Promise<DungeonSceneReading> {
+  return page.evaluate(() => {
+    interface SceneNode {
+      readonly text?: unknown;
+      readonly x?: number;
+      readonly y?: number;
+      readonly label?: unknown;
+      readonly children?: readonly SceneNode[];
+      getChildByLabel?(label: string): SceneNode | null;
+    }
+    const scope = globalThis as unknown as Record<string, unknown>;
+    const applications = (scope['__KD_E2E_PIXI_APPS__'] as unknown[] | undefined) ?? [];
+    const application = applications[applications.length - 1] as { stage?: SceneNode } | undefined;
+    const root = application?.stage?.getChildByLabel?.('dungeon-world') ?? null;
+    const layer = root?.getChildByLabel?.('dungeon-world-layer') ?? null;
+    const player = layer?.getChildByLabel?.('dungeon-player') ?? null;
+    const roomsLayer = layer?.getChildByLabel?.('dungeon-rooms') ?? null;
+    const roomLabels: string[] = [];
+    const doorLabels: string[] = [];
+    const topics: string[] = [];
+    // The room *containers* are the direct children of the rooms layer. Reading them
+    // positionally rather than by a label prefix is what distinguishes a room from the
+    // dozen labelled parts inside one - every one of those is also `dungeon-room-*`.
+    for (const room of roomsLayer?.children ?? []) {
+      if (typeof room.label === 'string') roomLabels.push(room.label);
+    }
+    const visit = (node: SceneNode): void => {
+      const label = typeof node.label === 'string' ? node.label : '';
+      if (label.startsWith('dungeon-door-')) doorLabels.push(label);
+      if (typeof node.text === 'string' && label === 'dungeon-room-label') topics.push(node.text);
+      for (const child of node.children ?? []) visit(child);
+    };
+    // The topic labels live inside the room containers; the doors live in the corridor
+    // layer, which is a sibling of the rooms layer. Both subtrees are walked, and only
+    // labels the scene actually set are collected.
+    if (roomsLayer) visit(roomsLayer);
+    const corridor = layer?.getChildByLabel?.('dungeon-corridors');
+    if (corridor) visit(corridor);
+    return {
+      player:
+        player && typeof player.x === 'number' && typeof player.y === 'number'
+          ? { x: player.x, y: player.y }
+          : null,
+      roomLabels,
+      doorLabels,
+      topics,
     };
   });
 }

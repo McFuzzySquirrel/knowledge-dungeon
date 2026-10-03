@@ -202,6 +202,19 @@ export function createPixiWorldHost<
     for (const listener of listeners) listener();
   }
 
+  /**
+   * Read the scene's state and hand it to every subscriber.
+   *
+   * Also handed to the scene as `init.publishState`, so a world that changed *itself* - a
+   * player who walked into another room, a camera the learner pinched - reaches the same
+   * subscribers with the same value as one that changed through an action. It is the same
+   * closure, not a second one and not a re-implementation: to a subscriber there is one
+   * channel, which is what lets the dungeon treat "the learner pressed something" and "the
+   * world moved" alike.
+   *
+   * Safe to pass as a bare reference because it is a hoisted function declaration, and the
+   * returned host object is the only place it is exposed.
+   */
   function publishState(): void {
     if (scene === null) return;
     const state = scene.readState();
@@ -371,7 +384,7 @@ export function createPixiWorldHost<
     // mount and on `restart()` below - a fresh closure per mount would leave a
     // destroyed scene holding a live dispatcher, which is the one way this seam could
     // come apart later.
-    const init: WorldSceneInit = { theme, quality, onAction: dispatch };
+    const init: WorldSceneInit = { theme, quality, onAction: dispatch, publishState };
     let built: TScene;
     try {
       built = createScene(created, init);
@@ -446,7 +459,7 @@ export function createPixiWorldHost<
     const previous = scene;
     scene = null;
     previous?.destroy();
-    const built = createScene(current, { theme, quality, onAction: dispatch });
+    const built = createScene(current, { theme, quality, onAction: dispatch, publishState });
     scene = built;
     built.onResize(surface.width, surface.height);
     if (!hidden) current.startTicker();
