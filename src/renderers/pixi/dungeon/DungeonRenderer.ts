@@ -57,6 +57,10 @@ import type {
   WorldEventPayloadField,
 } from '@/application/contracts/events';
 import type { DungeonWorldModel } from '@/application/contracts/world';
+import {
+  IDLE_DUNGEON_ARTIFACT_SNAPSHOT,
+  type DungeonArtifactSnapshot,
+} from './dungeonArtifact';
 import { createDungeonScene, type DungeonScene } from './createDungeonScene';
 
 /**
@@ -123,6 +127,27 @@ export interface PixiDungeonRenderer extends WorldRenderer, DungeonRendererCapab
   onState(listener: (state: WorldActionState) => void): () => void;
   /** Perform a named world action the way a DOM control does. */
   activateFromDom(actionId: string): void;
+  /**
+   * Read the dungeon's artifact surface, for a DOM surface that renders it.
+   *
+   * ## Why this is not on `DungeonRendererCapabilities`
+   *
+   * Because that port is shared with the Phaser adapter and could not be widened here, and
+   * because a read and a verb belong together: `state.canCollect` is what a control checks
+   * before it enables itself, and `activateFromDom(DUNGEON_ARTIFACT_ACTION_ID)` is what it
+   * dispatches when pressed. The two are only meaningful as a pair, so they sit on the same
+   * object.
+   *
+   * The same pattern the village's Phase 12 `readNpcSnapshot` set, and for the same reason:
+   * a React surface must not have to hold a scene to ask a question. Total - before mount,
+   * after unmount, and on a corridor it reports {@link IDLE_DUNGEON_ARTIFACT_SNAPSHOT}'s
+   * shape rather than `undefined`.
+   *
+   * The action to dispatch from it is {@link DUNGEON_ARTIFACT_ACTION_ID}, which routes
+   * through the host's own dispatch, so a pickup taken from a DOM control is announced once
+   * and is the same action as the marker the learner walks onto.
+   */
+  readArtifactSnapshot(): DungeonArtifactSnapshot;
 }
 
 /** Everything the renderer needs to present one dungeon world. */
@@ -240,6 +265,9 @@ export function createPixiDungeonRenderer(
       // The host dispatches and republishes in one function, so no `refreshState()` is
       // needed here: the activation *is* the trigger.
       host.activateFromDom(actionId);
+    },
+    readArtifactSnapshot(): DungeonArtifactSnapshot {
+      return scene?.readArtifactSnapshot() ?? IDLE_DUNGEON_ARTIFACT_SNAPSHOT;
     },
     setFloorVisibility(visibility): void {
       host.capabilities?.setFloorVisibility(visibility);

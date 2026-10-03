@@ -7,7 +7,6 @@ import {
   evaluateNoteValidation,
   REQUIRED_NOTE_SECTIONS,
 } from '@/core/validation/notes';
-import type { QualityScoreKey } from '@/core/validation/persistence';
 import { SCRIBE_CENTURY_120_BADGE_ID } from '@/core/progression';
 import { deriveGraphHierarchy } from '@/core/graph';
 import { isBossFloor } from '@/core/layout/bossRooms';
@@ -20,6 +19,12 @@ import {
   extractNoteSections,
 } from '@/ui/utils/noteSections';
 import { useToasts } from '@/ui/utils/useToasts';
+import {
+  scribeCriterionHint,
+  scribeCriterionLabel,
+  scribeQualityBonusLine,
+  scribeScoreDisplay,
+} from '@/ui/study/scribe/scribeViewModel';
 import {
   tokenizeForHighlighting,
   renderHighlightHtml,
@@ -34,27 +39,14 @@ import {
  * writes the bytes to the device-local attachment store and the room gains a
  * `local` attachment that resolves back to them, so the preview survives a
  * reload.
+ *
+ * The criterion labels, improvement hints, score presentation, and quality-bonus
+ * line used to be constants in this file. Phase 15 moved them to
+ * `src/ui/study/scribe/scribeViewModel.ts` - the renderer-neutral view model the
+ * redesigned Scribe workspace reads - and this modal now calls the same
+ * functions, so the wording has exactly one home while this lane stays the
+ * rollback surface.
  */
-
-const CRITERION_LABELS: Record<QualityScoreKey, string> = {
-  sectionCompleteness: 'Required sections',
-  conceptTermCoverage: 'Topic terms covered',
-  linkReferences: 'Links & references',
-  recallQuestionQuality: 'Recall questions',
-  clarityReadability: 'Readability',
-};
-
-function getCriterionHint(criterion: QualityScoreKey, score: number): string {
-  if (score === 2) return '';
-  const hints: Record<QualityScoreKey, string> = {
-    sectionCompleteness: 'Include Summary, Key Points, and Recall Question headings.',
-    conceptTermCoverage: 'Use key terms from the room topic throughout your note.',
-    linkReferences: score === 0 ? 'Add 2+ links or "see also" references.' : 'Add one more link or reference.',
-    recallQuestionQuality: 'Write 2+ questions in the Recall Question section.',
-    clarityReadability: 'Aim for 8-24 words per sentence and at least 2 paragraphs.',
-  };
-  return hints[criterion];
-}
 
 const TEMPLATE = composeNoteSections(emptyNoteSections());
 const DEFAULT_EXPANDED = true;
@@ -723,16 +715,16 @@ export function NoteEditorModal(): JSX.Element | null {
                 <ul className="validation-list">
                   {preview.rubric.map((entry) => {
                     const score = entry.score;
-                    const hint = getCriterionHint(entry.criterion, score);
+                    const hint = scribeCriterionHint(entry.criterion, score);
                     return (
                       <li key={entry.criterion}>
                         <span>
-                          <strong>{CRITERION_LABELS[entry.criterion]}</strong>
+                          <strong>{scribeCriterionLabel(entry.criterion)}</strong>
                           {hint ? <span style={{ display: 'block', fontSize: 12, opacity: 0.75 }}>{hint}</span> : null}
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span className={score === 2 ? 'pass' : score === 1 ? '' : 'fail'}>
-                            {score}/2
+                            {scribeScoreDisplay(score)}
                           </span>
                           <span
                             style={{
@@ -749,7 +741,7 @@ export function NoteEditorModal(): JSX.Element | null {
                   })}
                 </ul>
                 <p style={{ fontSize: 12, margin: '4px 0 0', opacity: 0.6 }}>
-                  Quality bonus: {preview.qualityBonus}/10 &middot; Each criterion scored 0–2
+                  {scribeQualityBonusLine(preview.qualityBonus)}
                 </p>
               </>
             ) : null}

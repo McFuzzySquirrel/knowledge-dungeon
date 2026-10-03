@@ -34,6 +34,11 @@ import { Container, Graphics, Text } from 'pixi.js';
 
 import type { DungeonDoor, DungeonRoom } from '@/core/layout/dungeonTypes';
 import { cozyTextStyle, type CozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
+import {
+  describeDungeonArtifactMarkerSuffix,
+  isDungeonArtifactMarkerDrawn,
+  type DungeonArtifactMarkerState,
+} from './dungeonArtifact';
 import { roomWallSegments } from './CorridorLayer';
 import { lightenHex, resolveRoomDecor, resolveRoomGuidePosition } from './WalkabilityController';
 
@@ -78,10 +83,16 @@ export interface RoomNodeState {
   readonly portal: RoomPortalDirection | null;
   /** Whether the player is standing in this room right now. */
   readonly focused: boolean;
-  /** Whether an artifact is waiting here and the icons are switched on. */
-  readonly artifactVisible: boolean;
-  /** Whether the artifact here has already been collected into the journal. */
-  readonly artifactCollected: boolean;
+  /**
+   * What this room's artifact marker is doing.
+   *
+   * One field rather than `artifactVisible` plus `artifactCollected`, because the two
+   * booleans could only be combined downstream and every combination was a state nobody
+   * had named: "an artifact exists but may not be picked up right now" is not "no
+   * artifact", and a room that had been collected is not "not yet collected". The marker
+   * and the room label now read the same decision.
+   */
+  readonly artifactMarker: DungeonArtifactMarkerState;
   /** Whether this room already carries a review marker. */
   readonly reviewed: boolean;
   /** Whether this room has image attachments. */
@@ -320,9 +331,19 @@ export function createRoomNode(options: CreateRoomNodeOptions): RoomNode {
       .stroke({ width: theme.border.hairline, color: theme.color.borderStrong, alpha: 0.7 });
   }
 
-  function drawArtifact(visible: boolean): void {
+  /**
+   * Draw the artifact marker.
+   *
+   * A diamond in a soft disc - a silhouette that is not a colour - and it is drawn for
+   * `collectible` only. A collected artifact draws *nothing*: the pickup is over, and the
+   * open chest in {@link drawOverlay} plus the words `apply` writes into the room label are
+   * how the room says so. A room whose artifact exists but may not be picked up in the
+   * current phase also draws nothing, because offering a marker the pickup would refuse is
+   * worse than offering nothing.
+   */
+  function drawArtifact(state: DungeonArtifactMarkerState): void {
     artifact.clear();
-    if (!visible) return;
+    if (!isDungeonArtifactMarkerDrawn(state)) return;
     const x = centerX;
     const y = centerY - height * MARKER_LIFT;
     artifact
@@ -396,14 +417,31 @@ export function createRoomNode(options: CreateRoomNodeOptions): RoomNode {
     drawWalls(state);
     drawOverlay(state);
     drawPortal(state.portal);
-    drawArtifact(state.artifactVisible && !state.artifactCollected);
+    drawArtifact(state.artifactMarker);
 
     const isPortal = state.portal !== null;
     floorBand.alpha = isPortal ? 1 : 0.65;
     label.style.fill = isPortal ? theme.color.accent : theme.color.textPrimary;
-    label.text = `${state.portal === 'up' ? '↑ ' : state.portal === 'down' ? '↓ ' : ''}${room.topic}${
-      state.artifactCollected ? ' ✓' : ''
-    }`;
+    // The room label repeats the artifact state in words, because the marker is a shape:
+    // a diamond means "collectible" to someone who can see the canvas and to nobody else.
+    // It previously appended a `✓` for the collected case, which covered one of three
+    // states and was a symbol rather than a sentence.
+    const artifactSuffix = describeDungeonArtifactMarkerSuffix(state.artifactMarker);
+    const roomName = `${room.topic}${artifactSuffix}`;
+    label.text = `${state.portal === 'up' ? '↑ ' : state.portal === 'down' ? '↓ ' : ''}${roomName}`;
+
+    // The accessible name is set as well as drawn, so the state has a carrier that is not
+    // a glyph even for a consumer reading the scene graph rather than the pixels. The
+    // dungeon's canvas is `aria-hidden` today, so nothing consumes these yet - they are set
+    // because the alternative is a host that turns the accessibility system on and finds a
+    // room whose name says nothing about the artifact standing in it.
+    container.accessibleTitle = roomName;
+    artifact.accessibleTitle = roomName;
+    artifact.accessibleHint =
+      state.artifactMarker === 'collectible'
+        ? 'Walk onto the marker to collect this artifact into the journal.'
+        : null;
+
     review.visible = state.reviewed;
     imageMarker.visible = state.imageAttachment;
     focusRing.visible = state.focused;

@@ -1,0 +1,356 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+ * The Scribe encounter workspace.
+ *
+ * ## Why this is colocated rather than added to `study.css`
+ *
+ * `src/ui/study/study.css` is the shared shell's stylesheet, and the shell is
+ * phase-agnostic by construction: adding Scribe rules there would put a fourth phase's
+ * layout inside the file that promises to hold none. Colocating follows the reasoning
+ * `study.css` states for itself, and the two rules `villagePanels.css` and
+ * `audioSettings.css` already follow. `scripts/check-cc0-assets.mjs` classifies `.css`
+ * as non-media, so a stylesheet here needs no registry entry.
+ *
+ * ## What every rule below obeys
+ *
+ * 1. **No colour-only state.** A missing section, a failed check, and a low rubric score
+ *    each carry a word - `Missing`, `Not met`, `Not scored` - next to any fill or border
+ *    the row has. `tests/phase15/scribe-encounter.test.tsx` asserts the words, so this file
+ *    is the second half of a pair rather than the only half.
+ * 2. **44 by 44 CSS pixels on every control**, matching the inline style every study
+ *    control already carries (`STUDY_TOUCH_TARGET_STYLE`). The rule here is a backstop for
+ *    a control added later without it, not the floor itself.
+ * 3. **Reduced motion is honoured** by removing every transition here, and none of them
+ *    carried information.
+ * 4. **System fonts only**, inherited from `.study-shell`.
+ * 5. **Everything wraps at 320 pixels.** `overflow-wrap: anywhere` on every text block, and
+ *    no fixed widths, so a 200% zoom on a phone does not widen the page.
+ */
+
+/* === The overlay '============================================================ */
+
+.scribe-encounter-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* A writing surface is taller than a confirmation dialog, and the note a learner is
+   * editing must stay reachable without the overlay growing past the viewport. */
+  max-block-size: min(92vh, 1000px);
+  overflow-y: auto;
+  inline-size: min(96vw, 900px);
+}
+
+/* === Arrival '================================================================ */
+
+.scribe-arrival {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scribe-arrival__headline {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.scribe-arrival__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+}
+
+/* === Composer '=============================================================== */
+
+.scribe-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scribe-composer__modes,
+.scribe-composer__formatting,
+.scribe-composer__image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scribe-composer__formatting {
+  padding: 8px;
+  border: 1px dashed var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+}
+
+.scribe-composer__url {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  inline-size: 100%;
+}
+
+.scribe-composer__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.scribe-composer__preview {
+  padding: 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+  background: var(--bg-panel, #fdf7ef);
+}
+
+.scribe-composer__submit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--border-soft, #d8ccc0);
+}
+
+.scribe-toggle,
+.scribe-inline-btn {
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding-inline: 10px;
+  cursor: pointer;
+  text-align: start;
+}
+
+/* `aria-pressed` is the state, and it is also rendered as a word: a border *width*, which
+ * survives a forced-colours mode where a fill may not. */
+.scribe-toggle[aria-pressed='true'] {
+  border-width: 3px;
+  font-weight: 600;
+}
+
+.scribe-toggle[disabled],
+.scribe-inline-btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.scribe-inline-btn--danger {
+  font-weight: 600;
+}
+
+/* === Images '================================================================= */
+
+.scribe-composer__images {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px dashed var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+}
+
+.scribe-image-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scribe-image-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 160px;
+  min-inline-size: 0;
+  padding: 6px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+}
+
+.scribe-image-card__image,
+.scribe-image-card__missing {
+  inline-size: 100%;
+  block-size: 96px;
+  object-fit: contain;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 6px;
+  background: var(--bg-panel, #fdf7ef);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: var(--text-muted, #5c5148);
+  overflow-wrap: anywhere;
+}
+
+.scribe-image-card__meta {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.scribe-image-card__kind {
+  font-size: 0.75rem;
+  color: var(--text-muted, #5c5148);
+}
+
+.scribe-image-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* === Confirmation '=========================================================== */
+
+.scribe-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  /* A 2px border rather than a fill: the confirmation is a border the learner crosses,
+   * and it has to read the same in a high-contrast mode. */
+  border: 2px solid var(--text-muted, #5c5148);
+  border-radius: 10px;
+}
+
+.scribe-confirm__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  /* The 44-pixel target is the label, not the box: a 44-pixel checkbox would be a
+   * control whose appearance lies about what the application is. */
+  min-block-size: 44px;
+  font-size: 0.875rem;
+}
+
+/* === Checks and rubric '====================================================== */
+
+.scribe-validation {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scribe-subheading {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, #5c5148);
+}
+
+.scribe-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.scribe-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+}
+
+.scribe-row__mark {
+  flex: 0 0 auto;
+  inline-size: 1.25em;
+  text-align: center;
+}
+
+.scribe-row__text {
+  flex: 1 1 14ch;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The verdict word is what carries the state; the border weight only reinforces it. */
+.scribe-row__verdict {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.scribe-row__detail {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted, #5c5148);
+  overflow-wrap: anywhere;
+}
+
+.scribe-row--missing,
+.scribe-row--none {
+  border-width: 3px;
+}
+
+.scribe-row--partial {
+  border-width: 2px;
+}
+
+.scribe-row--full {
+  border-width: 1px;
+}
+
+/* === Artifact '=============================================================== */
+
+.scribe-artifact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.scribe-artifact__body {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+  background: var(--bg-panel, #fdf7ef);
+}
+
+/* === Shared bits '============================================================ */
+
+.scribe-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+  overflow-wrap: anywhere;
+}
+
+.scribe-hint--problem {
+  font-weight: 600;
+}
+
+.scribe-encounter__close {
+  display: flex;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--border-soft, #d8ccc0);
+}
+
+/* === Reduced motion '========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .scribe-toggle,
+  .scribe-inline-btn {
+    transition: none;
+  }
+}

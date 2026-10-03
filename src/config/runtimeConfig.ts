@@ -26,6 +26,7 @@ export interface RuntimeConfig {
    */
   readonly audioEnabled: boolean;
   readonly creatorWorkspace: boolean;
+  readonly scribeEncounterWorkspace: boolean;
 }
 
 export type RuntimeConfigKey = keyof RuntimeConfig;
@@ -43,6 +44,7 @@ export const RUNTIME_FLAG_ENV_KEYS = {
   webShare: 'VITE_WEB_SHARE',
   audioEnabled: 'VITE_AUDIO_ENABLED',
   creatorWorkspace: 'VITE_CREATOR_WORKSPACE',
+  scribeEncounterWorkspace: 'VITE_SCRIBE_ENCOUNTER_WORKSPACE',
 } as const satisfies Readonly<Record<RuntimeConfigKey, string>>;
 
 /**
@@ -61,6 +63,7 @@ export const DEFAULT_RUNTIME_CONFIG: Readonly<RuntimeConfig> = Object.freeze({
   webShare: false,
   audioEnabled: true,
   creatorWorkspace: false,
+  scribeEncounterWorkspace: false,
 });
 
 function normalizedRawValue(
@@ -130,6 +133,10 @@ export function parseRuntimeConfig(
     creatorWorkspace: parseBoolean(
       'creatorWorkspace',
       DEFAULT_RUNTIME_CONFIG.creatorWorkspace,
+    ),
+    scribeEncounterWorkspace: parseBoolean(
+      'scribeEncounterWorkspace',
+      DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace,
     ),
   };
 

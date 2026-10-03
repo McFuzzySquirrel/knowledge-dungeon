@@ -561,7 +561,13 @@ VITE_DATA_PRODUCTS_V2=true|false
 VITE_WEB_SHARE=true|false
 VITE_AUDIO_ENABLED=true|false
 VITE_CREATOR_WORKSPACE=true|false
+VITE_SCRIBE_ENCOUNTER_WORKSPACE=true|false
 ```
+
+`VITE_SCRIBE_ENCOUNTER_WORKSPACE` was added in Phase 15. It gates the redesigned Scribe
+encounter workspace behind the existing NoteEditorModal, and — like every flag except
+audio — it is a cutover gate whose production default is the pre-phase behaviour
+(`false`). It selects which view a learner sees, not what counts as a valid note.
 
 `VITE_CREATOR_WORKSPACE` was added in Phase 14. It gates the redesigned Creator workspace behind
 the existing RoomPanel Creator view, and — like every flag except audio — it is a cutover gate
@@ -5839,7 +5845,7 @@ Phase 15.
 
 ## Phase 15: Scribe Encounter and Artifact Redesign
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Preserve note validation and progression while redesigning the writing experience.
 
 ### Prerequisites
@@ -5895,6 +5901,191 @@ npm run test:e2e
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-10-03. `not-started` -> `in-progress` -> `verified`. **Not committed, pushed, or
+deployed** — that needs explicit maintainer authorization. Phase 15 is `verified` and awaits
+acceptance; Phase 16 has not been started.
+
+Phase 14 was `verified` and awaiting acceptance; the maintainer's instruction to execute Phase 15
+is recorded here as acceptance of that checkpoint.
+
+#### Baseline
+
+Green at `aff3281` before any change: `npm run lint`, `npm run typecheck`, and `npm test` at
+**220 files / 4543 tests** — identical to Phase 14's recorded totals, so Phase 14's evidence is
+reproducible. No baseline repair was needed this phase.
+
+#### Files
+
+- **Ledger** (`core-logic-engineer`): `src/core/progression/roomClearRewards.ts` (355 lines) +
+  `index.ts` export.
+- **Encounter commands** (`core-logic-engineer`): `src/application/encounterCommands.ts` (641),
+  `src/store/encounterCommands.ts` (119), `src/application/contracts/commands.ts` (+102, four
+  `encounter/*` members with derived payload aliases).
+- **Scribe view model** (`core-logic-engineer`): `src/ui/study/scribe/scribeViewModel.ts` (501).
+- **Reward wiring** (`core-logic-engineer`): `src/store/progressionStore.ts` (+97).
+- **Workspace** (`ui-engineer`): `src/ui/study/scribe/{ScribeEncounter,NoteComposer,ValidationSummary,ArtifactPreview}.tsx`,
+  `useScribeEncounterActions.ts`, `scribe.css`; `src/ui/study/{controlIds,StudyControls,StudyShell}.ts(x)`;
+  `src/ui/screens/GameScreen.tsx`.
+- **Pixi artifact event** (`game-engineer`): `src/renderers/pixi/dungeon/{dungeonArtifact,createDungeonScene,DungeonWorld,RoomNode,DungeonRenderer}` (+480 net).
+- **Flag** (`infrastructure-engineer`): `src/config/{runtimeConfig,featureFlags}.ts`, `.env.example`,
+  `tests/unit/runtimeConfig.test.ts`, two closed-list gates.
+- **Tests**: `tests/phase15/` (5 files + fixture, 69 tests), `tests/phase15-qa/` (9 files, 66 tests),
+  `tests/phase14/study-shell-boundary.test.ts` (6), `tests/unit/{roomClearRewards,encounterCommands,scribeViewModel,pixiDungeonArtifactRule}.test.ts`
+  + `pixiDungeonArtifactCollection.test.tsx`.
+
+#### Commands
+
+```text
+npm run lint                                   exit 0
+npm run typecheck                              exit 0
+npm test                                       240 files / 4801 tests passed   (was 220 / 4543)
+npm run build:web                              exit 0
+npm run check:bundle-size                      4.97 MB across 153 files (was 4.90 MB)
+npm run test:e2e                               32 passed / 12 skipped (4 viewports, Chromium)
+npm run test:licenses                          PASSED, 99 entries, 0 media under src/
+npm run test:privacy                           6 files / 34 tests passed
+npx vitest run tests/unit/noteValidation.test.ts     4 passed
+npx vitest run tests/unit/artifactGenerator.test.ts  1 passed
+npx vitest run tests/unit/NoteEditorModal.test.tsx   7 passed
+npx vitest run tests/phase13/                   5 files / 102 tests passed
+```
+
+#### Where the ledger lives, and why
+
+Inside the canonical per-subject progression record's preserved unknown-app-owned-field carrier
+(`extraFields`) under the static key `roomClearRewardLedger`. Rejected: a new storage-v2 store (a
+data-format change, outside this phase), `RoomMetadata` (subject schema stays `1.1.0`), and a
+separate `localStorage` key (no migration, no generation membership, no backup membership).
+
+`src/core/progression/canonicalProgression.ts` and `src/services/persistence/v2/validation.ts` are
+**byte-identical to `aff3281`** — verified, not asserted. The unknown-field machinery already
+round-trips the value through the legacy mirror, the storage-v2 generation, both backup products,
+and subject-copy ID remapping. QA independently confirmed a real `.kdbak` round trip, a
+`.kdsubject` export/copy-import with `roomId` remapping, zero validation problems, and a real
+`exportSubjectTemplate` output containing neither the ledger key nor the clear identity.
+`CURRENT_SCHEMA_VERSION` stays `1.1.0`.
+
+Identity = FNV-1a digest over the room id, its direct neighbours, and every edge touching either —
+exactly the set `propagateRevalidationAfterGraphMutation` can reach, which QA verified is one hop.
+
+#### Exit-criteria assessment
+
+1. **Existing validation output unchanged** — met. `src/core/validation/notes/` and
+   `src/core/artifacts/` are untouched (`git status` empty for both), so the output cannot have
+   changed. `NoteEditorModal.test.tsx` and `noteValidation.test.ts` pass unchanged.
+2. **A valid note clears and rewards a room exactly once** — met. Three submissions diff the whole
+   progression record to exactly one award; submissions 2 and 3 report
+   `awarded:false, duplicate:true, xpGained:0`. Same-tick double dispatch awards once. Suppression
+   survives a real page load (`resetModules` + re-hydrate). A graph mutation *inside* the
+   propagation window awards again (`roomsCleared === 2`); one *outside* it does not.
+3. **An invalid note saves a draft without progression** — met. Five draft submissions leave the
+   entire progression value byte-identical; `kind:'draft'`, `progression:null`,
+   `artifactMarkdown:null`. The dangerous ordering (clear, then write an invalid note) also holds.
+4. **Image attachment and preview work locally** — met against real `fake-indexeddb`: bytes
+   round-trip byte-for-byte, the resolved source is a `blob:` URL, no `externalUrl`, and
+   `fetch`/`XMLHttpRequest`/`sendBeacon` are never touched. Removal deletes bytes and metadata.
+5. **Artifact generation and pickup remain separate actions** — met. A clear writes the artifact
+   and leaves `collectedNotes` empty; the pickup control is offered only when
+   `artifact.canCollect`; an unbound pickup rejects rather than reporting success.
+
+#### Non-vacuity evidence
+
+Every repair was reverted to confirm it goes red, then restored. All reverted; the working tree is
+the intended one.
+
+| Probe | Result |
+| --- | --- |
+| Remove the suppression branch in `decideRoomClearReward` | 8 tests red across 3 files |
+| Identity -> constant `clear-deadbeef` | 3 red |
+| Identity -> hash the room id only | 2 red, incl. `P3` |
+| `runNoteSubmit` supplies a constant identity | 2 red |
+| Identity hashes every edge (window-insensitive) | 2 red |
+| Revert the `sessionStore` import direction | 2 red in the boundary test |
+| Make the boundary test's `plantProbe()` a no-op | 1 red (its control asserts `existsSync`) |
+| Inject a real `fetch('/api/upload', FormData)` into `NoteComposer` | privacy gate red, naming the file |
+| Swap the seed/insert effect order | 5 QA probes red + the implementers' own test |
+| `grep -rn "awardRoomClear" src/ui/` | one code path only, in the rollback modal |
+
+#### Defects found and fixed during the phase
+
+- **The signpost insertion silently discarded every insert.** `ScribeEncounter`'s seed effect runs
+  *after* its child `NoteComposer`'s (React runs child effects first), so the composer appended the
+  pending text and the parent immediately overwrote `sections` from `room.noteText` — while still
+  draining the one-shot token. `NoteEditorModal` never had this bug because both effects are in one
+  component, declared seed-then-insert. Fixed by hoisting both effects into `ScribeEncounter` in
+  that order.
+- **`tests/phase14/study-shell-boundary.test.ts` never existed.** `StudyShell.tsx` has claimed since
+  Phase 14 that this file holds the boundary. Nothing enforced it, so Phase 15's new
+  `src/ui/study/scribe/**` was equally unenforced. Written in Phase 15, and it immediately found a
+  real violation below.
+- **The study surface was transitively renderer-coupled.** `src/store/sessionStore.ts` imported
+  `PlayerClassId` from `@/game/systems/playerClasses`, putting `src/game/**` in the closure of every
+  `src/ui/study/**` module that reads `GamePhase` from that store. The canonical declaration is the
+  neutral one in `@/application/contracts/world`, and `playerClasses.ts` already asserts its own
+  duplicate matches it. One import line fixed it; `git diff` confirms it is the only change to that
+  file.
+- **A learner could be told a false sentence.** `awarded:false` covers three causes — ledger repeat,
+  progression refusal, and *no active progression subject at all* — but the feedback layer branched
+  on `!awarded` alone, so a clear that was never awarded was announced as "already rewarded". Now
+  keyed on `duplicate`, with a distinct sentence for the other cases.
+- **Two specialists could not run the gate** (no shell in their sessions). One shipped a build-
+  breaking type error (`SCRIBE_CONTROL_IDS.composerMode`) and an entirely unexecuted test file. The
+  orchestrator ran the gate; 7 type errors and 2 failing test files were fixed.
+- **A test that could never go green.** QA's D1 test copied the buggy branch into the test body and
+  asserted on the copy. Rewritten to render the real workspace and assert the real sentence, with a
+  control test proving a genuine repeat still says "already rewarded".
+
+#### Known limitations
+
+- **No plan-10.2 performance or memory evidence.** Unchanged from Phases 13 and 14. `check:memory`
+  is a build-level preflight; it measures no frame time, heap growth, or GPU texture. The memory
+  lane still cannot be pointed at this surface. Frame time and memory over mount/unmount cycles are
+  **UNVERIFIED** and must not be claimed.
+- **Chromium only, and no e2e spec visits the Scribe surface.** `test:e2e` is 32 passed / 12 skipped
+  across four viewports. **No 320px, 200%-zoom, reduced-motion, or axe evidence for the redesigned
+  workspace** — the automated axe lane runs on the Welcome view only. No Firefox, WebKit, or Edge
+  evidence; Phase 21 owns it.
+- **The rollback lane double-awards and restructures notes.** `NoteEditorModal` still calls
+  `awardRoomClear` with no clear identity (`roomsCleared === 2` on two valid submits), and on a
+  resubmission its `extractNoteSections` reads the composer's own outer headings as body text, so the
+  learner's `## Summary` / `## Key Points` / `## Recall Question` structure is lost while the prose
+  survives. Both are pre-Phase-15 behavior in the lane Phase 15's scope line told it to preserve.
+  The new workspace does neither. **Needs an owner: core-logic-engineer, post-cutover.**
+- **`room.artifactMarkdown` can never be byte-stable across a resubmission.** The clear branch of
+  `submitNote` regenerates it with a fresh `generatedAtIso`. Pre-Phase-15, out of scope here,
+  recorded rather than changed.
+- **`EncounterNoteDraftOutcome.validation` carries one undeclared key** (`artifactMarkdown`),
+  because `runNoteSubmit` assigns the whole `submitNote` result. Harmless for named-field consumers;
+  a trap for `Object.keys` or exact comparison.
+- **`host-vs-domain pickup gate.** `GameScreen` now passes a named `HOST_PERMITS_ARTIFACT_PICKUP`
+  constant instead of `phase === 'archaeologist'`, because the domain's `collectArtifact` tests only
+  `room.artifactMarkdown` and has no phase test — the host, not the domain, was what stranded the
+  Scribe-phase pickup. QA verified `src/renderers/**` contains no phase comparison and cannot learn
+  the study vocabulary.
+- **Bundle grew 4.90 -> 4.97 MB (+0.07 MB)**. The workspace is statically imported by `GameScreen`
+  in both builds (verified in minified output), so the flag selects at runtime and the bytes ship
+  with the flag off — correct for rollback, and it is the size increase.
+- **Possible flake, not attributed to Phase 15.** `tests/privacy/uploadBoundary.test.ts` failed once
+  when run alongside two suites that plant probe directories inside `src/`; it did not reproduce in 9
+  subsequent identical runs, nor in `test:privacy`, nor in the full `npm test`.
+
+#### Rollback
+
+Verified in built artifacts rather than from the flag constant. The default build inlines
+`import.meta.env` with **no `VITE_SCRIBE_ENCOUNTER_WORKSPACE` value**, so `parseBoolean` returns the
+default `false` and `GameScreen` renders `NoteEditorModal`; `VITE_SCRIBE_ENCOUNTER_WORKSPACE=true
+npm run build:web` inlines the value and renders `ScribeEncounterDialog`.
+`FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.productionDefault === false` and it is **not** in
+`NON_CUTOVER_FLAG_KEYS`. QA confirmed the rollback lane end to end **unmocked**: the modal renders as
+`dialog[name="Note editor"]`, an invalid note saves a composed draft with zero progression, a valid
+confirmed note clears and generates an artifact, and the journal stays empty.
+
+As in Phase 14, the flag's *identifier* survives in the bundle inside `RUNTIME_FLAG_ENV_KEYS` and
+`DEFAULT_RUNTIME_CONFIG` reads `scribeEncounterWorkspace:!1` in both builds. What differs is the
+inlined **value**; that is the safe default literal, not the parse result.
 
 ### Exit criteria
 

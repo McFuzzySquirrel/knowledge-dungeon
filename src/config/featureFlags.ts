@@ -5,7 +5,19 @@ import {
   type RuntimeConfigKey,
 } from './runtimeConfig';
 
-export type FeatureFlagOwnerPhase = 4 | 5 | 8 | 9 | 10 | 11 | 13 | 14 | 17 | 19 | 20;
+export type FeatureFlagOwnerPhase =
+  | 4
+  | 5
+  | 8
+  | 9
+  | 10
+  | 11
+  | 13
+  | 14
+  | 15
+  | 17
+  | 19
+  | 20;
 export type FeatureFlagValueKind = 'boolean' | 'enum';
 
 export interface FeatureFlagDefinition {
@@ -147,6 +159,16 @@ export const FEATURE_FLAG_MATRIX = {
       'Gates the redesigned Creator workspace, where subject mapping is the first-class dungeon workspace, behind the existing RoomPanel Creator view.',
     rollback:
       'Set VITE_CREATOR_WORKSPACE=false to retain the existing RoomPanel Creator view.',
+  },
+  scribeEncounterWorkspace: {
+    environmentVariable: RUNTIME_FLAG_ENV_KEYS.scribeEncounterWorkspace,
+    valueKind: 'boolean',
+    productionDefault: false,
+    ownerPhase: 15,
+    purpose:
+      'Gates the redesigned Scribe encounter workspace behind the existing NoteEditorModal, so note validation, progression, and artifact generation are unchanged until the cutover.',
+    rollback:
+      'Set VITE_SCRIBE_ENCOUNTER_WORKSPACE=false to retain the existing NoteEditorModal as the Scribe view.',
   },
 } as const satisfies FeatureFlagMatrix;
 

@@ -28,6 +28,11 @@
  * It imports no store, no renderer, and no domain mutation. It receives data and
  * renders it. `tests/phase14/study-shell-boundary.test.ts` holds the boundary: no
  * Phaser, no Pixi, no `src/game`, no `src/renderers` anywhere under `src/ui/study/**`.
+ *
+ * That file was authored in **Phase 15**, for a boundary Phase 14 asserted in this
+ * comment and never tested. It now also covers `src/ui/study/scribe/**`, which Phase 15
+ * added under the same unenforced claim. The path was kept as written above so the
+ * claim and the gate finally name the same thing.
  */
 import type { ReactNode } from 'react';
 

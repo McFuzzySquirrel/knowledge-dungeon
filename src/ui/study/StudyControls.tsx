@@ -66,6 +66,15 @@ export interface StudyActionButtonProps {
   readonly className?: string;
   /** Set for a control inside a `<form>` that submits it. */
   readonly type?: 'button' | 'submit';
+  /**
+   * A stable DOM id, for a workspace whose "next action" moves focus here.
+   *
+   * A pass-through and nothing more: `focusStudyControl` looks the control up by id, and
+   * the ids are static vocabulary in `controlIds.ts`. Omit it where nothing needs to find
+   * the control, and a generated id is not created - an unused id is still an id that ends
+   * up in a test selector.
+   */
+  readonly id?: string;
 }
 
 export function StudyActionButton({
@@ -79,6 +88,7 @@ export function StudyActionButton({
   touchTarget,
   className,
   type = 'button',
+  id,
 }: StudyActionButtonProps): ReactNode {
   const reasonId = useId();
   const blocked = refusal !== null || pending;
@@ -89,6 +99,7 @@ export function StudyActionButton({
     <span className="study-action">
       <button
         type={type}
+        id={id}
         className={`study-action__button study-action__button--${tone}${className == null ? '' : ` ${className}`}`}
         disabled={blocked}
         aria-describedby={note === null ? undefined : reasonId}

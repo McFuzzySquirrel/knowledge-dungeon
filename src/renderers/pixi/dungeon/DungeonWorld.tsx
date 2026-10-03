@@ -11,6 +11,17 @@
  * will do and, where it does not apply, says so and is disabled rather than silently
  * doing nothing.
  *
+ * ## The artifact pickup, which is a different shape on purpose
+ *
+ * Phase 15 added one more world verb, collecting a room's artifact, and it is deliberately
+ * *not* in that list. The five above are always offered; a pickup is offered only when the
+ * renderer says this room has something to collect, so it is its own group, read from
+ * `readArtifactSnapshot()` and dispatched through `activateFromDom`. Its status line names
+ * which of the three states a room is in - no artifact, ready to collect, already
+ * collected - because the marker on the canvas is a diamond and the room label is the only
+ * other thing naming it. The Scribe workspace owns its own control for the same action; both
+ * dispatch `DUNGEON_ARTIFACT_ACTION_ID`, so there is one action and one announcement.
+ *
  * ## Why the room list is here and not only in the full map
  *
  * The full map and the minimap are React surfaces owned by `ui-engineer`, and the plan
@@ -50,6 +61,13 @@ import { useWorldQuality } from '@/renderers/pixi/runtime/useWorldQuality';
 import type { DungeonRendererCapabilities } from '@/application/contracts/renderer';
 import type { DungeonWorldModel } from '@/application/contracts/world';
 import type { WorldActionState } from '@/renderers/pixi/runtime/types';
+import {
+  DUNGEON_ARTIFACT_ACTION_HINT,
+  DUNGEON_ARTIFACT_ACTION_ID,
+  DUNGEON_ARTIFACT_ACTION_LABEL,
+  IDLE_DUNGEON_ARTIFACT_SNAPSHOT,
+  type DungeonArtifactSnapshot,
+} from './dungeonArtifact';
 import {
   DUNGEON_ACTIONS,
   DUNGEON_INTERACT_ACTION_ID,
@@ -92,6 +110,15 @@ export interface DungeonWorldHandle extends DungeonRendererCapabilities {
   restart(): void;
   /** Perform a named world action the way a DOM control does. */
   activateFromDom(actionId: string): void;
+  /**
+   * Read the artifact surface, so a parent surface renders the same words the canvas drew.
+   *
+   * Part of the handle rather than only of the internal renderer because Phase 15's
+   * Scribe workspace lives *outside* this component: it needs to know whether the room it
+   * is writing about has an artifact waiting, and the only renderer-neutral answer to that
+   * is a read from the mounted world.
+   */
+  readArtifactSnapshot(): DungeonArtifactSnapshot;
 }
 
 /**
@@ -218,6 +245,20 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
    * inert.
    */
   const [actionState, setActionState] = useState<WorldActionState>({});
+  /**
+   * The dungeon's artifact surface, republished on the same trigger as the action state.
+   *
+   * One subscription for both reads, deliberately. The artifact snapshot is not a key in
+   * `WorldActionState` because that map is exactly one sentence per declared action, and a
+   * pickup is not an always-on mirror action - it is a control the Scribe workspace owns
+   * and shows only when it applies. Adding a key would have put a permanently-unavailable
+   * verb into the always-on group; a second subscription would have been a second
+   * publication trigger that could fire when the first did not, and two triggers for one
+   * read is how a mirror ends up showing the canvas's state from one frame ago.
+   */
+  const [artifact, setArtifact] = useState<DungeonArtifactSnapshot>(
+    IDLE_DUNGEON_ARTIFACT_SNAPSHOT,
+  );
 
   useEffect(() => {
     callbacksRef.current = callbacks;
@@ -267,8 +308,14 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
       onReadyRef.current?.();
     });
     // Subscribed beside `onReady` rather than instead of it: readiness says the world
-    // started, and this says what the world is currently offering.
-    const stopState = renderer.onState(setActionState);
+    // started, and this says what the world is currently offering. The artifact read comes
+    // from the same publication - the host republishes after every dispatch *and* after
+    // every capability call, which covers walking into a room, a floor change, and the
+    // host pushing its artifact sets.
+    const stopState = renderer.onState((state) => {
+      setActionState(state);
+      setArtifact(renderer.readArtifactSnapshot());
+    });
 
     try {
       renderer.mount();
@@ -283,6 +330,7 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
       rendererRef.current = null;
       setIsReady(false);
       setActionState({});
+      setArtifact(IDLE_DUNGEON_ARTIFACT_SNAPSHOT);
     };
   }, [stableCallbacks, colorTheme, profile.id]);
 
@@ -292,6 +340,8 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
       isReady: () => rendererRef.current?.isReady() ?? false,
       restart: () => rendererRef.current?.restart(),
       activateFromDom: (actionId) => rendererRef.current?.activateFromDom(actionId),
+      readArtifactSnapshot: () =>
+        rendererRef.current?.readArtifactSnapshot() ?? IDLE_DUNGEON_ARTIFACT_SNAPSHOT,
       setFloorVisibility: (visibility) => rendererRef.current?.setFloorVisibility(visibility),
       teleportToRoom: (roomId) => rendererRef.current?.teleportToRoom(roomId),
       setArtifactRooms: (roomIds, visible) => rendererRef.current?.setArtifactRooms(roomIds, visible),
@@ -317,6 +367,21 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
     const visible = new Set(world.floor.visibleRoomIds);
     return world.map.rooms.filter((room) => visible.has(room.roomId));
   }, [world.floor.visibleRoomIds, world.map.rooms]);
+
+  /**
+   * The artifact words for each room that has some, keyed by room id.
+   *
+   * Read from the renderer's own snapshot rather than recomputed here: the suffix is a
+   * decision the marker already made, and a list that re-derived it would be a second
+   * reader of the same fact. This is what makes the room list agree with the canvas -
+   * a learner navigating by keyboard hears "Child Topic 1, artifact ready to collect"
+   * before they ever walk into the room.
+   */
+  const artifactLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const room of artifact.rooms) labels.set(room.roomId, room.label);
+    return labels;
+  }, [artifact.rooms]);
 
   const canNavigate = onNavigateToRoom !== undefined;
 
@@ -452,6 +517,73 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
       </div>
 
       {/*
+        The artifact control, kept out of the group above on purpose.
+
+        A pickup is conditional - most rooms, most of the time, have nothing to collect -
+        so it is not one of the dungeon's always-on actions and is not rendered as a
+        permanently-disabled button beside the canvas. It is rendered when the renderer
+        says there is something to collect, from the same snapshot the marker was drawn
+        from, so a control can never appear for a room the canvas is not offering and can
+        never be missing for one it is.
+
+        What it *is* here, and what it is not: this is the DOM route for the world action,
+        so a learner who cannot walk onto a marker has one. The Phase 15 Scribe workspace
+        owns its own control for the same action, and both dispatch
+        `DUNGEON_ARTIFACT_ACTION_ID` through the host, so they are one action with one
+        announcement rather than two routes that drift.
+
+        The status line is visible rather than hidden, for the same reason the action
+        statuses are: a disabled control is not focusable, so a reason reachable only
+        through `aria-describedby` would be unreachable exactly when it matters. It uses
+        its own `data-*` attributes rather than `data-action-status`, because that
+        attribute is the always-on group's declaration of "this id has a status
+        sentence", and a pickup is not one of those ids.
+      */}
+      <div
+        role="group"
+        aria-label="Artifact in this room"
+        data-dungeon-artifact-state={artifact.state}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: px(theme.space['1']),
+          alignItems: 'flex-start',
+        }}
+      >
+        <button
+          type="button"
+          // Disabled, never hidden, and never focusable-but-inert: the sentence below says
+          // which of the three states this is, in words.
+          disabled={!artifact.canCollect}
+          aria-describedby={`${surfaceId}-artifact-hint ${surfaceId}-artifact-status`}
+          aria-label={DUNGEON_ARTIFACT_ACTION_LABEL}
+          data-dungeon-artifact-action="collect"
+          onClick={() => activateById(DUNGEON_ARTIFACT_ACTION_ID)}
+          style={controlStyle(theme, !artifact.canCollect)}
+        >
+          {DUNGEON_ARTIFACT_ACTION_LABEL}
+        </button>
+        <span id={`${surfaceId}-artifact-hint`} style={visuallyHidden}>
+          {DUNGEON_ARTIFACT_ACTION_HINT}
+        </span>
+        <span
+          id={`${surfaceId}-artifact-status`}
+          aria-live="polite"
+          data-dungeon-artifact-status="collect"
+          style={{
+            maxWidth: px(theme.space['12'] * 8),
+            fontFamily: theme.fontFamily.body,
+            fontSize: px(theme.fontSize.sm),
+            lineHeight: theme.lineHeight.snug,
+            color: cssHex(theme.color.textSecondary),
+            background: 'transparent',
+          }}
+        >
+          {artifact.sentence}
+        </span>
+      </div>
+
+      {/*
         The room list is the DOM route to a *different room*. The map is a modal; this
         is not, and it is filtered by the same floor visibility the renderer uses, so a
         row can never name a room the world is hiding. `canNavigate` rather than a
@@ -476,7 +608,7 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
                 type="button"
                 disabled={!canNavigate}
                 onClick={() => onNavigateToRoom?.(room.roomId)}
-                aria-label={`Go to ${room.topic}`}
+                aria-label={`Go to ${artifactLabels.get(room.roomId) ?? room.topic}`}
                 style={controlStyle(theme, !canNavigate)}
               >
                 {room.topic}

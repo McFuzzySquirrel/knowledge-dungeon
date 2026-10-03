@@ -20,6 +20,7 @@ describe('runtime feature configuration', () => {
       webShare: false,
       audioEnabled: true,
       creatorWorkspace: false,
+      scribeEncounterWorkspace: false,
     });
   });
 
@@ -37,6 +38,7 @@ describe('runtime feature configuration', () => {
         VITE_WEB_SHARE: 'true',
         VITE_AUDIO_ENABLED: 'true',
         VITE_CREATOR_WORKSPACE: 'true',
+        VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'true',
       }),
     ).toEqual({
       worldRenderer: 'pixi',
@@ -50,6 +52,7 @@ describe('runtime feature configuration', () => {
       webShare: true,
       audioEnabled: true,
       creatorWorkspace: true,
+      scribeEncounterWorkspace: true,
     });
   });
 
@@ -148,6 +151,63 @@ describe('the Phase 14 Creator workspace flag', () => {
     // flag allowed to default on, and it says so by name; adding this one there would be
     // a claim that Phase 14 builds the Creator view rather than replaces it.
     expect(NON_CUTOVER_FLAG_KEYS).not.toContain('creatorWorkspace');
+    expect(NON_CUTOVER_FLAG_KEYS).toEqual(['audioEnabled']);
+  });
+});
+
+describe('the Phase 15 Scribe encounter workspace flag', () => {
+  it('exists, has an environment key, and defaults off three ways', () => {
+    // The same three-way agreement every cutover gate states for its own flag: the safe
+    // production default, the parsed default with no environment, and the declared
+    // matrix default. Phase 15's rollback line is "restore the existing modal as the
+    // Scribe view", which only means something if the default already *is* the
+    // NoteEditorModal.
+    expect(RUNTIME_FLAG_ENV_KEYS.scribeEncounterWorkspace).toBe('VITE_SCRIBE_ENCOUNTER_WORKSPACE');
+    expect(DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace).toBe(false);
+    expect(parseRuntimeConfig({}).scribeEncounterWorkspace).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.productionDefault).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.environmentVariable).toBe(
+      'VITE_SCRIBE_ENCOUNTER_WORKSPACE',
+    );
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.valueKind).toBe('boolean');
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.ownerPhase).toBe(15);
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.rollback).toContain(
+      'VITE_SCRIBE_ENCOUNTER_WORKSPACE=false',
+    );
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.rollback).toContain('NoteEditorModal');
+    // The purpose names what it gates, so a future reader cannot mistake it for a flag
+    // that changes what counts as a valid note. The flag selects a view; the validation
+    // and progression rules are identical in both lanes.
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.purpose).toContain('NoteEditorModal');
+  });
+
+  it('parses exactly as the other cutover booleans parse, in all three spellings', () => {
+    expect(parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'false' }).scribeEncounterWorkspace).toBe(false);
+    expect(parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'true' }).scribeEncounterWorkspace).toBe(true);
+    expect(parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: ' TRUE ' }).scribeEncounterWorkspace).toBe(true);
+    // A malformed value fails the build rather than silently defaulting, and the error
+    // names the variable, never its value.
+    expect(() => parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'maybe' })).toThrow(
+      'VITE_SCRIBE_ENCOUNTER_WORKSPACE must be one of: true, false',
+    );
+    // The default build reaches no renderer, storage generation, or product flag through
+    // it: it is an independent cutover switch, so turning the Scribe workspace on does
+    // not silently move any other flag with it.
+    expect(parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'true' })).toMatchObject({
+      worldRenderer: 'phaser',
+      storageRepository: 'legacy',
+      dataProductsV2: false,
+      adaptiveAssistance: false,
+      creatorWorkspace: false,
+    });
+  });
+
+  it('is a cutover gate, so it is not on the non-cutover list', () => {
+    // It switches an existing behaviour (the NoteEditorModal) to a new one, so its
+    // production default is the pre-phase behaviour. `audioEnabled` is the only flag
+    // allowed to default on, and it says so by name; adding this one there would be a
+    // claim that Phase 15 builds the Scribe view rather than replaces it.
+    expect(NON_CUTOVER_FLAG_KEYS).not.toContain('scribeEncounterWorkspace');
     expect(NON_CUTOVER_FLAG_KEYS).toEqual(['audioEnabled']);
   });
 });

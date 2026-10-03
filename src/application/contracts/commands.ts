@@ -19,6 +19,14 @@
  * `isReachableViaSubtopics`, and `computeFloorVisibility` directly, because
  * those are pure derivations over a snapshot rather than mutations, and routing
  * them through a command would mean asking for data as if requesting an action.
+ *
+ * Phase 15 adds the Scribe `encounter/*` commands: note submission (draft or
+ * clear, reported as a discriminated outcome) and the three local-image
+ * attachment commands. `src/application/encounterCommands.ts` executes them. Note
+ * that artifact *pickup* is not one of them - it stays `artifact/collect`,
+ * which the encounter controller forwards to rather than reimplements, because
+ * generation and pickup being separate actions is plan exit criterion 5 and one
+ * implementation is how that stays true.
  */
 import type { EdgeRelationType } from '@/core/validation/persistence';
 import type { FloorTransitionDirection } from './events';
@@ -87,6 +95,63 @@ export interface WorldCommandPayloadMap {
   'graph/tag-add': { roomId: string; tag: string };
   /** Creator: remove one tag from a room. */
   'graph/tag-remove': { roomId: string; tag: string };
+
+  // ── Scribe encounter (Phase 15) ───────────────────────────────────────────
+  //
+  // The Scribe workspace used to reach into `useSubjectStore` and
+  // `useProgressionStore` directly from a modal, which is how a valid note could
+  // be awarded twice (see `src/core/progression/roomClearRewards.ts`). These are
+  // the same operations as ordinary commands for the same reason the graph
+  // mutations are: a DOM control names what it wants, and the application layer
+  // decides what happens to the note, the artifact, and the reward.
+  //
+  // **Artifact pickup is deliberately *not* in this block.** It is already
+  // `artifact/collect`, and `encounterCommands` forwards to that command rather
+  // than reimplementing it - two implementations of one action is exactly the
+  // drift this layer exists to remove. See `src/application/encounterCommands.ts`.
+  //
+  // There is deliberately no `encounter/*` command for *generating* an artifact
+  // either: generation is a consequence of `encounter/note-submit`, which is why
+  // plan exit criterion 5 ("artifact generation and pickup remain separate
+  // actions") holds by construction - one command generates, the other collects.
+
+  /**
+   * Scribe: save a draft, or clear the encounter.
+   *
+   * The command is one because the *decision* is one: `submitNote` validates and
+   * branches, and the command reports which branch ran. The outcome is
+   * discriminated so a caller never has to re-read the note to find out whether
+   * progression happened.
+   */
+  'encounter/note-submit': {
+    roomId: string;
+    /** Exactly what the composer holds; never inspected by the command layer. */
+    noteText: string;
+    /** The learner's own "these notes are mine" confirmation. */
+    manualConfirmed: boolean;
+  };
+  /**
+   * Scribe: store a picked image's bytes on this device and attach it.
+   *
+   * The file is bytes, not a URL, and the command layer never uploads: the
+   * subject store's device-local path writes them to the device-local attachment
+   * store. `Blob` is a **type-only** reference, the same one
+   * `src/services/persistence/deviceAttachments.ts` takes, so the application
+   * layer needs no DOM lib and no runtime global.
+   */
+  'encounter/attachment-add': {
+    roomId: string;
+    file: Blob & { readonly name?: string };
+  };
+  /**
+   * Scribe: attach an image the learner already hosts somewhere.
+   *
+   * The URL is recorded as an external-only attachment and is never fetched, so
+   * this command discloses a location rather than making a request.
+   */
+  'encounter/attachment-add-external': { roomId: string; url: string };
+  /** Scribe: forget one attachment, its device-local bytes included. */
+  'encounter/attachment-remove': { roomId: string; attachmentId: string };
 }
 
 /** Every application command name. */
@@ -129,3 +194,40 @@ export type GraphRemoveRoomTagPayload = WorldCommandPayload<'graph/tag-remove'>;
 export type GraphCommand = {
   [C in GraphCommandName]: { type: C; payload: WorldCommandPayloadMap[C] };
 }[GraphCommandName];
+
+// ── Scribe encounter ─────────────────────────────────────────────────────────
+//
+// Derived from the payload map, exactly as the `graph/*` aliases above are, so
+// the map stays the single source of truth and a controller's method signatures
+// cannot drift from the command union.
+
+/** Every Scribe encounter command name. */
+export type EncounterCommandName = Extract<WorldCommandName, `encounter/${string}`>;
+
+/** Payload of `encounter/note-submit`. */
+export type EncounterNoteSubmitPayload = WorldCommandPayload<'encounter/note-submit'>;
+/** Payload of `encounter/attachment-add`. */
+export type EncounterAttachmentAddPayload = WorldCommandPayload<'encounter/attachment-add'>;
+/** Payload of `encounter/attachment-add-external`. */
+export type EncounterAttachmentAddExternalPayload =
+  WorldCommandPayload<'encounter/attachment-add-external'>;
+/** Payload of `encounter/attachment-remove`. */
+export type EncounterAttachmentRemovePayload =
+  WorldCommandPayload<'encounter/attachment-remove'>;
+
+/** The tagged form of every Scribe encounter command. */
+export type EncounterCommand = {
+  [C in EncounterCommandName]: { type: C; payload: WorldCommandPayloadMap[C] };
+}[EncounterCommandName];
+
+/**
+ * The existing artifact-pickup command, named as a type.
+ *
+ * `EncounterController.artifactCollect` accepts this so the reuse is visible in
+ * the contract rather than only in prose: the encounter controller cannot
+ * dispatch anything except the pickup it forwards to.
+ */
+export type ArtifactCollectCommand = {
+  type: 'artifact/collect';
+  payload: WorldCommandPayload<'artifact/collect'>;
+};

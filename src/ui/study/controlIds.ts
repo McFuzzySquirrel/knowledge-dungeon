@@ -40,6 +40,68 @@ export const STUDY_CONTROL_IDS = Object.freeze({
 export type StudyControlId = (typeof STUDY_CONTROL_IDS)[keyof typeof STUDY_CONTROL_IDS];
 
 /**
+ * The Scribe encounter workspace's controls.
+ *
+ * A separate object rather than more entries on {@link STUDY_CONTROL_IDS}, for the
+ * same reason the Creator ids are one object: the Scribe workspace's next action
+ * has to move focus to a control that lives inside the note composer, and Phase 14's
+ * vocabulary is not where Phase 15's controls belong. Neither object knows the
+ * other exists, and both are static literals for the reason stated at the top of this
+ * file.
+ */
+export const SCRIBE_CONTROL_IDS = Object.freeze({
+  /** The arrival/resumability block, and the frame focus lands on. */
+  arrival: 'scribe-arrival',
+  /** The section tablist of the note composer. */
+  sectionTabs: 'scribe-section-tabs',
+  /**
+   * The composer's mode-toggle group.
+   *
+   * A base rather than a control: `NoteComposer` appends `-edit`, `-preview`,
+   * `-formatting`, and `-images` to it, so the four toggles stay one stable, enumerable
+   * family instead of four unrelated literals scattered through a component. The suffixes
+   * are as static as this value is, and `tests/phase15/scribe-accessibility.test.tsx` pins
+   * all four so a rename cannot land silently.
+   */
+  composerMode: 'scribe-composer-mode',
+  /** The textarea for the section currently being written. */
+  noteEditor: 'scribe-note-editor',
+  /** The formatting toolbar's own frame. */
+  formattingToolbar: 'scribe-formatting-toolbar',
+  /** The image library's own frame. */
+  imageLibrary: 'scribe-image-library',
+  /** The manual-confirmation checkbox. */
+  confirmation: 'scribe-confirmation',
+  /** Save a draft or defeat the encounter. */
+  submit: 'scribe-submit',
+  /** Store a picked image's bytes on this device. */
+  attachLocal: 'scribe-attach-local',
+  /** Record an externally hosted image. */
+  attachExternal: 'scribe-attach-external',
+  /** Pick a generated artifact up into the journal. */
+  artifactCollect: 'scribe-artifact-collect',
+  /** The overlay's own close control. */
+  close: 'scribe-encounter-close',
+  /** The overlay dialog frame, which receives focus on open. */
+  dialog: 'scribe-encounter-dialog',
+});
+
+/**
+ * Static ids for the three required-section tabs and their one shared panel.
+ *
+ * Declared rather than interpolated. `REQUIRED_NOTE_SECTIONS` is a static literal
+ * today, so a derived id would be static today too - and a derived id is one edit
+ * away from carrying a learner value. These three strings cannot.
+ */
+export const SCRIBE_SECTION_TAB_IDS = Object.freeze({
+  Summary: 'scribe-section-tab-summary',
+  'Key Points': 'scribe-section-tab-key-points',
+  'Recall Question': 'scribe-section-tab-recall-question',
+});
+
+export type ScribeSectionId = keyof typeof SCRIBE_SECTION_TAB_IDS;
+
+/**
  * Move focus to a control by id, if it is in the document.
  *
  * Returns whether focus moved, so a caller can report "there is nothing to focus" rather

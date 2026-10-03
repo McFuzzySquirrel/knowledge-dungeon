@@ -50,6 +50,20 @@
  * The zoom transition is the only animation here that moves the world, so it is the only
  * one the motion profile scales. Player movement is direct control rather than
  * decoration, and scaling it to zero would remove the only way to move without a pointer.
+ *
+ * ## Artifacts
+ *
+ * One decision, in `./dungeonArtifact.ts`, and everything here asks for it rather than
+ * recomputing it: whether a room's artifact marker is drawn, whether walking onto it
+ * performs a pickup, and what a DOM surface reads. The three inputs are the ones the host
+ * pushes - an artifact exists, it has been collected, and pickup is permitted here - and
+ * this file has no phase of its own, because `src/renderers/**` cannot reach the session
+ * store and a phase comparison here would be the first place the two renderers could drift
+ * over the study flow's vocabulary.
+ *
+ * A pickup is a *notification*. It reports through `onArtifactCollected` and does nothing
+ * else: generation is `encounter/note-submit` on the other side of the host, so plan exit
+ * criterion 5 holds structurally rather than by convention.
  */
 import { Container, Graphics } from 'pixi.js';
 
@@ -69,6 +83,15 @@ import type {
   WorldSceneInit,
 } from '@/renderers/pixi/runtime/types';
 import type { CozyMotionProfile } from '@/theme';
+import {
+  DUNGEON_ARTIFACT_ACTION_ID,
+  createDungeonArtifactSnapshot,
+  describeDungeonArtifactMarkerSuffix,
+  resolveDungeonArtifactMarker,
+  type DungeonArtifactMarkerState,
+  type DungeonArtifactRoomView,
+  type DungeonArtifactSnapshot,
+} from './dungeonArtifact';
 import { createCorridorLayer, type CorridorLayer } from './CorridorLayer';
 import type { DungeonSceneCallbacks } from './DungeonRenderer';
 import { createRoomNode, type RoomNode, type RoomNodeState } from './RoomNode';
@@ -264,6 +287,17 @@ export interface CreateDungeonSceneOptions {
 /** The scene the host drives. */
 export interface DungeonScene extends WorldScene<DungeonRendererCapabilities> {
   readonly capabilities: DungeonRendererCapabilities;
+  /**
+   * Read the dungeon's artifact surface, for a DOM surface that renders it.
+   *
+   * Deliberately a *read* beside the capability port rather than a member of it: Phase 15
+   * could not widen `DungeonRendererCapabilities` (a shared contract both adapters answer
+   * to), and inventing a store import to work around that would have put a second source
+   * of artifact truth inside the renderer. The read is the same idea as the village's
+   * `readNpcSnapshot` - data out of a port, never a handle into the scene - and it is what
+   * lets a DOM control offer a pickup without having to be the callback's recipient.
+   */
+  readArtifactSnapshot(): DungeonArtifactSnapshot;
 }
 
 /* ── The scene ─────────────────────────────────────────────────────────────── */
@@ -318,7 +352,34 @@ export function createDungeonScene(
   const reviewedArtifactRoomIds = new Set<string>();
   const imageRoomIds = new Set<string>();
   const roomOverlayStates = new Map<string, string>();
-  let showArtifactIcons = false;
+  /**
+   * The host's pickup-permitted gate, pushed in as the `visible` argument of
+   * `setArtifactRooms`.
+   *
+   * Named for what the argument *means* rather than for how it was called, because the
+   * distinction is the whole of Phase 15: this is "may an artifact be picked up in the
+   * phase the session is in", not "should the icons be drawn". A renderer that treated it
+   * as the latter would draw a marker the pickup path then refused, which is the
+   * unreachable-marker defect; a renderer that treated it as a phase of its own would have
+   * to import the session store to decide, which is forbidden. So it is the host's answer,
+   * honoured verbatim, in every phase.
+   */
+  let artifactPickupPermitted = false;
+  /**
+   * Rooms whose pickup *this renderer* has already reported.
+   *
+   * Never cleared, and unioned with the host's set, because a marker that came back after
+   * the world had already reported the pickup would be a second offer of an action the
+   * store records idempotently under `${dungeonId}:${roomId}` - and the store's own
+   * `collectArtifactNote` returns `false` for the repeat, so the learner would see a
+   * marker, walk onto it, press the control, and nothing happen. That hole is reachable:
+   * the host's set arrives from a React effect, so a capability push that lands between
+   * the walk and the journal write publishes a set that does not yet include the room,
+   * and a floor change rebuilds every room node from these sets. The renderer's own record
+   * is monotone in the same direction as the store's, so it can only ever be a subset the
+   * host will agree with - it cannot invent a collection that did not happen.
+   */
+  const reportedArtifactRoomIds = new Set<string>();
 
   // ── Walkability and room lookup ───────────────────────────────────────────
   const walkability: WalkabilityController = createWalkabilityController({
@@ -464,14 +525,41 @@ export function createDungeonScene(
     return roomOverlayStates.get(room.roomId) ?? room.status;
   }
 
+  /**
+   * Whether a room's artifact has already gone into the journal.
+   *
+   * The union of what the host reported and what this renderer reported, so a host push
+   * that has not caught up yet cannot resurrect a marker. See
+   * {@link reportedArtifactRoomIds} for why that is safe in the direction it is monotone.
+   */
+  function isArtifactCollected(roomId: string): boolean {
+    return collectedArtifactRoomIds.has(roomId) || reportedArtifactRoomIds.has(roomId);
+  }
+
+  /**
+   * The one artifact decision, for every caller.
+   *
+   * The drawn marker, the per-frame pickup test, and the DOM read all come through here,
+   * so "the marker is showing" and "a pickup can happen" are the same statement. Before
+   * this, `RoomNode.apply` computed `artifactVisible && !artifactCollected` while
+   * `checkArtifactCollection` re-derived the same expression from the same three sets, and
+   * a divergence between them would have been a marker that could not be picked up.
+   */
+  function artifactMarkerOf(roomId: string): DungeonArtifactMarkerState {
+    return resolveDungeonArtifactMarker({
+      pickupPermitted: artifactPickupPermitted,
+      hasArtifact: artifactRoomIds.has(roomId),
+      collected: isArtifactCollected(roomId),
+    });
+  }
+
   function roomNodeState(room: DungeonRoom): RoomNodeState {
     const roomId = room.roomId;
     return {
       overlayState: overlayStateOf(room),
       portal: portalDirectionFor(roomId),
       focused: roomId === currentRoomId,
-      artifactVisible: showArtifactIcons && artifactRoomIds.has(roomId),
-      artifactCollected: collectedArtifactRoomIds.has(roomId),
+      artifactMarker: artifactMarkerOf(roomId),
       reviewed: reviewedArtifactRoomIds.has(roomId),
       // A picture-frame hint is contextual: only while standing in that exact room.
       imageAttachment: imageRoomIds.has(roomId) && insideRoom && currentRoomId === roomId,
@@ -600,19 +688,73 @@ export function createDungeonScene(
     callbacks.onNpcDialogPosition?.({ roomId, ...projectToViewport(guide.x, guide.y) });
   }
 
-  function checkArtifactCollection(): void {
-    if (!showArtifactIcons || currentRoomId === null) return;
-    if (!artifactRoomIds.has(currentRoomId) || collectedArtifactRoomIds.has(currentRoomId)) return;
-    const room = roomById.get(currentRoomId);
-    if (room === undefined) return;
+  /**
+   * Where a room's artifact marker is drawn, read from the node's own geometry rule.
+   *
+   * Derived here rather than asked of the node because the pickup test needs it on a frame
+   * where nothing has been redrawn, and because `MARKER_LIFT` is the one number both the
+   * node and this test must agree on: if they drifted, the learner would walk onto where
+   * the marker appears to be and nothing would happen.
+   */
+  function artifactMarkerPosition(room: DungeonRoom): { x: number; y: number } {
     const center = resolveRoomCenter(room, tileSize);
-    const markerX = center.x;
-    const markerY = center.y - room.height * tileSize * MARKER_LIFT;
-    const distanceSq = (player.x - markerX) ** 2 + (player.y - markerY) ** 2;
-    if (distanceSq > DUNGEON_ARTIFACT_PICKUP_RADIUS ** 2) return;
-    collectedArtifactRoomIds.add(currentRoomId);
+    return { x: center.x, y: center.y - room.height * tileSize * MARKER_LIFT };
+  }
+
+  function isWithinArtifactPickupRange(roomId: string): boolean {
+    const room = roomById.get(roomId);
+    if (room === undefined) return false;
+    const marker = artifactMarkerPosition(room);
+    const dx = player.x - marker.x;
+    const dy = player.y - marker.y;
+    return dx * dx + dy * dy <= DUNGEON_ARTIFACT_PICKUP_RADIUS ** 2;
+  }
+
+  /**
+   * Report a pickup for a room, and mark it collected.
+   *
+   * The *only* place either happens. Both routes - the marker the learner walks onto and
+   * the control a DOM surface dispatches - come through here, so neither can perform a
+   * pickup the other would refuse, and neither can report one twice.
+   *
+   * Nothing here generates an artifact, writes a note, or touches the room's status:
+   * `onArtifactCollected` is a notification about a pickup, and the pickup itself is
+   * `StudyFlowController.collectArtifact` on the other side of the callback. Plan exit
+   * criterion 5 - generation and pickup remain separate actions - is structural here:
+   * there is no code path from a marker to `artifactMarkdown`.
+   */
+  function reportArtifactCollected(roomId: string): void {
+    reportedArtifactRoomIds.add(roomId);
     applyRoomStates();
-    callbacks.onArtifactCollected?.(currentRoomId);
+    callbacks.onArtifactCollected?.(roomId);
+  }
+
+  function checkArtifactCollection(): void {
+    const roomId = currentRoomId;
+    if (roomId === null) return;
+    // The same decision the marker was drawn from, so the marker is never a thing the
+    // pickup refuses.
+    if (artifactMarkerOf(roomId) !== 'collectible') return;
+    if (!isWithinArtifactPickupRange(roomId)) return;
+    reportArtifactCollected(roomId);
+  }
+
+  /**
+   * The pickup as a *named* action, for a DOM control and for the host's dispatch.
+   *
+   * The room the player is standing in, gated by the same rule the marker is drawn from,
+   * and deliberately **not** gated by the marker radius: the radius is a canvas gesture
+   * ("step onto the spot"), while a DOM control names the room, exactly as the
+   * room-navigation buttons name a room and teleport rather than walk. Gating it on the
+   * radius would make the accessible route strictly harder than the canvas route, which is
+   * the failure plan 10.1 forbids in the other direction.
+   */
+  function performArtifactCollect(): boolean {
+    const roomId = currentRoomId;
+    if (roomId === null) return false;
+    if (artifactMarkerOf(roomId) !== 'collectible') return false;
+    reportArtifactCollected(roomId);
+    return true;
   }
 
   /**
@@ -720,6 +862,44 @@ export function createDungeonScene(
   }
 
   /**
+   * The dungeon's artifact surface, as one value a DOM surface can render.
+   *
+   * The answer to "may this room's artifact be picked up", read from exactly the same rule
+   * the canvas drew from, which is what makes a DOM control and a marker unable to
+   * disagree. `rooms` carries every room on the visible floor that has something to say,
+   * so a room list can suffix a label rather than leaving the marker as the only carrier.
+   */
+  function readArtifactSnapshot(): DungeonArtifactSnapshot {
+    const roomId = currentRoomId;
+    const room = roomId === null ? undefined : roomById.get(roomId);
+    const rooms: DungeonArtifactRoomView[] = [];
+    for (const candidate of map.rooms) {
+      if (visibleRoomIds !== null && !visibleRoomIds.has(candidate.roomId)) continue;
+      // "Has something to say" is about the room, not about the marker: a room whose
+      // artifact exists but cannot be picked up in this phase is still a room with an
+      // artifact, and a surface that could only see collectible rooms would draw it the
+      // same as a room that never had one.
+      if (!artifactRoomIds.has(candidate.roomId) && !isArtifactCollected(candidate.roomId)) continue;
+      const state = artifactMarkerOf(candidate.roomId);
+      rooms.push({
+        roomId: candidate.roomId,
+        topic: candidate.topic,
+        state,
+        label: `${candidate.topic}${describeDungeonArtifactMarkerSuffix(state)}`,
+      });
+    }
+    return createDungeonArtifactSnapshot({
+      roomId,
+      topic: room?.topic ?? '',
+      pickupPermitted: artifactPickupPermitted,
+      hasArtifact: roomId !== null && artifactRoomIds.has(roomId),
+      collected: roomId !== null && isArtifactCollected(roomId),
+      withinPickupRange: roomId !== null && isWithinArtifactPickupRange(roomId),
+      rooms,
+    });
+  }
+
+  /**
    * Tell the DOM mirror that the world moved on its own.
    *
    * ## The two call sites, and why there are exactly two
@@ -774,6 +954,11 @@ export function createDungeonScene(
       case DUNGEON_ZOOM_OUT_ACTION_ID:
         adoptZoomAsTarget((rig) => rig.addZoom(-DUNGEON_ZOOM_STEP));
         return true;
+      case DUNGEON_ARTIFACT_ACTION_ID:
+        // Reached only through `init.onAction`, like every other verb: the host performs
+        // it and republishes in one function, so a pickup from a DOM control announces
+        // itself exactly once, the same way a zoom button press does.
+        return performArtifactCollect();
       default:
         return false;
     }
@@ -877,10 +1062,10 @@ export function createDungeonScene(
       applyFloorVisibility(visibility);
     },
     teleportToRoom,
-    setArtifactRooms(roomIds, visible): void {
+    setArtifactRooms(roomIds, pickupPermitted): void {
       artifactRoomIds.clear();
       for (const roomId of roomIds) artifactRoomIds.add(roomId);
-      showArtifactIcons = visible;
+      artifactPickupPermitted = pickupPermitted;
       applyRoomStates();
     },
     setCollectedArtifactRooms(roomIds): void {
@@ -922,6 +1107,7 @@ export function createDungeonScene(
     actions: DUNGEON_ACTIONS,
     activate,
     readState,
+    readArtifactSnapshot,
     update,
     onResize,
     setMotionProfile,

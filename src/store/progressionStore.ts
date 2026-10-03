@@ -35,6 +35,11 @@ import {
   type CanonicalLootItem,
   type CanonicalSubjectProgressionWriteShape,
 } from '@/core/progression/canonicalProgression';
+import {
+  decideRoomClearReward,
+  writeRoomClearRewardLedgerToFields,
+  type RoomClearRewardDecision,
+} from '@/core/progression/roomClearRewards';
 
 export type LootItem = CanonicalLootItem;
 export type CollectedNoteEntry = CanonicalCollectedNote;
@@ -51,6 +56,37 @@ export type CollectedNoteEntry = CanonicalCollectedNote;
 type PersistedSubjectProgression = CanonicalSubjectProgressionWriteShape;
 
 const REVIEW_PASS_XP = 6;
+
+/**
+ * The room and clear generation a room-clear reward belongs to.
+ *
+ * Phase 15. Supplied by `encounter/note-submit`, which is the only caller that
+ * knows the graph the note was validated against (see
+ * `deriveRoomClearIdentity`). Omitting it keeps the pre-Phase-15 behaviour
+ * exactly - an unconditional award - which is what keeps the two byte-comparison
+ * lanes and every direct store caller honest. The rollback lane that still uses
+ * `NoteEditorModal` is therefore unchanged too, and that is the documented
+ * Phase 15 rollback, not an oversight.
+ */
+export interface RoomClearRewardIdentity {
+  /** The room the learner cleared. */
+  roomId: string;
+  /** The digest of the graph generation the clear was validated in. */
+  clearIdentity: string;
+}
+
+/**
+ * What `awardRoomClear` reports about the award itself.
+ *
+ * Additive, so every existing reader of `xpGained` / `loot` /
+ * `unlockedBadges` / `unlockedAchievements` is unaffected. `duplicate` is the
+ * signal a caller needs in order not to announce a reward that did not happen.
+ */
+export interface RoomClearRewardOutcome {
+  awarded: boolean;
+  /** The ledger already held this exact (room, clear generation). */
+  duplicate: boolean;
+}
 
 /**
  * Identifier factory for a persisted record that is missing an id.
@@ -292,6 +328,14 @@ export interface ProgressionStoreState {
     isBossEncounter?: boolean;
     /** Track 3c: boss loot rarity minimum */
     bossMinLootRarity?: 'rare' | 'epic';
+    /**
+     * Phase 15: which (room, clear generation) this reward is for.
+     *
+     * Present makes the award idempotent for that identity; absent preserves the
+     * pre-Phase-15 unconditional award that the rollback lane and the
+     * byte-comparison fixtures depend on.
+     */
+    clear?: RoomClearRewardIdentity;
   }) => {
     xpGained: number;
     newRank: RankTier;
@@ -300,6 +344,10 @@ export interface ProgressionStoreState {
     loot: LootItem | null;
     /** Track 3c: newly unlocked cross-subject achievements */
     unlockedAchievements: string[];
+    /** Phase 15: whether this call awarded anything. */
+    awarded: boolean;
+    /** Phase 15: whether this call was suppressed as a repeat of an awarded clear. */
+    duplicate: boolean;
   };
   awardReviewPass: () => {
     xpGained: number;
@@ -564,6 +612,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     archaeologistFullReviewPasses,
     isBossEncounter = false,
     bossMinLootRarity,
+    clear,
   }) {
     const state = get();
     if (!state.activeSubjectId) {
@@ -574,9 +623,39 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
         unlockedBadges: [] as string[],
         loot: null as LootItem | null,
         unlockedAchievements: [] as string[],
+        awarded: false,
+        duplicate: false,
       };
     }
     const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+
+    // Phase 15: the durable awarded-once check, taken *before* any reward is
+    // computed so a suppressed clear rolls no loot, burns no `Math.random`, and
+    // performs no write at all. The decision and the ledger it produces are one
+    // pure value, and both land in the single `set` below together with XP,
+    // loot, badges, and `roomsCleared` - so a failed write leaves the reward and
+    // its guard in the same state, never one without the other.
+    let decision: RoomClearRewardDecision | null = null;
+    if (clear) {
+      decision = decideRoomClearReward({
+        extraFields: current.extraFields,
+        roomId: clear.roomId,
+        clearIdentity: clear.clearIdentity,
+        awardedAt: new Date().toISOString(),
+      });
+      if (decision.outcome === 'already-awarded') {
+        return {
+          xpGained: 0,
+          newRank: current.rank,
+          rankChanged: false,
+          unlockedBadges: [],
+          loot: null,
+          unlockedAchievements: [],
+          awarded: false,
+          duplicate: true,
+        };
+      }
+    }
 
     // Compute equip bonuses
     const equipBonuses = computeEquipBonuses(current.equippedItems ?? []);
@@ -604,6 +683,8 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
         unlockedBadges: [],
         loot: null,
         unlockedAchievements: [],
+        awarded: false,
+        duplicate: false,
       };
     }
 
@@ -622,6 +703,19 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     const roomsCleared = current.roomsCleared + 1;
     const bossesDefeated = isBossEncounter ? current.bossesDefeated + 1 : current.bossesDefeated;
 
+    // Phase 15: the ledger rides in the record's preserved app-owned fields, so
+    // it reaches the legacy mirror (the shipping repository), the storage-v2
+    // generation, and both backup products through the machinery that already
+    // exists. A record with no ledger decision and no preserved fields gains no
+    // new key, which is what keeps the byte-comparison lanes byte-identical.
+    // Carrying `extraFields` forward unconditionally is also a preservation fix:
+    // this action previously rebuilt the record field by field and dropped every
+    // preserved unknown app-owned field on every room clear.
+    const extraFields =
+      decision === null
+        ? current.extraFields
+        : writeRoomClearRewardLedgerToFields(current.extraFields, decision.ledger);
+
     const nextSubject: PersistedSubjectProgression = {
       xpTotal: value.xpTotalAfter,
       rank: value.rankAfter,
@@ -636,6 +730,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       artifacts: current.artifacts,
       bossesDefeated,
       fishCollection: current.fishCollection,
+      ...(extraFields !== undefined ? { extraFields } : {}),
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
@@ -651,6 +746,8 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       unlockedBadges: value.unlockedBadges,
       loot,
       unlockedAchievements,
+      awarded: true,
+      duplicate: false,
     };
   },
 

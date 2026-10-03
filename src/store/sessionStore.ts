@@ -4,7 +4,16 @@
  * welcome screen needs to mutate.
  */
 import { create } from 'zustand';
-import type { PlayerClassId } from '@/game/systems/playerClasses';
+/*
+ * Phase 15. This used to be imported from `@/game/systems/playerClasses`, which made
+ * every DOM surface that reads `GamePhase` from this store - including the whole of
+ * `src/ui/study/**` - transitively reach into the legacy renderer tree. The canonical
+ * renderer-neutral declaration is the one in `@/application/contracts/world`, and
+ * `playerClasses.ts` already asserts its own duplicate is identical to it at compile
+ * time, so nothing is lost by reading the neutral one: that guard is what keeps the
+ * two from drifting, and it does not depend on this import direction.
+ */
+import type { PlayerClassId } from '@/application/contracts/world';
 import type {
   StudyFlowPhase,
   StudyFlowQuestStep,

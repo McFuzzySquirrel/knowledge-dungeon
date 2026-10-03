@@ -28,6 +28,8 @@ import { TutorialOverlay } from '@/ui/components/TutorialOverlay';
 import { MobileTouchHint } from '@/ui/components/MobileTouchHint';
 import type { RoomTab } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
+import { ScribeEncounterDialog } from '@/ui/study/scribe/ScribeEncounter';
+import { bindArtifactCollection } from '@/store/encounterCommands';
 import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
 import { Minimap } from '@/ui/components/Minimap';
 import { HelpOverlay } from '@/ui/components/HelpOverlay';
@@ -81,6 +83,54 @@ const phaserDungeonFactory =
  * tearing down and rebuilding the `Application`.
  */
 const LazyPixiDungeonWorld = pixiDungeonFactory !== null ? lazy(pixiDungeonFactory) : null;
+
+/**
+ * Whether this build renders the redesigned Scribe encounter workspace (Phase 15).
+ *
+ * Read from the build-time flag once, at module scope, exactly as `RoomPanel` reads
+ * `runtimeConfig.creatorWorkspace` for the Creator workspace. `false` is the production
+ * default, and with it this screen renders the pre-Phase-15 `NoteEditorModal` unchanged
+ * and untouched - that modal is the rollback lane, and the phase's rollback line is to
+ * restore it as the Scribe view while retaining the shared commands.
+ *
+ * The two are switched here rather than in two places because they occupy the *same slot*:
+ * `studyFlowController.roomInteract` opens exactly one Scribe surface per room, so
+ * rendering both would put two composers over one encounter.
+ */
+const SCRIBE_ENCOUNTER_WORKSPACE_ENABLED = runtimeConfig.scribeEncounterWorkspace;
+
+/**
+ * Whether this host permits an artifact pickup, in every phase.
+ *
+ * ## Why the second argument to `setArtifactRooms` is no longer a phase test
+ *
+ * That argument used to be `phase === 'archaeologist'`, which read as "are we reviewing"
+ * while the renderer asked "may this be picked up". Those are different questions, and the
+ * second is the one the renderer actually asks: `dungeonArtifact.ts` documents that input as
+ * "pickup is a live action in whatever phase the session is in" and forbids the renderer
+ * from importing the session store to answer it. So the host is the only place the answer can
+ * live, and the honest answer is yes.
+ *
+ * It was also a delivery blocker, not a nicety. The Scribe phase is where an artifact is
+ * generated, so a gate that opened only in Archaeologist left a learner holding a thing they
+ * had just earned with no way to take it. That is Phase 15's "Artifact collection event for
+ * Pixi Dungeon", and it could not land while the host said no.
+ *
+ * ## Why `true`, rather than something cleverer
+ *
+ * The domain rule is per-room, and the other two inputs already carry it in full:
+ * `StudyFlowController.collectArtifact` returns early on anything but a truthy
+ * `room.artifactMarkdown`; `artifactRoomIds` lists only cleared rooms; and
+ * `setCollectedArtifactRooms` makes an already-collected room report `collected`, which
+ * `resolveDungeonArtifactMarker` answers before it ever looks at permission. A phase term
+ * here would not add a condition, it would add a rule the domain does not have - which is
+ * exactly how the Scribe pickup got stranded. One fewer input, one fewer way to disagree.
+ *
+ * The surface that owns the action in Scribe is the encounter workspace's artifact region; the
+ * canvas marker is the gesture route to the same `artifact/collect`. Both reach
+ * `flow.collectArtifact`, so both are gated by the same domain check.
+ */
+const HOST_PERMITS_ARTIFACT_PICKUP = true;
 
 /**
  * The renderer surface this screen drives, in renderer-neutral terms.
@@ -305,6 +355,29 @@ export function GameScreen(): JSX.Element {
   }
   const flow = flowRef.current;
 
+  /**
+   * Bind this screen's artifact pickup to the encounter command layer (Phase 15).
+   *
+   * `encounterController.artifactCollect` reaches the pickup through
+   * `bindArtifactCollection`, because the pickup is owned by whichever world controller is
+   * mounted and `studyFlowController` is per-screen: it is built here, from this screen's
+   * ports, and it is what builds the journal entry and opens the journal. Without this
+   * binding the redesigned Scribe workspace's pickup throws instead of silently doing
+   * nothing, which is the right default and not a usable lane.
+   *
+   * Cleared on unmount, so a later encounter can never dispatch into a flow that is gone.
+   * This is a wiring effect, not a mutation: it registers a handler and removes it, and
+   * it never runs a command itself.
+   */
+  useEffect(() => {
+    bindArtifactCollection((command) => {
+      flow.collectArtifact(command.payload.roomId);
+    });
+    return () => {
+      bindArtifactCollection(null);
+    };
+  }, [flow]);
+
   const closeInfoPanel = useCallback(() => {
     flow.closeInfoPanel();
   }, [flow]);
@@ -445,7 +518,10 @@ export function GameScreen(): JSX.Element {
     const artifactRoomIds = Object.values(snapshot.rooms)
       .filter((room) => room.validationState.finalPass)
       .map((room) => room.roomId);
-    renderer.setArtifactRooms(artifactRoomIds, phase === 'archaeologist');
+    renderer.setArtifactRooms(artifactRoomIds, HOST_PERMITS_ARTIFACT_PICKUP);
+    // `phase` stays in this dependency list on purpose. It is unused by the body today, and
+    // removing it would mean the next person who reintroduces a phase term changes the
+    // gate without also re-wiring the effect that publishes it.
   }, [sceneReady, snapshot, phase]);
 
   useEffect(() => {
@@ -507,9 +583,22 @@ export function GameScreen(): JSX.Element {
     if (!snapshot) return;
     if (lastWelcomedSubjectId === snapshot.dungeon.dungeonId) return;
     const totalRooms = snapshot.dungeon.rooms.length;
+    /*
+     * Phase 15 changed this sentence's honesty, so it changed the sentence.
+     *
+     * It used to answer every phase with "Review artifacts in Archaeologist phase", which
+     * is only good advice in the Archaeologist phase: it points a learner out of the phase
+     * they are in, and after the pickup gate opened in every phase it also hid the fact
+     * that the artifact they may still be owed is collectable *here and now*. So the branch
+     * that fires once every room is cleared is now phase-aware: in the review phase it says
+     * what to do, and in every other phase it names the pickup that is available before it
+     * points at review.
+     */
     const suggestedNextAction =
       clearedRoomsCount >= totalRooms && totalRooms > 0
-        ? 'Review artifacts in Archaeologist phase.'
+        ? phase === 'archaeologist'
+          ? 'Review the artifacts in your journal.'
+          : 'Collect any artifact still waiting in a room, then move to Archaeologist to review.'
         : phase === 'creator'
           ? 'Add a few rooms, then switch to Scribe to clear encounters.'
           : 'Open a room encounter to continue progress.';
@@ -893,7 +982,12 @@ export function GameScreen(): JSX.Element {
             />
           ) : null}
 
-          <NoteEditorModal />
+          {/*
+            One Scribe surface per room, chosen by the build-time flag. With the flag off
+            - the production default - this is the pre-Phase-15 modal, rendered unchanged;
+            its own unit test is the rollback lane's evidence that it still works.
+          */}
+          {SCRIBE_ENCOUNTER_WORKSPACE_ENABLED ? <ScribeEncounterDialog /> : <NoteEditorModal />}
           {isMapViewOpen ? (
             <FullMapView
               snapshot={snapshot}

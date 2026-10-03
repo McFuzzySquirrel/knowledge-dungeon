@@ -555,8 +555,9 @@ describe('Phase 7 gate 24: the one module outside the product tree reaches the p
     // added one flag to that closed set, `audioEnabled`, for the audio service; it is a
     // service flag, not a product flag, and adding it here keeps the list closed rather
     // than opening it. Phase 14 added `creatorWorkspace` for the redesigned Creator
-    // workspace, which is also not a product flag. A twelfth flag still fails this
-    // assertion.
+    // workspace, and Phase 15 added `scribeEncounterWorkspace` for the redesigned Scribe
+    // encounter workspace; neither is a product flag either. A thirteenth flag still
+    // fails this assertion.
     expect(Object.keys(FEATURE_FLAG_MATRIX).sort()).toEqual([
       'adaptiveAssistance',
       'audioEnabled',
@@ -566,6 +567,7 @@ describe('Phase 7 gate 24: the one module outside the product tree reaches the p
       'pixiDungeon',
       'pixiFishing',
       'pixiVillage',
+      'scribeEncounterWorkspace',
       'storageRepository',
       'webShare',
       'worldRenderer',
