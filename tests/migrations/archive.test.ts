@@ -77,13 +77,42 @@ describe('archive round trip', () => {
     expect(readArchiveText(withEmptyMember, 'recovery/empty.txt')).toBe('');
   });
 
-  it('is byte-stable for identical input', () => {
+  /**
+   * Reproducibility is a property of the *caller supplying a clock*, not of
+   * `writeArchive`. `ArchiveFile.mtime` documents that omitting it means fflate's
+   * default of "now", and `node_modules/fflate` reads `f.mtime == null ?
+   * Date.now() : f.mtime` when stamping the DOS timestamp - so two writes of
+   * identical bytes agree only while they land inside the same tick.
+   *
+   * These two tests pin that contract from both sides. The previous version of
+   * this case asserted byte-stability while omitting `mtime`, which is the one
+   * input the module explicitly excludes: it passed in isolation and went red
+   * under parallel load, not because the archive codec changed but because two
+   * calls straddled a two-second timestamp boundary.
+   */
+  it('is byte-stable for identical input when the caller supplies an mtime', () => {
+    const mtime = new Date('2024-06-01T12:00:00Z');
     const files = [
-      { path: 'manifest.json', bytes: encoder.encode('{"product":"kdbak"}') },
-      { path: 'state.json', bytes: encoder.encode('{"subjects":[]}') },
+      { path: 'manifest.json', bytes: encoder.encode('{"product":"kdbak"}'), mtime },
+      { path: 'state.json', bytes: encoder.encode('{"subjects":[]}'), mtime },
     ];
 
     expect(writeArchive(files)).toEqual(writeArchive(files));
+  });
+
+  it('falls back to the current clock when no mtime is supplied', () => {
+    const bytes = [
+      { path: 'manifest.json', bytes: encoder.encode('{"product":"kdbak"}') },
+      { path: 'state.json', bytes: encoder.encode('{"subjects":[]}') },
+    ];
+    const pinned = new Date('2024-06-01T12:00:00Z');
+
+    // Deterministic by construction: the pinned archive cannot agree with one
+    // written against the wall clock, so this asserts the documented fallback
+    // instead of racing two unpinned writes against each other.
+    expect(Array.from(writeArchive(bytes))).not.toEqual(
+      Array.from(writeArchive(bytes.map((file) => ({ ...file, mtime: pinned })))),
+    );
   });
 
   it('reports a missing member rather than returning undefined', () => {

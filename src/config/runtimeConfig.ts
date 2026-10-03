@@ -25,6 +25,7 @@ export interface RuntimeConfig {
    * means something if there is audio to disable.
    */
   readonly audioEnabled: boolean;
+  readonly creatorWorkspace: boolean;
 }
 
 export type RuntimeConfigKey = keyof RuntimeConfig;
@@ -41,6 +42,7 @@ export const RUNTIME_FLAG_ENV_KEYS = {
   dataProductsV2: 'VITE_DATA_PRODUCTS_V2',
   webShare: 'VITE_WEB_SHARE',
   audioEnabled: 'VITE_AUDIO_ENABLED',
+  creatorWorkspace: 'VITE_CREATOR_WORKSPACE',
 } as const satisfies Readonly<Record<RuntimeConfigKey, string>>;
 
 /**
@@ -58,6 +60,7 @@ export const DEFAULT_RUNTIME_CONFIG: Readonly<RuntimeConfig> = Object.freeze({
   dataProductsV2: false,
   webShare: false,
   audioEnabled: true,
+  creatorWorkspace: false,
 });
 
 function normalizedRawValue(
@@ -124,6 +127,10 @@ export function parseRuntimeConfig(
     dataProductsV2: parseBoolean('dataProductsV2', DEFAULT_RUNTIME_CONFIG.dataProductsV2),
     webShare: parseBoolean('webShare', DEFAULT_RUNTIME_CONFIG.webShare),
     audioEnabled: parseBoolean('audioEnabled', DEFAULT_RUNTIME_CONFIG.audioEnabled),
+    creatorWorkspace: parseBoolean(
+      'creatorWorkspace',
+      DEFAULT_RUNTIME_CONFIG.creatorWorkspace,
+    ),
   };
 
   if (errors.length > 0) {

@@ -1,0 +1,579 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+ * The study surfaces: the shared shell, the Creator workspace, and the DOM graph.
+ *
+ * ## Why this file is colocated under `src/ui/study/`
+ *
+ * Same reason `src/ui/village/villagePanels.css` and `src/ui/components/audioSettings.css`
+ * are: these rules belong to one component family, and colocating them means extracting
+ * the workspace for Phase 15 or 16 moves the CSS with the JSX instead of leaving a
+ * `study-` rule behind in a 5900-line global sheet. `scripts/check-cc0-assets.mjs`
+ * classifies `.css` as non-media, so a stylesheet here needs no registry entry.
+ *
+ * ## What every rule below obeys
+ *
+ * 1. **No colour-only state.** A selected topic, a reparented room, a cross-link, and
+ *    a refused action each carry a word or a border *width* in addition to any fill.
+ *    `tests/phase14/creator-workspace.test.tsx` asserts the words, so this file is the
+ *    second half of a pair rather than the only half.
+ * 2. **44 by 44 CSS pixels on every control**, matching the inline style every study
+ *    control already carries (`STUDY_TOUCH_TARGET_STYLE`). The rule here is a backstop
+ *    for a control added later without it, not the floor itself.
+ * 3. **Reduced motion is honoured** by removing every transition in this file, and none
+ *    of them carried information - they are hover and focus affordances only.
+ * 4. **System fonts only.** No webfont, so the workspace renders before any download
+ *    and on a device that has none.
+ */
+
+/* === The shell '================================================================ */
+
+.study-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text-primary, #221a12);
+}
+
+.study-shell__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.study-shell__phase {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.study-shell__phase-name {
+  font-weight: 700;
+  /* A state is never colour alone: the phase name is the word, this is the accent. */
+  border-inline-start: 4px solid var(--accent, #b4622d);
+  padding-inline-start: 8px;
+}
+
+.study-shell__phase-purpose {
+  color: var(--text-muted, #5c5148);
+}
+
+.study-shell__topic {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.3;
+  /* A long topic must wrap rather than widen a 320-pixel viewport. */
+  overflow-wrap: anywhere;
+}
+
+.study-shell__context {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.study-shell__context-row {
+  display: contents;
+}
+
+.study-shell__context dt {
+  font-weight: 600;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-shell__context dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.study-shell__archetype {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+}
+
+/* === Feedback '================================================================= */
+
+/*
+ * One live channel for the whole workspace. It is kept in the layout rather than
+ * collapsed to zero height, so an announced message is also a visible one, and so an
+ * empty channel does not shift the regions below it when a command starts and settles.
+ */
+.study-feedback {
+  margin: 0;
+  min-block-size: 1.25em;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-feedback--refusal {
+  /* Weight and a border width, not hue: the sentence says "Not applied". */
+  font-weight: 600;
+  border-inline-start: 4px double var(--text-muted, #5c5148);
+  padding-inline-start: 8px;
+}
+
+.study-feedback--done {
+  font-weight: 600;
+  border-inline-start: 4px solid var(--accent, #b4622d);
+  padding-inline-start: 8px;
+}
+
+/* === Regions '================================================================= */
+
+.study-region {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: 8px;
+  border-block-start: 1px solid var(--border-soft, #d8ccc0);
+}
+
+.study-region__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.study-region__title {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.study-region__toggle {
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding-inline: 10px;
+  cursor: pointer;
+}
+
+.study-region__description,
+.study-next-action__detail {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-region__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* `hidden` is the mechanism: it removes the subtree from Tab order and from the
+ * accessibility tree together. A class that only set `display: none` visually would
+ * leave a collapsed region's controls focusable, which is the defect plan 10.1 names. */
+.study-region__body[hidden] {
+  display: none;
+}
+
+.study-next-action {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #b4622d) 8%, transparent);
+}
+
+.study-next-action__label {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.study-next-action__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* === Controls '================================================================ */
+
+.study-action {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.study-action__button {
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+  background: var(--bg-panel, #fdf7ef);
+  color: inherit;
+  font: inherit;
+  padding-inline: 12px;
+  cursor: pointer;
+  /* Affordance only; removed under reduced motion below. */
+  transition: background-color 120ms ease-out;
+}
+
+.study-action__button--primary {
+  border-width: 2px;
+  font-weight: 600;
+}
+
+.study-action__button--danger {
+  font-weight: 600;
+}
+
+.study-action__button[disabled] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.study-action__note {
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+  /* Wraps under the button rather than pushing a 320-pixel viewport wide. */
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
+
+.study-action__note--refusal {
+  font-weight: 600;
+}
+
+.study-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.study-field__label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.study-field__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-input,
+.study-textarea,
+.study-choice {
+  inline-size: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+  background: var(--bg-panel, #fdf7ef);
+  color: inherit;
+  font: inherit;
+  padding: 8px;
+}
+
+.study-textarea {
+  resize: vertical;
+  min-block-size: 88px;
+}
+
+/* A visible focus ring on every study control, including the SVG nodes below. */
+.study-shell :focus-visible,
+.study-graph :focus-visible {
+  outline: 3px solid var(--accent, #b4622d);
+  outline-offset: 2px;
+}
+
+/* === Topic and relation lists '================================================= */
+
+.study-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.study-list__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+}
+
+.study-list__row--current {
+  /* Selection is a word ("Current topic") plus a border width, never a fill alone. */
+  border-width: 3px;
+  font-weight: 600;
+}
+
+.study-list__name {
+  flex: 1 1 10ch;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.study-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.study-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.study-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+}
+
+.study-tag__remove {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* === Tools '=================================================================== */
+
+.study-tools,
+.study-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.study-tools {
+  gap: 14px;
+}
+
+.study-tool {
+  padding-block: 8px;
+  border-block-start: 1px dashed var(--border-soft, #d8ccc0);
+}
+
+.study-tool__preview {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+  overflow-wrap: anywhere;
+}
+
+.study-inline-btn {
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding-inline: 10px;
+  cursor: pointer;
+  text-align: start;
+}
+
+.study-inline-btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.study-list__relation {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-list__empty {
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-secondary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: 8px;
+  border-block-start: 1px solid var(--border-soft, #d8ccc0);
+}
+
+.study-secondary-actions__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-phase-nudge {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* A sentence a screen reader reads and nobody sees: the child-topic textarea points at it
+ * so the control that performs the recommendation describes itself before it is used. */
+.study-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* === The guide conversation '================================================== */
+
+.study-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block: 8px;
+  border-block-start: 1px solid var(--border-soft, #d8ccc0);
+}
+
+.study-guide__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+}
+
+/* === Confirmation '============================================================ */
+
+.study-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 2px solid var(--text-muted, #5c5148);
+  border-radius: 10px;
+}
+
+.study-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* === The DOM graph '============================================================ */
+
+/*
+ * The graph is presentation. Node positions live in React state and are never persisted,
+ * so the only thing a stroke or a fill may carry is "which node is selected" - and that
+ * is also carried in words on the node's accessible name.
+ */
+.study-graph {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.study-graph__frame {
+  max-block-size: 320px;
+  overflow: auto;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+  background: var(--bg-panel, #fdf7ef);
+}
+
+.study-graph__surface {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 180px;
+  /* `focusable="false"` keeps a stray Tab stop out of the SVG root on older engines. */
+  touch-action: none;
+}
+
+.study-graph__edge {
+  stroke: var(--border-soft, #8a7a6b);
+  stroke-width: 2;
+  /* The edge kind is in the edge's accessible description, not in a hue. */
+}
+
+.study-graph__edge--crosslink {
+  stroke-dasharray: 6 4;
+}
+
+.study-graph__node {
+  cursor: pointer;
+}
+
+.study-graph__node-surface {
+  fill: color-mix(in srgb, var(--accent, #b4622d) 10%, var(--bg-panel, #fdf7ef));
+  stroke: var(--border-soft, #8a7a6b);
+  stroke-width: 2;
+}
+
+.study-graph__node--selected .study-graph__node-surface {
+  /* Selection is a heavier border as well as the "Current" word on the node. */
+  stroke-width: 5;
+}
+
+.study-graph__node--needs-revalidation .study-graph__node-surface {
+  stroke-dasharray: 3 3;
+}
+
+.study-graph__node-label {
+  fill: var(--text-primary, #221a12);
+  font-size: 13px;
+}
+
+.study-graph__node-note {
+  fill: var(--text-muted, #5c5148);
+  font-size: 11px;
+}
+
+.study-graph__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.study-graph__hint,
+.study-graph__summary {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+}
+
+.study-graph__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+/* === Reduced motion '========================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .study-action__button {
+    transition: none;
+  }
+}

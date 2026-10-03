@@ -554,11 +554,14 @@ describe('Phase 7 gate 24: the one module outside the product tree reaches the p
     // acquire one - plan section 11's list is closed and Phase 1 owns it. Phase 10
     // added one flag to that closed set, `audioEnabled`, for the audio service; it is a
     // service flag, not a product flag, and adding it here keeps the list closed rather
-    // than opening it: an eleventh flag still fails this assertion.
+    // than opening it. Phase 14 added `creatorWorkspace` for the redesigned Creator
+    // workspace, which is also not a product flag. A twelfth flag still fails this
+    // assertion.
     expect(Object.keys(FEATURE_FLAG_MATRIX).sort()).toEqual([
       'adaptiveAssistance',
       'audioEnabled',
       'cozyVisuals',
+      'creatorWorkspace',
       'dataProductsV2',
       'pixiDungeon',
       'pixiFishing',

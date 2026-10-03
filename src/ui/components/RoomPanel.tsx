@@ -15,16 +15,29 @@ import {
   getConnectedRoomIds,
   isReachableViaSubtopics,
 } from '@/core/graph';
+import { runtimeConfig } from '@/config/featureFlags';
 import type { GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
 import { Markdown } from '@/ui/utils/markdown';
+import { CreatorWorkspace } from '@/ui/study/creator/CreatorWorkspace';
+import { GuideConversation } from '@/ui/study/guide/GuideConversation';
 import {
   evaluateReviewUnlock,
   extractMarkdownHeadings,
   generateSelfCheckPrompts,
 } from '@/core/review';
+
+/**
+ * Whether this build renders the redesigned Creator workspace.
+ *
+ * Read from the build-time flag, exactly once, at module scope - so the rollback lane and
+ * the new lane are decided by the same value in every render and a test can mock one
+ * module to choose. `false` is the production default, and with it `RoomPanel` renders the
+ * pre-Phase-14 Creator view against the pre-Phase-14 store actions, untouched.
+ */
+const CREATOR_WORKSPACE_ENABLED = runtimeConfig.creatorWorkspace;
 
 export type RoomTab = 'topic' | 'notes' | 'images' | 'artifact' | 'selfcheck';
 
@@ -92,6 +105,13 @@ export function RoomPanel({
   const phase = useSessionStore((s) => s.phase);
   const setPhase = useSessionStore((s) => s.setPhase);
   const setFocusedRoomId = useSessionStore((s) => s.setFocusedRoomId);
+  /**
+   * The archetype, for the Creator workspace's tool prominence.
+   *
+   * `null` until the tutorial's pick-archetype step, which is a real state the workspace
+   * handles rather than a missing value.
+   */
+  const selectedClass = useSessionStore((s) => s.selectedClass);
   const [draftTopics, setDraftTopics] = useState('');
   const [reparentTargetId, setReparentTargetId] = useState('');
   const [sameFloorFilter, setSameFloorFilter] = useState('');
@@ -467,6 +487,45 @@ export function RoomPanel({
     : [];
 
   if (!focusedRoom) {
+    /*
+     * The Phase 14 lane keeps its workspace on screen when there is no focused room.
+     *
+     * A cascade delete can remove the room the learner is editing, and the legacy panel's
+     * "Walk into a room to inspect it" answer is wrong twice over here: it strands the
+     * learner on a dead view with no route back into the graph they were mapping, and in the
+     * Creator phase there is nothing to walk to - the topics are the map, not a place.
+     * `CreatorWorkspace` already falls back to the root room when its selection no longer
+     * exists, so handing it a `null` focus is the whole fix and its own fallback does the
+     * rest.
+     *
+     * The legacy panel is untouched below this branch, because it is the rollback lane and
+     * the flag decides which of the two answers a learner gets.
+     */
+    if (CREATOR_WORKSPACE_ENABLED && phase === 'creator') {
+      return (
+        <aside
+          ref={panelRef}
+          className={`room-panel${panelExpanded ? ' room-panel--expanded' : ''}${dragState ? ' room-panel--dragging' : ''}${isMobile ? ` room-panel--bottomsheet${bottomsheetExpanded ? ' room-panel--bottomsheet-expanded' : ''}` : ''}`}
+          style={panelStyle}
+          aria-label="Room information"
+        >
+          <div
+            className={`room-panel-drag-handle${isMobile ? ' room-panel-drag-handle--mobile' : ''}`}
+            data-testid="room-panel-drag-handle"
+            onPointerDown={isMobile ? undefined : onDragHandlePointerDown}
+          >
+            Drag panel
+          </div>
+          <CreatorWorkspace
+            snapshot={snapshot}
+            focusedRoomId={null}
+            archetype={selectedClass}
+            onSwitchToScribe={() => setPhase('scribe')}
+          />
+        </aside>
+      );
+    }
+
     return (
       <aside
         ref={panelRef}
@@ -602,7 +661,34 @@ export function RoomPanel({
 
       <div className="room-tab-body">
         {tab === 'topic' ? (
-          <>
+          phase === 'creator' && CREATOR_WORKSPACE_ENABLED ? (
+            /*
+             * The Phase 14 Creator lane. Everything below in this tab - the archaeology
+             * progress cards, the travel lists, the portal list - is the pre-Phase-14 view
+             * and is rendered only when the flag is off.
+             */
+            <>
+              <CreatorWorkspace
+                snapshot={snapshot}
+                focusedRoomId={focusedRoomId}
+                archetype={selectedClass}
+                onSwitchToScribe={() => setPhase('scribe')}
+              />
+              <GuideConversation
+                phase={phase}
+                room={
+                  focusedRoom === null
+                    ? null
+                    : {
+                        topic: focusedRoom.topic,
+                        state: focusedRoom.state,
+                        isCleared: focusedRoom.validationState.finalPass,
+                      }
+                }
+              />
+            </>
+          ) : (
+            <>
             <h2>{focusedRoom.topic}</h2>
             <span className="room-status-chip">{focusedRoom.state}</span>
             {phase !== 'creator' ? (
@@ -874,7 +960,19 @@ export function RoomPanel({
 
             {lastError ? <p className="room-error-text">{lastError}</p> : null}
 
-          </>
+            {/*
+              The guide-conversation DOM route, for every phase.
+            */}
+            <GuideConversation
+              phase={phase}
+              room={{
+                topic: focusedRoom.topic,
+                state: focusedRoom.state,
+                isCleared: focusedRoom.validationState.finalPass,
+              }}
+            />
+            </>
+          )
         ) : null}
 
         {tab === 'notes' ? (

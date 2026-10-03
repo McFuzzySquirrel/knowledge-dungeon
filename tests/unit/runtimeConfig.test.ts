@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FEATURE_FLAG_MATRIX, FEATURE_FLAGS } from '@/config/featureFlags';
+import { FEATURE_FLAG_MATRIX, FEATURE_FLAGS, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
 import {
   DEFAULT_RUNTIME_CONFIG,
   parseRuntimeConfig,
@@ -19,6 +19,7 @@ describe('runtime feature configuration', () => {
       dataProductsV2: false,
       webShare: false,
       audioEnabled: true,
+      creatorWorkspace: false,
     });
   });
 
@@ -35,6 +36,7 @@ describe('runtime feature configuration', () => {
         VITE_DATA_PRODUCTS_V2: 'true',
         VITE_WEB_SHARE: 'true',
         VITE_AUDIO_ENABLED: 'true',
+        VITE_CREATOR_WORKSPACE: 'true',
       }),
     ).toEqual({
       worldRenderer: 'pixi',
@@ -47,6 +49,7 @@ describe('runtime feature configuration', () => {
       dataProductsV2: true,
       webShare: true,
       audioEnabled: true,
+      creatorWorkspace: true,
     });
   });
 
@@ -107,5 +110,44 @@ describe('runtime feature configuration', () => {
     }
 
     expect(FEATURE_FLAGS).toEqual(DEFAULT_RUNTIME_CONFIG);
+  });
+});
+
+describe('the Phase 14 Creator workspace flag', () => {
+  it('exists, has an environment key, and defaults off three ways', () => {
+    // The same three-way agreement every cutover gate states for its own flag: the safe
+    // production default, the parsed default with no environment, and the declared
+    // matrix default. Phase 14's rollback line is "retain the existing RoomPanel Creator
+    // view behind the phase flag", which only means something if the default is already
+    // the RoomPanel view.
+    expect(RUNTIME_FLAG_ENV_KEYS.creatorWorkspace).toBe('VITE_CREATOR_WORKSPACE');
+    expect(DEFAULT_RUNTIME_CONFIG.creatorWorkspace).toBe(false);
+    expect(parseRuntimeConfig({}).creatorWorkspace).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.productionDefault).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.environmentVariable).toBe('VITE_CREATOR_WORKSPACE');
+    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.valueKind).toBe('boolean');
+    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.ownerPhase).toBe(14);
+    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.rollback).toContain('VITE_CREATOR_WORKSPACE=false');
+    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.rollback).toContain('RoomPanel Creator view');
+  });
+
+  it('parses exactly as the other cutover booleans parse, in all three spellings', () => {
+    expect(parseRuntimeConfig({ VITE_CREATOR_WORKSPACE: 'false' }).creatorWorkspace).toBe(false);
+    expect(parseRuntimeConfig({ VITE_CREATOR_WORKSPACE: 'true' }).creatorWorkspace).toBe(true);
+    expect(parseRuntimeConfig({ VITE_CREATOR_WORKSPACE: ' TRUE ' }).creatorWorkspace).toBe(true);
+    // A malformed value fails the build rather than silently defaulting, and the error
+    // names the variable, never its value.
+    expect(() => parseRuntimeConfig({ VITE_CREATOR_WORKSPACE: 'maybe' })).toThrow(
+      'VITE_CREATOR_WORKSPACE must be one of: true, false',
+    );
+  });
+
+  it('is a cutover gate, so it is not on the non-cutover list', () => {
+    // It switches an existing behaviour (the RoomPanel Creator view) to a new one, so
+    // its production default is the pre-phase behaviour. `audioEnabled` is the only
+    // flag allowed to default on, and it says so by name; adding this one there would be
+    // a claim that Phase 14 builds the Creator view rather than replaces it.
+    expect(NON_CUTOVER_FLAG_KEYS).not.toContain('creatorWorkspace');
+    expect(NON_CUTOVER_FLAG_KEYS).toEqual(['audioEnabled']);
   });
 });

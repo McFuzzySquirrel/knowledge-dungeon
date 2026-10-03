@@ -5,7 +5,7 @@ import {
   type RuntimeConfigKey,
 } from './runtimeConfig';
 
-export type FeatureFlagOwnerPhase = 4 | 5 | 8 | 9 | 10 | 11 | 13 | 17 | 19 | 20;
+export type FeatureFlagOwnerPhase = 4 | 5 | 8 | 9 | 10 | 11 | 13 | 14 | 17 | 19 | 20;
 export type FeatureFlagValueKind = 'boolean' | 'enum';
 
 export interface FeatureFlagDefinition {
@@ -137,6 +137,16 @@ export const FEATURE_FLAG_MATRIX = {
       'Enables the renderer-neutral audio service built in Phase 10: gesture-gated playback, procedural synthesis with no media files, and persisted music and SFX volume. It is a rollback switch, not a cutover gate, so it defaults on and the plan’s rollback line - disable audio independently and retain procedural art fallbacks - is a build with it off.',
     rollback:
       'Set VITE_AUDIO_ENABLED=false to disable audio independently and retain the procedural art fallbacks. Nothing else is affected: no media is unloaded, no data is migrated, and the procedural art recipes are untouched.',
+  },
+  creatorWorkspace: {
+    environmentVariable: RUNTIME_FLAG_ENV_KEYS.creatorWorkspace,
+    valueKind: 'boolean',
+    productionDefault: false,
+    ownerPhase: 14,
+    purpose:
+      'Gates the redesigned Creator workspace, where subject mapping is the first-class dungeon workspace, behind the existing RoomPanel Creator view.',
+    rollback:
+      'Set VITE_CREATOR_WORKSPACE=false to retain the existing RoomPanel Creator view.',
   },
 } as const satisfies FeatureFlagMatrix;
 

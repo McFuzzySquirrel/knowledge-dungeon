@@ -560,7 +560,12 @@ VITE_ADAPTIVE_ASSISTANCE=true|false
 VITE_DATA_PRODUCTS_V2=true|false
 VITE_WEB_SHARE=true|false
 VITE_AUDIO_ENABLED=true|false
+VITE_CREATOR_WORKSPACE=true|false
 ```
+
+`VITE_CREATOR_WORKSPACE` was added in Phase 14. It gates the redesigned Creator workspace behind
+the existing RoomPanel Creator view, and — like every flag except audio — it is a cutover gate
+whose production default is the pre-phase behaviour (`false`).
 
 `VITE_AUDIO_ENABLED` was added in Phase 10 and is the one flag here that is not a
 cutover gate. Every other flag switches an existing behaviour to a new one, so its
@@ -731,7 +736,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 11 | complete | Build the Pixi village world foundation. |
 | 12 | complete | Build village NPCs, quests, and redesigned panels. |
 | 13 | complete | Build the Pixi dungeon world and navigation. |
-| 14 | not-started | Redesign the Creator flow. |
+| 14 | verified | Redesign the Creator flow. |
 | 15 | not-started | Redesign the Scribe flow. |
 | 16 | not-started | Redesign the Archaeologist flow. |
 | 17 | not-started | Rebuild fishing in Pixi. |
@@ -5584,7 +5589,7 @@ Phase 14.
 
 ## Phase 14: Creator Learning-Flow Redesign
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Make subject mapping the first-class dungeon workspace while retaining graph mutations.
 
 ### Prerequisites
@@ -5637,6 +5642,183 @@ npm run test:e2e
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-10-03. `not-started` -> `in-progress` -> `verified`. **Not committed, pushed, or
+deployed** — that needs explicit maintainer authorization. Phase 14 is `verified` and awaits
+acceptance; Phase 15 has not been started.
+
+#### Baseline was red before this phase began, and was fixed first
+
+`npm test` at `d446b3c` (Phase 13 accepted, tree clean) failed: `tests/migrations/archive.test.ts`
+*"is byte-stable for identical input"*, 1 failed / 4409 passed.
+
+**The test was wrong, not the product.** `writeArchive` is documented as deliberately *not*
+byte-stable without an explicit `mtime` (`archive.ts`: *"Omitted means 'now' ... A caller that needs
+a reproducible archive must pass it, because the clock is not the caller's data and this module
+deliberately has no clock of its own"*), and fflate's own source is
+`f.mtime == null ? Date.now() : f.mtime`. The test omitted `mtime` — the one input the module
+excludes — and passed only while both `zipSync` calls shared a tick, going red under parallel load.
+
+Reproducibility where it matters is intact and unaffected: both backup products stamp one
+injected-clock `mtime` across every member (`fullDeviceBackup.ts`, `subjectBackup.ts`, clamped by
+`archiveMemberTimeFrom`). Replaced with two tests that pin the contract from both sides. Proven
+deterministic over 5 consecutive runs.
+
+**Phase 13's recorded evidence is therefore not reproducible** — it claims 213 files / 4410 tests
+passed, and this phase reproduced identical totals with this one test red. Per the maintainer's
+instruction that evidence was left untouched; it is flagged here instead.
+
+#### Files
+
+- **Flag** (`infrastructure-engineer`): `src/config/{runtimeConfig,featureFlags}.ts`,
+  `.env.example`, `tests/unit/runtimeConfig.test.ts`, and two closed-list gates
+  (`tests/data/{subjectProductBoundary,templateProductBoundary}.test.ts`) that enumerate the matrix.
+- **Command contract** (`core-logic-engineer`): `src/application/contracts/commands.ts` (+7
+  `graph/*` commands), `src/application/creatorGraphCommands.ts`,
+  `src/store/creatorGraphCommands.ts`, `src/store/subjectStore.ts` (+`commitSubjectSnapshot`).
+- **Contract tests** (`qa-engineer`): `tests/unit/creatorGraph.{commands,revalidationParity,propagationFallback}.test.ts`,
+  `tests/contracts/creator-graph-store-parity.test.ts`, and two support fixtures.
+- **Creator workspace** (`ui-engineer`): `src/ui/study/` — `StudyShell.tsx`, `StudyControls.tsx`,
+  `controlIds.ts`, `study.css`, `creator/{CreatorWorkspace,TopicEditor,GraphMap,creatorViewModel,creatorTools,graphLayout,useCreatorGraphActions}.tsx|ts`,
+  `guide/GuideConversation.tsx`; `src/ui/components/{RoomPanel,TagEditor}.tsx`.
+- **Phase 14 tests**: `tests/phase14/` (3 files + fixture), 1204 lines.
+
+#### Commands
+
+```text
+npm run lint                                   exit 0
+npm run typecheck                              exit 0
+npm test                                       220 files / 4543 tests passed
+npm run build:web                              exit 0 (default; flag absent from env)
+VITE_CREATOR_WORKSPACE=true npm run build:web  exit 0 (flag inlined as "true")
+npm run check:bundle-size                      4.90 MB across 153 files (was 4.80 MB)
+npm run test:e2e (default build)               32 passed / 12 skipped (4 viewports)
+npm run test:licenses                          PASSED, 99 entries, 0 media under src/
+npm run test:privacy                           6 files / 34 tests passed
+npx vitest run tests/phase14/                  3 files / 48 tests passed
+npx vitest run tests/unit/graphDomain.test.ts  11 passed
+npx vitest run tests/unit/RoomPanel.test.tsx   passed (rollback lane)
+```
+
+#### Device checks
+
+Chromium only, the four Phase-1 viewport projects; `tablet`/`tablet-landscape` touch-emulated. No
+Firefox, WebKit, Edge, or physical-device evidence — those belong to Phase 21. Touch targets are
+asserted ≥44 px in `tests/phase14/` and by the existing 320-pixel e2e lane, but **no real touch
+device was used.**
+
+#### Migration/data result
+
+None. No storage, schema, or migration change; subject schema stays `1.1.0`. `src/services/` was
+not touched.
+
+#### Performance/accessibility/license result
+
+- **No plan-10.2 performance claim is made.** Phase 13 recorded that the memory lane cannot be
+  pointed at the dungeon, and Phase 14 adds no lane that could be pointed at the Creator workspace.
+  Frame time and memory over mount/unmount cycles are **UNVERIFIED** and must not be claimed.
+  Bundle grew 4.80 -> 4.90 MB (+0.10 MB) for ~3.8k lines of React/SVG; the workspace ships in both
+  flag states because `RoomPanel` imports it statically, so the flag switches rendering, not
+  presence.
+- License gate PASSED, 0 media files and 0 media references under `src/`. No new assets.
+- Accessibility: refusals are `disabled` **and** carry visible text, never `aria-describedby`
+  alone; async outcomes announce through one `role="status" aria-live="polite"` channel in
+  `StudyShell`; pre-condition refusals deliberately do *not* use the live region (announcing on
+  arrival is noise); no colour-only state; ≥44 px targets.
+- Privacy: no console output anywhere in `src/ui/study/**`; `test:privacy` green.
+
+#### Exit-criteria assessment
+
+1. **Create, link, reparent, tag, move, delete by keyboard or touch** — met. Every verb has a DOM
+   route with no pointer requirement, covered in `tests/phase14/`. Node repositioning stays
+   presentation-only local state.
+2. **Revalidation unchanged** — met and pinned. 9 tests assert the four graph commands flip
+   `ArtifactCollected -> NeedsRevalidation` on hand-computed room sets while the three tag commands
+   leave every status alone (the pre-Phase-14 store's tag actions ran no propagation; that
+   asymmetry is preserved deliberately, not fixed). 4 more pin that a propagation refusal falls
+   back to the unpropagated dungeon instead of aborting.
+3. **Phase transition available at the intended point** — met; Scribe handoff retained behind the
+   same `rooms.length >= 3` condition.
+4. **No duplicate mutations under StrictMode** — met. `tests/phase14/creator-strictmode.test.tsx`
+   counts store writes per verb rather than renders, and covers the mounted/re-render case.
+
+#### Non-vacuity evidence
+
+Every repair was reverted to confirm it goes red, then restored:
+
+| Probe | Result |
+| --- | --- |
+| Revert the stranded-view fix in `RoomPanel` | cascade-delete test red |
+| Revert the `linkRefusal` cross-link case | related-row test red |
+| Re-freeze the test harness snapshot prop | reparent-row test red |
+
+The `qa-engineer` ran 5 further mutation probes of its own, including flipping the revalidation
+fixture's `phaseState` (4 propagation tests red, 3 tag tests correctly stayed green).
+
+**Two probes caught my own bad fixes.** The first attempt at the related-topics tests was wrong
+(`openRegion` was not the cause) and the `linkRefusal` fix was initially covered by nothing; the
+probe is what revealed that before it shipped.
+
+#### Defects found and fixed during the phase
+
+- **A cascade delete stranded the learner.** `RoomPanel` early-returned a legacy panel reading
+  *"Walk into a room to inspect it"* when the focused room was gone, so deleting the room you were
+  on left a dead view with no route back into the graph — and in the Creator phase there is nothing
+  to walk to. `CreatorWorkspace` already had a correct root fallback that was unreachable because
+  `RoomPanel` returned first. Fixed by keeping the workspace mounted with a `null` focus.
+- **The related-topics row offered a control that could only fail.** Every row in that list is
+  already connected by construction, but `linkRefusal` was set only for subtopic pairs, so
+  cross-link rows got an enabled button whose only possible outcome was `EDGE_ALREADY_EXISTS`.
+  Where a refusal did apply, the button was omitted with no explanation while the reparent case
+  showed one. Both halves fixed.
+- **Three comments and tests asserted things the code did not do**: `commands.ts` claimed *"nothing
+  under `src/ui/**` calls a graph domain function directly"* (four files do — reads, not
+  mutations); `creatorGraphCommands.ts` claimed persistence failures *"still reject"* (true for the
+  four graph commands, false for the three tag commands); a test expected a heading of `Vectors`
+  where Matrices' parent is the root; a test named *"dispatches once"* asserted
+  `not.toHaveBeenCalled()`. All corrected.
+- **A test harness froze the snapshot** as a prop, so the workspace never re-rendered after a
+  mutation. `GameScreen` subscribes live, so the product was right and the harness was wrong.
+
+#### Known limitations
+
+- **No plan-10.2 performance or memory evidence** (above). Unchanged from Phase 13.
+- **Tag-command write-failure divergence.** The store's tag actions wrap `await persist` in the
+  same `try` as the domain call, so a failed write is swallowed into `lastError` and the action
+  resolves; `applyTag` awaits `commit` outside its `try`, so the command rejects. The command form
+  is kept on purpose: `ok: true` beside a failed write would be a typed lie. Making the store reject
+  too would turn the rollback lane's `void addRoomTag(...)` into unhandled rejections, so it is
+  **not this phase's change to make**. Pinned as a known divergence in
+  `creator-graph-store-parity.test.ts` and documented in the module header. **Needs an owner.**
+- **`dungeon.tagIndex` is never rebuilt after a cascade delete**, so it serves dangling room ids to
+  any consumer that does not cross-check `snapshot.rooms`. Pre-existing domain gap, now enshrined
+  by the parity contract. Harmless today; a trap for a future consumer.
+- **The archetype changes tool prominence only.** The Cartographer gets graph and links open on
+  arrival with cross-link leading; the Scholar gets topic and tools. No suggestion engine was built
+  — `TopicSuggestionInput` remains declared-and-unused, and "no adaptive graph suggestions yet" is a
+  Phase 14 non-goal. Scholar's and Archivist's perks remain unimplemented text in `playerClasses.ts`
+  and are **still owed** by Phases 15 and 16.
+- **Domain refusals are unreachable through the UI**, because every control derives its options
+  from `linkCandidates`/`reparentCandidates`. Good defence in depth, but it means the
+  "refused command" path has no browser-reachable case.
+- Chromium only, emulated touch only (above). Phase 13's seven sub-44 px HUD controls are unchanged.
+- **The memory lane still cannot target the dungeon** (Phase 13), and Phase 14 adds no lane.
+
+#### Rollback
+
+Verified in both directions, in built artifacts rather than by flag constant. The default build's
+inlined `import.meta.env` carries no `VITE_CREATOR_WORKSPACE`, so `parseBoolean` returns the
+default `false` and `RoomPanel` renders the untouched pre-Phase-14 Creator view against the
+pre-Phase-14 store actions. `VITE_CREATOR_WORKSPACE=true npm run build:web` inlines
+`VITE_CREATOR_WORKSPACE:"true"` and the same parser returns `true`. `FEATURE_FLAG_MATRIX.creatorWorkspace`
+defaults to `false` and is **not** in `NON_CUTOVER_FLAG_KEYS`. `npm run test:e2e` on the restored
+default build passes 32/12.
+
+An earlier reading of the minified bundle appeared to show `creatorWorkspace:!1` in the flag-on
+build; that is `DEFAULT_RUNTIME_CONFIG`, which correctly stays `false`. The parsed value was
+confirmed from the inlined env object and the parse call site.
 
 ### Exit criteria
 

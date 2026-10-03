@@ -163,6 +163,25 @@ function normalizeSnapshot(snapshot: SubjectSnapshot): SubjectSnapshot {
   return { ...snapshot, rooms };
 }
 
+/**
+ * Apply a snapshot the caller computed itself, then persist it.
+ *
+ * Phase 14: the Creator graph application layer
+ * (`src/application/creatorGraphCommands.ts`) computes the next snapshot and
+ * reaches the store only through this function, which is why it exists rather
+ * than being inlined there - `persist` is private to this module and its
+ * set-then-persist ordering plus throw-on-write-failure behavior are exactly
+ * what a graph mutation must keep.
+ *
+ * Ordering is unchanged from every action in this store: the snapshot lands in
+ * memory first, the write happens second, and a failed write rejects with the
+ * snapshot already applied.
+ */
+export async function commitSubjectSnapshot(snapshot: SubjectSnapshot): Promise<void> {
+  useSubjectStore.setState({ snapshot, lastError: null });
+  await persist(snapshot);
+}
+
 export const useSubjectStore = create<SubjectState>((set, get) => ({
   snapshot: null,
   lastError: null,
