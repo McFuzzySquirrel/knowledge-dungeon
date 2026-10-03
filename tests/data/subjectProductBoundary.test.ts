@@ -406,11 +406,13 @@ describe('Phase 6 gate 8: nothing outside the product tree reaches it eagerly, a
     // added one flag to that closed set, `audioEnabled`, for the audio service; it is a
     // service flag, not a product flag, and naming it here keeps the list closed rather
     // than opening it. Phase 14 added `creatorWorkspace` for the redesigned Creator
-    // workspace, and Phase 15 added `scribeEncounterWorkspace` for the redesigned Scribe
-    // encounter workspace; neither is a product flag either. A thirteenth flag still
-    // fails this assertion.
+    // workspace, Phase 15 added `scribeEncounterWorkspace` for the redesigned Scribe
+    // encounter workspace, and Phase 16 added `archaeologistReviewWorkspace` for the
+    // redesigned Archaeologist review workspace; none is a product flag either. A
+    // fourteenth flag still fails this assertion.
     expect(Object.keys(FEATURE_FLAG_MATRIX).sort()).toEqual([
       'adaptiveAssistance',
+      'archaeologistReviewWorkspace',
       'audioEnabled',
       'cozyVisuals',
       'creatorWorkspace',

@@ -434,6 +434,21 @@ export const useSubjectStore = create<SubjectState>((set, get) => ({
     if (!room || !room.validationState.finalPass) return;
 
     // Phase 4a: compute SM-2 state from quality rating
+    //
+    // The `3` is this store's own decision and is deliberately **not** imported from
+    // `CLOSED_WITHOUT_RATING_QUALITY` in `@/application/reviewCommands`. Naming it
+    // here would invert the layering - a store depending on an application command
+    // module, which exists precisely so the *application* reaches stores through
+    // injected ports rather than importing them - and it would move a product
+    // decision about the panel-close route into the data layer, where it does not
+    // belong. The two are also two different decisions that currently agree: this is
+    // the defensive default for any caller that omits a rating, while the constant is
+    // what the panel-close route deliberately records.
+    //
+    // **If you change one, change the other in the same commit.** The flow routes
+    // `CLOSED_WITHOUT_RATING_QUALITY` to the *one-argument* call precisely so it lands
+    // on this default, so a change to only one of the two literals would silently
+    // record a rating different from the one the constant names.
     const quality: QualityRating = clampQualityRating(qualityRating ?? 3);
     const previousSm2 = room.sm2QualityResponse != null
       ? {

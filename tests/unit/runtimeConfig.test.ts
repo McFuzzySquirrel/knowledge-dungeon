@@ -21,6 +21,7 @@ describe('runtime feature configuration', () => {
       audioEnabled: true,
       creatorWorkspace: false,
       scribeEncounterWorkspace: false,
+      archaeologistReviewWorkspace: false,
     });
   });
 
@@ -39,6 +40,7 @@ describe('runtime feature configuration', () => {
         VITE_AUDIO_ENABLED: 'true',
         VITE_CREATOR_WORKSPACE: 'true',
         VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'true',
+        VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'true',
       }),
     ).toEqual({
       worldRenderer: 'pixi',
@@ -53,6 +55,7 @@ describe('runtime feature configuration', () => {
       audioEnabled: true,
       creatorWorkspace: true,
       scribeEncounterWorkspace: true,
+      archaeologistReviewWorkspace: true,
     });
   });
 
@@ -208,6 +211,69 @@ describe('the Phase 15 Scribe encounter workspace flag', () => {
     // allowed to default on, and it says so by name; adding this one there would be a
     // claim that Phase 15 builds the Scribe view rather than replaces it.
     expect(NON_CUTOVER_FLAG_KEYS).not.toContain('scribeEncounterWorkspace');
+    expect(NON_CUTOVER_FLAG_KEYS).toEqual(['audioEnabled']);
+  });
+});
+
+describe('the Phase 16 Archaeologist review workspace flag', () => {
+  it('exists, has an environment key, and defaults off three ways', () => {
+    // The same three-way agreement every cutover gate states for its own flag: the safe
+    // production default, the parsed default with no environment, and the declared matrix
+    // default. Phase 16's rollback line is "use the previous Archaeologist panel", which
+    // only means something if the default already *is* the RoomPanel review view.
+    expect(RUNTIME_FLAG_ENV_KEYS.archaeologistReviewWorkspace).toBe(
+      'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE',
+    );
+    expect(DEFAULT_RUNTIME_CONFIG.archaeologistReviewWorkspace).toBe(false);
+    expect(parseRuntimeConfig({}).archaeologistReviewWorkspace).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.productionDefault).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.environmentVariable).toBe(
+      'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE',
+    );
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.valueKind).toBe('boolean');
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.ownerPhase).toBe(16);
+    // The rollback is the literal build line plus the view it retains, so rollback is a
+    // command rather than a hope.
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.rollback).toContain(
+      'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=false',
+    );
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.rollback).toContain('RoomPanel');
+    // The purpose names the retained view and the rules the flag does not touch, so a
+    // future reader cannot mistake it for a flag that changes what counts as a review
+    // pass. It selects a view; scheduling, SM-2 values, and progression are identical in
+    // both lanes.
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.purpose).toContain('room-panel review view');
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.purpose).toContain('SM-2');
+  });
+
+  it('parses exactly as the other cutover booleans parse, in all three spellings', () => {
+    expect(parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'false' }).archaeologistReviewWorkspace).toBe(false);
+    expect(parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'true' }).archaeologistReviewWorkspace).toBe(true);
+    expect(parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: ' TRUE ' }).archaeologistReviewWorkspace).toBe(true);
+    // A malformed value fails the build rather than silently defaulting, and the error
+    // names the variable, never its value.
+    expect(() => parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'maybe' })).toThrow(
+      'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE must be one of: true, false',
+    );
+    // The default build reaches no renderer, storage generation, product flag, or earlier
+    // workspace through it: it is an independent cutover switch, so turning the
+    // Archaeologist workspace on does not silently move any other flag with it.
+    expect(parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'true' })).toMatchObject({
+      worldRenderer: 'phaser',
+      storageRepository: 'legacy',
+      dataProductsV2: false,
+      adaptiveAssistance: false,
+      creatorWorkspace: false,
+      scribeEncounterWorkspace: false,
+    });
+  });
+
+  it('is a cutover gate, so it is not on the non-cutover list', () => {
+    // It switches an existing behaviour (the RoomPanel review view) to a new one, so its
+    // production default is the pre-phase behaviour. `audioEnabled` is the only flag
+    // allowed to default on, and it says so by name; adding this one there would be a
+    // claim that Phase 16 builds the Archaeologist review view rather than replaces it.
+    expect(NON_CUTOVER_FLAG_KEYS).not.toContain('archaeologistReviewWorkspace');
     expect(NON_CUTOVER_FLAG_KEYS).toEqual(['audioEnabled']);
   });
 });

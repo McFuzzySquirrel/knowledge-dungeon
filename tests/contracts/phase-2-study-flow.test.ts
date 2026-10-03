@@ -154,6 +154,98 @@ function makeSnapshot(overrides: Partial<SubjectSnapshot> = {}): SubjectSnapshot
   };
 }
 
+/**
+ * A snapshot whose review unlock is actually satisfied.
+ *
+ * ## Why this exists separately from {@link makeSnapshot}
+ *
+ * `makeSnapshot` clears **one of four** rooms (`synthetic-room-alpha`), and
+ * `evaluateReviewUnlock` defaults to `requiredCompletionRatio: 1`. So on
+ * `makeSnapshot` the dungeon is **locked for every room in it**, and Phase 16
+ * made `roomInteract` / `finalizePendingReview` ask that same question before
+ * arming or awarding a review. That is plan 5.3's defect ("Review unlock rules
+ * are displayed but not consistently enforced") being repaired, not a
+ * regression: before this phase the flow armed and paid a review while
+ * `RoomPanel` was simultaneously drawing "Clear every room encounter to unlock
+ * full review mode".
+ *
+ * `makeSnapshot` is shared with roughly forty-five other tests here whose point
+ * is dispatch, floors, portals, artifacts, and village routing, and none of
+ * those care whether review is unlocked. Mutating it would have put a
+ * four-room-cleared dungeon under all of them for no reason, so this is a
+ * separate fixture and only the review-related `describe` blocks use it.
+ *
+ * Every room listed in `dungeon.rooms` is cleared by default, which is the *only*
+ * way the default ratio is met. `extraRoomIds` adds rooms that live in `rooms`
+ * but **not** in `dungeon.rooms` - the orphan shape `makeOrphanSnapshot` already
+ * uses below - and those carry no final pass.
+ *
+ * That indirection is not decoration: under `requiredCompletionRatio: 1` "the
+ * dungeon is unlocked" and "one of the dungeon's rooms is not cleared" are
+ * mutually exclusive, because `evaluateReviewUnlock` counts the *same*
+ * `isReviewableRoom` predicate over the same `dungeon.rooms` list. A room the
+ * unlock does not count is a room the test can interact with without closing the
+ * unlock. Keeping the negative half of these tests therefore means making the
+ * negative room an orphan, not weakening the ratio.
+ *
+ * The numbers in the pinned toast below are derived over four *reviewable* rooms
+ * rather than one; see the comment on that assertion for the arithmetic.
+ *
+ * @param options `extraRoomIds` are present in `rooms` and absent from
+ *   `dungeon.rooms`, so they can never satisfy the unlock. `overrides` is spread
+ *   last, as everywhere else in this file.
+ */
+function makeUnlockedSnapshot(
+  options: {
+    readonly extraRoomIds?: readonly string[];
+    readonly overrides?: Partial<SubjectSnapshot>;
+  } = {},
+): SubjectSnapshot {
+  const extra = new Set(options.extraRoomIds ?? []);
+  const cleared = (roomId: string, topic: string, artifactMarkdown: string | null): RoomMetadata =>
+    extra.has(roomId)
+      ? room(roomId, topic)
+      : room(roomId, topic, {
+          state: 'ArtifactCollected',
+          validationState: { ...makeEmptyValidationState(), finalPass: true },
+          ...(artifactMarkdown === null ? {} : { artifactMarkdown }),
+        });
+
+  const listed: ReadonlyArray<{ roomId: string; topic: string }> = [
+    { roomId: SYNTHETIC_ROOM_ROOT, topic: 'Synthetic Root Floor' },
+    { roomId: SYNTHETIC_ROOM_ALPHA, topic: 'Test Room Alpha' },
+    { roomId: SYNTHETIC_ROOM_ALPHA_CHILD, topic: 'Test Room Alpha Child' },
+    { roomId: SYNTHETIC_ROOM_BETA, topic: 'Test Room Beta' },
+  ];
+
+  return {
+    dungeon: dungeonMetadata({
+      rooms: listed
+        .filter((entry) => !extra.has(entry.roomId))
+        .map((entry) => ({ ...entry, status: 'ArtifactCollected' })),
+    }),
+    rooms: {
+      [SYNTHETIC_ROOM_ROOT]: cleared(SYNTHETIC_ROOM_ROOT, 'Synthetic Root Floor', null),
+      [SYNTHETIC_ROOM_ALPHA]: cleared(
+        SYNTHETIC_ROOM_ALPHA,
+        'Test Room Alpha',
+        SYNTHETIC_ARTIFACT_MARKDOWN,
+      ),
+      [SYNTHETIC_ROOM_ALPHA_CHILD]: cleared(
+        SYNTHETIC_ROOM_ALPHA_CHILD,
+        'Test Room Alpha Child',
+        SYNTHETIC_ARTIFACT_MARKDOWN,
+      ),
+      [SYNTHETIC_ROOM_BETA]: cleared(
+        SYNTHETIC_ROOM_BETA,
+        'Test Room Beta',
+        SYNTHETIC_ARTIFACT_MARKDOWN,
+      ),
+    },
+    ...(options.overrides ?? {}),
+  };
+}
+
 /** A room present in `rooms` but absent from `dungeon.rooms` (orphan). */
 function makeOrphanSnapshot(): SubjectSnapshot {
   return makeSnapshot({
@@ -364,21 +456,27 @@ describe('Phase 2 study flow: room interaction dispatch', () => {
   });
 
   it('records a deferred review only for a room that already passed validation', () => {
-    harness.snapshot.current = makeSnapshot();
+    // A dungeon whose review unlock is met, so the assertion below is about the
+    // *deferral* and not about the unlock. The cleared/not-cleared contrast is
+    // preserved by making `synthetic-room-beta` a room the unlock does not count.
+    harness.snapshot.current = makeUnlockedSnapshot({
+      extraRoomIds: [SYNTHETIC_ROOM_BETA],
+    });
 
     harness.flow.roomInteract(SYNTHETIC_ROOM_ALPHA);
     harness.flow.closeInfoPanel();
     expect(harness.store.recordReviewPass).toHaveBeenCalledWith(SYNTHETIC_ROOM_ALPHA);
 
     harness.store.recordReviewPass.mockClear();
-    // `synthetic-room-beta` has no final pass, so closing the panel records nothing.
     harness.flow.roomInteract(SYNTHETIC_ROOM_BETA);
     harness.flow.closeInfoPanel();
     expect(harness.store.recordReviewPass).not.toHaveBeenCalled();
   });
 
   it('drops a pending review when another room is interacted with', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot({
+      extraRoomIds: [SYNTHETIC_ROOM_BETA],
+    });
 
     harness.flow.roomInteract(SYNTHETIC_ROOM_ALPHA);
     harness.flow.roomInteract(SYNTHETIC_ROOM_BETA);
@@ -391,8 +489,13 @@ describe('Phase 2 study flow: room interaction dispatch', () => {
 // ── Deferred review finalization ────────────────────────────────────────────
 
 describe('Phase 2 study flow: deferred review finalization', () => {
+  // Every test in this block runs against `makeUnlockedSnapshot()`. These six
+  // assertions are about deferral, single finalization, call ordering, the
+  // one-argument `recordReviewPass` call, the toast copy, and the badge path -
+  // none of them is about whether review is unlocked, and Phase 16 made the
+  // unlock a real precondition. See `makeUnlockedSnapshot`.
   it('finalizes the deferred review exactly once when the panel closes', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot();
 
     harness.flow.roomInteract(SYNTHETIC_ROOM_ALPHA);
     harness.flow.closeInfoPanel();
@@ -403,7 +506,7 @@ describe('Phase 2 study flow: deferred review finalization', () => {
   });
 
   it('never finalizes outside the archaeologist phase', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot();
     harness.phase.current = 'scribe';
 
     harness.flow.roomInteract(SYNTHETIC_ROOM_ALPHA);
@@ -415,7 +518,7 @@ describe('Phase 2 study flow: deferred review finalization', () => {
   });
 
   it('closes the panel before it finalizes the review', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot();
 
     harness.flow.roomInteract(SYNTHETIC_ROOM_ALPHA);
     harness.flow.closeInfoPanel();
@@ -426,21 +529,43 @@ describe('Phase 2 study flow: deferred review finalization', () => {
   });
 
   it('reports the reviewed-toward-next-pass count in a toast', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot();
 
     harness.flow.roomInteract(SYNTHETIC_ROOM_ALPHA);
     harness.flow.closeInfoPanel();
 
-    // Copy and numbers are pinned verbatim: the flow kept the message the
-    // dungeon screen produced before Phase 2.
+    /*
+     * Copy is still pinned verbatim: the flow kept the message the dungeon screen
+     * produced before Phase 2. The numbers are re-derived from
+     * `makeUnlockedSnapshot` and `runPassComplete`'s post-increment derivation,
+     * not copied from the old expectation:
+     *
+     * - Reviewable rooms: all 4 (`ArtifactCollected` + `finalPass`), so
+     *   `totalReviewableRooms = 4`. Before the review every `reviewPassCount` is 0,
+     *   so `reviewSessionCount = 0` and `fullReviewPasses = trunc(0/4) = 0`, giving
+     *   `nextPassTarget = fullReviewPasses + 1 = 1`.
+     * - `runPassComplete` re-derives the progress with `synthetic-room-alpha`'s
+     *   `reviewPassCount` incremented by one, so `reviewSessionCount = 1` and
+     *   `fullReviewPasses = trunc(1/4) = 0`. One review out of four rooms is not a
+     *   full pass, so the pass number is still 1 and `nextPassTarget` is still 1.
+     * - `roomsTowardNextPass` counts rooms at or past `nextPassTarget` over *all*
+     *   `dungeon.rooms`: exactly `synthetic-room-alpha`, so `1`.
+     * - `totalRooms` is `dungeon.rooms.length = 4`.
+     *
+     * The old string read `0/4 ... pass 2 ... full passes: 1` because the old
+     * fixture had a single reviewable room: `trunc(1/1) = 1` advanced the pass
+     * immediately. On a four-room dungeon that cannot happen until the fourth
+     * room is reviewed, which is the difference between the two fixtures and the
+     * only reason the numbers move.
+     */
     expect(harness.dungeonUi.pushToast).toHaveBeenCalledWith(
       'info',
-      'Review recorded (+25 XP): 0/4 rooms toward pass 2. Completed full passes: 1.',
+      'Review recorded (+25 XP): 1/4 rooms toward pass 1. Completed full passes: 0.',
     );
   });
 
   it('says the pass was already counted when no review xp is awarded', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot();
     harness.store.awardReviewPass.mockReturnValue({ xpGained: 0 });
 
     harness.flow.roomInteract(SYNTHETIC_ROOM_ALPHA);
@@ -453,7 +578,7 @@ describe('Phase 2 study flow: deferred review finalization', () => {
   });
 
   it('awards no badge when every phase badge is already owned', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot();
     harness.store.readProgressionBadges.mockReturnValue([
       'CreatorPhaseComplete',
       'ScribePhaseComplete',
@@ -475,7 +600,11 @@ describe('Phase 2 study flow: deferred review finalization', () => {
     harness.flow.finalizePendingReview(SYNTHETIC_ROOM_ALPHA);
     expect(harness.store.recordReviewPass).not.toHaveBeenCalled();
 
-    harness.snapshot.current = makeSnapshot();
+    // `synthetic-room-beta` carries no final pass and is not in `dungeon.rooms`,
+    // so `finalizePendingReview` returns before it can reach the command layer.
+    harness.snapshot.current = makeUnlockedSnapshot({
+      extraRoomIds: [SYNTHETIC_ROOM_BETA],
+    });
     harness.flow.finalizePendingReview(SYNTHETIC_ROOM_BETA);
     expect(harness.store.recordReviewPass).not.toHaveBeenCalled();
 
@@ -484,7 +613,7 @@ describe('Phase 2 study flow: deferred review finalization', () => {
   });
 
   it('toggles the panel closed through the finalizing path, and open otherwise', () => {
-    harness.snapshot.current = makeSnapshot();
+    harness.snapshot.current = makeUnlockedSnapshot();
     harness.dungeonUi.isInfoPanelOpen.mockReturnValue(false);
 
     harness.flow.toggleInfoPanel();

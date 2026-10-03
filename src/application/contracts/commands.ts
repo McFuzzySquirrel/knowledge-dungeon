@@ -27,8 +27,37 @@
  * which the encounter controller forwards to rather than reimplements, because
  * generation and pickup being separate actions is plan exit criterion 5 and one
  * implementation is how that stays true.
+ *
+ * Phase 16 adds the Archaeologist `review/*` commands: explicit pass completion
+ * with a learner recall rating, plus the save / resume / discard decision for a
+ * review that was started and not finished.
+ * `src/application/reviewCommands.ts` executes them. The award is idempotent per
+ * (room, pass) through a durable ledger - see
+ * `src/core/review/reviewPassRewards.ts` - which is what plan 5.2's "review
+ * completion is recorded exactly once per room per pass" actually requires; the
+ * old flow decided that with a live read against a counter an asynchronous writer
+ * had not moved yet.
+ *
+ * ## The pre-existing `review/complete` command is dead, and stays dead
+ *
+ * `'review/complete': { roomId: string }` is declared by the map below and has
+ * **no dispatcher, no payload reader, and no test** anywhere in `src/` or
+ * `tests/` (grep-verified at b756d34: exactly one hit, the declaration itself).
+ * It is the pre-Phase-16 shape of the operation - a room id and nothing else -
+ * and it is exactly what Phase 16 cannot use: a pass-complete with no rating is
+ * the behaviour the game guide describes and the application never delivered, and
+ * a pass-complete with no reward identity is the double-count defect.
+ *
+ * It is **left in place** rather than deleted, and `ReviewCommandName` excludes it
+ * explicitly below. Deleting a member of the shared payload map is a contract
+ * change for every consumer of `WorldCommandName`, including the two hosts this
+ * phase is not touching; leaving it declared costs nothing and keeps the map an
+ * honest record of the Phase 2 world contract. The explicit exclusion is what
+ * stops it from becoming a fifth review route, and it is written as a named
+ * `Exclude` with the reason here rather than as a silent filter.
  */
 import type { EdgeRelationType } from '@/core/validation/persistence';
+import type { QualityRating } from '@/core/review/spacedRepetition';
 import type { FloorTransitionDirection } from './events';
 
 /** Payload of every application command, keyed by command name. */
@@ -152,6 +181,67 @@ export interface WorldCommandPayloadMap {
   'encounter/attachment-add-external': { roomId: string; url: string };
   /** Scribe: forget one attachment, its device-local bytes included. */
   'encounter/attachment-remove': { roomId: string; attachmentId: string };
+
+  // ── Archaeologist review (Phase 16) ─────────────────────────────────────────
+  //
+  // `finalizePendingReview` used to compute `shouldAwardReviewXp` from a live
+  // read and then call two stores, one of them unawaited, so a room's review pass
+  // and its XP could be counted twice (see `src/core/review/reviewPassRewards.ts`).
+  // These are the same operations as ordinary commands for the same reason the
+  // `encounter/*` block above is: a control names what it wants, and the
+  // application layer decides what happens to SM-2, the reward, and the marker.
+  //
+  // **The four commands are the interrupted-review decision**, which plan section
+  // 5.3 called out as a defect ("Interrupted review state can be lost on exit").
+  // A review that was started and not finished is either completed
+  // (`pass-complete`), parked for later (`session-save`), abandoned
+  // (`session-discard`), or picked back up (`session-resume`).
+  //
+  // **Artifact pickup is deliberately *not* in this block**, for the same reason it
+  // is absent from `encounter/*`: it is already `artifact/collect`, owned by
+  // whichever world flow is mounted, and `studyFlowController.collectArtifact`
+  // implements it. Generation and pickup being separate actions is plan exit
+  // criterion 5, and one implementation is how that stays true.
+
+  /**
+   * Archaeologist: finish a review pass, rate the recall, and take the reward.
+   *
+   * The **explicit-completion route**, and the only one that awards. The rating is
+   * required because the learner answered it: `src/data/gameGuide.ts` has told
+   * learners to "rate your recall on a 0-5 scale" since before the rating could be
+   * supplied, and `subjectStore.recordReviewPass` defaulted it to 3.
+   *
+   * Idempotent for (room, pass) through the durable ledger, so a double dispatch,
+   * a retried close, and a reload all award at most once.
+   */
+  'review/pass-complete': {
+    roomId: string;
+    /** The learner's own 0-5 recall rating. Never inferred. */
+    qualityRating: QualityRating;
+  };
+  /**
+   * Archaeologist: save an unfinished review and come back to it later.
+   *
+   * Writes a **resumable marker only**. It does **not** write an SM-2 update and
+   * does not increment `reviewPassCount`: a review the learner did not finish has
+   * not been recalled, so scheduling the next review from it would make SM-2
+   * reward an unfinished session. See the header of
+   * `src/application/reviewCommands.ts`.
+   */
+  'review/session-save': {
+    roomId: string;
+    /**
+     * A rating the learner chose before leaving, or `null` for none.
+     *
+     * Recorded **beside** the marker for the surface to restore. Not applied to
+     * SM-2, for the reason above.
+     */
+    qualityRating: QualityRating | null;
+  };
+  /** Archaeologist: abandon an unfinished review. Awards nothing, clears the marker. */
+  'review/session-discard': { roomId: string };
+  /** Archaeologist: re-enter an interrupted review. Reports whether one existed. */
+  'review/session-resume': { roomId: string };
 }
 
 /** Every application command name. */
@@ -231,3 +321,36 @@ export type ArtifactCollectCommand = {
   type: 'artifact/collect';
   payload: WorldCommandPayload<'artifact/collect'>;
 };
+
+// ── Archaeologist review ─────────────────────────────────────────────────────
+//
+// Derived from the payload map, exactly as the `graph/*` and `encounter/*` aliases
+// above are, so the map stays the single source of truth and a controller's
+// method signatures cannot drift from the command union.
+
+/**
+ * Every Archaeologist review command name Phase 16 introduces.
+ *
+ * `review/complete` is excluded by name, and the exclusion is deliberate rather
+ * than cosmetic: see the module header. Without it, `Extract<..., \`review/${string}\`>`
+ * would sweep the dead Phase 2 declaration into this union and
+ * `ReviewController.dispatch` would have to answer it.
+ */
+export type ReviewCommandName = Exclude<
+  Extract<WorldCommandName, `review/${string}`>,
+  'review/complete'
+>;
+
+/** Payload of `review/pass-complete`. */
+export type ReviewPassCompletePayload = WorldCommandPayload<'review/pass-complete'>;
+/** Payload of `review/session-save`. */
+export type ReviewSessionSavePayload = WorldCommandPayload<'review/session-save'>;
+/** Payload of `review/session-discard`. */
+export type ReviewSessionDiscardPayload = WorldCommandPayload<'review/session-discard'>;
+/** Payload of `review/session-resume`. */
+export type ReviewSessionResumePayload = WorldCommandPayload<'review/session-resume'>;
+
+/** The tagged form of every Archaeologist review command Phase 16 introduces. */
+export type ReviewCommand = {
+  [C in ReviewCommandName]: { type: C; payload: WorldCommandPayloadMap[C] };
+}[ReviewCommandName];

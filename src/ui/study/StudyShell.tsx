@@ -30,9 +30,9 @@
  * Phaser, no Pixi, no `src/game`, no `src/renderers` anywhere under `src/ui/study/**`.
  *
  * That file was authored in **Phase 15**, for a boundary Phase 14 asserted in this
- * comment and never tested. It now also covers `src/ui/study/scribe/**`, which Phase 15
- * added under the same unenforced claim. The path was kept as written above so the
- * claim and the gate finally name the same thing.
+ * comment and never tested. It now also covers `src/ui/study/scribe/**` and
+ * `src/ui/study/review/**`, which Phases 15 and 16 added under the same unenforced claim.
+ * The path was kept as written above so the claim and the gate finally name the same thing.
  */
 import type { ReactNode } from 'react';
 
@@ -96,7 +96,20 @@ export interface StudyContextSummary {
   readonly status: string;
   /** Which floor of the dungeon it sits on. */
   readonly floor: string;
-  /** Ancestor topics, root first. Empty for the root room. */
+  /**
+   * The path from the subject root down to this room, root first and **including** the room
+   * itself.
+   *
+   * Including the room, because the heading above already names it and a path a learner
+   * would say out loud ends where they are standing: "Linear Algebra, then Matrices". Every
+   * workspace passes this the same way - the chain out of
+   * `GraphHierarchy.breadcrumbRoomIdsByRoomId`, which is built root-first and inclusive - so
+   * one `<dt>Path</dt>` row means one thing in all three of them.
+   *
+   * Empty therefore means **there is no room to trace a path from**, which is not the same
+   * fact as being at the root. It is reachable: a room removed between two renders still
+   * renders this shell, and it must not be told it is at the top of a subject.
+   */
   readonly breadcrumb: readonly string[];
 }
 
@@ -221,7 +234,23 @@ export function StudyShell({
           </div>
           <div className="study-shell__context-row">
             <dt>Path</dt>
-            <dd>{context.breadcrumb.length === 0 ? 'This is the root topic.' : context.breadcrumb.join(' → ')}</dd>
+            <dd>
+              {/*
+                Three facts, three sentences, and the empty case is the third one rather
+                than the first.
+
+                The claim this row used to make unconditionally - an empty list means "This
+                is the root topic." - is false for every workspace that renders this shell:
+                `GraphHierarchy.breadcrumbRoomIdsByRoomId` includes the room itself, so the
+                root room's real path is a one-entry list and every other room's is longer.
+                An empty list can therefore only mean that there is no room here, and saying
+                otherwise told a learner reviewing a room three floors down that they were
+                at the top of their subject.
+              */}
+              {context.breadcrumb.length === 0
+                ? 'No room is under review here, so there is no path to it.'
+                : context.breadcrumb.join(' → ')}
+            </dd>
           </div>
         </dl>
         {archetypeNote == null ? null : (

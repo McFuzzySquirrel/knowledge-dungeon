@@ -6,6 +6,7 @@ import {
   clampQualityRating,
   isReviewOverdue,
   daysUntilReview,
+  daysSinceReviewDue,
   MIN_EASE_FACTOR,
   DEFAULT_EASE_FACTOR,
   INITIAL_INTERVAL_DAYS,
@@ -252,6 +253,53 @@ describe('spacedRepetition - SM-2', () => {
 
     it('returns 1 for next day', () => {
       expect(daysUntilReview('2026-06-02T00:00:00.000Z', '2026-06-01T00:00:00.000Z')).toBe(1);
+    });
+  });
+
+  /*
+   * Phase 16 added `daysSinceReviewDue` beside `daysUntilReview`, and this file is
+   * one of the three the plan's Phase 16 Verification block names. Leaving a new
+   * export of the SM-2 module unpinned in the file that exists to pin that module
+   * would let it drift behind the surfaces that read it, so it is pinned here.
+   *
+   * The asymmetry with `daysUntilReview` is the whole reason it exists and is the
+   * first case: `daysUntilReview` clamps at 0, so a review three days late and a
+   * review due this morning are indistinguishable through it.
+   */
+  describe('daysSinceReviewDue', () => {
+    it('returns 0 for a date that has not passed', () => {
+      expect(daysSinceReviewDue('2027-01-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z')).toBe(0);
+    });
+
+    it('returns 0 for the same calendar day at an earlier time', () => {
+      // `isReviewOverdue` is a timestamp comparison and would call this overdue;
+      // this helper reports the *calendar day*, which is what distinguishes
+      // "due this morning" from "three days late".
+      expect(daysSinceReviewDue('2026-06-01T14:00:00.000Z', '2026-06-01T12:00:00.000Z')).toBe(0);
+    });
+
+    it('returns the days elapsed for a past date', () => {
+      expect(daysSinceReviewDue('2026-05-29T00:00:00.000Z', '2026-06-01T00:00:00.000Z')).toBe(3);
+    });
+
+    it('returns 1 for one day past', () => {
+      expect(daysSinceReviewDue('2026-05-31T00:00:00.000Z', '2026-06-01T00:00:00.000Z')).toBe(1);
+    });
+
+    it('never returns a negative count for a future date', () => {
+      for (const now of ['2026-06-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z']) {
+        expect(daysSinceReviewDue('2027-01-01T00:00:00.000Z', now)).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('agrees with daysUntilReview on the size of the same gap, mirrored in time', () => {
+      const earlier = '2026-01-01T00:00:00.000Z';
+      const later = '2026-03-11T00:00:00.000Z';
+      // 69 days apart. Both helpers round the same 86_400_000 ms day and one is the
+      // other's mirror, so a drift in either shows up as the pair disagreeing. The
+      // arguments are swapped deliberately: `daysUntilReview` clamps at 0 for a date
+      // in the past, which is why this cannot be compared argument-for-argument.
+      expect(daysSinceReviewDue(earlier, later)).toBe(daysUntilReview(later, earlier));
     });
   });
 

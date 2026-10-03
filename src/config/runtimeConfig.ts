@@ -27,6 +27,7 @@ export interface RuntimeConfig {
   readonly audioEnabled: boolean;
   readonly creatorWorkspace: boolean;
   readonly scribeEncounterWorkspace: boolean;
+  readonly archaeologistReviewWorkspace: boolean;
 }
 
 export type RuntimeConfigKey = keyof RuntimeConfig;
@@ -45,6 +46,7 @@ export const RUNTIME_FLAG_ENV_KEYS = {
   audioEnabled: 'VITE_AUDIO_ENABLED',
   creatorWorkspace: 'VITE_CREATOR_WORKSPACE',
   scribeEncounterWorkspace: 'VITE_SCRIBE_ENCOUNTER_WORKSPACE',
+  archaeologistReviewWorkspace: 'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE',
 } as const satisfies Readonly<Record<RuntimeConfigKey, string>>;
 
 /**
@@ -64,6 +66,7 @@ export const DEFAULT_RUNTIME_CONFIG: Readonly<RuntimeConfig> = Object.freeze({
   audioEnabled: true,
   creatorWorkspace: false,
   scribeEncounterWorkspace: false,
+  archaeologistReviewWorkspace: false,
 });
 
 function normalizedRawValue(
@@ -137,6 +140,10 @@ export function parseRuntimeConfig(
     scribeEncounterWorkspace: parseBoolean(
       'scribeEncounterWorkspace',
       DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace,
+    ),
+    archaeologistReviewWorkspace: parseBoolean(
+      'archaeologistReviewWorkspace',
+      DEFAULT_RUNTIME_CONFIG.archaeologistReviewWorkspace,
     ),
   };
 

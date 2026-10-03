@@ -115,6 +115,16 @@ afterAll(() => {
   removeProbe();
 });
 
+/**
+ * The extensions {@link everySourceModule} enumerates.
+ *
+ * Declared here rather than imported, because it is the *definition* of the population that
+ * test compares against - and a re-implementation is the very thing that let the two sides of
+ * that comparison drift apart. The pattern is the one `importGraph.ts`'s own `MODULE_FILE`
+ * uses; if it changes there, this test is what should notice.
+ */
+const MODULE_EXTENSION = /\.(?:ts|tsx|mts|js|jsx|mjs)$/;
+
 describe('Phase 5 gate 6: the import-graph walk is real', () => {
   it('reaches a non-trivial, fully resolved, proper subset of the src tree', () => {
     const graph = walk();
@@ -122,13 +132,63 @@ describe('Phase 5 gate 6: the import-graph walk is real', () => {
     const paths = graph.modules.map((module) => module.path);
 
     expect(paths).toContain(ENTRY_MODULE);
-    // A floor, and the walk is strictly smaller than the tree, so it cannot be a
-    // glob in disguise.
-    expect(paths.length).toBeGreaterThanOrEqual(100);
-    expect(paths.length).toBeLessThan(all.length);
+
+    /*
+     * The subset check, over the same population on both sides.
+     *
+     * `everySourceModule()` enumerates **code** modules - `.ts`, `.tsx`, `.mts`, `.js`,
+     * `.jsx`, `.mjs`, minus `.d.ts` - and excludes stylesheets and locale JSONs. The walk
+     * *reaches* those: `src/styles.css`, the nine colocated stylesheets, and the two
+     * `src/i18n/locales/*.json` files are all modules in the graph, because the resolver
+     * follows them and `import './scribe.css'` is an edge like any other.
+     *
+     * So the two counts were never the same population, and `paths.length < all.length` was
+     * comparing reached-code-plus-assets against reached-code-eligible. It held only because
+     * Phase 16 happened to add enough code modules to the enumerator's side to outrun the
+     * twelve assets on the walk's - which is a coincidence of arithmetic, not a property of
+     * the gate, and it would flip again on the next phase that adds a stylesheet. The check
+     * below filters the walk's own output through the enumerator's extension rule, so the two
+     * sides count the same thing and the comparison means what the comment says.
+     */
+    const allSet = new Set(all);
+    const reachedCode = paths.filter(
+      (path) => MODULE_EXTENSION.test(path) && allSet.has(path),
+    );
+    expect(reachedCode.length, 'the walk reaches no code modules').toBeGreaterThanOrEqual(100);
+    expect(
+      reachedCode.length,
+      'the walk reached every code module in the tree, so it cannot be an import walk',
+    ).toBeLessThan(all.length);
     expect(all.length).toBeGreaterThanOrEqual(120);
 
-    // Every reached module exists: no phantom inflates the count.
+    /*
+     * And the non-code modules the walk picked up are real files under `src/`, so "the walk
+     * resolved a module" cannot be satisfied by a stray invented path.
+     *
+     * Existence is the whole check, and it is checked rather than pattern-matched on purpose:
+     * an enumerated allowlist of stylesheet paths would have to be edited every time a phase
+     * colocates one, and the first edit would be this test failing on a legitimate file. What
+     * would actually be a defect - a walk reporting a module that is not on disk - is caught
+     * by the `existsSync` below, and it catches it for assets too because this loop covers
+     * every path the walk reported, not just the code ones.
+     */
+    for (const path of paths) {
+      expect(path.startsWith('src/'), path).toBe(true);
+      if (MODULE_EXTENSION.test(path)) continue;
+      // A stylesheet or a locale file, by extension - the two kinds `src/` holds that are not
+      // code. Anything else here would be a walk that followed something it should not have.
+      expect(path, `${path} is neither a module nor a known non-code asset`).toMatch(
+        /\.(?:css|json)$/,
+      );
+    }
+
+    /*
+     * Every reached module exists: no phantom inflates the count. This is the check the
+     * non-code loop above defers to, and it is deliberately *after* it - an invented path fails
+     * both, but a real stylesheet outside `src/ui/study|components|data|village` would have
+     * failed only the extension check, so the order makes the extension check the cheap first
+     * filter and this one the authority on existence.
+     */
     for (const path of paths) {
       expect(existsSync(join(process.cwd(), path)), path).toBe(true);
     }

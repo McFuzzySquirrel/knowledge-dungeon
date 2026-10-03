@@ -1,0 +1,424 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+ * The Archaeologist review workspace.
+ *
+ * ## Why this is colocated rather than added to `study.css`
+ *
+ * Same reason `scribe.css` is: `src/ui/study/study.css` is the shared shell's stylesheet and
+ * the shell is phase-agnostic by construction. `scripts/check-cc0-assets.mjs` classifies
+ * `.css` as non-media, so a stylesheet here needs no registry entry.
+ *
+ * ## What every rule below obeys
+ *
+ * 1. **No colour-only state.** Overdue, due today, and scheduled are three *different words*
+ *    rendered in full (`reviewDueSentence`), and the `--overdue` / `--due-today` classes
+ *    below change only a border width. A greyscale print and a full-colour screen read the
+ *    same three states. `tests/phase16/review-workspace.test.tsx` asserts the words.
+ * 2. **44 by 44 CSS pixels on every control.** The floor itself is the inline
+ *    `STUDY_TOUCH_TARGET_STYLE` every study control carries, and these rules are the backstop
+ *    for a control added later without it.
+ * 3. **Reduced motion is honoured.** The only transition in this file is the progress fill,
+ *    and it carries no information - the number is in the sentence above it - so it is removed
+ *    below rather than shortened.
+ * 4. **System fonts only**, inherited from `.study-shell`.
+ * 5. **Contrast from the existing Cozy tokens**, never a new colour. Every value here is
+ *    `var(--accent)`, `var(--text-secondary)`, `var(--text-muted)`, `var(--border-soft)` or
+ *    `var(--bg-panel)` with a fallback, which is the Phase 8 palette Phase 15's sheet uses and
+ *    the reason this file invents no hex of its own. `--text-secondary` and `--text-muted` on
+ *    `--bg-panel` are the tokens already measured at 4.5:1 or better in every theme Phase 8
+ *    validated; Phase 21 owns re-measuring them for this surface.
+ * 6. **Everything wraps at 320 pixels.** `overflow-wrap: anywhere` on every text block and no
+ *    fixed widths, so a 200% zoom on a phone does not widen the panel.
+ */
+
+/* === Where this review stands '================================================ */
+
+.archaeologist-standing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.archaeologist-standing__headline {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.archaeologist-standing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+/* === Shared bits '================================================================ */
+
+/*
+ * The fact list. A plain bulleted list rather than a grid, because the facts are sentences
+ * of different lengths and a two-column grid at 320 pixels would either truncate them or
+ * need per-row widths.
+ */
+.archaeologist-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #4a4038);
+}
+
+.archaeologist-fact {
+  overflow-wrap: anywhere;
+}
+
+.archaeologist-subheading {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted, #5c5148);
+}
+
+.archaeologist-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted, #5c5148);
+  overflow-wrap: anywhere;
+}
+
+.archaeologist-hint--problem {
+  font-weight: 600;
+}
+
+/* === The artifact '================================================================ */
+
+.archaeologist-artifact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.archaeologist-artifact__body {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 10px;
+  background: var(--bg-panel, #fdf7ef);
+}
+
+/* === Recall '===================================================================== */
+
+.archaeologist-recall {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.archaeologist-recall__prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.archaeologist-prompt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-inline-start: 20px;
+  font-size: 0.875rem;
+}
+
+.archaeologist-prompt {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The rating group.
+ *
+ * A `<fieldset>`, so the legend is the group's name and the browser gives the six radios
+ * their arrow-key roving tabindex without any code here. The visible border is 2px rather
+ * than a fill: this is a group the learner crosses into, and it has to read the same in a
+ * high-contrast mode.
+ */
+.archaeologist-quality {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 2px solid var(--text-muted, #5c5148);
+  border-radius: 10px;
+}
+
+.archaeologist-quality__legend {
+  padding-inline: 6px;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+/*
+ * The six options wrap rather than shrink.
+ *
+ * `flex: 1 1 10rem` with a wrap is what lets six labelled radios sit three-across on a
+ * desktop and one-across at 320 CSS pixels without a media query and without ever dropping
+ * below the 44-pixel target: the row height is driven by the label, and `min-inline-size:
+ * 10rem` is above the width a "Perfect" label needs at 0.8125rem.
+ */
+.archaeologist-quality__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.archaeologist-quality__option {
+  position: relative;
+  flex: 1 1 10rem;
+  min-inline-size: 0;
+}
+
+/*
+ * The native radio is kept in the layout and given the room, rather than hidden behind a
+ * `::before` dot on the label. Two reasons, both load-bearing:
+ *
+ * 1. It is the element the browser focuses, so the focus ring lands on the control rather
+ *    than on a decoration, and `:focus-visible` styling can target it.
+ * 2. Hiding it with `display: none` or `visibility: hidden` would take it out of the
+ *    accessibility tree *and* out of Tab order, which would leave a radio group a keyboard
+ *    user cannot enter at all. The rule below uses `accent-color` to make the real control
+ *    match the surface instead.
+ */
+.archaeologist-quality__input {
+  inline-size: 24px;
+  block-size: 24px;
+  margin: 0 8px 0 0;
+  accent-color: var(--accent, #b4622d);
+  /* The 44x44 floor is on the row, not the radio: a 44-pixel radio would be a control whose
+   * appearance lies about what the application is. The inline style the shared control
+   * helper supplies sets the minimum, and this rule keeps the drawn control proportionate
+   * inside it. */
+  flex: 0 0 auto;
+}
+
+.archaeologist-quality__label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-block-size: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft, #d8ccc0);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+/* The checked state is a word and a border weight, never the radio dot alone. */
+.archaeologist-quality__option:has(.archaeologist-quality__input:checked) .archaeologist-quality__label {
+  border-width: 3px;
+  border-color: var(--accent, #b4622d);
+  font-weight: 700;
+}
+
+.archaeologist-quality__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.archaeologist-quality__name {
+  color: var(--text-secondary, #4a4038);
+}
+
+/*
+ * The full SM-2 sentence. Visually hidden *inside* the label, so it is in the DOM as text -
+ * readable by a learner who wants it, assertable by a test that the real label reached the
+ * surface - while the radio reaches it through `aria-describedby`.
+ */
+.archaeologist-quality__description {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  color: var(--text-muted, #5c5148);
+  overflow-wrap: anywhere;
+}
+
+.archaeologist-quality__chosen {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent, #b4622d);
+}
+
+.archaeologist-quality__readback {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* === Schedule '=================================================================== */
+
+.archaeologist-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/*
+ * The three due states.
+ *
+ * `due.sentence` is what says which state this is, and the class below only changes a border
+ * width and a font weight. No hue is introduced here, and no `background-color`, because
+ * either would be the sole carrier the moment the sentence is read out of context - and the
+ * sentence *is* what a screen reader reads.
+ */
+.archaeologist-due {
+  margin: 0;
+  padding-inline-start: 8px;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.archaeologist-due--overdue,
+.archaeologist-due--due-today,
+.archaeologist-due--not-scheduled {
+  border-inline-start: 4px double var(--text-muted, #5c5148);
+  font-weight: 700;
+}
+
+.archaeologist-due--due-in {
+  border-inline-start: 4px solid var(--border-soft, #d8ccc0);
+}
+
+/* === Complete '==================================================================== */
+
+.archaeologist-complete {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.archaeologist-close {
+  display: flex;
+  padding-block-start: 8px;
+  border-block-start: 1px solid var(--border-soft, #d8ccc0);
+}
+
+/* === The full map's review affordances '========================================= */
+
+/*
+ * Phase 16 also adds a review affordance to `src/ui/components/FullMapView.tsx`, and these
+ * are its rules.
+ *
+ * **They are here, in the phase's own stylesheet, and not in `src/styles.css` or in a
+ * colocated `fullMapView.css`.** Both alternatives were tried and both are worse:
+ *
+ * - `src/styles.css` is the legacy sheet `tests/phase8/qa-verification.test.ts` pins
+ *   line-for-line below its theme blocks, as the evidence that rolling the Cozy visuals back
+ *   leaves the legacy themes byte-identical. Adding there weakens that evidence on every
+ *   phase, silently.
+ * - A colocated `src/ui/components/fullMapReview.css` was the first attempt, and it broke
+ *   `tests/data/localDownloadOnly.test.ts`'s import-graph gate: that test enumerates every
+ *   `.ts`/`.tsx` module under `src/` and asserts the walk from `src/main.tsx` reaches a
+ *   *strict subset* of them, which is its non-vacuity check that the walk is not a glob in
+ *   disguise. A new stylesheet is a module the walk can reach and the enumerator does not
+ *   count, so adding one pushed the walk to the whole tree and the gate went red. Importing
+ *   `review.css` from `FullMapView.tsx` instead reaches a file the enumerator already knew
+ *   about, and the gate stays meaningful.
+ *
+ * Recorded rather than silently reverted, because the constraint is not obvious and the next
+ * person to style this map will reach for the colocated file first.
+ */
+
+/*
+ * The focus ring on the map's SVG room nodes.
+ *
+ * They were already `tabIndex={0}` and already announced as buttons, but nothing drew a focus
+ * indicator for them. `.study-shell :focus-visible, .study-graph :focus-visible` in
+ * `../study.css` covers the Creator workspace's own SVG nodes, and the Cozy
+ * `[data-cozy-visuals='true'] :focus-visible` rule in `src/styles/cozy.css` is scoped to that
+ * attribute - so on a build with the Cozy visuals off, these nodes got the browser default and
+ * nothing more. A control a keyboard user can land on and cannot see is exactly the defect plan
+ * 10.1 names, and it was present in *both* lanes, the rollback lane included.
+ *
+ * Two independent signals, because one is not enough:
+ *
+ * 1. `outline` on the `<g>` rather than the `<rect>`, because `outline` on an SVG container is
+ *    drawn around the union of its children and stays visible when a child is at a viewport
+ *    edge.
+ * 2. `stroke-width` on the `rect`, which is *geometry* - and geometry is what forced-colours
+ *    mode still honours when it replaces author colours wholesale. The `@media
+ *    (forced-colors)` block is that reasoning applied here, as `src/styles/cozy.css` states
+ *    for its own focus rule.
+ */
+.full-map-viewport g[data-room-id]:focus-visible {
+  outline: 3px solid var(--accent, #b4622d);
+  outline-offset: 2px;
+}
+
+.full-map-viewport g[data-room-id]:focus-visible rect {
+  stroke: var(--accent, #b4622d);
+  stroke-width: 4;
+}
+
+@media (forced-colors: active) {
+  .full-map-viewport g[data-room-id]:focus-visible {
+    outline: 3px solid CanvasText;
+  }
+
+  .full-map-viewport g[data-room-id]:focus-visible rect {
+    stroke: CanvasText;
+  }
+}
+
+/*
+ * The review-state rows.
+ *
+ * The state is a *word* in each button's own text, produced by `FullMapView`'s
+ * `describeRoomReviewState` and asserted in `tests/phase16/fullmap-review-state.test.tsx`.
+ * These selectors change only a border width and a weight: a hue that meant "overdue" would
+ * become the sole carrier in a greyscale print or for a learner with any colour vision.
+ */
+.room-section[aria-label='Rooms due for review'] {
+  /*
+   * A bounded, scrollable region rather than an unbounded list. A 40-room dungeon would render
+   * forty rows below a map that is already the height of the viewport, pushing the map itself
+   * off screen - and a learner who opened a map to see the map would not get one.
+   */
+  max-block-size: 30vh;
+  overflow-y: auto;
+}
+
+button[data-review-due-row] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: start;
+}
+
+button[data-review-due-row='overdue'],
+button[data-review-due-row='due-today'] {
+  border-width: 3px;
+  font-weight: 700;
+}
+
+button[data-review-due-row='due-in'] {
+  border-width: 1px;
+}
+
+/* === Reduced motion '============================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * The inherited `.review-progress-bar-fill` transition is the only animation this surface
+   * has. It carries no information - the percentage is in the sentence above the bar and in
+   * `aria-valuetext` - so removing it loses nothing and honours the preference completely.
+   */
+  .archaeologist-progress .review-progress-bar-fill {
+    transition: none;
+  }
+}

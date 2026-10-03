@@ -22,12 +22,14 @@ import { useSessionStore } from '@/store/sessionStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
 import { Markdown } from '@/ui/utils/markdown';
 import { CreatorWorkspace } from '@/ui/study/creator/CreatorWorkspace';
+import { ArchaeologistWorkspace } from '@/ui/study/review/ArchaeologistWorkspace';
 import { GuideConversation } from '@/ui/study/guide/GuideConversation';
 import {
   evaluateReviewUnlock,
   extractMarkdownHeadings,
   generateSelfCheckPrompts,
 } from '@/core/review';
+import type { InterruptedReviewSession } from '@/core/review/interruptedReviewSession';
 
 /**
  * Whether this build renders the redesigned Creator workspace.
@@ -38,6 +40,23 @@ import {
  * pre-Phase-14 Creator view against the pre-Phase-14 store actions, untouched.
  */
 const CREATOR_WORKSPACE_ENABLED = runtimeConfig.creatorWorkspace;
+
+/**
+ * Whether this build renders the redesigned Archaeologist review workspace (Phase 16).
+ *
+ * Read from the build-time flag once, at module scope, for the same reason and with the same
+ * shape as {@link CREATOR_WORKSPACE_ENABLED} above - so the rollback lane and the new lane are
+ * decided by one value in every render and a test can mock one module to choose. `false` is
+ * the production default, and with it the `notes` tab below renders the pre-Phase-16 view:
+ * three progress cards, the note body, and the "Done reviewing" button, byte for byte.
+ *
+ * **It is decided here, not in the workspace, because the swap is per-tab.** The Creator lane
+ * replaces the `topic` tab's whole body; the review lane replaces the `notes` tab's whole
+ * body. Both leave the panel's header, its tab strip, and its travel lists alone, which is
+ * why a single `phase` comparison per tab is the whole gating and no subtree has to know
+ * whether a flag is on.
+ */
+const ARCHAEOLOGIST_REVIEW_WORKSPACE_ENABLED = runtimeConfig.archaeologistReviewWorkspace;
 
 export type RoomTab = 'topic' | 'notes' | 'images' | 'artifact' | 'selfcheck';
 
@@ -78,6 +97,28 @@ interface RoomPanelProps {
   reviewRoomsTowardNextPass: number;
   reviewNextPassTarget: number;
   reviewTotalRooms: number;
+  /**
+   * The durable interrupted-review marker, or `null` (Phase 16).
+   *
+   * `GameScreen` reads it through `flow.readPendingReviewSession()` on every render and passes
+   * the value down, rather than the workspace reaching for the flow itself: `RoomPanel` is
+   * the shared mount point for two workspaces and it should not know that a flow controller
+   * exists, and a value rather than a getter is what lets the workspace react to a discard
+   * the moment it happens instead of on the next unrelated render.
+   */
+  pendingReviewSession?: InterruptedReviewSession | null;
+  /** Re-enter the saved review. `flow.resumePendingReview`, which also re-arms the close route. */
+  onResumeReview?: (roomId: string) => boolean;
+  /** Abandon the saved review. `flow.discardPendingReview`. Awards nothing. */
+  onDiscardReview?: (roomId: string) => boolean;
+  /**
+   * The clock the review workspace reads "now" from (Phase 16).
+   *
+   * Injected rather than read, for the reason `reviewCommands.ts` injects `nowIso`: "due
+   * today" is a comparison against a clock, and a surface that read `Date.now()` would be
+   * untestable and could report two different due states in one render.
+   */
+  reviewNowIso?: string;
 }
 
 export function RoomPanel({
@@ -91,6 +132,10 @@ export function RoomPanel({
   reviewRoomsTowardNextPass,
   reviewNextPassTarget,
   reviewTotalRooms,
+  pendingReviewSession = null,
+  onResumeReview,
+  onDiscardReview,
+  reviewNowIso,
 }: RoomPanelProps): JSX.Element {
   const reviewProgressPercent =
     reviewTotalRooms > 0
@@ -976,7 +1021,28 @@ export function RoomPanel({
         ) : null}
 
         {tab === 'notes' ? (
-          <>
+          phase === 'archaeologist' && ARCHAEOLOGIST_REVIEW_WORKSPACE_ENABLED ? (
+            /*
+             * The Phase 16 review lane. It replaces this tab's whole body and nothing else:
+             * the header, the tab strip, the travel lists, and the "Close review" control in
+             * `room-panel-header-actions` are all still this component's, and
+             * `onClose` below is still the `closeInfoPanel` route the flow finalizes through.
+             *
+             * The `else` arm is the pre-Phase-16 view, unchanged - which is the rollback lane,
+             * and the whole of what the production default renders.
+             */
+            <ArchaeologistWorkspace
+              room={focusedRoom}
+              snapshot={snapshot}
+              pendingSession={pendingReviewSession}
+              nowIso={reviewNowIso ?? new Date().toISOString()}
+              resolveLocalImage={resolveLocalImage}
+              onResumeReview={onResumeReview ?? ((): boolean => false)}
+              onDiscardReview={onDiscardReview ?? ((): boolean => false)}
+              onClose={onClose}
+            />
+          ) : (
+            <>
             <h2>Notes</h2>
             {!hasNoteText && noteWordCount === 0 ? (
               <p>No notes drafted yet. Press <kbd>E</kbd> in the dungeon to open the editor.</p>
@@ -1016,7 +1082,8 @@ export function RoomPanel({
                 ) : null}
               </>
             )}
-          </>
+            </>
+          )
         ) : null}
 
         {tab === 'images' ? (

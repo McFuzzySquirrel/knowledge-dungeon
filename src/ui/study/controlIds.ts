@@ -102,6 +102,40 @@ export const SCRIBE_SECTION_TAB_IDS = Object.freeze({
 export type ScribeSectionId = keyof typeof SCRIBE_SECTION_TAB_IDS;
 
 /**
+ * The Archaeologist review workspace's controls.
+ *
+ * A third object, for the same reason the second one is: the review workspace's next action
+ * moves focus to a control that lives inside the recall card, and Phase 14's vocabulary is
+ * not where Phase 16's controls belong.
+ *
+ * **No learner value appears in any of these.** The rating radios are the case that most
+ * wanted one - a `name` of `${roomId}-${quality}` would be the obvious way to make them
+ * unique - and it is exactly why the group carries `role="radiogroup"` instead: a radio
+ * group is keyed by *its own* label and needs no name attribute at all, so a room id never
+ * reaches the DOM. See `RecallCard.tsx`.
+ */
+export const ARCHAEOLOGIST_CONTROL_IDS = Object.freeze({
+  /** The arrival/resumability block, and the frame focus lands on. */
+  arrival: 'archaeologist-arrival',
+  /** The recall-prompt list for the room under review. */
+  recallPrompts: 'archaeologist-recall-prompts',
+  /** The 0-5 recall-quality radio group. */
+  qualityRating: 'archaeologist-quality-rating',
+  /** The review-pass progress block. */
+  progress: 'archaeologist-progress',
+  /** Resume the interrupted review the durable marker holds. */
+  sessionResume: 'archaeologist-session-resume',
+  /** Discard the interrupted review. Awards nothing. */
+  sessionDiscard: 'archaeologist-session-discard',
+  /** Explicitly complete this pass for this room, with the chosen rating. */
+  passComplete: 'archaeologist-pass-complete',
+  /** Park the unfinished review so it survives an exit. */
+  sessionSave: 'archaeologist-session-save',
+  /** Close the room panel, which finalizes the review through the flow. */
+  close: 'archaeologist-review-close',
+});
+
+/**
  * Move focus to a control by id, if it is in the document.
  *
  * Returns whether focus moved, so a caller can report "there is nothing to focus" rather

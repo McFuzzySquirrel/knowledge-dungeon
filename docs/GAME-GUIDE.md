@@ -94,12 +94,38 @@ Knowledge Dungeon has three gameplay phases. You progress through them for each 
 
 **Goal:** Review cleared rooms using spaced repetition.
 
-Once every room is cleared, the Archaeologist phase unlocks. Review prompts are scheduled using the **SM-2 algorithm**:
+> **This section has two variants, and your build shows one of them.**
+> `src/data/gameGuide.ts` selects between them at build time from
+> `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE`. The default build sets that flag to `false` and shows
+> the **flag-off** text, which describes the pre-Phase-16 review panel. A build with
+> `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=true` shows the **flag-on** text below. Everything outside
+> this section is identical in both. Do not merge the two variants: they are the same section
+> made true twice, and collapsing them would reintroduce the bug the split exists to prevent.
+>
+> **Flag-off text**, for reference:
+>
+> > Reviewing a room needs two gates: that room's own encounter is cleared, and every other
+> > room in the dungeon is cleared too. Press **E** in a cleared room to open the room panel for
+> > that room's review, then read its artifact and work through the self-check prompts out loud.
+> > Pressing **E** opens the panel and marks nothing - closing the panel is what counts the pass.
+> > Each room's next review date is then scheduled with the **SM-2 algorithm**.
+> >
+> > - The pass is recorded at a rating of 3, the "correct with serious difficulty" step of that
+> >   schedule: 1 day, then 6 days, then multiplying by the room's own ease factor
+> > - Study Statistics tracks reviewable rooms, rooms reviewed, full review passes, due today,
+> >   overdue reviews, and average ease factor
 
-- Rate your recall on a 0-5 scale
-- Easy cards get longer intervals; hard cards repeat sooner
-- Track your review streak and overdue count
-- Self-check prompts help you verify knowledge retention
+**Flag-on text** (`VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=true`):
+
+Reviewing a room needs two gates: that room's own encounter is cleared, and every other room in the dungeon is cleared too. Open a cleared room with **E**, read its artifact, answer its recall prompts out loud, and rate how well you recalled it. Each room's next review date is then scheduled with the **SM-2 algorithm**:
+
+- Pressing **E** opens the room for review and marks nothing; the pass is counted when you finish with the room panel
+- Rate your recall from 0 to 5, labelled from Forgot through Perfect
+- A rating below 3 resets the room to 1 day; 3 or higher gives 1 day, then 6 days, then multiplies by the room's own ease factor
+- Completing the review counts the pass at the rating you chose; closing the room panel counts it at a rating of 3 instead
+- If you have to leave part way through, **Save and finish later** keeps the review here, and the room offers to **Pick this review back up** the next time you open it
+- The panel shows this room's next review date, how far you are toward the next full pass, and whether the room is overdue
+- Study Statistics tracks reviewable rooms, rooms reviewed, full review passes, due today, overdue reviews, and average ease factor
 
 ---
 

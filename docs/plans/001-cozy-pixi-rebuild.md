@@ -562,7 +562,14 @@ VITE_WEB_SHARE=true|false
 VITE_AUDIO_ENABLED=true|false
 VITE_CREATOR_WORKSPACE=true|false
 VITE_SCRIBE_ENCOUNTER_WORKSPACE=true|false
+VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=true|false
 ```
+
+`VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE` was added in Phase 16. It gates the redesigned
+Archaeologist review workspace behind the existing room-panel review view, and — like every
+flag except audio — it is a cutover gate whose production default is the pre-phase behaviour
+(`false`). It selects which view a learner sees, not what counts as a review pass: the review
+command layer, the SM-2 scheduling, and the review-pass reward are unchanged by it.
 
 `VITE_SCRIBE_ENCOUNTER_WORKSPACE` was added in Phase 15. It gates the redesigned Scribe
 encounter workspace behind the existing NoteEditorModal, and — like every flag except
@@ -743,8 +750,8 @@ Phase 24 Remove Phaser and legacy renderer
 | 12 | complete | Build village NPCs, quests, and redesigned panels. |
 | 13 | complete | Build the Pixi dungeon world and navigation. |
 | 14 | verified | Redesign the Creator flow. |
-| 15 | not-started | Redesign the Scribe flow. |
-| 16 | not-started | Redesign the Archaeologist flow. |
+| 15 | verified | Redesign the Scribe flow. |
+| 16 | verified | Redesign the Archaeologist flow. |
 | 17 | not-started | Rebuild fishing in Pixi. |
 | 18 | not-started | Wire and redesign study statistics. |
 | 19 | not-started | Add local adaptive assistance. |
@@ -6107,7 +6114,7 @@ Phase 16.
 
 ## Phase 16: Archaeologist Review and Progression Redesign
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Retain artifact collection, self-check, review passes, and SM-2 scheduling in a calmer review-first interface.
 
 ### Prerequisites
@@ -6161,6 +6168,313 @@ npm run test:e2e
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-10-03. `not-started` -> `in-progress` -> `verified`. **Not committed, pushed, or
+deployed** — that needs explicit maintainer authorization. Phase 16 is `verified` and awaits
+acceptance; Phase 17 has not been started.
+
+Phase 15 was `verified` and awaiting acceptance; the maintainer's instruction to execute Phase 16
+is recorded here as acceptance of that checkpoint. The Phase Summary row for 15 said
+`not-started` and was stale; it is corrected, as was 16's own row.
+
+#### Baseline
+
+Green at `b756d34` before any change: `npm run lint`, `npm run typecheck`, `npm test` at
+**240 files / 4801 tests**, `npm run build:web`, `npm run check:bundle-size` at
+**4.97 MB / 153 files**. Identical to Phase 15's recorded totals, so Phase 15's evidence is
+reproducible. No baseline repair was needed.
+
+#### Files
+
+- **Ledger** (`core-logic-engineer`): `src/core/review/reviewPassRewards.ts` (438),
+  `src/core/review/reviewPasses.ts` (311+), `src/core/review/interruptedReviewSession.ts` (247),
+  `src/core/review/index.ts`.
+- **Command layer** (`core-logic-engineer`): `src/application/reviewCommands.ts` (665),
+  `src/store/reviewCommands.ts` (67), `src/application/contracts/commands.ts` (+123, five
+  `review/*` members with derived payload aliases).
+- **Flow** (`core-logic-engineer`): `src/application/studyFlow.ts` (+371),
+  `src/store/progressionStore.ts` (+156), `src/core/review/spacedRepetition.ts` (+24).
+- **Workspace** (`ui-engineer`): `src/ui/study/review/{ArchaeologistWorkspace,RecallCard,ReviewProgress,reviewViewModel,useReviewActions}.ts(x)` + `review.css` (423); `src/ui/study/{controlIds,StudyShell}.ts(x)`;
+  `src/ui/components/{RoomPanel,FullMapView,HelpOverlay}.tsx`; `src/ui/screens/GameScreen.tsx`;
+  `src/ui/village/villageStudyFlow.ts`.
+- **Copy** (`village-content-designer`): `src/ui/components/RoomNpcDialog.tsx`,
+  `src/data/gameGuide.ts`, `src/data/villageLayout.ts`, `src/store/sessionStore.ts` (one quest
+  hint), `docs/GAME-GUIDE.md`.
+- **Renderer** (`game-engineer`): **zero lines changed** under `src/renderers/**` or
+  `src/game/**`. Parity was verified, not assumed.
+- **Flag** (`infrastructure-engineer`): `src/config/{runtimeConfig,featureFlags}.ts`,
+  `.env.example`, plan section 11.
+- **Tests**: `tests/phase16/` (16 files), plus re-pins of
+  `tests/contracts/phase-2-study-flow.test.ts` and `tests/unit/GameScreen.npcDialog.test.tsx`.
+
+#### Commands
+
+```text
+npm run lint                                   exit 0
+npm run typecheck                              exit 0
+npm test                                       256 files / 5029 tests passed   (was 240 / 4801)
+npm run build:web                              exit 0
+npm run check:bundle-size                      5.06 MB across 153 files (was 4.97 MB)
+npm run test:e2e                               32 passed / 12 skipped (4 viewports, Chromium)
+npm run test:licenses                          PASSED, 99 entries, 0 media under src/
+npm run test:privacy                           6 files / 34 tests passed
+npx vitest run tests/unit/reviewDomain.test.ts     3 passed
+npx vitest run tests/unit/spacedRepetition.test.ts 41 passed
+npx vitest run tests/unit/GameScreen.npcDialog.test.tsx 6 passed
+npx vitest run tests/contracts/phase-2-study-flow.test.ts 52 passed
+npx vitest run tests/phase16/                 16 files / 219 tests passed
+npx vitest run tests/phase15/                 5 files / 69 tests passed
+npx vitest run tests/phase13/                 5 files / 102 tests passed
+```
+
+#### Where the ledger lives, and why
+
+In the canonical per-subject progression record's preserved unknown-app-owned-field carrier
+(`extraFields`), under `reviewPassRewardLedger` beside Phase 15's `roomClearRewardLedger`. Same
+three rejected alternatives, same reasoning.
+
+**The subject record's carrier was rejected on evidence, not taste**, and that finding matters
+beyond this phase: `withRooms` in `src/store/subjectStore.ts` rebuilds every snapshot as
+`{ dungeon, rooms }`, so an unknown top-level key dies on the next room write, and
+`migrateToV11` is configured `unknownTopLevelFields: 'drop'`. `JSON.stringify` round-trips such a
+key in isolation, which is exactly the trap — it looks right in a test and vanishes in the app.
+The interrupted-review marker is in the same carrier for the same reason.
+
+**No canonical-progression version change.** `src/core/progression/canonicalProgression.ts` and
+`src/services/persistence/v2/validation.ts` are **byte-identical to `b756d34`** — verified by
+`git diff --stat` and by matching `git hash-object` against `git rev-parse b756d34:<path>`, not
+asserted. `CURRENT_SCHEMA_VERSION` stays `1.1.0`; `src/core/validation/persistence/` has an empty
+diff. No migrations, no new storage stores.
+
+**Identity = (app-minted room id, integer pass number), `rpass-<8 hex>`.** The obvious identity —
+(room, `reviewPassCount`) — is wrong in exactly the case this ledger exists for, because
+`reviewPassCount` is written by an **async** subject-store call, so it does not move within the
+tick that decides the award. The pass number is `fullReviewPasses + 1` over reviewable rooms from
+the pre-increment analytics: stable across every room in one pass, identical across same-tick
+duplicates, different next pass. A test pins that entries carry exactly four keys and that no
+topic, note, artifact, or subject name can reach an entry or a digest input.
+
+#### Exit-criteria assessment
+
+1. **The full Creator to Scribe to Archaeologist path passes** — **partially met.** Creator (Phase
+   14) and Scribe (Phase 15) are untouched and green. The Archaeologist path is covered at flow
+   level (`tests/phase16/studyFlowReview.test.ts`), store level
+   (`reviewCommandStoreBinding.test.ts`), and real-screen level
+   (`review-marker-publication.test.tsx`, `dungeon-review-signal-parity.test.ts`). **No browser
+   e2e spec visits it** — see *Unmet deliverable*.
+2. **Review pass and XP cannot be double-counted** — met, after the orchestrator caught a defect
+   QA's 24 probes had missed. See *Defects found*.
+3. **SM-2 values survive reload and backup** — met. Reload was covered; the **backup half was
+   only an inherited argument**, so QA wrote `tests/phase16/review-backup-round-trip.test.ts`: a
+   real `.kdbak` export imported into a second empty device, and a real `.kdsubject` export
+   imported with `replace`. Both assert the SM-2 numbers round-trip **and** that the restored
+   ledger still returns `already-awarded` for the awarded `(room, 1)` while still permitting
+   `(room, 2)`.
+4. **Review unlocks behave consistently** — met. `canReviewRoom` delegates to
+   `evaluateReviewUnlock`, the same function `RoomPanel` renders, so the displayed and enforced
+   rules are one call. A locked room arms nothing and says why.
+5. **Exiting during review does not silently lose committed work** — met. `returnToVillage`
+   re-saves the durable marker and announces it; `review/session-discard` is the explicit other
+   choice; `session-resume` reports whether a marker existed.
+
+#### Defects found and fixed during the phase
+
+- **A double award on the most natural sequence, which 24 non-vacuity probes missed.** Rating a
+  room, clicking **Complete this review pass**, then closing the room panel — the sequence the
+  workspace's own copy describes — paid **twice**. `awardReviewPass` increments `reviewPassCount`,
+  so if the explicit completion is the room that *finished* a full pass, `fullReviewPasses`
+  advances, and the panel-close route re-derives pass N+1, an identity the ledger has never seen.
+  No test performed that sequence, so no probe could catch it; the orchestrator wrote one and it
+  failed. Fixed by guarding `finalizePendingReview` on the durable marker, which
+  `awardReviewPass` clears in the same record write as the award. Removing the guard turns **4**
+  tests red (`tests/phase16/panelCloseAfterExplicitReview.test.ts`), verified independently.
+- **The "once per room per pass" test was a mock artifact.** `GameScreen.npcDialog.test.tsx`
+  stubbed `summarizeReviewAnalytics: () => ({ fullReviewPasses: 0 })` over a **one-room** dungeon.
+  On one reviewable room `fullReviewPasses = trunc(1/1) = 1`, so the second finalize was a
+  *genuine* pass-2 review that correctly paid again. The test never tested the domain. Fixed with
+  a multi-room fixture, the stub deleted, and a positive control: after a suppressed second close,
+  a **different** room in the same pass still awards. Without it, "the total did not move" would
+  pass against a flow that never awards.
+- **The Phase 2 contract fixture was asserting the defect this phase exists to fix.** Its six
+  review tests cleared 1 of 4 rooms — a state `RoomPanel` simultaneously labelled "Clear every
+  room encounter to unlock full review mode" — and asserted that the review armed, finalized,
+  awarded 25 XP, toasted, and evaluated badges. Re-pinned with a separate unlocked fixture;
+  `makeSnapshot()` is untouched for its ~45 other consumers.
+- **The learner could be told a false sentence.** `describeReviewRefusal` hardcoded
+  `${totalRooms}/${totalRooms}`, correct only at the default ratio of 1; at `0.5` on ten rooms it
+  said "unlocks at 10/10". Now derived with `ceil`, and pinned by a test that *asks*
+  `evaluateReviewUnlock` for the smallest unlocking count at five ratios and asserts the printed
+  threshold equals it.
+- **The workspace claimed every room was the root topic.** `StudyShell` renders an empty
+  breadcrumb as "This is the root topic.", and the workspace passed `breadcrumb: []` and
+  `floor: <subject name>` unconditionally. The sentence was unreachable from every workspace once
+  a real breadcrumb is derived, so it was corrected at the shell as well — `breadcrumbRoomIdsByRoomId`
+  is inclusive of the room, so an empty list can only mean "no room here".
+- **A pass could be completed twice through two different labels.** `UNRATED_REVIEW_QUALITY` was
+  not "unrated"; it is a real 3 that writes SM-2 state, and the panel-close route passes it
+  unconditionally, so "Closing the room panel does the same thing" and "counts this pass **if** you
+  rated it" were both false. Renamed to `CLOSED_WITHOUT_RATING_QUALITY` and every surrounding
+  sentence made unconditional, with the 3 interpolated from the constant so copy cannot drift.
+- **A manual that described controls the shipping build does not render.** The in-app guide and the
+  room guide both gained sentences about the 0–5 rating, save, and resume, none of which exist
+  with `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=false`. Both are now **flag-aware**, reading
+  `runtimeConfig` once at module scope exactly as `RoomPanel` does, so each lane's copy is true of
+  the lane it is rendered in.
+- **`docs/GAME-GUIDE.md` is a hand-maintained copy of `src/data/gameGuide.ts` with no generator**,
+  despite the source file's "Auto-generated" header. The Phase 3 section is now mirrored with both
+  lane variants recorded. **Nothing will regenerate the `.ts` from the `.md`, so the next person
+  who assumes it will silently revert the fix.**
+- **Three documented behaviours did not exist.** The guide promised a 0–5 rating (there was no
+  control, and `StudyFlowStorePort.recordReviewPass` was declared one-argument so 3 was the only
+  reachable rating); it promised a **review streak** (there is none — `longestReviewStreak` is
+  hard-coded `0` and `currentReviewStreak` is fed the *note-quality* streak); and it attributed
+  the unlock to the *phase* (which is ungated) rather than to the *review*.
+- **A fake store re-implemented production behaviour.** `studyFlowReview.test.ts`'s fake performed
+  the marker clear itself, so the test "a marker left by an interrupted review does not survive its
+  own completion" asserted the fake and would have passed against a broken store. Deleted as
+  redundant with the real-store test, and the fake now says so in a comment.
+- **A test passed for the wrong reason.** `studyFlowReview.test.ts`'s "the refusal is enforced on
+  finalize too" completed a review first, so the second call was suppressed by the **duplicate**
+  rather than the **unlock** — it stayed green with the unlock check removed. Rewritten against a
+  never-completed room and the flow's own sentence; removing the check now turns it red.
+
+#### Non-vacuity evidence
+
+Twenty-four probes from QA, all reverted (`git diff --stat` identical before and after; a
+sha256-checked harness aborted on any mismatch). Every one but two went red:
+
+| Probe | Result |
+| --- | --- |
+| Remove the ledger consultation in `awardReviewPass` | RED 3/36 |
+| `hasReviewPassReward` always `false` | RED 7/33 |
+| Pass number -> constant `1` | RED 2/82 |
+| Remove the unlock check in `roomInteract` | RED 1/82 |
+| Remove the `returnToVillage` save branch | RED 1/26 |
+| Remove the `extraFields` marker write | RED 3/32 |
+| Remove the `already-awarded` early return | RED 2/36 |
+| `CLOSED_WITHOUT_RATING_QUALITY` 3 -> 4 | RED 1/50 (copy constant follows) |
+| `deriveReviewPassIdentity` -> a constant | RED 1/29 |
+| Remove the `!duplicate` gate on the SM-2 write | RED 1/64 |
+| Report pre-increment instead of post-increment pass progress | RED 2/89 |
+| Drop the ledger write inside `awardReviewPass` | RED 2/38 |
+| Remove the unlock refusal from `requireReviewableRoom` | RED 1/106 |
+| Ledger written under a renamed carrier key | RED 1/35 |
+| Drop `review.passComplete` from `finalizePendingReview` | RED 17/77 |
+| `daysSinceReviewDue` always `0` | RED 5/65 |
+| `canReviewRoom` always allows | RED 4/54 |
+| `GameScreen` reviewed filter -> `reviewPassCount > 1` | RED 4/9 |
+| `DungeonRenderer.setReviewedArtifactRooms` body emptied | RED 2/8 |
+| `dungeonArtifact.ts` gains a `@/store` import | RED 3/8 |
+| Revert the Phase 2 re-pin | RED 1/52 |
+| Revert the npcDialog re-pin | RED 1/6 |
+| **Remove the marker guard in `finalizePendingReview`** (orchestrator) | **RED 4/6** |
+| Remove the flow's own `canReviewRoom` from `finalizePendingReview` | RED 1 (was GREEN; fixed) |
+
+**Two probes were GREEN and are recorded as findings, not suppressed:** the fake-store finding and
+the wrong-reason finding above. Both are now resolved.
+
+#### The two test files other agents changed, and the ruling
+
+- **`tests/data/localDownloadOnly.test.ts`** — legitimate, and now strictly stronger. QA restored
+  the old assertion verbatim and measured it: `everySourceModule()` enumerates **248 code modules**
+  while the walk reaches **248 paths of which 12 are non-code** (9 stylesheets, 2 locale JSONs,
+  `src/styles.css`), so `paths.length < all.length` was comparing two different populations and was
+  literally false. The replacement compares 236 code against 248 code — a true proper-subset claim
+  — and adds two constraints: every reached path is under `src/`, and every non-code path is
+  `.css` or `.json`.
+- **`tests/phase14/study-shell-boundary.test.ts`** — a strengthening. The five modules of
+  `src/ui/study/review/**` are named individually rather than globbed.
+- **`tests/phase8/qa-verification.test.ts`'s `LEGACY_TAIL_LINES` pin** — worked around, not
+  relaxed: `src/styles.css` is byte-identical to `b756d34` and the new stylesheet is colocated at
+  `src/ui/study/review/review.css`. **Caveat:** that file therefore sits outside the Phase 8
+  no-remote-font scan, which reads `src/styles.css` only. Checked by hand — no `url(`,
+  `@font-face`, or `https?://`.
+
+#### Unmet deliverable
+
+- **"Complete golden-path E2E test" is not met.** `grep` over `tests/e2e/**` for
+  `ArtifactCollected|finalPass|recordReviewPass|archaeologist|Defeat Encounter` returns nothing: no
+  spec visits a cleared room, a room panel, or the review surface. Three reasons it is not a small
+  fix: `test:e2e` builds the **default** artifact, whose inlined `import.meta.env` has no
+  `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE` key, so a new spec would drive the **rollback** panel and
+  `ArchaeologistWorkspace` is not in that artifact at all; covering it needs a flagged build lane
+  with a recorded artifact identity, the shape of `test:e2e:compat` and `test:e2e:pixi-memory`;
+  and the plan's phrase is the full three-phase path, which means driving three note-writing
+  encounters through a real Phaser dungeon, where the existing specs already take 1–2 minutes per
+  viewport on player movement alone. Phases 14 and 15 recorded the identical gap. **Needs an
+  owner: qa-engineer, with the next flagged Playwright lane.**
+
+#### Known limitations
+
+- **No performance or memory evidence.** `check:memory` is a build-level preflight measuring no
+  frame time, heap, or GPU texture; it was not run and is not presented as evidence. **Frame time
+  and mount/unmount memory over 20 cycles are UNVERIFIED** for this surface, unchanged from Phases
+  13–15.
+- **Accessibility evidence is semantics only.** The review surface has jsdom component coverage for
+  roles, `aria-labelledby`/`describedby`, the radio group, region maps, focus targets, and
+  44-pixel inline styles. `npm run test:e2e` runs 11 specs across four Chromium viewports and the
+  automated axe lane runs on the **Welcome view only**. **No 320px, 200%-zoom,
+  `prefers-reduced-motion`, screen-reader, or Firefox/WebKit/Edge evidence** for this surface, and
+  none is claimed. `check:budget:welcome` was not re-measured. Phase 21 owns that audit.
+- **Bundle grew 4.97 -> 5.06 MB (+0.09 MB)**, 153 files unchanged, and identical in both lanes.
+  `RoomPanel` statically imports `ArchaeologistWorkspace`, so the bytes ship with the flag off —
+  correct for rollback, and it is the size increase.
+- **The panel-close route ignores the learner's rating, deliberately.** It must work with no
+  rating control on screen at all, which is exactly the rollback lane. The residual cost is stated
+  in three files: a learner who rates a room 5 and closes the panel is recorded as a 3, and their
+  schedule drifts toward "correct with serious difficulty". Unifying the routes was analysed and
+  **is not a one-line change** — when the explicit completion is the room that *finished* a pass,
+  the close re-derives N+1, which is why the marker guard now exists instead.
+- **The unbound-host lane cannot be guarded.** The marker guard is gated on
+  `reviewSessionDurable()`, so the Phase 2 contract harness keeps its pre-Phase-16 behaviour byte
+  for byte — and would still double-award. Unavoidable without breaking that contract, and
+  unreachable in the app: of the two `createStudyFlowController` hosts, `villageStudyFlow` binds an
+  all-no-op dungeon UI so `closeInfoPanel` is never dispatched, leaving `GameScreen` as the only
+  reachable path. **Every reachable host is repaired.**
+- **`summarizeReviewAnalytics` and `summarizeReviewPassProgress` still disagree under a partial
+  clear.** The former divides by *reviewable* rooms, the latter reports the displayed pair over
+  *all* rooms. Phase 16 changed no displayed number; it centralised the derivation and named the
+  divergence. **The HUD denominator is still wrong on a partially-cleared dungeon. Needs an owner:
+  Phase 18, with the dashboard change.**
+- **The interrupted-review marker is single-slot per subject** — interrupting room B while room A's
+  is open replaces A's. `session-resume` reports `waitingForRoomId` so a surface can say so.
+- **`review/session-save` records the rating beside the marker but never applies it.** A resumed
+  review shows the saved rating; SM-2 moves only on completion.
+- **Follow-up work found and deliberately not done** (plan working rule 13): the Archivist
+  archetype's "Higher self-check cap during review phase" in `gameGuide.ts` and `StructurePanel.tsx`,
+  and `archivistDesc` "+3 max review streak cap" in `en.json`/`es.json` — no caller passes
+  `maxPromptCount` for room review prompts and there is no max-streak cap. Also the guide's Study
+  Statistics bullet "Review streaks", `Rooms per session`, and `Retention trends`, none of which
+  `StudyStatsPanel` renders. **Needs an owner: village-content-designer with Phase 18.**
+- **Possible flake, not attributed to Phase 16.** `tests/e2e/currentBuild.spec.ts` "the default
+  village build moves the player with the arrow keys" failed once in the `chromebook` viewport
+  across one of three full runs. It passed in isolation and in the immediately following full run
+  (32 passed / 12 skipped, matching QA's recorded result). Timing-sensitive village movement,
+  unrelated to the review surface.
+
+#### Rollback
+
+Verified in **built artifacts**, not from the flag constant. The default build inlines
+`import.meta.env` with **no** `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE` key, so `normalizedRawValue`
+returns `{present:false}` and `parseBoolean` takes the default `false`;
+`VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=true npm run build:web` inlines the value and reaches
+`ArchaeologistWorkspace`. `FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.productionDefault ===
+false` and it is **not** in `NON_CUTOVER_FLAG_KEYS` (which remains exactly `['audioEnabled']`). The
+pre-Phase-16 notes-tab body is preserved verbatim in the `else` arm of one ternary in `RoomPanel`.
+`tests/phase16/review-rollback-award.test.tsx` pins that the branch control
+`#archaeologist-pass-complete` is absent from the DOM and that the rollback lane still finalizes
+and awards.
+
+**Correcting an earlier assumption:** the rollback lane is **not** a double-pay risk. All three
+`src/` call sites of `progressionStore.awardReviewPass` forward the identity, and
+`finalizePendingReview` derives it itself via `review/pass-complete` — so the rollback lane *is*
+deduplicated, pinned by the rollback test. The identity-less unconditional award is real but is a
+different thing: a caller invoking `awardReviewPass()` with **no argument**, which the documented
+carve-out preserves for the Phase 15 note-submit lane. That distinction is now pinned as a fact
+about the store, because conflating the two is how a later phase comes to believe its rollback
+double-pays.
 
 ### Exit criteria
 

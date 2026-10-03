@@ -258,6 +258,15 @@ describe('the study surfaces resolve, and the walk reaches real modules', () => 
     expect(entries).toContain('src/ui/study/scribe/ScribeEncounter.tsx');
     expect(entries).toContain('src/ui/study/scribe/NoteComposer.tsx');
     expect(entries).toContain('src/ui/study/creator/CreatorWorkspace.tsx');
+    // Phase 16's subtree. Named individually rather than by pattern, for the reason the
+    // three above are: a subtree that grew a module which *did* reach a renderer has to fail
+    // here, and a prefix assertion would keep passing as long as one other module in the
+    // directory stayed clean.
+    expect(entries).toContain('src/ui/study/review/ArchaeologistWorkspace.tsx');
+    expect(entries).toContain('src/ui/study/review/RecallCard.tsx');
+    expect(entries).toContain('src/ui/study/review/ReviewProgress.tsx');
+    expect(entries).toContain('src/ui/study/review/reviewViewModel.ts');
+    expect(entries).toContain('src/ui/study/review/useReviewActions.ts');
 
     const closure = walkStudyClosure();
     const paths = closure.map((module) => module.path);
@@ -325,10 +334,13 @@ describe('no module reachable from src/ui/study/** reaches a renderer', () => {
       '@/ui/study/StudyShell',
       '../StudyShell',
       './scribe.css',
+      './review.css',
       '../controlIds',
       '@/core/graph',
+      '@/core/review',
       '@/core/validation/notes',
       '@/store/sessionStore',
+      '@/store/reviewCommands',
       '@/theme/tokens',
     ]) {
       expect(forbiddenReason(specifier), specifier).toBeNull();

@@ -141,12 +141,51 @@ export function createVillageStudyFlow(options: VillageStudyFlowOptions): StudyF
         useProgressionStore.getState().setActiveSubject(subjectId);
       },
       collectArtifactNote: (entry) => useProgressionStore.getState().collectArtifactNote(entry),
-      awardReviewPass: () => useProgressionStore.getState().awardReviewPass(),
+      /*
+       * Phase 16: the review identity is forwarded, and the two marker ports are bound.
+       *
+       * Both were recorded as follow-ups by `core-logic-engineer` in `studyFlow.ts`'s
+       * `StudyFlowStorePort` header, which states them as deliberate backwards-compatibility
+       * carve-outs: `review` and `awarded`/`duplicate` are optional so a pre-Phase-16 host
+       * keeps working, and `writeReviewSession`/`readProgressionPreservedFields` are optional
+       * *because* the marker is optional infrastructure. This binding was the last host on the
+       * unconditional lane, and it was reachable - see the inertness note below.
+       *
+       * Forwarding the identity is what makes an award on this host **durable**: without it
+       * `progressionStore.awardReviewPass` is called with no identity, takes the
+       * `decision === null` branch, skips `decideReviewPassReward` entirely, and therefore
+       * writes no (room, pass) ledger entry - so the awarded-once property this phase exists
+       * to establish does not exist on this host at all. `GameScreen` has forwarded it since
+       * Phase 16 landed there; this is the village half of the same fix.
+       *
+       * **What binding the marker ports does and does not change here.** This host's dungeon
+       * UI port is all no-ops - `pushToast`, `requestRoomPanelTab`, `setInfoPanelOpen`,
+       * `clearNpcDialog`, `openJournalForCollectedNote`, `getCurrentFloorId`,
+       * `setCurrentFloorId` all do nothing - and its renderer port is `setFloorVisibility` and
+       * `teleportToRoom` doing nothing. So `roomInteract` cannot open a room panel, and
+       * `closeInfoPanel` cannot be reached from here, which means **no review is ever armed
+       * and `finalizePendingReview` is never dispatched on this host**: `armPendingReview`
+       * needs `dungeonUi.requestRoomPanelTab` to have opened a panel, and nothing here can.
+       *
+       * That is stated rather than assumed, because it is the honest reason this is a
+       * correctness fix rather than a behaviour change. `roomInteract` *is* reachable on this
+       * host (the Phaser village's world callbacks and the Pixi village's approach handlers
+       * both route to it), and it *does* evaluate `canReviewRoom` and can push a refusal - so
+       * before this change a learner on this host could be told "review locked" and then have
+       * nothing enforced or recorded either way. What the binding fixes is that from now on
+       * the durable ledger and the marker are the *same* facts on this host as on
+       * `GameScreen`'s, so the moment any host here does arm a review, it is awarded once and
+       * resumable, with no second edit to this file.
+       */
+      awardReviewPass: (review) => useProgressionStore.getState().awardReviewPass(review),
       awardBadge: (badgeId) => {
         useProgressionStore.getState().awardBadge(badgeId);
       },
       readProgressionBadges: () => useProgressionStore.getState().badges,
       recordReviewPass: (roomId) => useSubjectStore.getState().recordReviewPass(roomId),
+      readProgressionPreservedFields: () =>
+        useProgressionStore.getState().readProgressionPreservedFields(),
+      writeReviewSession: (write) => useProgressionStore.getState().writeReviewSession(write),
     },
     renderer: {
       setFloorVisibility: () => {},

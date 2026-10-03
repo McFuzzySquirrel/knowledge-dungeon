@@ -79,7 +79,23 @@ export const QUEST_LABELS: Record<QuestStep, { label: string; hint: string }> = 
   'enter-dungeon': { label: 'Enter a Dungeon', hint: 'Walk to a dungeon portal and press E to enter' },
   'clear-room': { label: 'Clear a Room', hint: 'In Scribe phase, open a room encounter and write notes' },
   'write-note': { label: 'Write a Note', hint: 'Draft a structured note with Summary, Key Points, and a Recall Question' },
-  'review-artifact': { label: 'Review & Earn XP', hint: 'Switch to Archaeologist phase and review cleared rooms' },
+  /*
+   * Phase 16. The hint names the *rule*, not a control, because it is shown in both
+   * the rollback lane and the redesigned workspace and either surface's affordances
+   * could be different from the enforced behaviour.
+   *
+   * It used to say "Switch to Archaeologist phase and review cleared rooms", which
+   * read as *any* cleared room. That was loose before, and wrong after the unlock
+   * became enforced: `canReviewRoom` refuses with `room-not-cleared` unless the room
+   * itself is reviewable (`finalPass` and a reviewable `RoomState`), and refuses with
+   * `review-locked` unless the dungeon's cleared/total ratio meets
+   * `requiredCompletionRatio`. So a partly-cleared learner who followed the old hint
+   * got a refusal toast instead of a review - the hint walked them into the rule
+   * that refused them. This sentence carries both conditions, and borrows the word
+   * "unlock" from `describeReviewRefusal` so the hint and the refusal toast it
+   * exists to pre-empt read as the same rule rather than two.
+   */
+  'review-artifact': { label: 'Review & Earn XP', hint: 'Review a cleared room once the dungeon unlock threshold is met' },
   'complete': { label: 'Journey Begins', hint: 'You are ready to explore knowledge dungeons!' },
 };
 

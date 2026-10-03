@@ -6,6 +6,10 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 import type { FloorVisibilityModel } from '@/application/contracts/world';
+import {
+  buildReviewFixture,
+  withEveryRoomCleared,
+} from '../phase16/support/reviewFixtures';
 
 interface NpcDialogPayload {
   roomId: string;
@@ -82,27 +86,46 @@ vi.mock('@/core/layout/dungeonGenerator', () => ({
   }),
 }));
 
-vi.mock('@/core/graph', () => ({
-  deriveGraphHierarchy: () => ({
-    floorIdByRoomId: { 'room-1': 'room-1' },
-    floorLabelByFloorId: { 'room-1': 'Floor 1' },
-  }),
-  computeFloorVisibility: () => ({
-    floorId: 'room-1',
-    visibleRoomIds: new Set(['room-1']),
-    portalUpRoomId: null,
-    portalDownRoomIds: new Set<string>(),
-  }),
-}));
-
-vi.mock('@/core/review', async () => {
-  const actual = await vi.importActual<typeof import('@/core/review')>('@/core/review');
+vi.mock('@/core/graph', async () => {
+  const actual = await vi.importActual<typeof import('@/core/graph')>('@/core/graph');
   return {
     ...actual,
-    isReviewableRoom: () => true,
-    summarizeReviewAnalytics: () => ({ fullReviewPasses: 0 }),
+    deriveGraphHierarchy: () => ({
+      floorIdByRoomId: { 'room-1': 'room-1' },
+      floorLabelByFloorId: { 'room-1': 'Floor 1' },
+    }),
+    computeFloorVisibility: () => ({
+      floorId: 'room-1',
+      visibleRoomIds: new Set(['room-1']),
+      portalUpRoomId: null,
+      portalDownRoomIds: new Set<string>(),
+    }),
   };
 });
+
+/*
+ * Phase 16 re-pin: the pre-Phase-16 version of this file stubbed
+ * `summarizeReviewAnalytics` to `{ fullReviewPasses: 0 }` and `isReviewableRoom`
+ * to `true` over a one-room dungeon.
+ *
+ * Both stubs are gone, and the one-room dungeon with them. On a single reviewable
+ * room `fullReviewPasses = trunc(reviewSessionCount / 1)`, so the very first
+ * review advanced the pass number to 2 and the second close of the same room was
+ * a *genuine* pass-2 review that the domain correctly paid again. The stub hid
+ * the arithmetic; the fixture was the defect, and the test's premise ("XP only on
+ * the first review per room per pass") was an artifact of the stub rather than a
+ * statement about the domain.
+ *
+ * `makeReviewableSnapshot()` below is the three-room fixture from
+ * `tests/phase16/support/reviewFixtures.ts` with every room cleared. Reviewing
+ * one room twice stays inside pass 1 because two of the three rooms are still
+ * outstanding, so the ledger - not a frozen counter - is what suppresses the
+ * second award.
+ *
+ * `deriveGraphHierarchy` and `computeFloorVisibility` stay stubbed because they
+ * only drive floor *visuals*; the real `createRootDungeon` / `addLinkedRooms`
+ * the fixture builds with are spread through from `actual` above.
+ */
 
 vi.mock('@/core/progression', async () => {
   const actual = await vi.importActual('@/core/progression');
@@ -239,6 +262,27 @@ function makeSnapshot(): SubjectSnapshot {
   };
 }
 
+/**
+ * The three-room review fixture from `tests/phase16/support/reviewFixtures.ts`,
+ * with every room cleared.
+ *
+ * Three rooms is the point. `deriveReviewPassProgress` computes
+ * `fullReviewPasses = trunc(reviewSessionCount / reviewableRoomCount)`, so on one
+ * room the first review completes a whole pass and the pass number advances;
+ * on three rooms a single review leaves `reviewSessionCount = 1` against
+ * `reviewableRoomCount = 3`, `fullReviewPasses = 0`, and `nextPassTarget = 1`.
+ * Reviewing the same room a second time is then the same `(room, pass)` pair, and
+ * the durable ledger suppresses it - which is the property this file claims to
+ * test.
+ *
+ * Reused rather than rebuilt because `tests/phase16/reviewPasses.test.ts` and the
+ * Phase 16 workspace tests already pin that module's behaviour on this fixture;
+ * a second hand-written copy would be a second thing to keep in step.
+ */
+function makeReviewableSnapshot(): SubjectSnapshot {
+  return withEveryRoomCleared(buildReviewFixture().snapshot);
+}
+
 describe('GameScreen NPC dialog callbacks', () => {
   beforeEach(() => {
     capturedCallbacks = null;
@@ -271,7 +315,21 @@ describe('GameScreen NPC dialog callbacks', () => {
       teleportModeArmed: false,
       lastTeleportAt: null,
     });
+    /*
+     * `bySubject` is reset as well as the flattened view fields, and `activeSubjectId`
+     * is cleared so `GameScreen`'s `setActiveSubject('subject-1')` seeds a *fresh*
+     * record.
+     *
+     * Phase 16 makes this necessary: `extraFields[reviewPassRewardLedger]` rides on the
+     * per-subject progression record, and `setActiveSubject` deliberately keeps an
+     * existing record. Without the reset, a ledger entry written by an earlier test in
+     * this file would suppress the first award of a later one and the file would
+     * pass or fail on test order.
+     */
     useProgressionStore.setState({
+      activeSubjectId: null,
+      bySubject: {},
+      crossSubjectAchievements: [],
       xpTotal: 0,
       rank: 'Novice',
       badges: [],
@@ -340,15 +398,8 @@ describe('GameScreen NPC dialog callbacks', () => {
   });
 
   it('awards archaeologist XP only on first review per room per pass', async () => {
-    const snapshot = makeSnapshot();
-    snapshot.rooms['room-1'] = {
-      ...snapshot.rooms['room-1'],
-      state: 'ArtifactCollected',
-      validationState: {
-        ...snapshot.rooms['room-1'].validationState,
-        finalPass: true,
-      },
-    };
+    const fixture = buildReviewFixture();
+    const snapshot = makeReviewableSnapshot();
     useSubjectStore.setState({ snapshot, lastError: null });
     act(() => {
       useSessionStore.setState({ phase: 'archaeologist' });
@@ -361,20 +412,44 @@ describe('GameScreen NPC dialog callbacks', () => {
     });
 
     act(() => {
-      capturedCallbacks?.onInteract?.('room-1');
+      capturedCallbacks?.onInteract?.(fixture.matrixRoomId);
     });
     act(() => {
       screen.getByRole('button', { name: /Close room panel/i }).click();
     });
+    // `REVIEW_PASS_XP` in `src/store/progressionStore.ts`, with no equip bonus.
     expect(useProgressionStore.getState().xpTotal).toBe(6);
 
+    /*
+     * Still pass 1: one of three reviewable rooms reviewed is
+     * `trunc(1/3) = 0` full passes, so the identity is the same
+     * `(room, 1)` pair and the ledger suppresses it. The XP total therefore does
+     * not move, and the SM-2 half of the write does not run either - see
+     * `runPassComplete`'s gate on `progression.duplicate`.
+     */
     act(() => {
-      capturedCallbacks?.onInteract?.('room-1');
+      capturedCallbacks?.onInteract?.(fixture.matrixRoomId);
     });
     act(() => {
       screen.getByRole('button', { name: /Close room panel/i }).click();
     });
     expect(useProgressionStore.getState().xpTotal).toBe(6);
+    expect(useProgressionStore.getState().reviewPasses).toBe(1);
+
+    /*
+     * The positive control the old one-room fixture could not express: a
+     * *different* room in the same pass is a different identity, so it still
+     * awards. Without this, "the total did not move" would be satisfied by a
+     * broken flow that simply never awards.
+     */
+    act(() => {
+      capturedCallbacks?.onInteract?.(fixture.eigenRoomId);
+    });
+    act(() => {
+      screen.getByRole('button', { name: /Close room panel/i }).click();
+    });
+    expect(useProgressionStore.getState().xpTotal).toBe(12);
+    expect(useProgressionStore.getState().reviewPasses).toBe(2);
   });
 
   it('only shows reviewed markers in archaeologist phase', async () => {
@@ -416,6 +491,18 @@ describe('GameScreen NPC dialog callbacks', () => {
         rooms: {
           'room-1': {
             ...baseSnapshot.rooms['room-1'],
+            /*
+             * Phase 16 re-pin: this room was left at `state: 'Created'`.
+             *
+             * `'Created'` is not in `REVIEWABLE_ROOM_STATES`, so
+             * `canReviewRoom` refused the room with `room-not-cleared` *before*
+             * anything was armed, and `closeInfoPanel` had nothing to finalize.
+             * That is the newly enforced unlock behaving correctly; the assertion
+             * below is about *deferral*, so the fixture now says what a deferred
+             * review needs: the room's encounter is defeated
+             * (`ArtifactCollected`) and its validation passed.
+             */
+            state: 'ArtifactCollected',
             noteText: 'Review these notes.',
             validationState: {
               ...baseSnapshot.rooms['room-1'].validationState,

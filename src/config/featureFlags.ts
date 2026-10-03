@@ -15,6 +15,7 @@ export type FeatureFlagOwnerPhase =
   | 13
   | 14
   | 15
+  | 16
   | 17
   | 19
   | 20;
@@ -169,6 +170,16 @@ export const FEATURE_FLAG_MATRIX = {
       'Gates the redesigned Scribe encounter workspace behind the existing NoteEditorModal, so note validation, progression, and artifact generation are unchanged until the cutover.',
     rollback:
       'Set VITE_SCRIBE_ENCOUNTER_WORKSPACE=false to retain the existing NoteEditorModal as the Scribe view.',
+  },
+  archaeologistReviewWorkspace: {
+    environmentVariable: RUNTIME_FLAG_ENV_KEYS.archaeologistReviewWorkspace,
+    valueKind: 'boolean',
+    productionDefault: false,
+    ownerPhase: 16,
+    purpose:
+      'Gates the redesigned Archaeologist review workspace behind the existing room-panel review view, so review scheduling, SM-2 values, and progression are unchanged until the cutover. It selects which view a learner sees, not what counts as a review pass.',
+    rollback:
+      'Set VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=false to retain the existing RoomPanel review view and its close-the-panel-to-count-the-pass flow.',
   },
 } as const satisfies FeatureFlagMatrix;
 

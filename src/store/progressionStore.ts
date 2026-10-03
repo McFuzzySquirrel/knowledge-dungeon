@@ -40,6 +40,16 @@ import {
   writeRoomClearRewardLedgerToFields,
   type RoomClearRewardDecision,
 } from '@/core/progression/roomClearRewards';
+import {
+  decideReviewPassReward,
+  writeReviewPassRewardLedgerToFields,
+  type ReviewPassRewardDecision,
+  type ReviewPassRewardIdentity,
+} from '@/core/review/reviewPassRewards';
+import {
+  applyInterruptedReviewSessionWrite,
+  type InterruptedReviewSessionWrite,
+} from '@/core/review/interruptedReviewSession';
 
 export type LootItem = CanonicalLootItem;
 export type CollectedNoteEntry = CanonicalCollectedNote;
@@ -87,6 +97,39 @@ export interface RoomClearRewardOutcome {
   /** The ledger already held this exact (room, clear generation). */
   duplicate: boolean;
 }
+
+/**
+ * What `awardReviewPass` reports about the award itself.
+ *
+ * Phase 16. Additive, so every existing reader of `xpGained` / `newRank` /
+ * `unlockedAchievements` is unaffected. `duplicate` is the signal a caller needs
+ * in order not to announce a reward that did not happen - and, as with
+ * `RoomClearRewardOutcome`, `awarded: false` alone covers more than one cause:
+ *
+ * - `duplicate: true` - the durable ledger already held this (room, pass).
+ * - `duplicate: false, awarded: false` - there was no active subject to pay.
+ *
+ * A caller that branches on `!awarded` alone will tell a learner a sentence about
+ * a repeat when a different cause produced it.
+ */
+export interface ReviewPassAwardOutcome {
+  awarded: boolean;
+  duplicate: boolean;
+}
+
+/**
+ * One record write of the interrupted-review marker, or the reward transaction's
+ * marker clear.
+ *
+ * Phase 16. The marker rides in the same preserved app-owned field bag as the
+ * room-clear and review-pass ledgers, which is what gives it migration, generation
+ * membership, both backup products, and subject-copy ID remapping for free. See
+ * `src/core/review/interruptedReviewSession.ts` for the four locations weighed and
+ * why the *subject* record's carrier was rejected on evidence rather than taste:
+ * `withRooms` rebuilds every snapshot as `{ dungeon, rooms }`, so an unknown
+ * top-level key on a subject snapshot would not survive the next room write.
+ */
+export type ProgressionReviewSessionWrite = InterruptedReviewSessionWrite;
 
 /**
  * Identifier factory for a persisted record that is missing an id.
@@ -349,12 +392,53 @@ export interface ProgressionStoreState {
     /** Phase 15: whether this call was suppressed as a repeat of an awarded clear. */
     duplicate: boolean;
   };
-  awardReviewPass: () => {
+  /**
+   * Award a review pass, consulting and writing the durable (room, pass) ledger in
+   * the **same `set` of one record** as the XP, the rank, the `reviewPasses`
+   * increment, and the interrupted-review marker for that room.
+   *
+   * Phase 16. The identity is **required by the command layer and optional here**.
+   * Omitting it preserves the pre-Phase-16 behaviour exactly - an unconditional
+   * award - and that carve-out is deliberate, because two lanes still depend on
+   * it:
+   *
+   * - `NoteEditorModal`'s note-submit path passes no identity, and the Phase 15
+   *   rollback keeps using it.
+   * - `tests/phase15/**` and `tests/unit/roomClearRewards.test.ts` pin the
+   *   no-identity answer.
+   *
+   * Without the carve-out, extending the action would break both lanes and take
+   * the documented rollback with them. With it, the command layer is the only
+   * production caller that supplies an identity, and every *new* review award is
+   * therefore durable.
+   */
+  awardReviewPass: (review?: ReviewPassRewardIdentity) => {
     xpGained: number;
     newRank: RankTier;
     rankChanged: boolean;
     unlockedAchievements: string[];
+    /** Phase 16: whether this call awarded anything. */
+    awarded: boolean;
+    /** Phase 16: whether this call was suppressed as a repeat of an awarded pass. */
+    duplicate: boolean;
   };
+  /**
+   * Phase 16: read the active subject record's preserved app-owned fields.
+   *
+   * Exposed so the review command layer can decide from one read what is already
+   * durable - the ledger and the interrupted-review marker - before writing one
+   * record. It returns `undefined` when there is no active subject, which every
+   * preserved-field reader treats as "nothing preserved".
+   */
+  readProgressionPreservedFields: () => Record<string, unknown> | undefined;
+  /**
+   * Phase 16: write or drop the interrupted-review marker in one record write.
+   *
+   * No reward and no SM-2 state: this is the marker only. Used by
+   * `review/session-save` and `review/session-discard`, and idempotent, because a
+   * `save` of the same marker is the same record.
+   */
+  writeReviewSession: (write: ProgressionReviewSessionWrite) => void;
   /** Fisher's Rest: add a caught fish to the active subject's collection */
   addFish: (input: { name: string; rarity: FishEntry['rarity']; subjectId: string; subjectName: string }) => FishEntry;
   /** Fisher's Rest: award XP for correctly answering a fishing recall question */
@@ -751,7 +835,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     };
   },
 
-  awardReviewPass() {
+  awardReviewPass(review) {
     const state = get();
     if (!state.activeSubjectId) {
       return {
@@ -759,19 +843,64 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
         newRank: 'Novice' as RankTier,
         rankChanged: false,
         unlockedAchievements: [] as string[],
+        awarded: false,
+        duplicate: false,
       };
     }
 
     const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+
+    // Phase 16: the durable awarded-once check, taken *before* any reward is
+    // computed so a suppressed pass burns no `Math.random`, performs no write, and
+    // leaves `xpTotal` byte-identical. The decision is a single pure value and it
+    // lands in the same `set` below as the XP, the rank, the `reviewPasses`
+    // increment, and the marker clear - so a failed write leaves the reward and
+    // its guard in the same state, never one without the other, and two calls in
+    // one tick cannot both decide to award.
+    let decision: ReviewPassRewardDecision | null = null;
+    if (review) {
+      decision = decideReviewPassReward({
+        extraFields: current.extraFields,
+        roomId: review.roomId,
+        passNumber: review.passNumber,
+        awardedAt: new Date().toISOString(),
+      });
+      if (decision.outcome === 'already-awarded') {
+        return {
+          xpGained: 0,
+          newRank: current.rank,
+          rankChanged: false,
+          unlockedAchievements: [],
+          awarded: false,
+          duplicate: true,
+        };
+      }
+    }
+
     const equipBonuses = computeEquipBonuses(current.equippedItems ?? []);
     const xpEarned = REVIEW_PASS_XP + equipBonuses.xpBonus;
     const nextXp = current.xpTotal + xpEarned;
     const nextRank = assignRankTier(nextXp);
+
+    // The marker for *this* room clears in the same record write as the award, so
+    // a finished review is never left resumable. A marker for another room is
+    // untouched - `applyInterruptedReviewSessionWrite` is a no-op for a discard
+    // that names a different room.
+    let extraFields = current.extraFields;
+    if (decision !== null && review) {
+      extraFields = writeReviewPassRewardLedgerToFields(extraFields, decision.ledger);
+      extraFields = applyInterruptedReviewSessionWrite(extraFields, {
+        kind: 'discard',
+        roomId: review.roomId,
+      });
+    }
+
     const nextSubject: PersistedSubjectProgression = {
       ...current,
       xpTotal: nextXp,
       rank: nextRank,
       reviewPasses: current.reviewPasses + 1,
+      ...(extraFields !== undefined ? { extraFields } : {}),
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
@@ -784,7 +913,30 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       newRank: nextRank,
       rankChanged: nextRank !== current.rank,
       unlockedAchievements,
+      awarded: true,
+      duplicate: false,
     };
+  },
+
+  readProgressionPreservedFields() {
+    const state = get();
+    if (!state.activeSubjectId) return undefined;
+    return getSubjectProgression(state.bySubject, state.activeSubjectId).extraFields;
+  },
+
+  writeReviewSession(write) {
+    const state = get();
+    if (!state.activeSubjectId) return;
+    const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const extraFields = applyInterruptedReviewSessionWrite(current.extraFields, write);
+    // Nothing to do when the write changed nothing, so a repeated `save` of an
+    // unchanged marker is not a record write at all, and a `discard` with no marker
+    // costs the device nothing.
+    if (JSON.stringify(extraFields) === JSON.stringify(current.extraFields ?? {})) return;
+    const nextSubject: PersistedSubjectProgression = { ...current, extraFields };
+    const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
+    set({ bySubject, ...nextSubject });
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
   },
 
   // ── Phase 3c: Equippable loot methods ──────────────────────

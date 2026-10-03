@@ -279,6 +279,18 @@ export function GameScreen(): JSX.Element {
     return computeFloorVisibility(hierarchy, snapshot.dungeon, currentFloorId);
   }, [snapshot, hierarchy, currentFloorId]);
 
+  /*
+   * Phase 16: one clock reading per render, shared by every review surface.
+   *
+   * A single `new Date().toISOString()` here rather than one per call site, and it is read
+   * during render rather than in an effect for two reasons: two surfaces rendered from the
+   * same commit must agree about which day it is - a room that reads "due today" in the map
+   * and "due tomorrow" in the room panel is a bug a learner would report as the map lying -
+   * and a fresh object each render is one fewer identity for React to reconcile when a HUD
+   * tick lands mid-review.
+   */
+  const renderNowIso = useMemo(() => new Date().toISOString(), [clockMs, snapshot]);
+
   const teleportRemainingMs =
     lastTeleportAt === null ? 0 : Math.max(0, TELEPORT_COOLDOWN_MS - (clockMs - lastTeleportAt));
   const phaseChangeNeedsConfirmation = isNoteEditorOpen || isMapViewOpen || teleportModeArmed;
@@ -313,12 +325,15 @@ export function GameScreen(): JSX.Element {
         setProgressionActiveSubject,
         collectArtifactNote: (entry) =>
           useProgressionStore.getState().collectArtifactNote(entry),
-        awardReviewPass: () => useProgressionStore.getState().awardReviewPass(),
+        awardReviewPass: (review) => useProgressionStore.getState().awardReviewPass(review),
         awardBadge: (badgeId) => {
           useProgressionStore.getState().awardBadge(badgeId);
         },
         readProgressionBadges: () => useProgressionStore.getState().badges,
         recordReviewPass,
+        readProgressionPreservedFields: () =>
+          useProgressionStore.getState().readProgressionPreservedFields(),
+        writeReviewSession: (write) => useProgressionStore.getState().writeReviewSession(write),
       },
       renderer: {
         setFloorVisibility: (visibility) => {
@@ -956,6 +971,25 @@ export function GameScreen(): JSX.Element {
               onClose={closeInfoPanel}
               onTravelToRoom={handleTravelToRoom}
               requestedTab={roomPanelTabRequest}
+              /*
+               * Phase 16: the review workspace's arrival state, and its two session verbs.
+               *
+               * `pendingReviewSession` is read here rather than inside the workspace because
+               * this is the screen that owns the flow: `RoomPanel` is shared by the Creator
+               * lane and the Scribe lane and should not know a flow controller exists, and
+               * passing a *value* instead of a getter is what lets the workspace re-derive the
+               * moment a discard lands rather than on the next unrelated render.
+               *
+               * `onResumeReview` / `onDiscardReview` are the flow's own methods and are not
+               * interchangeable with the command-layer calls the workspace also makes. Resume
+               * re-arms `pendingReviewRoomId`, which is what lets `closeInfoPanel` finalize
+               * the review later; discard clears that arm, without which the next panel close
+               * would finalize the review the learner just abandoned.
+               */
+              reviewNowIso={renderNowIso}
+              pendingReviewSession={flow.readPendingReviewSession()}
+              onResumeReview={flow.resumePendingReview}
+              onDiscardReview={flow.discardPendingReview}
               reviewPassesCompleted={reviewProgress.fullReviewPasses}
               reviewRoomsTowardNextPass={reviewProgress.reviewedTowardNextPass}
               reviewNextPassTarget={reviewProgress.nextPassTarget}
@@ -999,6 +1033,13 @@ export function GameScreen(): JSX.Element {
               teleportRemainingMs={teleportRemainingMs}
               onTravelToRoom={handleTravelToRoom}
               onTeleportToRoom={handleTeleportToRoom}
+              /*
+               * Phase 16: one render-scoped instant, shared by the map's review-state
+               * announcement and the room panel's review workspace. Computed once here rather
+               * than as a second `new Date()` at each call site, so a room cannot read "due
+               * today" in the map and "due tomorrow" in the panel on the same commit.
+               */
+              nowIso={renderNowIso}
               onClose={closeMapView}
             />
           ) : null}

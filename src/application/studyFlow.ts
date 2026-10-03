@@ -22,7 +22,20 @@ import {
 } from '@/core/graph';
 import type { FishRarity } from '@/core/fishing/fishingTypes';
 import { evaluatePhaseBadgeUnlocks } from '@/core/progression';
-import { isReviewableRoom, summarizeReviewAnalytics } from '@/core/review';
+import {
+  canReviewRoom,
+  describeReviewRefusal,
+  isReviewableRoom,
+  type ReviewRoomRefusal,
+} from '@/core/review';
+import type { ReviewPassRewardIdentity } from '@/core/review/reviewPassRewards';
+import {
+  isInterruptedReviewSessionForRoom,
+  readInterruptedReviewSessionFromFields,
+  type InterruptedReviewSession,
+  type InterruptedReviewSessionWrite,
+} from '@/core/review/interruptedReviewSession';
+import type { RankTier } from '@/core/progression/types';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 import {
@@ -33,6 +46,13 @@ import {
 } from '@/data/villageLayout';
 import type { FloorTransitionDirection } from './contracts/events';
 import type { FloorVisibilityModel, PlayerClassId } from './contracts/world';
+import {
+  createReviewController,
+  CLOSED_WITHOUT_RATING_QUALITY,
+  type ReviewCommandResult,
+  type ReviewController,
+  type ReviewOutcome,
+} from './reviewCommands';
 import { activateSubject } from './subjectActivation';
 
 // ── Port value types ───────────────────────────────────────────────────────
@@ -175,12 +195,44 @@ export interface StudyFlowStorePort {
     noteMarkdown: string;
     artifactMarkdown: string;
   }): boolean;
-  awardReviewPass(): { xpGained: number };
+  /**
+   * Award a review pass.
+   *
+   * Phase 16: `review` is what makes the award durable, and it is supplied by the
+   * review command layer. It is **optional** so the pre-Phase-16 lane - the
+   * Phase 15 rollback, and `villageStudyFlow`'s binding - keeps working unchanged.
+   * `awarded` and `duplicate` are optional for the same reason: a host that binds
+   * the old lane does not report them, and the flow derives the answer from the one
+   * number that lane does report.
+   */
+  awardReviewPass(review?: ReviewPassRewardIdentity): {
+    xpGained: number;
+    awarded?: boolean;
+    duplicate?: boolean;
+  };
   awardBadge(badgeId: string): void;
   readProgressionBadges(): readonly string[];
 
   // ── Subject store ──
-  recordReviewPass(roomId: string): Promise<void>;
+  /**
+   * Record a review pass and advance SM-2.
+   *
+   * Phase 16: `qualityRating` is now reachable. It was declared one-argument here,
+   * which is why `subjectStore.recordReviewPass`'s `qualityRating ?? 3` default was
+   * the only rating the application ever supplied.
+   */
+  recordReviewPass(roomId: string, qualityRating?: number): Promise<void>;
+
+  // ── Progression store, Phase 16 marker ──
+  //
+  // Optional, and optional *because* the marker is optional infrastructure: a host
+  // that does not bind them keeps the pre-Phase-16 in-memory review behaviour and
+  // loses the interrupted session on exit, exactly as it did before. Both real
+  // hosts are expected to bind them; `GameScreen` does, and `villageStudyFlow` is
+  // recorded as the follow-up because it binds a dungeon UI that never dispatches
+  // review finalization.
+  readProgressionPreservedFields?(): Record<string, unknown> | undefined;
+  writeReviewSession?(write: InterruptedReviewSessionWrite): void;
 }
 
 /** Dungeon-world UI sinks. */
@@ -272,6 +324,27 @@ export interface StudyFlowController {
   toggleInfoPanel(): void;
   /** Finalize the deferred archaeologist review for a room. */
   finalizePendingReview(roomId: string): void;
+  /**
+   * Phase 16: the durable interrupted-review session, or `null` when there is
+   * none.
+   *
+   * A surface calls this to offer "resume" before it offers anything else, and it
+   * is what makes the marker observable: the marker is durable, but a durable fact
+   * nobody can read is not a feature.
+   */
+  readPendingReviewSession(): InterruptedReviewSession | null;
+  /**
+   * Phase 16: re-enter an interrupted review, reporting whether one existed.
+   *
+   * Read-only. Re-arming is idempotent for the same room, so a resume that the
+   * learner then abandons leaves the marker it found rather than losing it.
+   */
+  resumePendingReview(roomId: string): boolean;
+  /**
+   * Phase 16: abandon an interrupted review. Awards nothing and writes no SM-2
+   * state; returns whether there was anything to discard.
+   */
+  discardPendingReview(roomId: string): boolean;
   /** `dungeon:artifact-collected` / `artifact/collect`. */
   collectArtifact(roomId: string): void;
   /** `dungeon:floor-transition` / `floor/change`. */
@@ -340,7 +413,67 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
 
   // Deferred archaeologist review: a cleared room remembers that its panel was
   // opened so closing the panel records the review pass exactly once.
+  //
+  // Phase 16: this is now the *in-memory* arm only. The durable copy of the same
+  // fact is the interrupted-review marker in the progression record, so a review
+  // survives a reload and a walk out of the dungeon - see
+  // `src/core/review/interruptedReviewSession.ts` for where it lives and why.
+  //
+  // It is deliberately **not** what `finalizePendingReview` decides on: a learner who
+  // completes the pass from the workspace finishes the review without this ever being
+  // cleared, so on its own it cannot answer "is there still a review here". The marker
+  // can, and does - see that function's doc comment.
   let pendingReviewRoomId: string | null = null;
+
+  /**
+   * The review command layer, bound to this flow's store port.
+   *
+   * Built here rather than injected so `finalizePendingReview` and
+   * `roomInteract` go through exactly the same implementation the Phase 16
+   * workspace reaches through `src/store/reviewCommands.ts`, and so the flow has no
+   * second path to the reward.
+   *
+   * The subject port's split is the documented backwards-compatibility carve-out:
+   * the panel-close route is the *implicit* finalization, the learner never
+   * answered a rating question, so it stands in
+   * `CLOSED_WITHOUT_RATING_QUALITY` and takes the one-argument store call that
+   * `tests/contracts/phase-2-study-flow.test.ts` and
+   * `tests/unit/GameScreen.npcDialog.test.tsx` pin. Both branches reach the same
+   * `subjectStore.recordReviewPass`, and for the same rating number they compute
+   * the identical SM-2 update.
+   *
+   * `awarded` / `duplicate` are derived when the bound action does not report them,
+   * because a host on the pre-Phase-16 lane reports only `xpGained` - and
+   * `xpGained > 0` is that lane's own definition of "awarded".
+   */
+  const review: ReviewController = createReviewController({
+    subject: {
+      readSnapshot: () => store.getSnapshot(),
+      recordReviewPass: (reviewRoomId, qualityRating) =>
+        qualityRating === CLOSED_WITHOUT_RATING_QUALITY
+          ? store.recordReviewPass(reviewRoomId)
+          : store.recordReviewPass(reviewRoomId, qualityRating),
+    },
+    progression: {
+      awardReviewPass: (reviewIdentity) => {
+        const reward = store.awardReviewPass(reviewIdentity);
+        return {
+          xpGained: reward.xpGained,
+          newRank: 'Novice' as RankTier,
+          rankChanged: false,
+          unlockedAchievements: [],
+          awarded: reward.awarded ?? reward.xpGained > 0,
+          duplicate: reward.duplicate ?? false,
+        };
+      },
+      readPreservedFields: () => store.readProgressionPreservedFields?.(),
+      writeReviewSession: (write) => store.writeReviewSession?.(write),
+    },
+    nowIso: () => new Date().toISOString(),
+  });
+
+  /** Whether this flow's host bound the durable marker store. */
+  const reviewSessionDurable = (): boolean => typeof store.writeReviewSession === 'function';
 
   function findVillageStructure(structureId: string): VillageStructure | undefined {
     return [...VILLAGE_MAP.structures, ...(village?.content.getDynamicStructures() ?? [])].find(
@@ -358,6 +491,120 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
     };
   }
 
+  /**
+   * The pass toast, after a completed review.
+   *
+   * The message is the pre-Phase-16 string, character for character:
+   * `tests/contracts/phase-2-study-flow.test.ts` pins it verbatim and it is what a
+   * learner has always read. The numbers come from the command's *post*-increment
+   * pass progress rather than from a re-read, because the SM-2 write is
+   * asynchronous and a re-read would be one review stale - which is exactly the
+   * drift `archaeologistFullReviewPasses` must not have, since it is a badge
+   * input.
+   */
+  function pushReviewRecordedToast(outcome: Extract<ReviewOutcome, { command: 'review/pass-complete' }>): void {
+    const xpMessage =
+      outcome.progression.xpGained > 0
+        ? ` (+${outcome.progression.xpGained} XP)`
+        : ' (already counted for this pass)';
+    dungeonUi.pushToast(
+      'info',
+      `Review recorded${xpMessage}: ${outcome.passProgress.roomsTowardNextPass}/${outcome.passProgress.totalRooms} rooms toward pass ${outcome.passProgress.nextPassTarget}. Completed full passes: ${outcome.passProgress.fullReviewPasses}.`,
+    );
+  }
+
+  /** The refusal sentence for a room that cannot be reviewed. */
+  function pushReviewRefusedToast(reason: ReviewRoomRefusal, unlock: ReturnType<typeof canReviewRoom>['unlock']): void {
+    dungeonUi.pushToast('warn', describeReviewRefusal({ reason, unlock }));
+  }
+
+  /**
+   * Report a typed review refusal as a learner-facing sentence.
+   *
+   * `NO_ACTIVE_SUBJECT` and `ROOM_NOT_FOUND` are silent, exactly as
+   * `finalizePendingReview` has always been: a caller can ask about a room that was
+   * removed between two renders, and toasting about it would be noise. The two
+   * Phase 16 conditions are learner-facing, because they are the ones a learner
+   * caused by walking into a cleared room while the phase was still locked.
+   */
+  function reportReviewRefusal(
+    result: ReviewCommandResult<ReviewOutcome>,
+    fallback: { reason: ReviewRoomRefusal; unlock: ReturnType<typeof canReviewRoom>['unlock'] } | null,
+  ): void {
+    if (result.ok) return;
+    if (result.error.code === 'ROOM_NOT_REVIEWABLE' || result.error.code === 'REVIEW_LOCKED') {
+      dungeonUi.pushToast('warn', result.error.message);
+      return;
+    }
+    if (fallback !== null) {
+      pushReviewRefusedToast(fallback.reason, fallback.unlock);
+    }
+  }
+
+  /**
+   * Finalize the review the panel-close route armed, for one room.
+   *
+   * ## The rating passed here is **not** the learner's, and this is deliberate
+   *
+   * Read this before assuming the workspace's rating reaches SM-2 through this
+   * route. It does not. This function passes
+   * {@link CLOSED_WITHOUT_RATING_QUALITY} - a real `3` - **unconditionally**, so a
+   * learner who rated a room `5` in the workspace and then closed the panel is
+   * recorded as a `3`. The full argument for keeping it that way, and its cost, is
+   * on the constant in `reviewCommands.ts`; the short version is that this route
+   * has to work with no rating control on screen at all (the rollback lane renders
+   * the pre-Phase-16 notes tab, which has none) and the drift is toward *more*
+   * review rather than less.
+   *
+   * ## The durable marker is what says this review is still pending
+   *
+   * The workspace gives a learner two ways to finish the same review: "Complete
+   * this review pass" (the command layer, at their rating) and "Done reviewing"
+   * (this route, at {@link CLOSED_WITHOUT_RATING_QUALITY}). Both can be pressed, in
+   * that order, on the same panel. So the in-memory `pendingReviewRoomId` arm is
+   * **not** sufficient evidence that there is anything to finalize - the explicit
+   * completion never touches it, because the workspace dispatches a command and
+   * does not know a flow exists.
+   *
+   * The marker is. `armPendingReview` writes it in the same call that sets the arm,
+   * and both `progressionStore.awardReviewPass` and `review/session-discard` clear it
+   * for the room they finish, in the same record write as their own decision. So on
+   * a durable host, **no marker for this room is the fact that the review is
+   * already finished or explicitly abandoned**, and this function returns.
+   *
+   * Without that guard the flow pays twice for one room. `currentReviewPassNumber`
+   * is `fullReviewPasses + 1`, and `fullReviewPasses` is
+   * `trunc(sum of reviewPassCount / reviewable rooms)`, so the pass number moves only
+   * when a review crosses a multiple of the room count. Reviewing the same room
+   * twice re-derives the *same* pass, the (room, pass) ledger reports
+   * `duplicate: true`, and nothing is paid. But when the explicit completion was the
+   * room that **completed** the pass, the sum crossed the multiple, this function
+   * re-derives pass N+1, and the ledger has never seen N+1 - from its side that is a
+   * genuinely new pass, so it awards. The marker guard is what covers the case the
+   * ledger structurally cannot see; the ledger remains what covers the rest.
+   *
+   * ## Why the guard is on the marker and not on the arm
+   *
+   * The marker is durable and the arm is a closure variable, so they do not have the
+   * same reach:
+   *
+   * - The arm exists only inside one controller instance and only until one of its
+   *   own routes clears it. The marker survives a reload, so guarding on it holds
+   *   across every way a review can be finished - including from a surface that has
+   *   no way to reach the flow at all.
+   * - Every route that finishes a review already invalidates the marker as a side
+   *   effect of its own correct write. Invalidating the *arm* instead would mean
+   *   adding a callback the workspace must make before it can complete a review -
+   *   new public API on the controller, and a UI -> flow coupling that reintroduces
+   *   exactly the knowledge of flow internals the command layer exists to remove.
+   * - The arm is a cache of the marker, written in the same call. On a durable host
+   *   an arm implies a marker; a marker does not imply an arm. So guarding on the
+   *   marker is never the weaker of the two.
+   *
+   * A host that did not bind the marker ports has no marker to consult, so
+   * `reviewSessionDurable()` gates the guard and that lane keeps its pre-Phase-16
+   * in-memory behaviour exactly.
+   */
   function finalizePendingReview(roomId: string): void {
     const liveSnapshot = store.getSnapshot();
     if (!liveSnapshot) return;
@@ -365,44 +612,58 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
     const room = liveSnapshot.rooms[roomId];
     if (!room || !room.validationState.finalPass) return;
 
+    // Nothing to finalize. Read *before* the unlock check, because a review that is
+    // already finished is not a refusal and must not be reported as one.
+    if (
+      reviewSessionDurable() &&
+      !isInterruptedReviewSessionForRoom(readPendingReviewSession(), roomId)
+    ) {
+      return;
+    }
+
+    // The shared unlock evaluation, asked the same way `RoomPanel` asks it. A
+    // review is not finalized for a room the panel is simultaneously saying is
+    // locked, so the displayed unlock and the enforced unlock cannot diverge.
+    const permission = canReviewRoom({
+      dungeon: liveSnapshot.dungeon,
+      rooms: liveSnapshot.rooms,
+      roomId,
+    });
+    if (!permission.allowed) {
+      pushReviewRefusedToast(permission.reason, permission.unlock);
+      return;
+    }
+
+    // `review/pass-complete`, not a hand-rolled pair of store calls. The identity
+    // is derived inside the command layer from the same pre-increment pass number
+    // the badge thresholds read, and it is what makes this award durable.
+    //
+    // Unconditional, and it overrides any rating chosen in the workspace - see this
+    // function's doc comment above before changing it.
+    const result = review.passComplete({ roomId, qualityRating: CLOSED_WITHOUT_RATING_QUALITY });
+    if (!result.ok) {
+      reportReviewRefusal(result, null);
+      return;
+    }
+    const outcome = result.value;
+
+    // The number `evaluatePhaseBadgeUnlocks` has always been given here: the count
+    // of currently reviewable rooms for `scribeClearedRooms`, and the *real*
+    // post-review `fullReviewPasses` for `archaeologistFullReviewPasses`. Both are
+    // unchanged; the second now comes from the one pass-progress derivation rather
+    // than from a local copy of the analytics the command layer already ran.
     const reviewableRoomIds = liveSnapshot.dungeon.rooms
       .map((summary) => summary.roomId)
       .filter((candidateRoomId) => {
         const candidate = liveSnapshot.rooms[candidateRoomId];
         return candidate ? isReviewableRoom(candidate) : false;
       });
-    const analyticsBefore = summarizeReviewAnalytics({
-      rooms: liveSnapshot.rooms,
-      reviewableRoomIds,
-      currentReviewStreak: 0,
-      longestReviewStreak: 0,
-    });
-    const nextPassTarget = analyticsBefore.fullReviewPasses + 1;
-    const shouldAwardReviewXp = room.reviewPassCount < nextPassTarget;
-
-    void store.recordReviewPass(roomId);
-    const reviewProgression = shouldAwardReviewXp ? store.awardReviewPass() : { xpGained: 0 };
-
-    const roomsWithIncrement = {
-      ...liveSnapshot.rooms,
-      [roomId]: {
-        ...room,
-        reviewPassCount: room.reviewPassCount + 1,
-      },
-    };
-    const analytics = summarizeReviewAnalytics({
-      rooms: roomsWithIncrement,
-      reviewableRoomIds,
-      currentReviewStreak: 0,
-      longestReviewStreak: 0,
-    });
-
     const unlockedBadges = evaluatePhaseBadgeUnlocks(
       {
         totalRooms: liveSnapshot.dungeon.rooms.length,
         creatorMappedRooms: liveSnapshot.dungeon.rooms.length,
         scribeClearedRooms: reviewableRoomIds.length,
-        archaeologistFullReviewPasses: analytics.fullReviewPasses,
+        archaeologistFullReviewPasses: outcome.passProgress.fullReviewPasses,
       },
       store.readProgressionBadges(),
     );
@@ -416,19 +677,49 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
       );
     }
 
-    const nextPassProgressTarget = analytics.fullReviewPasses + 1;
-    const reviewedTowardNextPass = liveSnapshot.dungeon.rooms.filter((summary) => {
-      const count = roomsWithIncrement[summary.roomId]?.reviewPassCount ?? 0;
-      return count >= nextPassProgressTarget;
-    }).length;
-    const xpMessage =
-      reviewProgression.xpGained > 0
-        ? ` (+${reviewProgression.xpGained} XP)`
-        : ' (already counted for this pass)';
-    dungeonUi.pushToast(
-      'info',
-      `Review recorded${xpMessage}: ${reviewedTowardNextPass}/${liveSnapshot.dungeon.rooms.length} rooms toward pass ${nextPassProgressTarget}. Completed full passes: ${analytics.fullReviewPasses}.`,
-    );
+    pushReviewRecordedToast(outcome);
+  }
+
+  function readPendingReviewSession(): InterruptedReviewSession | null {
+    return readInterruptedReviewSessionFromFields(store.readProgressionPreservedFields?.());
+  }
+
+  function resumePendingReview(roomId: string): boolean {
+    const resumed = review.sessionResume({ roomId });
+    if (!resumed.ok) {
+      reportReviewRefusal(resumed, null);
+      return false;
+    }
+    if (resumed.value.resumed) armPendingReview(roomId);
+    return resumed.value.resumed;
+  }
+
+  function discardPendingReview(roomId: string): boolean {
+    const discarded = review.sessionDiscard({ roomId });
+    if (!discarded.ok) {
+      reportReviewRefusal(discarded, null);
+      return false;
+    }
+    if (discarded.value.discarded && pendingReviewRoomId === roomId) {
+      pendingReviewRoomId = null;
+    }
+    return discarded.value.discarded;
+  }
+
+  /**
+   * Arm a review for a room whose panel is opening, and make it resumable.
+   *
+   * `review/session-save` with no rating is the arming write: it records a marker
+   * and nothing else, so opening a cleared room's panel is what makes the session
+   * survive a reload, and closing the panel clears the marker in the same record
+   * write as the award. Saving the same room twice keeps the original
+   * `startedAt`, so this is idempotent rather than a new session each time.
+   */
+  function armPendingReview(roomId: string): void {
+    pendingReviewRoomId = roomId;
+    if (!reviewSessionDurable()) return;
+    const saved = review.sessionSave({ roomId, qualityRating: null });
+    if (!saved.ok) reportReviewRefusal(saved, null);
   }
 
   function roomInteract(roomId: string): void {
@@ -451,10 +742,24 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
 
     const liveSnapshot = store.getSnapshot();
 
+    // Phase 16: the unlock is enforced here, where the review is armed, using the
+    // one shared evaluation `RoomPanel` renders. The panel still opens - a learner
+    // must be able to read their own notes and artifact - but a locked room does
+    // not arm a review, and the learner is told why in a sentence rather than
+    // getting a silent no-op when they close the panel.
     if (liveSnapshot) {
       const room = liveSnapshot.rooms[roomId];
       if (room && room.validationState.finalPass) {
-        pendingReviewRoomId = roomId;
+        const permission = canReviewRoom({
+          dungeon: liveSnapshot.dungeon,
+          rooms: liveSnapshot.rooms,
+          roomId,
+        });
+        if (permission.allowed) {
+          armPendingReview(roomId);
+        } else {
+          pushReviewRefusedToast(permission.reason, permission.unlock);
+        }
       }
     }
 
@@ -561,6 +866,25 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
 
   function returnToVillage(): void {
     store.closeMapView();
+    // Phase 16: leaving with a review open is a **decision**, not a silent drop.
+    // The default is to SAVE - keep the marker so the review is resumable - because
+    // save is the only branch that cannot lose committed work, and
+    // `review/session-discard` is available to the surface that wants to offer the
+    // other two choices. The marker was already written when the review was armed,
+    // so this is a re-save: it refreshes `savedAt` and makes the choice durable
+    // even if arming happened on a host without the marker port.
+    if (pendingReviewRoomId !== null) {
+      const openRoomId = pendingReviewRoomId;
+      if (reviewSessionDurable()) {
+        const saved = review.sessionSave({ roomId: openRoomId, qualityRating: null });
+        if (saved.ok) {
+          dungeonUi.pushToast(
+            'info',
+            'Review saved. Return to this room to finish it, or discard it from the room panel.',
+          );
+        }
+      }
+    }
     pendingReviewRoomId = null;
     store.setFocusedRoomId(null);
     store.setActiveSubjectId(null);
@@ -724,6 +1048,9 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
     closeInfoPanel,
     toggleInfoPanel,
     finalizePendingReview,
+    readPendingReviewSession,
+    resumePendingReview,
+    discardPendingReview,
     collectArtifact,
     changeFloor,
     travelToRoom,

@@ -14,12 +14,21 @@ import {
   getConnectedRoomIds,
   isReachableViaSubtopics,
 } from '@/core/graph';
+import { describeReviewDueState, type ReviewDueState } from '@/core/review';
 import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistence';
 import type { DungeonMap } from '@/core/layout/dungeonTypes';
 import type { GamePhase } from '@/store/sessionStore';
 import type { ColorTheme } from '@/store/preferencesStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
+/*
+ * Phase 16's review stylesheet, imported here for the map's own review affordances.
+ *
+ * The rules this reaches are the `.full-map-viewport` and `[data-review-due-row]` blocks at the
+ * bottom of that file, and `review.css` explains at length why they live there rather than in a
+ * colocated sheet. Read that comment before moving them: two separate tests fail if they do.
+ */
+import '@/ui/study/review/review.css';
 
 interface FullMapViewProps {
   snapshot: SubjectSnapshot;
@@ -32,6 +41,14 @@ interface FullMapViewProps {
   onTravelToRoom: (roomId: string) => void;
   onTeleportToRoom: (roomId: string) => void;
   onClose: () => void;
+  /**
+   * The clock the map's review-state announcement reads "now" from (Phase 16).
+   *
+   * Injected for the reason `reviewCommands.ts` injects `nowIso`: a due-date comparison against
+   * a real clock is untestable, and two rooms rendered in one pass must agree about which
+   * day it is. Optional so the pre-Phase-16 lane renders with the ambient clock unchanged.
+   */
+  nowIso?: string;
 }
 
 const SCALE = 10;
@@ -187,6 +204,7 @@ export function FullMapView({
   onTravelToRoom,
   onTeleportToRoom,
   onClose,
+  nowIso,
 }: FullMapViewProps): JSX.Element {
   const palette = FULLMAP_PALETTE[colorTheme];
   const addChildRooms = useSubjectStore((s) => s.addChildRooms);
@@ -565,6 +583,116 @@ export function FullMapView({
     fitMapToViewport();
   }, [fitMapToViewport]);
 
+  /*
+   * Phase 16: which rooms are due for review, and in what words.
+   *
+   * Two things this deliberately does NOT do:
+   *
+   * 1. **No new filter and no new toggle.** A "due only" checkbox would be a control whose
+   *    only effect is to hide rooms, and hiding a room that is due is the opposite of making
+   *    it findable. The announcement below works by *labelling* every room, not by filtering
+   *    the map.
+   * 2. **No recolouring.** The palette is three `ColorTheme`s of renderer-neutral colours and
+   *    the due state would have to be a fourth one per theme; a hue that means "overdue" is a
+   *    colour-only state signal, which plan 10.1 forbids. The state is a word in the room's
+   *    accessible name and in a visible row of the selected-topic panel.
+   *
+   * `describeReviewDueState` is the domain's own answer, asked once per room rather than by
+   * this file comparing dates, so the map and the review workspace cannot disagree about
+   * which day a room comes back.
+   */
+  const reviewDueByRoomId = useMemo(() => {
+    const now = nowIso ?? new Date().toISOString();
+    const states = new Map<string, ReviewDueState>();
+    for (const room of rooms) {
+      const metadata = snapshot.rooms[room.roomId];
+      if (metadata === undefined) continue;
+      // A room that has never been defeated cannot be reviewed at all, and saying
+      // "not scheduled yet" about it would imply it is waiting its turn.
+      if (!metadata.validationState.finalPass) continue;
+      states.set(
+        room.roomId,
+        describeReviewDueState({ nextReviewDateIso: metadata.sm2NextReviewDate ?? null, nowIso: now }),
+      );
+    }
+    return states;
+  }, [nowIso, rooms, snapshot.rooms]);
+
+  /**
+   * A room's review state as one sentence, or `null` when it has none.
+   *
+   * Returned as one string so the same words serve every reader: the node's accessible name,
+   * the node's `<title>` tooltip, and the sidebar row a learner actually reads. One function
+   * is what stops those three from drifting into three slightly different claims about the
+   * same room.
+   */
+  function describeRoomReviewState(due: ReviewDueState | undefined): string | null {
+    if (due === undefined) return null;
+    if (due.kind === 'overdue') {
+      return due.days === 1 ? 'Review overdue by 1 day.' : `Review overdue by ${due.days} days.`;
+    }
+    if (due.kind === 'due-today') return 'Review due today.';
+    return due.days === 1 ? 'Review due in 1 day.' : `Review due in ${due.days} days.`;
+  }
+
+  /** What a node with no review state should be announced as. */
+  const NOT_DEFEATED_REVIEW_SENTENCE =
+    'Not yet defeated, so it has no review scheduled.';
+
+  /**
+   * Keyboard activation for the SVG room nodes.
+   *
+   * Each `<g role="button" tabIndex={0}>` was already focusable and already had an
+   * `onClick` that selected the room - so Enter and Space did nothing, because a `<g>` is not
+   * a `<button>` and gets neither the implicit activation nor the Space semantics the native
+   * element has. That is the whole defect: a control that Tab reaches and announces as a
+   * button, and that silently ignores both keys a button answers to.
+   *
+   * Handled here rather than by replacing the `<g>` with a `<button>`, which is not a valid
+   * child of `<svg>` and would mean reimplementing the drag gesture that shares the same
+   * element. The handler is the two-key minimum a `role="button"` owes its users, and it
+   * prevents the page scroll Space would otherwise cause.
+   */
+  function onRoomKeyDown(
+    roomId: string,
+    event: KeyboardEvent<SVGGElement>,
+  ): void {
+    if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedRoomId(roomId);
+  }
+
+  /**
+   * The selected room's review facts, as sentences.
+   *
+   * Derived here rather than in the render because the sidebar needs the *date* and the
+   * *count* as well as the state word, and the node's accessible name needs only the state.
+   * `selectedReviewState` is `null` for a room that has not been defeated, which is what the
+   * `else` arm below says in words.
+   */
+  const selectedReviewState = useMemo(() => {
+    if (selectedRoom === null) return null;
+    const due = reviewDueByRoomId.get(selectedRoom.roomId);
+    if (due === undefined) return null;
+    const scheduled = selectedRoom.sm2NextReviewDate;
+    return {
+      sentence:
+        due.kind === 'overdue'
+          ? due.days === 1
+            ? 'Review overdue by 1 day.'
+            : `Review overdue by ${due.days} days.`
+          : due.kind === 'due-today'
+            ? 'Review due today.'
+            : due.days === 1
+              ? 'Review due in 1 day.'
+              : `Review due in ${due.days} days.`,
+      reviewPassCount: selectedRoom.reviewPassCount,
+      nextReviewDateIso:
+        typeof scheduled === 'string' && scheduled.length > 0 ? scheduled : null,
+    };
+  }, [reviewDueByRoomId, selectedRoom]);
+
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
 
   return (
@@ -726,16 +854,38 @@ export function FullMapView({
                           : 1.5;
                   const textFill = isFocused || isNeighbor ? palette.textDark : palette.textLight;
                   const textStroke = isFocused || isNeighbor ? palette.textLight : palette.textDark;
+                  /*
+                   * The due-for-review sentence. Appended to the node's accessible name and
+                   * rendered as an SVG `<title>`, so a screen reader announces it when the node
+                   * takes focus and a mouse user sees it as the browser's own tooltip. It is
+                   * never the only signal: the same words appear as a visible row in the
+                   * selected-topic panel below, which is where a keyboard user reads them.
+                   */
+                  const reviewSentence = describeRoomReviewState(reviewDueByRoomId.get(room.roomId));
+                  const reviewLabel =
+                    reviewSentence === null
+                      ? `${room.topic}. ${NOT_DEFEATED_REVIEW_SENTENCE}`
+                      : `${room.topic}. ${reviewSentence}`;
                   return (
                     <g
                       key={room.roomId}
                       onClick={() => setSelectedRoomId(room.roomId)}
                       onPointerDown={(e) => onRoomPointerDown(room.roomId, e)}
+                      onKeyDown={(e) => onRoomKeyDown(room.roomId, e)}
                       role="button"
                       tabIndex={0}
+                      aria-label={reviewLabel}
                       data-room-id={room.roomId}
+                      data-review-due={reviewDueByRoomId.get(room.roomId)?.kind ?? 'none'}
                       style={{ cursor: 'grab' }}
                     >
+                      {/*
+                        A non-empty `<title>` on every node, always - including the ones with
+                        nothing due - because an empty `<title>` makes some assistive
+                        technologies treat the element as unlabelled and read the raw SVG
+                        coordinates instead.
+                      */}
+                      <title>{reviewLabel}</title>
                       <rect
                         x={x}
                         y={y}
@@ -849,6 +999,34 @@ export function FullMapView({
                   <p className="room-meta-line">{selectedRoom.topic}</p>
                   <p className="room-help-text">Floor: {hierarchy.floorLabelByFloorId[hierarchy.floorIdByRoomId[selectedRoom.roomId]]}</p>
                   <p className="room-help-text">Breadcrumbs: {selectedBreadcrumbs.join(' → ')}</p>
+                  {/*
+                    Phase 16: the selected room's review state as visible text.
+
+                    This is the row that makes the announcement reachable without sight or a
+                    pointer. The SVG node carries the same words in its accessible name and
+                    its `<title>`, but a sighted learner who Tabs to a node needs somewhere to
+                    *read* them, and the sidebar is where this map has always put a selected
+                    room's facts. It is a plain paragraph, not a colour and not a badge, and it
+                    names both the state and the count of reviews this room has had - which is
+                    what makes "due today" actionable rather than alarming.
+                  */}
+                  {selectedReviewState !== null ? (
+                    <>
+                      <p className="room-help-text" data-review-state-for-selection>
+                        {selectedReviewState.sentence}
+                      </p>
+                      <p className="room-help-text">
+                        Times reviewed: {selectedReviewState.reviewPassCount}. Next date:{' '}
+                        {selectedReviewState.nextReviewDateIso === null
+                          ? 'not set yet.'
+                          : `${selectedReviewState.nextReviewDateIso.slice(0, 10)}.`}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="room-help-text" data-review-state-for-selection>
+                      This room has not been defeated yet, so it has no review scheduled.
+                    </p>
+                  )}
                   <div className="linked-topic-list">
                     {focusedRoomId && neighborIds.has(selectedRoom.roomId) ? (
                       <button type="button" className="ghost" onClick={() => onTravelToRoom(selectedRoom.roomId)}>
@@ -934,6 +1112,61 @@ export function FullMapView({
           rooms are directly connected to the current room · purple border marks the selected room
           {floorFilterOn ? ' · dashed blue room is the portal back to the parent floor' : ''}.
         </p>
+        {/*
+          Phase 16: the review-state list, for a learner who is not using the map at all.
+
+          The rooms themselves announce their review state when focused, and the selected-topic
+          panel repeats it in visible text - but a screen-reader user who wants to know *which*
+          rooms are due, without arrowing the map one node at a time, needs the whole list. It
+          is a plain `<ul>` of buttons: each one selects that room, which is the same action
+          the node's click does, so the route is a keyboard route and not a second answer.
+          Every button is 44 by 44 through the global Cozy touch-target rule plus the
+          `teleport-room-item` class, so it reuses that styling rather than adding one.
+        */}
+        {reviewDueByRoomId.size > 0 ? (
+          <section className="room-section" aria-label="Rooms due for review">
+            <h3>Due for review</h3>
+            <ul className="inventory-grid" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {[...reviewDueByRoomId.entries()]
+                .sort((left, right) => {
+                  /*
+                   * Sorted worst-first, so the list leads with what a learner should actually
+                   * do. Ordering by the domain's own discriminant rather than by a number
+                   * computed here, and `Map` iteration order is dungeon order within a
+                   * state - so the sort is stable and two runs render the same list.
+                   */
+                  const rank = (kind: ReviewDueState['kind']): number =>
+                    kind === 'overdue' ? 0 : kind === 'due-today' ? 1 : 2;
+                  return rank(left[1].kind) - rank(right[1].kind);
+                })
+                .map(([roomId, due]) => {
+                  const topic = snapshot.rooms[roomId]?.topic ?? roomId;
+                  const sentence = describeRoomReviewState(due);
+                  return (
+                    <li key={roomId}>
+                      <button
+                        type="button"
+                        className="teleport-room-item"
+                        data-review-due-row={due.kind}
+                        /*
+                         * The topic *and* the state sentence are both in the button's own text,
+                         * so a screen-reader user hears the same two facts a sighted user
+                         * reads. `aria-label` is deliberately absent rather than repeated: a
+                         * label that duplicates visible text is a second copy to drift, and
+                         * testing-library's accessible-name computation prefers it over the
+                         * text.
+                         */
+                        onClick={() => setSelectedRoomId(roomId)}
+                      >
+                        <span>{topic}</span>
+                        <span className="room-help-text">{` — ${sentence}`}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+          </section>
+        ) : null}
       </div>
     </div>
   );

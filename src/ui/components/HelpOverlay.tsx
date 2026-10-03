@@ -25,7 +25,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             can drag the canvas, zoom, and drag individual room nodes to reshape the layout.
           </li>
           <li>
-            The room panel&rsquo;s <strong>Inventory</strong>, <strong>Badges</strong>, and
+            The HUD&rsquo;s <strong>Inventory</strong>, <strong>Badges</strong>, and
             <strong>Diary</strong> buttons open your collected loot, milestone badges, and saved
             notes.
           </li>
@@ -36,8 +36,10 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
           <li>
             In the <strong>Creator</strong> phase, use the Topic tab or the map edit tools to add,
             reparent, or delete topics. In the <strong>Scribe</strong> phase, defeat encounters by
-            writing the required notes. Once the dungeon is cleared, the
-            <strong>Archaeologist</strong> phase turns room interactions into review passes.
+            writing the required notes. In the <strong>Archaeologist</strong> phase, revisit
+            cleared rooms to run review passes &mdash; reviewing unlocks once every room encounter
+            in the dungeon is cleared. Opening a room panel starts a pass but does not count it;
+            the pass is counted when you complete the review or close the panel.
           </li>
           <li>
             Room images are managed in the note editor during the
@@ -46,8 +48,9 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             <strong>Expand</strong> on the room panel when you want a larger writing/media workspace.
           </li>
           <li>
-            Press <kbd>I</kbd> to open or close the room info panel (topic details, notes, and
-            review stats for the current room).
+            Press <kbd>I</kbd> to open or close the room info panel. Its tabs follow the phase:
+            topic tools in <strong>Creator</strong>, notes and review stats in
+            <strong>Scribe</strong> and <strong>Archaeologist</strong>.
           </li>
           <li>
             Press <kbd>?</kbd> to toggle this Help overlay.

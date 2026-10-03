@@ -167,6 +167,30 @@ export function daysUntilReview(nextReviewDate: string, nowIso?: string): number
 }
 
 /**
+ * Calculate the number of days *past* the next review date.
+ *
+ * Returns 0 when the review is not yet due.
+ *
+ * Phase 16. `daysUntilReview` answers "how long until this is due" and clamps at
+ * 0, which is the right answer for a due date but the wrong one for an overdue
+ * one: a review three days late reports `daysUntilReview === 0`, so a surface
+ * cannot tell "due this morning" from "three days late". This lives beside
+ * `daysUntilReview` rather than in a caller so all three date helpers - overdue
+ * test, days until, days since - share one calendar-day rule and cannot drift.
+ */
+export function daysSinceReviewDue(nextReviewDate: string, nowIso?: string): number {
+  const now = nowIso ?? new Date().toISOString();
+  const nextDate = new Date(nextReviewDate);
+  const nowDate = new Date(now);
+
+  if (nextDate.toDateString() === nowDate.toDateString()) return 0;
+
+  const diffMs = nowDate.getTime() - nextDate.getTime();
+  if (diffMs <= 0) return 0;
+  return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+/**
  * Add N days to an ISO 8601 date string and return a new ISO string.
  */
 function addDaysToIso(iso: string, days: number): string {

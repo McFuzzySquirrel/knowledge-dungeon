@@ -332,7 +332,34 @@ export const VILLAGE_MAP: VillageMapDef = {
         'enter-dungeon': ['You\'ve entered a dungeon! Each room is a topic to master.', 'In Scribe mode, press E in a room to open the encounter editor. Write a structured note with a Summary, Key Points, and a Recall Question.', 'Pass the validation checks to earn an artifact and clear the room.'],
         'clear-room': ['You cleared a room! Well fought, scholar.', 'Your artifact has been collected. You can view it in your journal.', 'Keep going - clear more rooms to earn XP and unlock badges.'],
         'write-note': ['Your notes are the weapons of this dungeon. The sharper they are, the easier your encounters will be.', 'Remember: each note needs a Summary (big picture), Key Points (specifics), and a Recall Question (self-test).', 'You can also attach images to your notes for richer artifacts.'],
-        'review-artifact': ['You\'ve entered the Archaeologist phase. Return to cleared rooms and run review passes.', 'Each review pass strengthens your memory and increases your review streak.', 'Complete enough passes and you\'ll earn Archaeologist badges.'],
+        /*
+         * Phase 16. Every sentence here is checked against `canReviewRoom` in
+         * `src/core/review/reviewPasses.ts` and against the SM-2 schedule in
+         * `src/core/review/spacedRepetition.ts`, because this is quest narration a learner reads before
+         * they know whether a review will open.
+         *
+         * "You have entered the Archaeologist phase" was the wrong claim twice: reaching this quest step
+         * is a linear walk along `QUEST_ORDER` that asks nothing about the subject, and the enforced gate
+         * is not the phase at all but two conditions - this room cleared, and every other room cleared
+         * (`canReviewRoom` asks `room-not-cleared` first, then `review-locked` at a ratio of 1). So the
+         * line now asks for the switch instead of claiming it happened, and states the gate.
+         *
+         * "Increases your review streak" went because nothing tracks a review streak.
+         * `deriveReviewPassProgress` reports full review passes and rooms toward the next pass, and the
+         * only streak in the product is `streakCount` in `progressionStore.ts`, which counts rooms
+         * cleared and feeds the quality bonus - not reviews. What a pass does do is reschedule that
+         * room's next review date, so that is what the line says now.
+         *
+         * The badge promise is kept: `evaluatePhaseBadgeUnlocks` in
+         * `src/core/progression/progressionEngine.ts` gates four Archaeologist badges on
+         * `archaeologistFullReviewPasses` at 2, 3, 7, and 15, and `finalizePendingReview` feeds it the
+         * real post-review count rather than a local tally.
+         *
+         * "Self-check prompts" is the lane-neutral term. Both panels generate them with the same
+         * `generateSelfCheckPrompts`; the pre-Phase-16 one labels the tab "Self-check" and the Phase 16
+         * workspace labels its region "Recall", and this dialogue is not behind either flag.
+         */
+'review-artifact': ['Time to switch to the Archaeologist phase.', 'A room opens for review only once its own encounter is cleared and every other room in the dungeon is cleared too.', 'Press E in a cleared room to open it, work through its artifact and self-check prompts, then finish with the room panel - that is what counts the pass, and each pass reschedules that room\'s next review date.', 'Complete enough passes and you\'ll earn Archaeologist badges.'],
         'complete': ['You\'ve learned the ways of the Knowledge Dungeon. The rest is up to you.', 'Remember: every subject is a dungeon, every room is a topic, and every note is a step toward mastery.', 'The portals will always be here. I will always be here. Go forth and learn!'],
       },
     },
