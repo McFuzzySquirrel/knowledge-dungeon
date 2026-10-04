@@ -347,6 +347,10 @@ describe('src/application/contracts names no renderer, in code or in type', () =
     // to the base port left this gate green. Widening the capture to `([a-zA-Z]+\??)`
     // is what closes that; it matches a superset of the old pattern, so it can only
     // find more members, never fewer.
+    //
+    // Phase 17 added `readPlayerGridPosition?` to the village port and `WorldGridPosition`
+    // beside it. That is exactly the case this capture exists to catch: a third and
+    // fourth optional member on the base port, invisible to the narrower pattern.
     const members = [
       ...stripComments(renderer).matchAll(/^\s{2}(?:readonly\s+)?([a-zA-Z]+\??)(?:\(|:|;)/gm),
     ].map((match) => match[1]);
@@ -363,6 +367,13 @@ describe('src/application/contracts names no renderer, in code or in type', () =
       'setImageRooms',
       'setRoomOverlayStates',
       'triggerInteract',
+      // `WorldGridPosition`, the two fields of the learner's tile. Declared
+      // immediately above `VillageRendererCapabilities` because it is that port's
+      // member type, so it is captured here rather than at the foot of the file. Two
+      // bare names, not capabilities: the scanner reads every two-space declaration,
+      // and this is what makes a stray field on a contract type visible too.
+      'gridX',
+      'gridY',
       'setDynamicStructures',
       'setPlayerClass',
       'triggerInteract',
@@ -370,6 +381,11 @@ describe('src/application/contracts names no renderer, in code or in type', () =
       // `VillageRendererCapabilities`, optional pending adapter wiring (WP-2).
       'readNpcSnapshot?',
       'invokeAction?',
+      // The learner's village tile, optional for the same reason: `src/ui/**` may not
+      // import a renderer and so must feature-detect. Both adapters implement it and
+      // both re-declare it as required on their own renderer interfaces, so the base
+      // port keeps the `?` - the promotion belongs on the adapter that earned it.
+      'readPlayerGridPosition?',
       // `VillageNpcHost`, the same two members required.
       'readNpcSnapshot',
       'invokeAction',

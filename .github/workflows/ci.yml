@@ -235,6 +235,64 @@ jobs:
             artifacts/web-artifact-manifest-pixi.json
           if-no-files-found: error
           retention-days: 14
+      # Phase 17 Pixi-fishing-flagged artifact, and the third artifact this
+      # run produces.
+      #
+      # `VITE_PIXI_FISHING` is a build-time flag like the two above, so the only
+      # way to exercise the flagged pond is to build with it — and Phase 17's
+      # exit criterion ("a complete cast-to-catch-to keep flow works using touch
+      # and keyboard") had no browser evidence in CI at all before this step.
+      # Its own Verification block says `VITE_PIXI_FISHING=true npm run
+      # test:e2e`, and `test:e2e` builds and previews the **default** artifact,
+      # so that command measured the Phaser fishing lane rather than the Pixi
+      # one. This is the lane that measures the right bytes.
+      #
+      # It is *steps in this job* rather than a job of its own for exactly the
+      # reasons the two flagged lanes above state, and the repository's gates
+      # force that shape: eleven wiring gates assert that no job other than
+      # `web-build` runs any `build:web*` script, and the two browser lanes that
+      # exist (`browser-smoke`, and `storage-v2-browser`) are each already
+      # asserted to neither download an artifact nor keep a `dist` of its own.
+      # A job of this lane's own would have to build a second artifact.
+      #
+      # Three properties keep it from disturbing the release, and they are the
+      # three the Pixi block above already has:
+      #
+      # - It runs strictly AFTER the production artifact has been recorded,
+      #   verified and uploaded. Nothing downstream reads this runner's
+      #   `dist` — the browser jobs download the uploaded artifacts — so this
+      #   rebuild cannot be mistaken for the artifact that shipped.
+      # - It records and uploads no second **production** artifact. The
+      #   production default stays `VITE_WORLD_RENDERER=phaser` and
+      #   `VITE_PIXI_FISHING` absent; this is a flagged build that exists to be
+      #   measured and then discarded. Its identity goes to its OWN manifest,
+      #   and `vite.config.ts` already refuses to emit a build in which the
+      #   flag is on and the pond chunk is missing, so a silently dropped flag
+      #   fails the build step rather than the lane four minutes later.
+      # - It installs no browser, exactly like the build job's other two
+      #   flagged builds. The browser-backed half runs in `browser-smoke`, which
+      #   already installs one Chromium and previews one `dist`.
+      #
+      # The bundle check runs against this artifact for the same reason it runs
+      # against the Pixi one: the pond is a lazy chunk the release path does not
+      # ship, and a chunk that arrives oversized has to fail in the job that
+      # produced it rather than in whichever lane happens to look at it first.
+      - name: Build the Phase 17 Pixi-fishing-flagged artifact
+        run: npm run build:web:pixi-fishing
+      - run: npm run check:bundle-size
+      - name: Record the Pixi-fishing-flagged artifact identity
+        run: npm run record:web-artifact:pixi-fishing
+      - name: Verify the Pixi-fishing-flagged artifact identity
+        run: npm run verify:web-artifact:pixi-fishing
+      - name: Upload the Pixi-fishing-flagged web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixi-fishing-web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest-pixi-fishing.json
+          if-no-files-found: error
+          retention-days: 14
 
   browser-smoke:
     name: Browser Smoke (Chromium Matrix)
@@ -398,6 +456,46 @@ jobs:
       # canvas — so this is the only thing that would catch it.
       - name: Run the Pixi canvas-pointer DOM mirror lane
         run: npm run test:e2e:pixi-pointer:recorded
+      # Phase 17 fishing lane, on the third artifact, in this same job.
+      #
+      # It needs a *second* flagged artifact, so it is downloaded here rather
+      # than built, and the download is preceded by its own discard for exactly
+      # the reason the first one exists: `actions/download-artifact` extracts
+      # **into** the working directory, so a third download merged into the tree
+      # the second one left behind would be a union of two flagged builds that is
+      # neither of them. The identity check would catch that, and a red run is a
+      # worse outcome than a correct one, so the tree is replaced explicitly.
+      #
+      # The ordering is load-bearing and is asserted in three separate wiring
+      # gates rather than described here alone: nothing may run between the
+      # discard and the download that puts a `dist` back, the lane must run after
+      # the download **and** after the identity check so it cannot measure a
+      # stale artifact, and the two Pixi lanes above must have finished against
+      # the artifact they were given. This block is last for that reason, and a
+      # lane appended to it is one more thing for those gates to keep ordering.
+      #
+      # It gates. Phase 17's exit criterion had no browser evidence in CI at all
+      # before this step, and a step that could not fail would leave the phase's
+      # central criterion ungated. The step is not exempt from failing and no
+      # step in this job is. It adds four steps and nothing else: no build, no
+      # browser install, no second `npm ci`.
+      #
+      # Evidence is the same sanitized JSON the allowlisted upload above already
+      # takes — the lane writes under `artifacts/compatibility-evidence/` — and it
+      # records no trace, screenshot or video, so the pre-existing failure upload
+      # further down is the only other thing that could carry one and it names
+      # neither of this lane's output directories.
+      - name: Discard the Pixi-flagged dist before the fishing download
+        run: rm -rf dist
+      - name: Download the Pixi-fishing-flagged artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pixi-fishing-web-artifact
+          path: .
+      - name: Verify the Pixi-fishing-flagged artifact identity
+        run: npm run verify:web-artifact:pixi-fishing
+      - name: Run the Pixi fishing lane
+        run: npm run test:e2e:fishing:recorded
       - name: Upload sanitized browser-smoke evidence
         # Allowlist: sanitized per-run JSON evidence only, on the same terms as the
         # storage-v2 and compatibility lanes. Nothing else leaves the runner, and

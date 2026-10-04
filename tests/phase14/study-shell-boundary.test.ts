@@ -56,6 +56,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   allFirstPartyModules,
   clearPlantingDeclarations,
+  isTestOwnedTransientModule,
+  PHASE14_BOUNDARY_PROBE_DIRECTORY,
   readSpecifiers,
   stripComments,
   testOwnedDirectory,
@@ -108,9 +110,26 @@ interface BoundaryFinding {
   readonly reason: string;
 }
 
-/** Repo-relative paths of every module under the study subtree, sorted. */
-function studyEntries(): string[] {
-  return allFirstPartyModules().filter((path) => path.startsWith(STUDY_PREFIX));
+/**
+ * Repo-relative paths of every module under the study subtree, sorted.
+ *
+ * **Live plantings are excluded unless the caller asks for them.** Three boundary gates plant
+ * probes on the real filesystem inside `src/` as positive controls, Vitest runs the files in
+ * parallel workers, and a probe one worker planted is otherwise a real entry in another worker's
+ * scan — a cross-file flake, not a finding. The exclusion is `isTestOwnedTransientModule`, which
+ * is the repository's own predicate and is keyed on the *declaration* a planting wrote, so a
+ * module left behind in one of those directories after the planting ended is scanned like any
+ * other source file again.
+ *
+ * The positive control passes `{ includeLivePlantings: true }` because its whole claim is that
+ * the walk sees the probe; it is the one caller for which the probe must be an entry.
+ */
+function studyEntries(options: { includeLivePlantings?: boolean } = {}): string[] {
+  return allFirstPartyModules().filter(
+    (path) =>
+      path.startsWith(STUDY_PREFIX) &&
+      (options.includeLivePlantings === true || !isTestOwnedTransientModule(path)),
+  );
 }
 
 /**
@@ -192,9 +211,9 @@ function describeFindings(findings: readonly BoundaryFinding[]): string {
 }
 
 /** Walk the closure of every study module and return the union of reached modules. */
-function walkStudyClosure(): GraphModule[] {
+function walkStudyClosure(options: { includeLivePlantings?: boolean } = {}): GraphModule[] {
   const reached = new Map<string, GraphModule>();
-  for (const entry of studyEntries()) {
+  for (const entry of studyEntries(options)) {
     for (const module of walkAppGraph({ entry }).modules) {
       if (!reached.has(module.path)) reached.set(module.path, module);
     }
@@ -216,12 +235,15 @@ function readRepoFile(repoRelativePath: string): string {
  * `tests/` would never become a study entry at all. It is declared through `appGraph`'s
  * planting marker while it exists and removed in `afterEach`, the same discipline the Phase 4
  * privacy gate uses for its detector probe, so a gate that scans `src/` while this runs can
- * tell this planted file from a real offender instead of reporting it as one.
+ * tell this planted file from a real offender instead of reporting it as one. Its directory name
+ * is {@link PHASE14_BOUNDARY_PROBE_DIRECTORY} rather than a literal here, because the shared
+ * inventory is what makes the declaration readable; see `studyEntries` for why the gates now
+ * skip a declared planting and why this file's own positive control does not.
  *
  * It is a *value* import, which is the stronger of the two cases; the detector test below
  * proves the type-only spelling without a second planting.
  */
-const PROBE_DIRECTORY_NAME = 'ui/study/__boundary_probe__';
+const PROBE_DIRECTORY_NAME = PHASE14_BOUNDARY_PROBE_DIRECTORY;
 const PROBE_DIRECTORY = testOwnedDirectory(PROBE_DIRECTORY_NAME);
 const PROBE_PATH = `src/${PROBE_DIRECTORY_NAME}/probe.ts`;
 const PROBE_SOURCE = `import { IDLE_DUNGEON_ARTIFACT_SNAPSHOT } from '@/renderers/pixi/dungeon/dungeonArtifact';
@@ -379,13 +401,15 @@ describe('positive control: the same walk reports a planted renderer import', ()
       expect(existsSync(join(process.cwd(), PROBE_PATH))).toBe(true);
 
       // The probe is inside the study subtree, so it becomes an entry, and the walk follows
-      // its edge out into the renderer tree.
-      const withProbe = studyEntries();
+      // its edge out into the renderer tree. `includeLivePlantings` is the whole reason this
+      // positive control still works: the gate's own scans skip a declared planting, so the one
+      // walk that must *not* skip it asks for it by name.
+      const withProbe = studyEntries({ includeLivePlantings: true });
       expect(withProbe, 'the probe must become a study entry or nothing is proved').toContain(
         PROBE_PATH,
       );
 
-      const findings = findingsIn(walkStudyClosure());
+      const findings = findingsIn(walkStudyClosure({ includeLivePlantings: true }));
       // Reported by check (A), against the module the walk actually reached - not merely
       // because the probe's own text said something.
       expect(

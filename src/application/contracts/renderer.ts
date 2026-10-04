@@ -49,6 +49,32 @@ export interface DungeonRendererCapabilities {
   triggerInteract(): void;
 }
 
+/**
+ * A learner's position in the village grid. Two tile indices; never personal data.
+ *
+ * A **tile**, not a pixel, and not a bounding box, because the tile is the unit
+ * interaction and collision are computed in on both lanes: `VILLAGE_MAP.tileSize` on
+ * the Phaser scene and `VILLAGE_TILE_SIZE` on the Pixi scene are the same 48 px, and
+ * both scenes place a structure at `(gridX + width / 2) * tile`. A consumer that aims
+ * at a structure's `gridX`/`gridY` and at its own published tile is therefore working
+ * in the same frame as the renderer, so a heading it computes is a heading the
+ * renderer will agree with.
+ *
+ * Renderer-neutral and renderer-free by construction: it names no engine, no scene,
+ * and no display object, so it can be declared here and read from `src/ui/**` without
+ * the `src/application/**` boundary being crossed.
+ *
+ * **Privacy.** A tile index into an authored map is not personal data and cannot
+ * become any: it is not a subject id, a quest step, a timestamp, or a location a
+ * learner can be recognised from - two learners standing on the same tile publish the
+ * identical pair. There is nothing here for a privacy boundary to exempt, because
+ * there is nothing personal in it.
+ */
+export interface WorldGridPosition {
+  readonly gridX: number;
+  readonly gridY: number;
+}
+
 /** Capability port of the village renderer. */
 export interface VillageRendererCapabilities {
   /** Replace the runtime portal structures derived from the subject list. */
@@ -88,6 +114,37 @@ export interface VillageRendererCapabilities {
    * {@link VillageRendererCapabilities.readNpcSnapshot}.
    */
   invokeAction?(invocation: VillageActionInvocation): void;
+  /**
+   * The learner's current tile, or `null` before a world exists.
+   *
+   * ## Why the village states where it is
+   *
+   * The village has always published a *distance* to each nearby structure and never a
+   * *position*. A walker - a keyboard learner pressing arrow keys, or an end-to-end
+   * harness doing the same - therefore could not know where it was standing, so each
+   * leg aimed at a structure's centre while pressing from wherever the previous leg
+   * ended: measured **30.8 px and 41.6 px** off on a 48 px tile, up to 0.9 of a tile,
+   * with the next leg then aiming a 25-tile heading from a position it was never at.
+   * This read is the missing half.
+   *
+   * ## A read, not a callback
+   *
+   * Deliberately a method and not a subscription. Position changes every frame, and a
+   * callback would push it into React as state - the per-frame-render regression
+   * `CompassOverlay` removed when it was rewritten as a sampled read-out. A caller
+   * that wants to watch the learner take a sample at whatever cadence it needs; the
+   * village does not decide the frequency on its behalf.
+   *
+   * Computed **on read**, never cached into a field. A cached position is correct for
+   * the frame that produced it and wrong the moment it is read outside that frame,
+   * which is exactly how the stale-distance bug happened.
+   *
+   * Optional for the same reason and with the same promotion as
+   * {@link VillageRendererCapabilities.readNpcSnapshot}. An adapter that has not
+   * implemented it *absents* rather than guesses: a missing member and a member that
+   * answers `null` are both "the world cannot say", and neither is ever a wrong tile.
+   */
+  readPlayerGridPosition?(): WorldGridPosition | null;
 }
 
 /**

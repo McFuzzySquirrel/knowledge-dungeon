@@ -51,13 +51,24 @@ import {
   VILLAGE_INTERACT_ACTION_ID,
   type VillageScene,
 } from '../../src/renderers/pixi/village/createVillageScene';
-import type { VillageSpawnPoint } from '../../src/renderers/pixi/village/VillageRenderer';
+import {
+  createPixiVillageRenderer,
+  type PixiVillageRenderer,
+  type VillageSpawnPoint,
+} from '../../src/renderers/pixi/village/VillageRenderer';
+import { VillageScene as PhaserVillageScene } from '../../src/game/scenes/VillageScene';
+import {
+  createPhaserVillageRenderer,
+  type PhaserVillageRenderer,
+} from '../../src/game/adapters/phaserVillageRenderer';
 import {
   PLAYER_SPEED,
   VILLAGE_MAP,
+  VILLAGE_TILE_SIZE,
   getDungeonPortalSlots,
   type VillageStructure,
 } from '../../src/data/villageLayout';
+import type { WorldGridPosition } from '../../src/application/contracts/renderer';
 import type { VillageWorldModel } from '../../src/application/contracts/world';
 import {
   installCanvasContextStub,
@@ -382,6 +393,270 @@ describe('the capability port mutates the live scene', () => {
     expect(() => mounted.scene.onResize(800, 600)).not.toThrow();
     expect(mounted.worldLayer.position.x).not.toBe(before.x);
     expect(mounted.worldLayer.position.y).not.toBe(before.y);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The published grid position, on both lanes                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Both renderers statically answer the position read.
+ *
+ * The contract member is `?` - `src/ui/**` may not import a renderer and so must
+ * feature-detect - but both adapters here implement it, and both renderer interfaces
+ * re-declare it as required. These assignments are what make that a `typecheck`
+ * fact rather than a comment: drop either implementation and this file stops
+ * compiling, which is the point of promoting a member on the adapter that earned it
+ * rather than on the neutral port.
+ */
+const PIXI_VILLAGE_ANSWERS_POSITION: PixiVillageRenderer =
+  null as unknown as PixiVillageRenderer;
+const PHASER_VILLAGE_ANSWERS_POSITION: PhaserVillageRenderer =
+  null as unknown as PhaserVillageRenderer;
+
+describe('both renderers statically answer the grid-position read', () => {
+  it('is a typecheck fact on both lanes, not a comment', () => {
+    // The declarations above are the assertion. The `typeof` reads keep them from being
+    // dead code under `noUnusedLocals`, and they are the same vacuous shape
+    // `tests/phase12/village-npc-renderer.test.ts` uses for its host assertions.
+    expect(typeof PIXI_VILLAGE_ANSWERS_POSITION).toBe('object');
+    expect(typeof PHASER_VILLAGE_ANSWERS_POSITION).toBe('object');
+  });
+});
+
+describe('the Pixi scene publishes the tile the live marker is standing on', () => {
+  it('is derived from the marker on every read, so it moves when the marker moves', async () => {
+    const mounted = await mountScene(villageWorld([]), { gridX: 5, gridY: 27 });
+    const read = (): WorldGridPosition | null =>
+      mounted.scene.capabilities?.readPlayerGridPosition?.() ?? null;
+
+    // The spawn put the marker at `gridX * tile + tile / 2`, so it starts mid-tile
+    // and the published tile is the authored one. Recomputed from the live marker's
+    // own `x`/`y` - never from the spawn argument, and never from a stored copy.
+    expect(mounted.player.x).toBeCloseTo(5 * VILLAGE_TILE_SIZE + VILLAGE_TILE_SIZE / 2, 6);
+    expect(read()).toEqual({ gridX: 5, gridY: 27 });
+    expect(read()).toEqual({
+      gridX: Math.floor(mounted.player.x / VILLAGE_TILE_SIZE),
+      gridY: Math.floor(mounted.player.y / VILLAGE_TILE_SIZE),
+    });
+
+    // Move the marker directly and read again **with no `update` in between**. A
+    // read that cached its answer into a field - the way `lastPoi` can, because a POI
+    // is only ever consumed on the frame that produced it - would still report tile 5
+    // here. This is the assertion that separates "computed on read" from "published
+    // last frame", and it is why the position may not be cached.
+    mounted.player.x = 700.5;
+    expect(read()).toEqual({
+      gridX: Math.floor(700.5 / VILLAGE_TILE_SIZE),
+      gridY: Math.floor(mounted.player.y / VILLAGE_TILE_SIZE),
+    });
+    expect(read()?.gridX).toBe(14);
+    expect(read()?.gridY).toBe(27);
+  });
+
+  it('follows a real keyboard walk across a tile boundary', async () => {
+    const mounted = await mountScene(villageWorld([]), { gridX: 5, gridY: 27 });
+    const read = (): WorldGridPosition | null =>
+      mounted.scene.capabilities?.readPlayerGridPosition?.() ?? null;
+    const before = read();
+    expect(before).toEqual({ gridX: 5, gridY: 27 });
+
+    // 30 frames at 16.7 ms is about half a second, so about 60 px at
+    // `PLAYER_SPEED` - a little over one tile, from 264 px to ~324 px.
+    dispatchKey('keydown', 'ArrowRight');
+    for (let frame = 0; frame < 30; frame += 1) mounted.scene.update(16.7);
+    dispatchKey('keyup', 'ArrowRight');
+
+    const after = read();
+    expect(mounted.player.x).toBeGreaterThan(6 * VILLAGE_TILE_SIZE);
+    expect(after?.gridX).toBeGreaterThan(before?.gridX ?? 0);
+    expect(after?.gridX).toBe(Math.floor(mounted.player.x / VILLAGE_TILE_SIZE));
+    // Walking east does not invent a northward tile.
+    expect(after?.gridY).toBe(27);
+  });
+
+  it('publishes integers inside the map, which is what a consumer can validate', async () => {
+    const mounted = await mountScene(villageWorld([]), { gridX: 5, gridY: 27 });
+    const position = mounted.scene.capabilities?.readPlayerGridPosition?.() ?? null;
+    expect(position).not.toBeNull();
+    // The shape a DOM publisher will accept: two finite non-negative integers, both
+    // inside the authored map. A float or a NaN here would be an attribute that
+    // silently refuses to publish, which reads as a broken feature.
+    expect(Number.isInteger(position?.gridX)).toBe(true);
+    expect(Number.isInteger(position?.gridY)).toBe(true);
+    expect(position?.gridX).toBeGreaterThanOrEqual(0);
+    expect(position?.gridY).toBeGreaterThanOrEqual(0);
+    expect(position?.gridX).toBeLessThan(VILLAGE_MAP.width);
+    expect(position?.gridY).toBeLessThan(VILLAGE_MAP.height);
+  });
+
+  it('answers null before a world exists - on the renderer, which is where that state lives', async () => {
+    // Constructed and *not mounted*: no scene, no world, no player. This is the whole
+    // "before a world exists" case on this lane, and it is the adapter that owns it -
+    // the scene itself cannot observe it, because the scene does not exist first.
+    const renderer = createPixiVillageRenderer({
+      host: document.createElement('div'),
+      world: villageWorld([]),
+      callbacks: {
+        onStructureApproached: vi.fn(),
+        onStructureLeft: vi.fn(),
+        onStructureInteract: vi.fn(),
+        onReady: vi.fn(),
+      },
+    });
+
+    expect(renderer.isReady()).toBe(false);
+    expect(renderer.readPlayerGridPosition()).toBeNull();
+    // `readPoi` is absent for the identical reason, so this is the same story and not
+    // a special case bolted onto one member.
+    expect(renderer.readPoi()).toBeNull();
+  });
+});
+
+/**
+ * A `VillageScene` with only the state a grid-position read touches.
+ *
+ * `player` is the scene's own field and the same one `checkStructureProximity`
+ * measures from, so this is the real class reading its real state. What it cannot do
+ * is run a frame - `create()` needs a `Phaser.Game`, and jsdom has no renderer - which
+ * is exactly why the "moves without an update" assertion below is meaningful: there is
+ * no update loop here that could be doing the work.
+ */
+function phaserVillageScene(player: { x: number; y: number } | null): PhaserVillageScene {
+  const scene = new PhaserVillageScene();
+  const internal = scene as unknown as Record<string, unknown>;
+  internal.callbacks = {
+    onStructureApproached: vi.fn(),
+    onStructureLeft: vi.fn(),
+    onStructureInteract: vi.fn(),
+    onNpcApproached: vi.fn(),
+    onNpcLeft: vi.fn(),
+    onNpcInteract: vi.fn(),
+    onNpcDialogPosition: vi.fn(),
+    onReady: vi.fn(),
+  };
+  internal.player = player;
+  // The Keeper's Tower, at the authored grid the public proximity read resolves to a
+  // centre for. Present so the assertion below can compare like with like.
+  internal.allStructures = [
+    { id: 'keeper-tower', type: 'keeper-tower', label: "Keeper's Tower", gridX: 16, gridY: 3, width: 2, height: 2 },
+  ];
+  internal.structureZones = [{ getData: () => 'keeper-tower' }];
+  internal.npcStates = new Map();
+  internal.currentNpcId = null;
+  internal.currentStructureId = null;
+  return scene;
+}
+
+describe('the Phaser scene publishes the same tile from the same pixel position', () => {
+  it('is the floor of the map tile over the player x and y, computed on read', () => {
+    const player = { x: 264, y: 1320 };
+    const scene = phaserVillageScene(player);
+    const ts = VILLAGE_MAP.tileSize;
+
+    // The same 48 px tile the Pixi lane divides by, so the two builds publish one
+    // coordinate system rather than two that look alike.
+    expect(ts).toBe(VILLAGE_TILE_SIZE);
+    expect(scene.readPlayerGridPosition()).toEqual({
+      gridX: Math.floor(player.x / ts),
+      gridY: Math.floor(player.y / ts),
+    });
+    expect(scene.readPlayerGridPosition()).toEqual({ gridX: 5, gridY: 27 });
+
+    // Move the player and read again, with no `update()` anywhere in this file. A
+    // cached read - `lastPoi` is cached, once per frame, and this is precisely the
+    // pattern that would be wrong for a position - would still answer 5 here.
+    player.x = 700.5;
+    player.y = 100;
+    expect(scene.readPlayerGridPosition()).toEqual({
+      gridX: Math.floor(700.5 / ts),
+      gridY: Math.floor(100 / ts),
+    });
+    expect(scene.readPlayerGridPosition()).toEqual({ gridX: 14, gridY: 2 });
+  });
+
+  it('uses the same x the scene measures proximity from, so the two cannot disagree', () => {
+    // `updateStructureProximityData` computes `this.player.x - structCx` where
+    // `structCx = (struct.gridX + struct.width / 2) * ts`
+    // (`src/game/scenes/VillageScene.ts:775`). This asserts the published tile is
+    // derived from that identical `x` and that identical `ts`, by reading the
+    // distance the scene's own public measurement produces and reconstructing it.
+    const player = { x: 872, y: 180 };
+    const scene = phaserVillageScene(player);
+    const ts = VILLAGE_MAP.tileSize;
+
+    const candidates = scene.readNpcSnapshotCandidates();
+    const keeper = candidates.find((entry) => entry.id === 'keeper-tower');
+    const keeperCentreX = (16 + 2 / 2) * ts;
+    const keeperCentreY = (3 + 2 / 2) * ts;
+
+    expect(keeper?.distance).toBeCloseTo(
+      Math.hypot(player.x - keeperCentreX, player.y - keeperCentreY),
+      6,
+    );
+    // ...and the published tile is the floor of the very position that produced it.
+    expect(scene.readPlayerGridPosition()).toEqual({
+      gridX: Math.floor(player.x / ts),
+      gridY: Math.floor(player.y / ts),
+    });
+    // Inside the Keeper's Tower footprint, so a consumer aiming at `16,3` from the
+    // tile it just published is aiming from where the renderer thinks it is standing.
+    expect(scene.readPlayerGridPosition()?.gridX).toBe(18);
+    expect(scene.readPlayerGridPosition()?.gridY).toBe(3);
+  });
+
+  it('answers null before the player exists', () => {
+    expect(phaserVillageScene(null).readPlayerGridPosition()).toBeNull();
+  });
+
+  it('answers null on the renderer before a scene exists', () => {
+    // `scene` is `null` until `game.events.once('ready')` has handed it over, and this
+    // adapter never constructs a game in this file. That is the "no world yet" state,
+    // and it must be `null` rather than the map origin: a consumer cannot tell tile
+    // `0,0` apart from a measurement, and a wrong tile is worse than none.
+    const renderer = createPhaserVillageRenderer({
+      parent: document.createElement('div'),
+      world: villageWorld([]),
+      callbacks: {
+        onStructureApproached: vi.fn(),
+        onStructureLeft: vi.fn(),
+        onStructureInteract: vi.fn(),
+        onNpcApproached: vi.fn(),
+        onNpcLeft: vi.fn(),
+        onNpcInteract: vi.fn(),
+        onNpcDialogPosition: vi.fn(),
+        onReady: vi.fn(),
+      },
+    });
+
+    expect(renderer.isReady()).toBe(false);
+    expect(renderer.readPlayerGridPosition()).toBeNull();
+    expect(renderer.readPoi()).toBeNull();
+  });
+
+  it('refuses to clamp a player standing on the map edge, because a clamped tile is a different tile', () => {
+    const ts = VILLAGE_MAP.tileSize;
+    // The Pixi scene clamps `player.x` to `worldWidth` and the Phaser scene clamps to
+    // the world bounds, so a learner can stand on the boundary. There the floor is
+    // one past the last column. This returns that rather than `VILLAGE_MAP.width - 1`:
+    // the value is refused downstream, which is correct, whereas a clamp would report
+    // the learner as being on a tile they are not standing on.
+    const onEdge = phaserVillageScene({ x: VILLAGE_MAP.width * ts, y: VILLAGE_MAP.height * ts });
+    const edge = onEdge.readPlayerGridPosition();
+    expect(edge).toEqual({ gridX: VILLAGE_MAP.width, gridY: VILLAGE_MAP.height });
+    expect(edge?.gridX).toBeGreaterThanOrEqual(VILLAGE_MAP.width);
+
+    // One pixel inside the edge is a real, in-map tile - so the edge case is the
+    // boundary and not a general off-by-one in the division.
+    const justInside = phaserVillageScene({
+      x: VILLAGE_MAP.width * ts - 1,
+      y: VILLAGE_MAP.height * ts - 1,
+    });
+    expect(justInside.readPlayerGridPosition()).toEqual({
+      gridX: VILLAGE_MAP.width - 1,
+      gridY: VILLAGE_MAP.height - 1,
+    });
   });
 });
 

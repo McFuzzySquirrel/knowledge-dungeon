@@ -136,6 +136,64 @@ export const ARCHAEOLOGIST_CONTROL_IDS = Object.freeze({
 });
 
 /**
+ * The fishing surfaces' controls.
+ *
+ * A fourth object, for the same reason the second and third ones exist: the fishing HUD has a
+ * *next* action whose target is a different control from the one naming it - the catch panel's
+ * "Cast again" only becomes the right next step once a fish is caught - and Phase 14's
+ * vocabulary is not where Phase 17's controls belong.
+ *
+ * **Two of these are for focus order rather than for identity.** `chargeHold` and the walk
+ * pair are a press-and-hold control each, and a learner who presses Tab once must land on one
+ * of them rather than skipping three: Tab reaches every one, and Enter or Space works on every
+ * one, which is what makes keyboard parity with the touch path a claim rather than an
+ * intention.
+ *
+ * **No learner value appears in any of these.** `catalogId` is catalogue content and would be
+ * the tempting key, and it is exactly why the collection view keys on the *index into the
+ * catalogue* rather than on an id: a React key is a DOM-facing identity, and an id the learner
+ * chose belongs in the text, not in the structure. `tests/phase17/fishing-control-ids.test.ts`
+ * holds every value here against the rule.
+ */
+export const FISHING_CONTROL_IDS = Object.freeze({
+  /**
+   * The hold-to-charge control.
+   *
+   * One control, two actions: `beginPower` on press and `release` on lift, which is learner
+   * action 1 and learner action 3 of the state machine's table. Two separate buttons would
+   * make the charge stop when the learner moved between them.
+   */
+  chargeHold: 'fishing-charge-hold',
+  /** Walk left, held. The button, the key, and the walk intent are one control. */
+  walkLeft: 'fishing-walk-left',
+  /** Walk right, held. */
+  walkRight: 'fishing-walk-right',
+  /** Set the hook, inside the bite window. */
+  setHook: 'fishing-set-hook',
+  /** Cast again, from a caught fish. */
+  castAgain: 'fishing-cast-again',
+  /** Try again, from a missed cast. */
+  tryAgain: 'fishing-try-again',
+  /**
+   * The catch panel, which becomes the focus target the moment a fish is revealed.
+   *
+   * A focus *target*, not a control the learner presses: the recall question inside it is the
+   * next thing a keyboard user needs, and the panel arriving on its own is the one moment a
+   * screen-reader user would otherwise hear nothing about.
+   */
+  catchPanel: 'fishing-catch-panel',
+  /**
+   * The recall question's route back to its room.
+   *
+   * The only control in this file that is a *navigation* verb, and it is here for the same
+   * reason the rest are: an id is how a test asserts that a route exists at all.
+   */
+  recallRoom: 'fishing-recall-room',
+});
+
+export type FishingControlId = (typeof FISHING_CONTROL_IDS)[keyof typeof FISHING_CONTROL_IDS];
+
+/**
  * Move focus to a control by id, if it is in the document.
  *
  * Returns whether focus moved, so a caller can report "there is nothing to focus" rather

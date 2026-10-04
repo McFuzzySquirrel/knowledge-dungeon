@@ -23,6 +23,7 @@
  */
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { COZY_TOUCH_TARGET_MIN } from '../../src/theme';
@@ -43,6 +44,13 @@ const fake = vi.hoisted(() => {
     readonly setPlayerClass: ReturnType<typeof vi.fn>;
     readonly triggerInteract: ReturnType<typeof vi.fn>;
     readonly readPoi: () => null;
+    /**
+     * A mock, not a fixed value, because the handle's contract has two halves and both
+     * matter: it forwards what the renderer measured, and it does not substitute a
+     * default of its own when the renderer declines. A `() => ({ gridX: 7, ... })`
+     * double could only ever prove the first.
+     */
+    readonly readPlayerGridPosition: ReturnType<typeof vi.fn>;
     readonly onReady: (listener: () => void) => () => void;
     readonly fireReady: () => void;
   }
@@ -69,6 +77,7 @@ vi.mock('../../src/renderers/pixi/village/VillageRenderer', () => ({
       setPlayerClass: vi.fn(),
       triggerInteract: vi.fn(),
       readPoi: () => null,
+      readPlayerGridPosition: vi.fn(() => ({ gridX: 7, gridY: 11 })),
       onReady: (listener: () => void) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
@@ -84,6 +93,7 @@ vi.mock('../../src/renderers/pixi/village/VillageRenderer', () => ({
 
 // Imported after the mock so the component resolves the fake factory.
 import VillageWorld from '../../src/renderers/pixi/village/VillageWorld';
+import type { VillageWorldHandle } from '../../src/renderers/pixi/village/VillageWorld';
 import type { VillageSceneCallbacks } from '../../src/renderers/pixi/village/VillageRenderer';
 
 const callbacks: VillageSceneCallbacks = {
@@ -194,5 +204,53 @@ describe('state is announced in words, never by colour', () => {
     expect(screen.getByRole('img', { name: 'Village world' })).toBeTruthy();
     // The surface the renderer appends its canvas into is present and identified.
     expect(container.querySelector('[data-pixi-surface="pixi-village-world"]')).not.toBeNull();
+  });
+});
+
+describe('the imperative handle forwards the grid position without inventing one', () => {
+  /**
+   * Render and hold the ref, which is the only way a parent screen can reach the port.
+   *
+   * Asserted here rather than in `village-scene.test.ts` because the claim is about the
+   * `useImperativeHandle` wiring: the handle is the object `ui-engineer`'s publisher
+   * ends up calling, and a forwarding omission on this seam is invisible at every other
+   * altitude in the tree.
+   */
+  it('returns what the renderer measured, and null when the renderer declines', async () => {
+    const ref = createRef<VillageWorldHandle>();
+    await act(async () => {
+      render(<VillageWorld ref={ref} world={world} callbacks={callbacks} />);
+    });
+
+    expect(ref.current?.readPlayerGridPosition()).toEqual({ gridX: 7, gridY: 11 });
+    // Forwarded, not recomputed: exactly one call, straight to the renderer.
+    expect(fake.latest().readPlayerGridPosition).toHaveBeenCalledTimes(1);
+
+    // A renderer that cannot say must produce `null` here rather than a fallback tile.
+    // `0,0` would be the worst available answer: it is a real tile on the map, so a
+    // consumer would walk toward it believing the renderer had measured it.
+    fake.latest().readPlayerGridPosition.mockReturnValue(null);
+    expect(ref.current?.readPlayerGridPosition()).toBeNull();
+
+    // ...and it is a read, not a subscription: polling it re-reads, and mounting the
+    // world published nothing of its own.
+    expect(fake.latest().readPlayerGridPosition).toHaveBeenCalledTimes(2);
+  });
+
+  it('holds no React state for the position, so walking costs no renders', async () => {
+    const ref = createRef<VillageWorldHandle>();
+    await act(async () => {
+      render(<VillageWorld ref={ref} world={world} callbacks={callbacks} />);
+    });
+    // The handle is a stable object for the life of the mount, so a caller polling it
+    // gets a measurement without ever causing this component to re-render. A publisher
+    // that took the tile as `useState` would re-render the whole village subtree at the
+    // sample rate, which is the regression the compass rewrite removed.
+    const handle = ref.current;
+    for (let sample = 0; sample < 50; sample += 1) {
+      expect(handle?.readPlayerGridPosition()).toEqual({ gridX: 7, gridY: 11 });
+    }
+    expect(ref.current).toBe(handle);
+    expect(fake.latest().readPlayerGridPosition).toHaveBeenCalledTimes(50);
   });
 });

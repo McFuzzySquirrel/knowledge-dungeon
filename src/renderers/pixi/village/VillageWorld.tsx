@@ -46,7 +46,7 @@ import {
 import { PixiCanvas } from '@/renderers/pixi/runtime/PixiCanvas';
 import { resolveCozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
 import { useWorldQuality } from '@/renderers/pixi/runtime/useWorldQuality';
-import type { VillageNpcHost } from '@/application/contracts/renderer';
+import type { VillageNpcHost, WorldGridPosition } from '@/application/contracts/renderer';
 import { createVillageNpcSnapshot } from '@/application/contracts/villageNpc';
 import type { WorldPointOfInterest, VillageWorldModel } from '@/application/contracts/world';
 import type { VillageStructure } from '@/data/villageLayout';
@@ -88,6 +88,15 @@ export interface VillageWorldProps {
 export interface VillageWorldHandle extends VillageNpcHost {
   isReady(): boolean;
   restart(): void;
+  /**
+   * Re-declared as required, for the reason the header gives for `VillageNpcHost`:
+   * this handle is *this component's* declaration of what a screen may ask the world,
+   * and it answers `null` for "not mounted yet" rather than omitting the member. A
+   * screen that feature-detected would get a truthy-or-`undefined` answer with no
+   * distinction between "cannot say" and "said nothing", and the one thing this value
+   * must never be is a tile the renderer did not measure.
+   */
+  readPlayerGridPosition(): WorldGridPosition | null;
 }
 
 const DEFAULT_SURFACE_ID = 'pixi-village-world';
@@ -241,6 +250,13 @@ const VillageWorld = forwardRef<VillageWorldHandle, VillageWorldProps>(function 
       setPlayerClass: (playerClass) => rendererRef.current?.setPlayerClass(playerClass),
       triggerInteract: () => rendererRef.current?.triggerInteract(),
       readPoi: (): WorldPointOfInterest | null => rendererRef.current?.readPoi() ?? null,
+      // The learner's tile, forwarded like every other member. `null` while the
+      // renderer ref is empty - which is the whole "before a world exists" case on
+      // this lane, and the reason the handle's answer is `null` rather than a
+      // default tile. No state, no subscription, no render: the read is a measurement
+      // and the caller's cadence is the caller's business.
+      readPlayerGridPosition: (): WorldGridPosition | null =>
+        rendererRef.current?.readPlayerGridPosition() ?? null,
       // Phase 12's NPC surface, forwarded like every other member. A DOM
       // nearby-action panel reads the snapshot and sends an invocation; the scene
       // measures and the contract decides what a row means.

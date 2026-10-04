@@ -64,6 +64,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   allFirstPartyModules,
   clearPlantingDeclarations,
+  isTestOwnedTransientModule,
+  PHASE16_BOUNDARY_PROBE_DIRECTORY,
   readSpecifiers,
   stripComments,
   testOwnedDirectory,
@@ -217,15 +219,33 @@ function describeFindings(findings: readonly BoundaryFinding[]): string {
     .join('\n');
 }
 
-/** Repo-relative paths of every module under `src/renderers/`, sorted. */
-function rendererEntries(): string[] {
-  return allFirstPartyModules().filter((path) => path.startsWith(RENDERER_PREFIX));
+/**
+ * Repo-relative paths of every module under `src/renderers/`, sorted.
+ *
+ * **Live plantings are excluded unless the caller asks for them.** Three boundary gates plant
+ * probes on the real filesystem inside `src/` as positive controls, Vitest runs the files in
+ * parallel workers, and a probe one worker planted is otherwise a real entry in another worker's
+ * scan — a cross-file flake, not a finding. Phase 17's probe is a value import of
+ * `@/store/fishingCommands` from `src/renderers/`, so this gate reading it mid-planting reports a
+ * renderer-to-store violation that does not exist. The exclusion is
+ * `isTestOwnedTransientModule`, the repository's own predicate, keyed on the *declaration* the
+ * planting wrote — so a module left behind in one of those directories after the planting ended
+ * is scanned like any other source file again.
+ */
+function rendererEntries(options: { includeLivePlantings?: boolean } = {}): string[] {
+  return allFirstPartyModules().filter(
+    (path) =>
+      path.startsWith(RENDERER_PREFIX) &&
+      (options.includeLivePlantings === true || !isTestOwnedTransientModule(path)),
+  );
 }
 
 /** Repo-relative paths of every domain module, sorted. */
 function domainEntries(): string[] {
   return allFirstPartyModules().filter(
-    (path) => path.startsWith('src/core/') || path.startsWith('src/application/'),
+    (path) =>
+      (path.startsWith('src/core/') || path.startsWith('src/application/')) &&
+      !isTestOwnedTransientModule(path),
   );
 }
 
@@ -254,7 +274,7 @@ function readRepoFile(repoRelativePath: string): string {
  * `eslint.config.js`'s reasoning for `pixi.js` (that a type import is renderer coupling too)
  * applies unchanged.
  */
-const PROBE_DIRECTORY_NAME = 'renderers/__phase16_boundary_probe__';
+const PROBE_DIRECTORY_NAME = PHASE16_BOUNDARY_PROBE_DIRECTORY;
 const PROBE_DIRECTORY = testOwnedDirectory(PROBE_DIRECTORY_NAME);
 const PROBE_PATH = `src/${PROBE_DIRECTORY_NAME}/probe.ts`;
 const PROBE_SOURCE = `import type { ReviewPassRewardLedger } from '@/store/reviewCommands';
@@ -465,13 +485,16 @@ describe('positive control: the same walk reports a planted renderer-to-store im
       expect(existsSync(join(process.cwd(), PROBE_PATH))).toBe(true);
 
       // The probe is inside the renderer subtree, so it becomes an entry, and the walk follows
-      // its edge out into the store.
-      expect(rendererEntries(), 'the probe must become an entry or nothing is proved').toContain(
-        PROBE_PATH,
-      );
+      // its edge out into the store. `includeLivePlantings` is what makes this control work at
+      // all: the gate's own scans skip a declared planting, so the one walk that must *not* skip
+      // it asks for it by name.
+      expect(
+        rendererEntries({ includeLivePlantings: true }),
+        'the probe must become an entry or nothing is proved',
+      ).toContain(PROBE_PATH);
 
       const findings = findingsIn(
-        walkClosure(rendererEntries()),
+        walkClosure(rendererEntries({ includeLivePlantings: true })),
         RENDERER_FORBIDDEN,
         FORBIDDEN_RENDERER_TREES,
       );

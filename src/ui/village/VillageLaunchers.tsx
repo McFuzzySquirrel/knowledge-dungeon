@@ -35,6 +35,9 @@ import { SettingsModal } from '@/ui/components/SettingsModal';
 import { StudyStatsPanel } from '@/ui/components/StudyStatsPanel';
 import { FishStandPanel } from '@/ui/components/FishStandPanel';
 import { FishingRecallModal } from '@/ui/components/FishingRecallModal';
+import type { FishingRecallChoice } from '@/ui/components/FishingRecallModal';
+import { FishingCatchPanel } from '@/ui/fishing/FishingCatchPanel';
+import type { RecallRoomDestination } from '@/ui/fishing/fishingRecallNavigation';
 import type { ColorTheme } from '@/store/preferencesStore';
 
 import { VILLAGE_TOUCH_TARGET_STYLE } from './villageTypes';
@@ -46,7 +49,18 @@ export interface VillageFishCatch {
   readonly description: string;
 }
 
+/**
+ * Whether the recall dialog is open.
+ *
+ * Separate from `recallQuestion` on purpose. Before Phase 17 the dialog rendered only when a
+ * question existed, so "the pond had no question" was indistinguishable from "the question is
+ * still loading" and from "the learner dismissed it" - and the only way to offer the
+ * kept-without-recall outcome was to not render the dialog at all, which is precisely how that
+ * outcome came to be recorded as a correct answer.
+ */
 export interface VillageLaunchersProps {
+  /** Open the recall dialog for the current catch, whether or not it has a question. */
+  readonly showRecallModal: boolean;
   readonly colorTheme: ColorTheme;
   readonly showStats: boolean;
   readonly onCloseStats: () => void;
@@ -61,10 +75,31 @@ export interface VillageLaunchersProps {
   readonly fishCatch: VillageFishCatch | null;
   readonly onKeepFish: () => void;
   readonly onReleaseFish: () => void;
-  /** The recall question for the current catch, or `null`. */
+  /**
+   * The recall question for the current catch, or `null` when the pond had none.
+   *
+   * `null` is now a **reachable** state rather than an accident of an async load: Phase 17
+   * gives "kept with no recall material" its own outcome, and that outcome's dialog is this
+   * component's no-question branch. `FishingRecallModal` renders a distinct third decision
+   * there - keep the fish, earn nothing - instead of the pre-Phase-17 "Keep Fish" button that
+   * paid `FSH_XP_PER_CORRECT_ANSWER`.
+   */
   readonly recallQuestion: { prompt: SelfCheckPrompt; roomId: string } | null;
-  readonly onSelfEvaluate: (result: 'correct' | 'incorrect') => void;
+  /**
+   * The learner committed one of three outcomes.
+   *
+   * `'correct' | 'incorrect'` is gone, and its absence is the fix: two values could not express
+   * "kept with no question", so that case was reported as a correct answer and paid learning XP.
+   */
+  readonly onRecallDecision: (choice: FishingRecallChoice, roomId: string | null) => void;
   readonly onCancelRecall: () => void;
+  /**
+   * The subject and room the recall question came from, for its "open that room" route.
+   *
+   * `null` hides the route rather than rendering a control that cannot work - the rule the whole
+   * app follows for a capability it does not have.
+   */
+  readonly recallDestination: RecallRoomDestination | null;
   /** The one-shot welcome sentence, or `null`. */
   readonly welcomeMessage: string | null;
   readonly onDismissWelcome: () => void;
@@ -85,13 +120,14 @@ export function VillageLaunchers(props: VillageLaunchersProps): ReactNode {
     fishCatch,
     onKeepFish,
     onReleaseFish,
+    showRecallModal,
     recallQuestion,
-    onSelfEvaluate,
+    onRecallDecision,
     onCancelRecall,
+    recallDestination,
     welcomeMessage,
     onDismissWelcome,
   } = props;
-  const catchTitleId = useId();
   const welcomeTitleId = useId();
 
   return (
@@ -110,74 +146,39 @@ export function VillageLaunchers(props: VillageLaunchersProps): ReactNode {
 
       {fishStandOpen ? <FishStandPanel onClose={onCloseFishStand} /> : null}
 
+      {/*
+        The catch card and its recall dialog, delegated.
+
+        Both were inline JSX here before Phase 17. The card is now
+        `src/ui/fishing/FishingCatchPanel.tsx` and the dialog is a three-outcome surface with a
+        focus trap, an Escape route, and focus restoration - none of which belongs in a
+        launcher whose job is "open this if it is switched on". The decision props are passed
+        through verbatim; this module decides nothing about what a catch is worth.
+      */}
       {fishCatch !== null ? (
-        <div
-          className="modal-backdrop"
-          style={{ zIndex: 350, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          {/*
-            The whole card is the live region rather than a sentence inside it, so
-            the fish's name, its rarity, and its description are announced as one
-            unit. The rarity is stated as a word as well as carried by the badge's
-            colour, which is plan 10.1's no-colour-only rule.
-          */}
-          <div
-            className="village-info-panel ui-skin screen-slide-up"
-            data-theme={colorTheme}
-            style={{ maxWidth: 420, width: '90%' }}
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            aria-labelledby={catchTitleId}
-          >
-            <div className="village-info-panel-header">
-              <span className="village-info-portal-icon" aria-hidden="true">
-                🎣
-              </span>
-              <div>
-                <h3 id={catchTitleId}>{fishCatch.fishName}</h3>
-                <p className="village-info-meta">
-                  {fishCatch.rarity.charAt(0).toUpperCase() + fishCatch.rarity.slice(1)} fish.
-                  Caught.
-                </p>
-              </div>
-              <span className="fish-rarity-badge" data-rarity={fishCatch.rarity}>
-                {fishCatch.rarity.toUpperCase()}
-              </span>
-            </div>
-            <p className="village-info-desc">{fishCatch.description}</p>
-            <div className="village-info-actions">
-              <button
-                type="button"
-                className="village-enter-btn"
-                onClick={onKeepFish}
-                style={VILLAGE_TOUCH_TARGET_STYLE}
-                data-village-touch-target="keep-fish"
-              >
-                Keep Fish
-              </button>
-              <button
-                type="button"
-                className="village-action-btn"
-                onClick={onReleaseFish}
-                style={VILLAGE_TOUCH_TARGET_STYLE}
-                data-village-touch-target="release-fish"
-              >
-                Release
-              </button>
-            </div>
-          </div>
-        </div>
+        <FishingCatchPanel
+          fishName={fishCatch.fishName}
+          rarity={fishCatch.rarity as FishRarity}
+          catalogId={fishCatch.catalogId}
+          description={fishCatch.description}
+          onKeep={onKeepFish}
+          onRelease={onReleaseFish}
+          // The card replaces the pond's hook control, which the machine has just left
+          // `biting` for - so without this, focus would sit on a now-disabled button while the
+          // card announced a catch nobody could reach.
+          autoFocus
+        />
       ) : null}
 
-      {fishCatch !== null && recallQuestion !== null ? (
+      {fishCatch !== null && showRecallModal ? (
         <FishingRecallModal
           fishName={fishCatch.fishName}
-          rarity={fishCatch.rarity as 'common' | 'rare' | 'epic'}
+          rarity={fishCatch.rarity as FishRarity}
           catalogId={fishCatch.catalogId}
           description={fishCatch.description}
           recallQuestion={recallQuestion}
-          onSelfEvaluate={onSelfEvaluate}
+          destination={recallDestination}
+          onDecide={onRecallDecision}
           onCancel={onCancelRecall}
         />
       ) : null}

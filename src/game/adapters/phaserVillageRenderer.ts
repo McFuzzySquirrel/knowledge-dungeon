@@ -52,7 +52,7 @@ import {
   type VillageActionInvocation,
   type VillageNpcSnapshot,
 } from '@/application/contracts/villageNpc';
-import type { VillageNpcHost, WorldRenderer } from '@/application/contracts/renderer';
+import type { VillageNpcHost, WorldGridPosition, WorldRenderer } from '@/application/contracts/renderer';
 import type { VillageWorldModel } from '@/application/contracts/world';
 import { type VillageStructure } from '@/data/villageLayout';
 
@@ -107,6 +107,14 @@ export interface PhaserVillageRenderer extends WorldRenderer, VillageNpcHost {
    * function; listeners added after readiness are not replayed.
    */
   onReady(listener: () => void): () => void;
+  /**
+   * Re-declared as required here, and narrowed from the base port's optional member,
+   * for the reason the interface header gives for `VillageNpcHost`: this adapter
+   * implements the read, so the object literal below must not be able to drop it
+   * without a `typecheck` failure. The contract member stays `?` - the promotion
+   * belongs on the adapter that has earned it.
+   */
+  readPlayerGridPosition(): WorldGridPosition | null;
   /**
    * The fishing world renderer bound to this host's game. The fishing world
    * has no canvas of its own: it swaps the running scene, so the village host
@@ -239,6 +247,23 @@ export function createPhaserVillageRenderer(
       const poi = scene?.lastPoi;
       if (!poi || poi.distance >= 1e9) return null;
       return { name: poi.name, angle: poi.angle, distance: poi.distance };
+    },
+
+    /**
+     * The scene's tile, computed on read.
+     *
+     * Forwarded, never recomputed here and never cached here. Recomputing in this
+     * adapter would mean a second answer to "where is the learner" derived from a
+     * different source than the scene measures proximity from, and caching it would
+     * reintroduce exactly the staleness `readPoi`'s cached `lastPoi` is acceptable
+     * with and a position is not.
+     *
+     * `null` before a scene exists, which is the whole of the "no world yet" case on
+     * this lane: `scene` is `null` until `game.events.once('ready')` has handed it
+     * over, and the optional call collapses that to the contract's `null`.
+     */
+    readPlayerGridPosition(): WorldGridPosition | null {
+      return scene?.readPlayerGridPosition() ?? null;
     },
 
     /**

@@ -355,6 +355,19 @@ export interface RendererChunkBoundaryOptions {
    * read nothing - the shape of a check that measures nothing.
    */
   readonly pixiDungeon?: boolean;
+  /**
+   * Whether this build was asked for the PixiJS fishing pond, from `VITE_PIXI_FISHING`.
+   *
+   * Optional and additive, for the same reason as `pixiDungeon`, and necessary for the
+   * same reason: `build:web:pixi-fishing` leaves `VITE_WORLD_RENDERER=phaser`,
+   * `VITE_PIXI_VILLAGE` unset, and `VITE_PIXI_DUNGEON` unset, so none of the three
+   * existing checks can cover it. A fishing-flagged build that emitted no Pixi chunk set a
+   * build-time variable and read nothing, which is the shape of a check that reports
+   * success because it measured nothing. `undefined` is treated exactly as `false`, so
+   * every existing caller - including the Phase 9 switch tests, which construct options
+   * with `worldRenderer` alone - keeps compiling and keeps its current behaviour.
+   */
+  readonly pixiFishing?: boolean;
 }
 
 /**
@@ -367,12 +380,14 @@ export interface RendererChunkBoundaryOptions {
  *    so the Welcome route would fetch the Pixi runtime before running a line of
  *    application code.
  * 2. **A build that asked for Pixi and emitted no Pixi chunk.** Reached by
- *    `VITE_WORLD_RENDERER=pixi` (the Phase 9 renderer switch) and, additively, by
- *    `VITE_PIXI_VILLAGE=true` (the Phase 11 village switch). Each is a build-time
- *    contract that CI has to exercise, and a switched build that contains no
- *    switched renderer is the shape of a check that reports success because it
- *    measured nothing. The two are independent because `build:web:pixi-village`
- *    leaves `VITE_WORLD_RENDERER=phaser`: the village is the only thing switched on.
+ *    `VITE_WORLD_RENDERER=pixi` (the Phase 9 renderer switch), and additively by
+ *    `VITE_PIXI_VILLAGE=true` (the Phase 11 village switch), `VITE_PIXI_DUNGEON=true`
+ *    (the Phase 13 dungeon switch), and `VITE_PIXI_FISHING=true` (the Phase 17 fishing
+ *    switch). Each is a build-time contract that CI has to exercise, and a switched build
+ *    that contains no switched renderer is the shape of a check that reports success
+ *    because it measured nothing. The four are independent because each of those build
+ *    scripts leaves `VITE_WORLD_RENDERER=phaser`: the renderer check cannot cover any of
+ *    them.
  *
  * The Phaser side is reported rather than enforced. `vendor-phaser-*` is already
  * named by the entry document's `modulepreload` links in the current production
@@ -508,6 +523,27 @@ export function rendererChunkBoundaryPlugin(options: RendererChunkBoundaryOption
           ].join('\n'),
         );
       }
+
+      // The Phase 17 fishing switch, enforced independently of the other three.
+      //
+      // `build:web:pixi-fishing` turns on exactly one flag and leaves every other switch at
+      // its production default, so neither the renderer check, the village check, nor the
+      // dungeon check can cover it. The failure mode is the same one this block exists for:
+      // a build that asked for the pond and emitted no Pixi chunk has set a variable nothing
+      // read, and the lane would then verify nothing.
+      if (
+        options.pixiFishing === true &&
+        options.worldRenderer !== 'pixi' &&
+        audit.rendererChunks.every((entry) => entry.family !== 'pixi')
+      ) {
+        this.error(
+          [
+            '[renderer-chunks] VITE_PIXI_FISHING=true, but this build contains no Pixi chunk.',
+            'The fishing switch set a build-time variable and nothing read it, so there is no Pixi fishing artifact to verify.',
+            'Wire the Pixi fishing host into the village route under the flag, or build without VITE_PIXI_FISHING until the host exists.',
+          ].join('\n'),
+        );
+      }
     },
   };
 }
@@ -539,6 +575,7 @@ export default defineConfig(({ mode }) => {
         worldRenderer: runtimeConfig.worldRenderer,
         pixiVillage: runtimeConfig.pixiVillage,
         pixiDungeon: runtimeConfig.pixiDungeon,
+        pixiFishing: runtimeConfig.pixiFishing,
       }),
     ],
     resolve: {

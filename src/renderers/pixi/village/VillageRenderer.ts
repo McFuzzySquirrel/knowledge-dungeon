@@ -39,7 +39,11 @@ import { resolveCozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
 import { resolveWorldQualityProfile, type WorldApplication, type WorldQualityId } from '@/renderers/pixi/runtime/types';
 import { readWorldQuality } from '@/renderers/pixi/runtime/useWorldQuality';
 import { currentWorldEnvironment } from '@/renderers/pixi/runtime/worldEnvironment';
-import type { VillageNpcHost, WorldRenderer } from '@/application/contracts/renderer';
+import type {
+  VillageNpcHost,
+  WorldGridPosition,
+  WorldRenderer,
+} from '@/application/contracts/renderer';
 import {
   createVillageNpcSnapshot,
   type VillageActionInvocation,
@@ -95,6 +99,19 @@ export interface PixiVillageRenderer extends WorldRenderer, VillageNpcHost {
    * listeners added after readiness are not replayed.
    */
   onReady(listener: () => void): () => void;
+  /**
+   * Re-declared as **required** here, and narrowed from the base port's optional
+   * member, for the reason the interface header gives for `VillageNpcHost`: this
+   * adapter implements the read, and the entire point of implementing it is that a
+   * consumer should not have to feature-detect. Typed against the optional base port,
+   * the object literal below could drop the member and still compile, and a consumer
+   * would read `undefined` at runtime with nothing in the build to say so.
+   *
+   * The contract member stays `?`. The promotion happens here, on the adapter that has
+   * earned it - which is what keeps the two lanes' implementations honest rather than
+   * declaring one of them unable to answer.
+   */
+  readPlayerGridPosition(): WorldGridPosition | null;
 }
 
 /** Everything the renderer needs to present one village world. */
@@ -197,6 +214,24 @@ export function createPixiVillageRenderer(
     },
     readPoi(): WorldPointOfInterest | null {
       return host.capabilities?.readPoi() ?? null;
+    },
+
+    /**
+     * The scene's grid position, forwarded.
+     *
+     * `null` before a mount, and that is the *only* `null` this lane produces: a
+     * mounted scene always has a player and so always has a tile. The value is
+     * computed by the scene on each read, so nothing here caches it into a field that
+     * could outlive the frame it was measured in.
+     */
+    readPlayerGridPosition(): WorldGridPosition | null {
+      // The second `?.` is the *base port's* optionality, not a real possibility: the
+      // scene above implements the read unconditionally, and the host is typed against
+      // `VillageNpcHost` because that is the renderer-neutral type a scene factory is
+      // declared to return. Nudging the host to the narrowed port would buy nothing a
+      // test cannot already see, and would make this module name a type that only
+      // exists to restate a `?`.
+      return host.capabilities?.readPlayerGridPosition?.() ?? null;
     },
 
     /**

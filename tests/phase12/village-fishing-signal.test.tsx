@@ -310,42 +310,70 @@ describe('the village screen publishes a DOM-observable fishing-entry signal', (
   });
 
   /*
-   * ── KNOWN LIMITATION, not correct behaviour ────────────────────────────────
+   * ── The Phase 17 fix, which this file asked for ────────────────────────────
    *
-   * `isMounted()` reports whether a renderer *handle* exists; it does not ask whether
-   * that handle carries a fishing world. So a handle that mounts a village but has no
-   * `fishing()` member passes the guard, `prepareFishingSession` publishes the signal,
-   * and then `enter` no-ops - a screen-reader user is told they have started fishing
-   * when nothing started.
+   * This test used to pin a KNOWN LIMITATION and say, in its own words, that "Phase 17
+   * should tighten the guard to require a fishing host, not merely a handle, and this
+   * test becomes the one that fails then - `enterCalls` and the signal should be
+   * asserted together, because after that change neither may happen without the other."
    *
-   * No shipped lane has that shape today: the Phaser adapter always carries `fishing()`,
-   * and the Pixi lane mounts no handle at all (the previous test). So this is not a live
-   * defect. It is a trap laid directly in Phase 17's path, where a Pixi handle will
-   * start carrying nearby-action rows before it carries a fishing world, and the ordering
-   * that makes the guard work today will quietly stop making it work.
+   * Phase 17 did exactly that. `villageStudyFlow.ts` now resolves both lanes through one
+   * `resolveFishingHost()`, so `isMounted()` asks whether a fishing world can be *entered*
+   * rather than whether a renderer *handle* exists. A handle that mounts a village without
+   * carrying a fishing world resolves to `null`, `enterFishing` returns before
+   * `prepareFishingSession`, and neither the signal nor a world happens.
    *
-   * Pinned as-is so the shape is recorded. **Phase 17 should tighten the guard to require
-   * a fishing host, not merely a handle**, and this test becomes the one that fails then -
-   * `enterCalls` and the signal should be asserted together, because after that change
-   * neither may happen without the other.
+   * So the shape recorded below is now the *fixed* shape, asserted in the form the
+   * original note asked for: `enterCalls` and the signal together, neither without the
+   * other. The trap was real - a screen-reader user would have been told they had started
+   * fishing when nothing started - and it was reachable on the Pixi lane as it stood in
+   * Phase 12, which is why the note named the phase that would close it.
    */
-  it('KNOWN LIMITATION: a handle with no fishing host still publishes the signal, then starts nothing', async () => {
+  it('a handle with no fishing host starts nothing and publishes no signal', async () => {
     adapterHasFishingHost = false;
     const container = await renderVillageScreen();
 
     await act(async () => {
       (adapter.callbacks as SceneCallbacks).onStructureInteract(POND_ID);
     });
-    await waitFor(() => {
-      expect(readWorld(container)).toBe('fishing');
+    // Give the flow every chance to publish, so the assertion below is about the guard and
+    // not about the test having waited too little.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    // The signal fired...
-    expect(readFishingAnnouncement(container)).toBe(FISHING_ANNOUNCEMENT);
-    // ...and the world did not.
+    // Neither half happened...
     expect(
       adapter.enterCalls,
       'a fishing world was entered despite the handle reporting no fishing host',
     ).toBe(0);
+    expect(readWorld(container)).toBe('village');
+    expect(readFishingAnnouncement(container)).toBeNull();
+  });
+
+  it('and the Pixi lane adds nothing on top of it, so a session is never doubled', async () => {
+    // The other half of the fix, and the reason it needed two lanes rather than one.
+    // `resolveFishingHost` prefers the Pixi lane and falls back to the Phaser one, so a build
+    // with *both* must still enter exactly one world. The Pixi lane contributes a host only
+    // while a session is already on screen - it is a mount, not an offer - so on a cold screen
+    // it resolves to `null` and the Phaser adapter is reached exactly once.
+    //
+    // `pixiFishing` is false under vitest: `import.meta.env.VITE_PIXI_FISHING` is not `'true'`,
+    // so the switch is folded away and the chunk is not even importable. That is the
+    // *default-build* condition, which is the one worth asserting, and it is also the
+    // rollback condition - the plan's rollback line is `VITE_PIXI_FISHING=false`.
+    adapterHasFishingHost = true;
+    const container = await renderVillageScreen();
+
+    await act(async () => {
+      (adapter.callbacks as SceneCallbacks).onStructureInteract(POND_ID);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // One world, one signal. Not two of either.
+    expect(adapter.enterCalls, 'a fishing session was started more than once').toBe(1);
+    expect(readFishingAnnouncement(container)).toBe(FISHING_ANNOUNCEMENT);
   });
 });

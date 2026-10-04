@@ -27,15 +27,38 @@
  * screen keeps up to date on every render - the same trick the pre-Phase-12
  * screen used, preserved rather than reinvented.
  *
- * ## The fishing port is honest about which renderer owns it
+ * ## The fishing port, and which renderer owns it
  *
- * `isMounted` reports the **Phaser** handle, and `enter` returns early when that
- * handle has no fishing world. The Phase 11 Pixi village has no fishing world yet
- * (Phase 17 does), so on the Pixi path `isMounted` is `false` and `enterFishing`
- * no-ops *before* the flow clears any village UI state. That ordering is a
- * documented behaviour - the original village screen returned before touching
- * state when no host was mounted - and this module preserves it by construction
- * rather than by comment.
+ * `isMounted` reports **whether a fishing world can be entered at all**, and `enter` returns
+ * early when there is none. Both resolve through one function, {@link resolveFishingHost},
+ * which asks the Pixi lane first and the Phaser lane second.
+ *
+ * That indirection exists because Phase 17 gave the Pixi lane a fishing world. Until it did,
+ * this module read `options.readPhaserHandle()?.fishing?.()` directly and documented the Pixi
+ * path as having nowhere to fish. That is no longer true, and this is the change that makes
+ * it so: a Pixi host is a peer of the Phaser one, not a second concept. The Phaser lane's
+ * behaviour is unchanged, because a non-null Phaser handle always reports a `fishing()`
+ * member and so always resolves to a host.
+ *
+ * The ordering is a deliberate build-time one: the Pixi host is preferred so a build with
+ * `VITE_PIXI_FISHING=true` never reaches for a Phaser scene, and the default build - where
+ * `readPixiFishingHost` returns `null` because the Pixi fishing chunk is deleted from the
+ * artifact - behaves exactly as it did before.
+ *
+ * The ordering also preserves the documented early return: a learner with nowhere to fish sees
+ * the pond, not an empty screen, because `enterFishing` returns before `prepareFishingSession`
+ * clears any village UI state.
+ *
+ * ## Why the Pixi host arrives through a port rather than being reached from here
+ *
+ * This module names no engine and no renderer tree. Phase 12's exit criterion - "no Pixi object
+ * is required to understand or invoke a village action" - is enforced as a graph property by
+ * `tests/phase12/village-shell-split.test.ts`, which refuses *any* `@/renderers` reach from
+ * `src/ui/village/**`, dynamic import included. A `VITE_PIXI_FISHING` switch here would have
+ * been a second, differently-located copy of a rule the screen already owns twice over: this
+ * file's own header puts "the build-time Phaser/Pixi switch" in the screen, "deliberately".
+ * So the switch lives in `VillageScreen.tsx` beside the village and dungeon switches, and all
+ * this module needs from it is a getter that returns the host or `null`.
  */
 import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -49,24 +72,48 @@ import {
   type StudyFlowVillageSubject,
 } from '@/application/studyFlow';
 import type { FishingWorldModel } from '@/application/contracts/world';
-import type { PlayerClassId } from '@/game/systems/playerClasses';
+/*
+ * Phase 17. This used to be `@/game/systems/playerClasses`, which put a Phaser-tree module in
+ * the import closure of the fishing lane's own host contract - and the lane's DOM half, which
+ * legitimately holds that contract, is held renderer-free by
+ * `tests/phase17/fishing-control-ids.test.ts`. `PlayerClassId` is declared in
+ * `@/application/contracts/world`, and `playerClasses.ts` asserts its own duplicate is identical
+ * to that one at compile time, so reading the neutral declaration loses nothing and keeps the
+ * two from drifting - the same move `src/store/sessionStore.ts` records making for `GamePhase`.
+ */
+import type { PlayerClassId } from '@/application/contracts/world';
 import type { VillageStructure } from '@/data/villageLayout';
 
 /**
- * The fishing host a Phaser village renderer owns.
+ * The fishing host a renderer owns, in renderer-neutral terms.
  *
- * Structural, so this module names no engine - the same reasoning the screen's
- * handle type uses.
+ * The same shape for both lanes, so this module names no engine and holds no engine type.
+ * The Phaser adapter supplies a facade over a scene swap inside the village's own game; a
+ * Pixi host supplies a mount of `FishingWorld` and the controller its handle exposes.
  */
+export interface VillageFishingHostHandlers {
+  onFishCaught: (data: StudyFlowFishCaught) => void;
+  onReturnToVillage: () => void;
+  onReady: () => void;
+  /**
+   * The pond this session is for.
+   *
+   * Carried on the handlers rather than added to `FishingWorldModel` because plan 6.1 keeps
+   * world models renderer-neutral and `src/application/contracts/**` is not this phase's to
+   * edit - and because a pond id is session *identity*, which is exactly what a handler bag
+   * is for. Phase 17 needs it to mint the fishing session context with the same pond
+   * identifier the eligibility lookup used, which is plan 5.3's "one subject context carried
+   * unchanged" in the one place it was previously dropped.
+   *
+   * The **Phaser** adapter does not supply it: it is a facade over a scene swap and its
+   * `enter` ignores the field. A Pixi-lane session therefore carries a pond id and a
+   * Phaser-lane session does not, so the screen falls back to the structure id it cast from.
+   */
+  readonly pondId?: string;
+}
+
 export interface VillageFishingHost {
-  enter(
-    model: FishingWorldModel,
-    handlers: {
-      onFishCaught: (data: StudyFlowFishCaught) => void;
-      onReturnToVillage: () => void;
-      onReady: () => void;
-    },
-  ): void;
+  enter(model: FishingWorldModel, handlers: VillageFishingHostHandlers): void;
   returnToVillage(): void;
 }
 
@@ -78,6 +125,24 @@ export interface VillageStudyFlowOptions {
    * is what makes `fishing.isMounted` false in both cases.
    */
   readonly readPhaserHandle: () => { fishing?: () => VillageFishingHost } | null;
+  /**
+   * The live Pixi-lane fishing host, read at call time.
+   *
+   * `null` on the Phaser lane, and `null` on a build whose artifact contains no Pixi fishing
+   * chunk at all.
+   *
+   * **Non-null means "this screen has a Pixi fishing world host", not "a pond is running."** The
+   * two are different questions with different answers, and the Pixi lane's host is published
+   * from the moment the screen mounts - because `studyFlow.enterFishing` asks `isMounted()`
+   * *before* it calls `enter`, so a host published by `enter` could never be reached by the only
+   * code that calls `enter`. This is the same shape as `readPhaserHandle`, which is likewise
+   * non-null whenever the village game has mounted and not while `FishingScene` is the active
+   * scene; see `PixiFishingLane`'s header for the two questions and the two answers.
+   *
+   * Nothing in this module may read the non-null case as "a pond exists". The only thing that
+   * answers *that* is the host's own `enter` having been called.
+   */
+  readonly readPixiFishingHost: () => VillageFishingHost | null;
   /** The current portal-slot projection. Read through a ref by the screen. */
   readonly readDynamicStructures: () => readonly VillageStructure[];
   /** The current subject summaries. Read through a ref by the screen. */
@@ -102,6 +167,27 @@ export interface VillageStudyFlowOptions {
    * screen state and not a port.
    */
   readonly prepareFishingSession: () => void;
+  /**
+   * A fishing session ended, on a lane that cannot report it to the DOM itself.
+   *
+   * Called from the one place every exit route funnels through: this module's `fishing.exit`,
+   * which is what `studyFlow.exitFishing` dispatches and what the `onReturnToVillage` handler
+   * `enterFishing` built into the world's own handlers.
+   *
+   * ## Why the option and not something already in the port
+   *
+   * The Pixi lane's host *can* say so itself - its `returnToVillage` clears its session and
+   * reports it - and the screen's flag is cleared from that report. The **Phaser** lane cannot:
+   * `createPhaserFishingRenderer`'s `returnToVillage` stops the fishing scene and wakes the
+   * village, both inside a `Phaser.Game` the DOM cannot see, and reports nothing. So on the
+   * rollback lane the screen's `data-world` stayed `fishing` and its live region kept announcing
+   * "You have started fishing" after the learner had walked back - a learner-visible false
+   * sentence, on the artifact that ships by default.
+   *
+   * This is the symmetric counterpart to {@link prepareFishingSession}, and it is supplied whole
+   * for the same reason that one is: which surfaces a fishing session owns is a screen decision.
+   */
+  readonly finishFishingSession: () => void;
 }
 
 /**
@@ -246,14 +332,22 @@ export function createVillageStudyFlow(options: VillageStudyFlowOptions): StudyF
         prepareFishingSession: options.prepareFishingSession,
       },
       fishing: {
-        isMounted: () => options.readPhaserHandle() !== null,
-        enter: ({ playerClass, hasClearedRooms, onFishCaught, onReturnToVillage, onReady }) => {
-          // Fishing is a Phaser-host capability in Phase 11; the Pixi path has no
-          // fishing world yet, and `isMounted` above reports false there. The
-          // original village screen also cleared its panels *after* this guard, so
-          // a learner with nowhere to fish sees the pond, not an empty screen.
-          const fishing = options.readPhaserHandle()?.fishing?.();
-          if (fishing === undefined) return;
+        /*
+         * "A world host is mounted and able to start the fishing world" - which is the
+         * question `enterFishing` asks before it clears any village UI state, and *not*
+         * "a fishing world is running". The Pixi host answers it from the moment the screen
+         * mounts and the Phaser one from the moment the village game has, so the two lanes
+         * mean the same thing here.
+         */
+        isMounted: () => resolveFishingHost() !== null,
+        enter: ({ pondId, playerClass, hasClearedRooms, onFishCaught, onReturnToVillage, onReady }) => {
+          // A host that resolves to nothing means there is nowhere to fish, and this
+          // returns before `prepareFishingSession` clears any village UI state - so a
+          // learner with no world sees the pond, not an empty screen. That ordering is
+          // the original village screen's behaviour, preserved by construction rather than
+          // by comment.
+          const fishing = resolveFishingHost();
+          if (fishing === null) return;
           // One explicit subject context for the whole session, so catch resolution
           // and persistence cannot disagree about the subject.
           const world: FishingWorldModel = {
@@ -264,12 +358,40 @@ export function createVillageStudyFlow(options: VillageStudyFlowOptions): StudyF
             hasClearedRooms,
             subjectId: useProgressionStore.getState().activeSubjectId,
           };
-          fishing.enter(world, { onFishCaught, onReturnToVillage, onReady });
+          // `pondId` forwarded, and that one word is the whole of Phase 17's session-identity
+          // fix on this side: `studyFlow.enterFishing` already resolved it from the structure
+          // the learner cast from, so the pond's identity is now the *same* value the
+          // eligibility lookup above used instead of being re-derived - or, as before Phase 17,
+          // thrown away.
+          fishing.enter(world, { onFishCaught, onReturnToVillage, onReady, pondId });
         },
         exit: () => {
-          options.readPhaserHandle()?.fishing?.().returnToVillage();
+          /*
+           * Stop the world first, then say so - and say so on **both** lanes.
+           *
+           * `studyFlow.exitFishing` is the only dispatch every route out of a fishing session
+           * reaches: `FishingScene`'s `ESC` binding and its in-scene return button both fire the
+           * `onReturnToVillage` handler this module's `enterFishing` built, and the Pixi lane's
+           * own return control routes through the same host. The host handles the lane that can
+           * report itself; `finishFishingSession` covers the one that cannot, which is the Phaser
+           * rollback lane. Without it that lane left `data-world="fishing"` and the live region
+           * still saying "You have started fishing" while the learner stood in the village.
+           */
+          resolveFishingHost()?.returnToVillage();
+          options.finishFishingSession();
         },
       },
     },
   });
+
+  /**
+   * The fishing host this build can enter, Pixi first and Phaser second.
+   *
+   * One resolution for all three port members, which is the point: `isMounted`, `enter`, and
+   * `exit` cannot disagree about which world they are talking about. That is the Phase 9
+   * "one dispatch path" rule restated for the fishing port.
+   */
+  function resolveFishingHost(): VillageFishingHost | null {
+    return options.readPixiFishingHost() ?? options.readPhaserHandle()?.fishing?.() ?? null;
+  }
 }

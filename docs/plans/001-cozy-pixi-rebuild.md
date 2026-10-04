@@ -565,6 +565,16 @@ VITE_SCRIBE_ENCOUNTER_WORKSPACE=true|false
 VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=true|false
 ```
 
+`VITE_PIXI_FISHING` was added in Phase 17. It gates the PixiJS fishing pond behind the
+existing village fishing-pond launcher, and — like every flag except audio — it is a
+cutover gate whose production default is the pre-phase behaviour (`false`). It selects which
+world a cast enters, not what counts as a catch: the state machine, the canonical catalog
+and subject ids, the catch transaction, and the keep, release, and recall rules are
+unchanged by it. `build:web:pixi-fishing` sets only this flag and leaves
+`VITE_WORLD_RENDERER=phaser`, which is why the renderer chunk boundary has a
+`pixiFishing` check of its own; the phase's rollback is `VITE_PIXI_FISHING=false`, which
+returns the same launcher to the Phaser `FishingScene`.
+
 `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE` was added in Phase 16. It gates the redesigned
 Archaeologist review workspace behind the existing room-panel review view, and — like every
 flag except audio — it is a cutover gate whose production default is the pre-phase behaviour
@@ -752,7 +762,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 14 | verified | Redesign the Creator flow. |
 | 15 | verified | Redesign the Scribe flow. |
 | 16 | verified | Redesign the Archaeologist flow. |
-| 17 | not-started | Rebuild fishing in Pixi. |
+| 17 | verified | Rebuild fishing in Pixi. |
 | 18 | not-started | Wire and redesign study statistics. |
 | 19 | not-started | Add local adaptive assistance. |
 | 20 | not-started | Redesign private share cards. |
@@ -6496,7 +6506,7 @@ Phase 17.
 
 ## Phase 17: Pixi Fishing Rebuild
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Port fishing to Pixi while preserving the familiar cast, bite, catch, keep, release, and recall loop.
 
 ### Prerequisites
@@ -6559,6 +6569,317 @@ npm run check:memory
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-10-04. `not-started` -> `in-progress` -> `verified`. **Not committed, pushed, or
+deployed** — that needs explicit maintainer authorization. Phase 17 is `verified` and awaits
+acceptance; Phase 18 has not been started.
+
+Phase 16 was `verified`, accepted, committed as `ade1f78`, and pushed. The maintainer's instruction
+to execute Phase 17 is recorded here as acceptance of that checkpoint.
+
+#### Baseline
+
+Green at `ade1f78` before any Phase 17 change: `npm run lint` 0, `npm run typecheck` 0,
+`npm test` **256 files / 5029 tests**, `npm run build:web` 0, `npm run check:bundle-size`
+**5.06 MB / 153 files**. No baseline repair was needed.
+
+#### Files
+
+- **State machine and transaction** (`core-logic-engineer`): `src/core/fishing/fishingStateMachine.ts`
+  (1141), `src/core/fishing/catchRewards.ts` (954), `src/application/fishingCommands.ts` (991),
+  `src/store/fishingCommands.ts` (194), `src/application/contracts/commands.ts` (+191),
+  `src/store/progressionStore.ts` (+274 then +60 comment correction), `src/core/fishing/fishingContext.ts`
+  (+14/−2).
+- **Renderer** (`game-engineer`): `src/renderers/pixi/fishing/{createFishingScene.ts 1575,
+  FishingController.ts 512, FishingWorld.tsx 329}`, `src/ui/screens/PixiFishingLane.tsx` (created,
+  later grown), `src/ui/village/villageStudyFlow.ts` (+84). Later, the village position capability:
+  `src/application/contracts/renderer.ts` (+57), `src/renderers/pixi/village/{createVillageScene,
+  VillageRenderer,VillageWorld}`, `src/game/{scenes/VillageScene,adapters/phaserVillageRenderer}`.
+- **DOM** (`ui-engineer`): `src/ui/fishing/{FishingHud.tsx 514, FishingCatchPanel.tsx 156,
+  fishingHudPort.ts, fishingHudCopy.ts, fishingSession.ts, fishingRecallNavigation.ts, fishing.css}`,
+  `src/ui/screens/{useVillageFishing.tsx, PixiFishingLane.tsx}`,
+  `src/ui/components/{FishingRecallModal, FishStandPanel}` rewritten, `src/ui/study/controlIds.ts`
+  (+`FISHING_CONTROL_IDS`), `src/ui/village/villagePlayerPosition.ts` (new).
+- **Lane and build** (`infrastructure-engineer`): `tests/e2e/{fishing-lane.ts, fishing-harness.ts,
+  fishing-lane.test.ts, fishing.spec.ts, fishingRollback.spec.ts, playwright.fishing.config.ts,
+  playwright.fishing-rollback.config.ts}`, `scripts/require-fishing-lane-artifact.mjs`,
+  `vite.config.ts` (+49/−8), `package.json` (+9), `.github/workflows/ci.yml` (+8 steps).
+- **Tests**: `tests/phase17/` — 16 files; plus rewritten `tests/unit/{FishingRecallModal,
+  FishStandPanel}.test.tsx`.
+
+#### Commands
+
+```text
+npm run lint                                   exit 0
+npm run typecheck                              exit 0
+npm test                                       273 files / 5509 tests passed   (was 256 / 5029)
+npm run build:web                              exit 0
+npm run build:web:pixi-fishing                 exit 0
+npm run check:bundle-size                      default 5.15 MB / 153 files · flagged 6.35 MB / 157 files
+npm run test:e2e                               32 passed / 12 skipped (4 viewports, Chromium)
+npm run test:e2e:fishing:full                  10 passed — 8 consecutive green runs total
+npm run test:e2e:fishing:rollback              4 passed
+npm run test:privacy                           6 files / 34 tests passed
+npm run test:licenses                          PASSED, 99 entries, 0 media under src/
+npx vitest run tests/unit/fishingMechanics.test.ts / fishingTypes / FishingRecallModal / FishStandPanel   4 files, 73 tests
+npx vitest run tests/phase11/                  64 passed
+npx vitest run tests/phase12/ 13/ 14/ 15/ 16/  568 passed
+```
+
+#### The catch identity, and why each component is in it
+
+`catch-` + FNV-1a32 over `(contextId, catalogId, castNumber)`.
+
+- **Not the fish entry id.** `createFishId` is `Date.now()` + `Math.random()` — neither
+  deterministic nor injectable, so it cannot key an awarded-once guard.
+- **Not a renderer-held ordinal.** A reload loses it and the retry pays twice. `castNumber` is
+  minted by the state machine at `release` and never rewound, so it survives losing the renderer.
+- **Each component earns its place:** without `contextId` two ponds' first catches collide; without
+  `catalogId` cast 3 of a Carp and cast 3 of a Trout collide; without `castNumber` **two Carp in one
+  session collide**, which is the common case.
+
+**Placement:** the canonical per-subject progression record's `extraFields`, under
+`catchRewardLedger`, beside the Phase 15 and Phase 16 ledgers. A fourth option was rejected and
+documented: *inside the fish collection array* — the natural home, rejected because a released fish
+and a failed recall must write **nothing**, so the carrier would exist only for the one outcome that
+already left a trace.
+
+**Write ordering:** `decideCatchReward` is one pure function and `progressionStore.recordCatch` writes
+the fish entry, XP, rank, badges, and ledger in **one `set` of one record**. A declined outcome
+returns before any `set` and before any `Math.random`, so a release is not even a re-save of an
+unchanged record. *Not* atomic, and stated: cross-subject achievements (one `set` each, after the
+record, as in Phases 15 and 16), and the renderer dying between catch and keep.
+
+**Keep-without-recall pays zero XP.** The fish is kept and still counts toward all four badges. Three
+reasons: XP is paid for learning evidence everywhere else and there is no learning event here; the
+eligibility gate *requires* a cleared room, so paying in exactly the no-material case would reward
+skipping the work that produces material; and `FSH_XP_PER_CORRECT_ANSWER` would be lying at the one
+place a reader looks — so it keeps its name and is only ever paid for a correct answer. The rate
+lives in `CATCH_XP_BY_OUTCOME` rather than in `progression/types.ts`, because the rollback lane's
+`awardFishingXp` reads that constant.
+
+#### Exit-criteria assessment
+
+1. **A complete cast-to-catch-to-keep flow works using touch and keyboard** — met. `tests/e2e/fishing.spec.ts`
+   drives the full flow **keyboard-only** (20.0 s) and again **pointer-only** (19.6 s), in a real
+   browser, through the real DOM controls.
+2. **Recall questions use the same subject context as the catch** — met. One explicit
+   `FishingContext`, minted at pond entry, enforced at the commit boundary by
+   `requireMatchingSession`; a mismatch is `{ code: 'SUBJECT_CONTEXT_MISMATCH' }`, and the commit
+   writes to `context.subjectId`, never to `activeSubjectId`. Previously three different derivations
+   disagreed, including a literal `'village'` fallback and a write to the active subject carrying a
+   different `subjectId` field.
+3. **Fish, XP, and badges are awarded exactly once** — met. Previously three non-transactional
+   writes with no guard at all; `awardFishingXp` paid twice on a double dispatch.
+4. **Release and failed recall do not mutate progression** — met, by rule rather than by accident.
+   Both were previously separate `setState` calls that happened to award nothing; the tests diff the
+   **entire** progression value with sorted-key JSON, not "XP did not change".
+5. **Returning to Village destroys fishing GPU resources cleanly** — met **in jsdom**: 4 mount/unmount
+   cycles leave `canvases = 0`, net window listeners `= 0`, `stage.children = 0`, `tickerRunning = false`,
+   `app.ticker === null`. **GPU bytes, live WebGL contexts, and frame time are UNVERIFIED** — no jsdom
+   API reports them.
+6. **Collection counts use canonical catalog IDs and subject IDs** — met. `FishStandPanel` counted with
+   `f.id.split(':')[0]`; it now goes through `resolveFishCatalogId` / `countCanonicalCatalogTypes`, and
+   groups history by `subjectId`.
+
+#### Deliverables and Non-goals
+
+All six deliverables are met, including **fishing browser E2E coverage** — which Phases 14, 15, and
+16 could not deliver, because `test:e2e` builds the default artifact in which the new surface is not
+present. Phase 17 built a **separate flagged lane** with a recorded artifact identity, which is the
+first time a phase's new surface has browser evidence.
+
+All four Non-goals hold, verified as byte-identity against `ade1f78`: **no new fish species**
+(`FISH_CATALOG` still 8 entries), **no new currencies**, **no multiplayer**, **no change to rarity
+probabilities** (`FISH_RARITY_WEIGHTS` still 65/28/7).
+
+#### Defects found and fixed during the phase
+
+Fourteen, of which these are the ones that changed behaviour:
+
+- **A double award on the most natural sequence, which 24 probes had missed.** Rating a room, clicking
+  **Complete this review pass**, then closing the panel paid twice: `awardReviewPass` increments
+  `reviewPassCount`, so when the explicit completion is the room that *finished* a full pass, the
+  panel close re-derives pass N+1, an identity the ledger has never seen. (Carried from Phase 16's
+  review flow, where the equivalent guard is now in place; recorded here because the same reasoning
+  governs the catch identity.)
+- **The Pixi fishing lane never mounted at all.** `hostRef.current` was assigned only inside the
+  `useEffect` guarded by `session !== null`, while `session` was set only by calling
+  `hostRef.current.enter(...)`. The ref was therefore never assigned, `resolveFishingHost`'s Pixi-first
+  `??` fell through to Phaser, and the pond chunk was built and never fetched. Measured in the browser:
+  0 fishing-chunk requests, 0 `.fishing-hud`, 0 `.pixi-fishing-world`. **Only the e2e lane found this.**
+- **A reachable pond with every control permanently disabled.** The HUD's port subscribed on the
+  commit where `session` first became non-null, while the `Suspense` boundary was still showing its
+  fallback, so the subscription landed on a null handle and the HUD sat on its idle readout for the
+  rest of the session — with `hasClearedRooms` true and no error anywhere. Fixed with a zero-output
+  marker inside the boundary, because React attaches every `useImperativeHandle` in the layout phase,
+  which precedes every `useEffect`.
+- **A learner was told "You have started fishing" after leaving the pond.** `FishingScene`'s only two
+  exits both stop the scene and wake the village inside a `Phaser.Game` the DOM cannot see, and report
+  nothing. Only the Pixi host could report it, so on the **rollback** lane the announcement never
+  cleared. Fixed with a `finishFishingSession` option on the one dispatch every exit route funnels
+  through; verified by probe in a real browser.
+- **A keep with no recall material was recorded as a correct answer**, awarding
+  `FSH_XP_PER_CORRECT_ANSWER` — a constant whose own name says what it is for.
+- **A failed recall awarded full XP by accident**, because it reached the same handler through a path
+  that happened not to award. Now a rule.
+- **Fish catalog identity was discarded.** `addFish` derived the id prefix from the **display name**
+  and never set `catalogId`, so identity survived only because every catalogue name happens to slug to
+  its own id — a coincidence between two files, not a contract.
+- **The review rollback lane's `f.id.split(':')[0]` counting** worked by the same accident.
+- **Three subject-context derivations disagreed**, one of them a literal `'village'` as a subject id.
+- **`pullRecallQuestion` still uses `Math.random()`** and ignores the file's own `createSeededRng`.
+  Called once per catch, so a catch's question is fixed at catch time rather than re-rolled per render
+  — the substantive half of the fix. **Recorded as follow-up rather than changed**, because threading
+  an `rng` parameter changes an existing public signature for a caller outside this phase.
+- **Two stale comments claimed `VillageScreen.handleKeepFish` was the rollback lane** for three store
+  actions that **no production caller uses any more**. Corrected, with the grep evidence.
+- **`FishStandPanel`'s dialog comment claimed an `aria-label` it does not have** (it uses
+  `aria-labelledby`). The `aria-labelledby` is right and was kept.
+- **`addFish`'s `?? 3` default and `CLOSED_WITHOUT_RATING_QUALITY` are two decisions that happen to
+  agree**, recorded as such with an explicit "change both in one commit" warning.
+
+#### Non-vacuity evidence
+
+Every probe below was reverted and the restore verified by sha256. **One probe came back green and is
+reported as a vacuous probe, not as a finding** — see the note under the table.
+
+| Probe | Result |
+| --- | --- |
+| `hasCatchReward` -> always `false` (suppression disabled) | **RED** 7 failed / 62 passed |
+| `hasCatchReward` -> always `true` | **RED** 27 failed / 42 passed |
+| `kept-without-recall` pays `FSH_XP_PER_CORRECT_ANSWER` | **RED** 7 failed / 386 passed |
+| Village position read cached in a field (the stale-read bug) | **RED** 3 failed / 17 passed |
+| Village position read -> constant `{0,0}` (a lying read) | **RED** 2 failed / 18 passed |
+| Remove the whole `review.passComplete` from `finalizePendingReview` (Phase 16) | **RED** 17/77 |
+| Pixi village read -> `lastPoi` angle/distance | **RED** 3 Pixi tests |
+| Phaser village read -> constant `{0,0}` | **RED** 3 Phaser tests |
+| Render filter -> `reviewPassCount > 1` | **RED** 4/9 |
+| Renderer boundary given a planted `@/store` import | **RED** 3/8 |
+| Phaser readPoi pattern (a cached field) applied to the position | **RED** 3, "expected null" |
+| Lane: walk shrink near the burst | **RED** 2 tests |
+| Lane: aim tie-break bit removed | **RED** |
+| Lane: stall-counter movement reset removed | **RED** |
+| Lane: summary read after the dialog closes | **RED** |
+| Lane: discard step removed | **RED** 3 tests |
+| Contract member list gate (`gridX`, `gridY`, the new read) | **RED**, correctly |
+
+**A vacuous probe, reported rather than hidden.** A first attempt to remove the Pixi village position
+read patched nothing — the replacement string did not match the file — and reported **64 passed**. A
+green probe is only evidence if it actually removed something, so the two real probes above were run
+instead. Recorded because "my probe went green" is exactly the moment a reviewer should check.
+
+Three further **vacuous assertions** were found and closed during the phase, all of the same family:
+
+- `expect(NaN).toBe(NaN)` passes, because `toBe` is `Object.is`. A Fish Stand stat published as
+  `"{caught} of {total}"` was read with `Number(...)`, so every before/after comparison of it was a
+  tautology that could not fail.
+- An assertion made **one line after** the harness had clicked "Close the fish collection", so no run
+  in the lane's history could ever have satisfied it.
+- A gate that asserted a **re-implementation** of the harness loop's arithmetic, which `&& false` on
+  the harness would have survived. The gates now assert the harness *contains* the branch.
+
+#### The flaky walk, and why it was fixed on the product side
+
+The lane swung **7–9 of 10** across identical runs. The harness walked the village by aiming each leg
+at a structure's **centre** while pressing from wherever the learner happened to be — measured
+**30.8 px and 41.6 px** off on a 48 px tile, up to 0.9 of a tile — and the next leg then aimed a
+25-tile heading from a position it was never at. One instrumented run: **212 polls with a correct
+heading, never saw the pond row once, and walked off the map.**
+
+Two harness-side fixes were implemented and **rejected on evidence**: a press-distance gate (timed out
+all ten tests; the failures were not monotonic — presses at 32 and 45.1 px landed, losses at 38.9 and
+47.9 — so no cut-off separates them) and press-at-closest-approach (cost five of ten tests, because
+the nearby list is sampled and a waiting walk loses the ring between readings). An overshoot reversal
+landed, was mutation-verified, and was then **deleted** once the walk could see itself: a heading
+derived from the learner's own tile points back at the target the instant they pass it, so there was
+nothing left to reverse.
+
+**The actual fix was the missing product fact.** The village published a *distance* to each nearby
+structure and never a *position*. `readPlayerGridPosition?(): WorldGridPosition | null` was added to
+`VillageRendererCapabilities` and implemented on both scenes — **computed on read, never cached**,
+because a cached position is correct for the frame that produced it and wrong the moment it is read
+outside it — and `data-village-player` now publishes it on the screen root. The harness re-aims from
+it every burst.
+
+`ui-engineer` **refused to publish the attribute until the renderer could source it**, on the stated
+grounds that a test-visible attribute which lies is worse than one that is absent. That is the correct
+call and it is why the attribute went live only after the renderer landed.
+
+**The lane is green because the walk is correct, not because it got lucky: 8 consecutive 10/10 runs**
+(6 by the implementing agent, 2 re-confirmed by the orchestrator), zero skips.
+
+#### Rollback
+
+Verified in **built artifacts**, not from the flag constant.
+
+| | default (`build:web`) | flagged (`build:web:pixi-fishing`) |
+| --- | --- | --- |
+| `FishingWorld-*` chunks | **0** | 2 (55.7 kB + 55.2 kB) |
+| `vendor-pixi-*` chunks | **0** | 2 |
+| `vendor-phaser-*` chunks | 2 | 2 |
+| dist | 5.15 MB / 153 files | 6.35 MB / 157 files |
+
+`src/game/scenes/FishingScene.ts` is **byte-identical to `ade1f78`**, so the rollback lane is
+untouched code, not a re-implementation. `npm run test:e2e:fishing:rollback` drives the default
+artifact through the village fishing pond to the Phaser `FishingScene` and is **4/4**, including a
+proof of life after `Escape` — the learner walks out of the 48 px approach radius, walks back, and the
+row reappears at a new distance.
+
+`FEATURE_FLAG_MATRIX.pixiFishing.productionDefault === false`, `ownerPhase: 17`, and it is **not** in
+`NON_CUTOVER_FLAG_KEYS` (which remains exactly `['audioEnabled']`). `vite.config.ts` now fails the
+build if a `VITE_PIXI_FISHING=true` config does not emit the pond chunk, so a dead lane cannot ship.
+
+#### Known limitations
+
+- **Frame time and GPU memory are UNVERIFIED.** `check:memory` is a build-level preflight and says so
+  in its own `NOT MEASURED` list — it reads a build, not a browser, and cannot count canvases over 20
+  mount/unmount cycles. Teardown was measured in jsdom only.
+- **Two live renderers tick at once** on the fishing lane: the pond overlays the village, so both
+  applications run. A deliberate trade — the alternative destroys the village's camera and NPC
+  conversation — and its cost is **unquantified**.
+- **The fishing world is not in the pixi-memory lane's `VITE_WORLD_RENDERER` switch**, so a 20-cycle
+  browser measurement of this world does not exist anywhere yet. Phase 22 owns it.
+- **Accessibility evidence is semantics plus browser reach, not measurement.** Real 44×44 targets, real
+  keyboard flow, real dialog focus management, and a real 320 px-safe layout are asserted. **Contrast
+  ratios, on-screen touch-target size, 200 % zoom, `forced-colours`, and axe are UNVERIFIED** — jsdom
+  computes no colours and no layout. Phase 21 owns that audit.
+- **Chromium only.** `test:e2e:compat` and the Firefox/WebKit/Edge lanes were not run for this surface.
+  Phase 21 owns cross-browser.
+- **A species is no longer visually distinct.** `FishingScene` switched texture per catalogue entry; the
+  legacy SVGs are `legacy-unverified` and CC0-inadmissible, so the pond draws one silhouette tinted by
+  rarity and the species is named in DOM from `catalogId`. A visible change, taken deliberately.
+- **The on-canvas instructional text is gone.** `FishingScene` drew a hint line, a `Power: ████░░░░`
+  read-out, and a "Return to Village" button on the canvas. The Pixi pond draws a shape-only meter and
+  no words; all of it is DOM. Correct per plan 6.2, and a visible change.
+- **The rollback lane is not in CI.** `browser-smoke`'s production window is closed at both ends by two
+  **existing** gates that together permit exactly one production-artifact lane. Putting the fishing
+  rollback there means relaxing a working gate, so it was left out rather than forced. Options for the
+  maintainer: widen that window and re-assert it for the Phase 10 lane's own boundary, add it to the
+  nightly `compatibility.yml`, or leave it local.
+- **Follow-up work found and deliberately not done** (plan working rule 13): `pullRecallQuestion`
+  should take an `rng`; `addFish`, `awardFishingXp`, and `checkFishingBadges` now have **no production
+  caller** and should be either deleted or kept with a decision recorded;
+  `tests/phase8/qa-verification.test.ts`'s `src/styles.css` scan does not cover the new colocated
+  `review.css` / `fishing.css` sheets (checked by hand — no `url(`, `@font-face`, or remote reference);
+  and the Phase 6/7 archetype-perk strings that promise a self-check cap and a review-streak cap which
+  do not exist.
+
+#### Gates other agents changed, and the rulings
+
+| Gate | Ruling |
+| --- | --- |
+| `tests/privacy/support/appGraph.ts` `TEST_OWNED_SOURCE_DIRECTORIES` 1 -> 4 entries | **Legitimate.** Phase 14/16/17 plant probe files on the real filesystem as positive controls; parallel workers were reading each other's probes as real offenders. |
+| `tests/phase4/plantingExemptionAdversarial.test.ts` exact pin | **Legitimate and intent-preserving.** It now pins all four names exactly and asserts each is a live directory, so the list still cannot grow silently. |
+| `tests/e2e/pixi-memory-lane.test.ts`, `tests/phase9/pixi-pointer-lane-wiring.test.ts` download count 2 -> 3 | **Legitimate**, and each additionally pins the three artifact **names**. |
+| `tests/e2e/phase10-media-lane.test.ts` renamed + mutation retargeted | **Legitimate.** Its purpose is that the Phase 10 lane adds none of these lanes, and it still does; the mutation was retargeted so it fails for the same reason. |
+| `tests/phase9/qa-independent-verification.test.ts` contract member list +3 | **Legitimate.** The gate exists to catch exactly this, and its own comment predicted a third optional member would leave it green. |
+| `tests/phase17/fishing-flag-boundary.test.ts` two assertions inverted | **Legitimate.** Both recorded a *gap*; the gap is now closed, so the assertions became gates rather than being left contradicting the implementation. |
+| `tests/phase12/village-fishing-signal.test.tsx` KNOWN LIMITATION replaced | **Legitimate.** The replaced test named Phase 17 and said it would fail then. It failed, which is the signal working. |
+| `src/ui/village/villageStudyFlow.ts` `PlayerClassId` re-pointed to the neutral contract | **Legitimate.** Otherwise the lane's host contract dragged `src/game/**` into the DOM fishing closure. Same move Phase 16 recorded for `GamePhase`. |
+| `tests/phase17/village-player-position.test.ts` "imports nothing but React and the village map" | **Rewritten, not weakened.** The shared `readSpecifiers` cannot tell a type-only import from a value one. The test now asserts the **runtime** import set exactly, asserts the contract import is `import type` by form, and asserts no `@/renderers` specifier in either reading — which is the property the original comment stated. |
 
 ### Exit criteria
 

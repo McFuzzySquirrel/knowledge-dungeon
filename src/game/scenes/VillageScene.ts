@@ -15,6 +15,7 @@ import {
   type VillageActionTarget,
   type VillageNearbyCandidate,
 } from '@/application/contracts/villageNpc';
+import type { WorldGridPosition } from '@/application/contracts/renderer';
 import type {
   WorldEventHandler,
   WorldEventPayload,
@@ -844,6 +845,58 @@ export class VillageScene extends Phaser.Scene {
       clientX: (canvasRect?.left ?? 0) + screenX,
       clientY: (canvasRect?.top ?? 0) + screenY,
     };
+  }
+
+  /**
+   * The learner's tile, or `null` before the player exists.
+   *
+   * ## Computed on read. Never cached. That is the whole design.
+   *
+   * `lastPoi` directly above sets the pattern this method deliberately does *not*
+   * follow: it is populated once per frame inside `update`, so reading it outside
+   * that frame reads the previous frame's measurement. That is acceptable for a POI,
+   * whose value is only ever consumed on the frame it was produced. It is not
+   * acceptable for a position, because a position is read *from outside* the update
+   * loop by definition - that is the only way a DOM surface samples it - and a cached
+   * position is wrong the instant it is read outside the frame that wrote it. So this
+   * reads `player.x` / `player.y` at the moment of the call and divides there.
+   *
+   * ## Why `player.x` is the right source and not `playerBody`
+   *
+   * The player is an `Image` under Arcade physics, and the scene's `update` writes
+   * `this.player.x += vx * dt` while the physics step may also reposition the body.
+   * `this.player.x` is the resolved value *after* both, and it is the exact quantity
+   * `checkStructureProximity` measures its distances from - the same `x` the same
+   * method reads at `this.player.x - structCx`. Sourcing the tile from anything else
+   * (`body.position`, `body.x`) would answer for a frame that may not be the frame the
+   * rest of the scene measured against, and the published tile could then be a tile the
+   * scene is not actually using. One source of truth, or two answers to one question.
+   *
+   * ## Why the division is the map's own
+   *
+   * `VILLAGE_MAP.tileSize` is the same 48 px as the Pixi lane's `VILLAGE_TILE_SIZE`, and
+   * both scenes place a structure's centre at `(gridX + width / 2) * tile`. Dividing the
+   * resolved pixel position by that tile puts the two lanes in the same frame, so a
+   * consumer aiming at a structure's `gridX`/`gridY` and its own published tile computes
+   * a heading the renderer will agree with.
+   *
+   * ## `Math.floor`, and the edge it produces
+   *
+   * `floor` because a tile is a region: a learner at `tile - 0.1` is on the tile whose
+   * region contains them and not on the next one. The honest edge is the consequence -
+   * a learner standing exactly on the world's right or bottom boundary is at
+   * `gridX === VILLAGE_MAP.width`, which is one past the last column. This returns that
+   * value rather than clamping it, because a clamped tile would be a *different tile*
+   * and therefore a lie; a consumer that validates a position against the map is
+   * expected to refuse an off-map tile, and refusing is the correct outcome at an edge.
+   *
+   * Pure read of scene state: no event, no state change, no allocation beyond the
+   * returned pair.
+   */
+  readPlayerGridPosition(): WorldGridPosition | null {
+    if (!this.player) return null;
+    const ts = VILLAGE_MAP.tileSize;
+    return { gridX: Math.floor(this.player.x / ts), gridY: Math.floor(this.player.y / ts) };
   }
 
   /**

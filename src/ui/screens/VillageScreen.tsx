@@ -11,14 +11,13 @@ import type { VillageRendererCapabilities, WorldRenderer } from '@/application/c
 import type { VillageNpcSnapshot } from '@/application/contracts/villageNpc';
 import type { VillageWorldHandle } from '@/renderers/pixi/village/VillageWorld';
 import type { StudyFlowVillageInfoPanel } from '@/application/studyFlow';
-import type { SelfCheckPrompt } from '@/core/review/types';
 import type { FloorBiomeId } from '@/core/biomes';
-import type { FishRarity } from '@/core/fishing/fishingTypes';
+import { pixiFishing, PixiFishingLaneSurface } from '@/ui/screens/PixiFishingLane';
+import { useVillageFishing } from '@/ui/screens/useVillageFishing';
 import { runtimeConfig } from '@/config/featureFlags';
 import { listSubjectIds, loadSubjectSnapshot } from '@/services/persistence/subjectPersistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 import { computeSessionStats } from '@/services/sessionTracker';
-import { pullRecallQuestion, getClearedRooms } from '@/core/fishing/fishingMechanics';
 import type { StudyFlowController } from '@/application/studyFlow';
 import {
   createVillageStudyFlow,
@@ -37,6 +36,10 @@ import {
   useVillageFishingHint,
 } from '@/ui/village/StructurePanel';
 import { useVillageActionHandler } from '@/ui/village/NearbyActionList';
+import {
+  readVillagePlayerGridPosition,
+  useVillagePlayerPositionAttribute,
+} from '@/ui/village/villagePlayerPosition';
 import { useVillageNpcSurface, type VillageActionBridge } from '@/ui/village/useVillageNpcSurface';
 import { useVillageSurfaceMode } from '@/ui/village/useVillageSurfaceMode';
 import { VillageHud } from '@/ui/village/VillageHud';
@@ -78,8 +81,8 @@ const phaserVillageFactory =
 /**
  * The lazy Pixi village chunk, or `null` on a build that did not request it.
  *
- * Computed once at module scope: a `lazy()` call inside the component would mint a
- * new component type on every render and remount the world.
+ * Computed once at module scope: a `lazy()` call inside the component would mint a new
+ * component type on every render and remount the world.
  */
 const LazyPixiVillageWorld = pixiVillageFactory !== null ? lazy(pixiVillageFactory) : null;
 
@@ -211,6 +214,7 @@ export function VillageScreen(): JSX.Element {
   const pixiVillage = pixiVillageFactory !== null;
   const pixiVillageMismatch = runtimeConfig.pixiVillage && pixiVillageFactory === null;
 
+
   // The one-shot spawn override, read once and shared by whichever renderer
   // mounts. The ref guard keeps StrictMode's double render from consuming it on
   // the first pass and seeing an already-cleared key on the second.
@@ -235,39 +239,7 @@ export function VillageScreen(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [makeItYoursOpen, setMakeItYoursOpen] = useState(false);
   const [showFishStand, setShowFishStand] = useState(false);
-  const [fishCaughtData, setFishCaughtData] = useState<{
-    fishName: string; rarity: string; catalogId: string; description: string;
-  } | null>(null);
-  const [showRecallModal, setShowRecallModal] = useState(false);
-  const [recallQuestionData, setRecallQuestionData] = useState<{
-    prompt: SelfCheckPrompt; roomId: string;
-  } | null>(null);
   const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
-
-  /**
-   * Whether a fishing session has been started from this screen.
-   *
-   * This exists because fishing had **no** DOM-observable signal at all: the
-   * fishing world is a Phaser scene swap inside the village's own canvas
-   * (`phaserFishingRenderer.ts`), so the only "you are fishing now" surface was
-   * a `Text` object drawn inside the canvas - unreachable by a screen reader,
-   * by a keyboard user, and by any DOM assertion. Everything else the world
-   * swaps (a dungeon) *is* a screen change, which is what made the absence go
-   * unnoticed.
-   *
-   * It is set from `prepareFishingSession`, which the study flow calls **only**
-   * after its own mount guard has passed (`studyFlow.ts:672`) and which the Phaser
-   * handle is what makes reachable. On the Pixi lane `isMounted()` is false -
-   * `readPhaserHandle()` returns `null` - so `enterFishing` returns before that
-   * call and this flag is never set. That is the intended asymmetry: the Pixi
-   * village has no fishing world yet (Phase 17), and the signal must not claim
-   * one exists.
-   *
-   * The announcement below is a **fixed string**. It carries no subject name, no
-   * pond id, no fish, and no count, because a live region is exactly the kind of
-   * surface a learner value must never reach.
-   */
-  const [fishingActive, setFishingActive] = useState(false);
 
   const surfaceMode = useVillageSurfaceMode();
   const showFishingHint = useVillageFishingHint(infoPanel?.type ?? null);
@@ -294,55 +266,6 @@ export function VillageScreen(): JSX.Element {
     }),
     [sessionStats, rank, xpTotal],
   );
-
-  const addFishToCollection = useProgressionStore((s) => s.addFish);
-
-  const handleKeepFish = useCallback((data: typeof fishCaughtData) => {
-    if (!data) return;
-    // Find a subject to associate the fish with - prefer the most recently active one
-    const subjectIds = Object.keys(useProgressionStore.getState().bySubject);
-    const subjectId = subjectIds.length > 0 ? subjectIds[subjectIds.length - 1] : 'village';
-    const subjectName = useSubjectStore.getState().snapshot?.dungeon.subjectName || subjectId;
-    const rarity = data.rarity as FishRarity;
-    addFishToCollection({ name: data.fishName, rarity, subjectId, subjectName });
-    // Award XP for correctly answering the recall question
-    const progression = useProgressionStore.getState();
-    const xpResult = progression.awardFishingXp(rarity);
-    console.log(`[Fishing] XP gained: ${xpResult.xpGained} (${rarity}), rank: ${xpResult.newRank}${xpResult.rankChanged ? ' ⬆' : ''}`);
-    const newBadges = progression.checkFishingBadges();
-    if (newBadges.length > 0) {
-      console.log(`[Fishing] New badges earned: ${newBadges.join(', ')}`);
-    }
-    setFishCaughtData(null);
-    setShowRecallModal(false);
-    setRecallQuestionData(null);
-  }, [addFishToCollection]);
-
-  const handleKeepFishClicked = useCallback(async (_data: NonNullable<typeof fishCaughtData>) => {
-    // Compute the recall question from the active subject's dungeon data
-    const activeSubjectId = useProgressionStore.getState().activeSubjectId;
-    if (activeSubjectId) {
-      try {
-        const snapshot = await loadSubjectSnapshot(activeSubjectId);
-        if (snapshot) {
-          const clearedRooms = getClearedRooms(snapshot.rooms);
-          const question = pullRecallQuestion({
-            clearedRooms,
-            dungeonRooms: snapshot.dungeon.rooms,
-            subjectName: snapshot.dungeon.subjectName,
-          });
-          setRecallQuestionData(question);
-        } else {
-          setRecallQuestionData(null);
-        }
-      } catch {
-        setRecallQuestionData(null);
-      }
-    } else {
-      setRecallQuestionData(null);
-    }
-    setShowRecallModal(true);
-  }, []);
 
   const refreshSubjects = useCallback(async () => {
     try {
@@ -471,6 +394,19 @@ export function VillageScreen(): JSX.Element {
     rendererRef.current?.triggerInteract();
   }, [pixiVillage]);
 
+  /**
+   * The learner's village tile, published as `data-village-player` on this screen's root.
+   *
+   * Read through the *neutral* capability port, feature-detected, from whichever adapter is
+   * mounted, so each lane reads it from its own renderer and this screen never learns which
+   * one that is. A ref plus a direct attribute write, not state: a moving learner must not
+   * cost a render of this subtree. `villagePlayerPosition.ts` carries the reasoning, the
+   * refusals, and the staleness bound.
+   */
+  const villagePlayerRef = useVillagePlayerPositionAttribute(
+    useCallback(() => readVillagePlayerGridPosition(activeCapabilities()), [activeCapabilities]),
+  );
+
   const restart = useCallback((): void => {
     if (pixiVillage) {
       pixiVillageRef.current?.restart();
@@ -495,6 +431,19 @@ export function VillageScreen(): JSX.Element {
     rendererRef.current?.setPlayerClass(playerClass);
   }, [pixiVillage]);
 
+  /**
+   * The screen's fishing surface: the lane, the session, the catch transaction, and the controls.
+   *
+   * A hook, and the reason is a gate as much as a size: `tests/phase12/village-shell-split.test.ts`
+   * holds this file under 900 lines on the reasoning that "the composition root is the *small*
+   * thing", and the catch flow - one session, four outcomes, six controls, and a redesigned
+   * collection view - is a unit, so it lives in one. The screen's contribution is the `flow`
+   * declaration below and four JSX lines.
+   */
+  const fishing = useVillageFishing((structureId) => flow.enterFishing(structureId), pixiFishing);
+  // The lane, under the name the flow's port and the flag gate both refer to it by.
+  const { lane: pixiFishingLane } = fishing;
+
   // Ref-based callbacks: the world captures the ref, always reads fresh values
   const subjectsRef = useRef(subjects);
   subjectsRef.current = subjects;
@@ -509,6 +458,7 @@ export function VillageScreen(): JSX.Element {
   if (flowRef.current === null) {
     flowRef.current = createVillageStudyFlow({
       readPhaserHandle: () => rendererRef.current,
+      readPixiFishingHost: pixiFishingLane.readHost,
       readDynamicStructures: () => dynamicStructuresRef.current,
       readSubjects: () => subjectsRef.current,
       setInfoPanel,
@@ -516,16 +466,19 @@ export function VillageScreen(): JSX.Element {
       setCreateOpen,
       setMakeItYoursOpen,
       setShowStats,
-      setFishCaught: (data) => setFishCaughtData(data),
+      setFishCaught: fishing.onFishCaught,
       prepareFishingSession: () => {
         setInfoPanel(null);
-        setFishCaughtData(null);
-        setShowRecallModal(false);
-        setRecallQuestionData(null);
-        // The one DOM-observable consequence of starting a fishing session. The
-        // flow has already proved a world host is mounted, so by here "fishing is
-        // starting" is true rather than attempted.
-        setFishingActive(true);
+        // The hook closes every catch surface, begins the session, and sets the one
+        // DOM-observable consequence of starting a fishing session. The flow has already proved a
+        // world host is mounted, so by here "fishing is starting" is true rather than attempted.
+        fishing.prepareSession();
+      },
+      // The other half of the same pair, and the reason the rollback lane's Escape is honest:
+      // `FishingScene` stops its own scenes and reports nothing to the DOM, so the flow tells
+      // the hook when a session ended. See `useVillageFishing`'s `endSession`.
+      finishFishingSession: () => {
+        fishing.endSession();
       },
     });
   }
@@ -658,11 +611,12 @@ export function VillageScreen(): JSX.Element {
     <div
       className="village-screen ui-skin screen-fade-in"
       data-theme={colorTheme}
+      ref={villagePlayerRef}
       // Which world this screen is currently presenting. `fishing` is not a
       // screen change - it is a Phaser scene swap inside the same canvas - so
       // without this the DOM could not tell a learner (or a test) that the
       // village they walked into had become the pond they are fishing in.
-      data-world={fishingActive ? 'fishing' : 'village'}
+      data-world={fishing.active ? 'fishing' : 'village'}
     >
       <VillageHud
         questStep={questStep}
@@ -728,6 +682,13 @@ export function VillageScreen(): JSX.Element {
             village chunk. Build it with VITE_PIXI_VILLAGE=true.
           </p>
         ) : null}
+
+        <PixiFishingLaneSurface
+          lane={pixiFishingLane}
+          colorTheme={colorTheme}
+          renderControls={fishing.renderControls}
+        />
+
         <CompassOverlay readPoi={readPoi} />
       </div>
 
@@ -765,7 +726,7 @@ export function VillageScreen(): JSX.Element {
             onStartTutorial={() => { void handleStartTutorial(); }}
             onOpenSpriteEditor={() => setMakeItYoursOpen(true)}
             onOpenFishCollection={() => { setInfoPanel(null); setShowFishStand(true); }}
-            onCastLine={(structureId) => flow.enterFishing(structureId)}
+            onCastLine={fishing.castFrom}
             showFishingHint={showFishingHint}
           />
         )
@@ -807,9 +768,24 @@ export function VillageScreen(): JSX.Element {
         and a subject name or a fish name here would be learner data in a place
         plan 10.1's privacy boundary does not exempt.
       */}
-      {fishingActive ? (
+      {fishing.active ? (
         <p className="village-visually-hidden" role="status" aria-live="polite">
           You have started fishing. Use the Return to Village control in the world to come back.
+        </p>
+      ) : null}
+
+      {/*
+        What the last catch decision did, in words.
+
+        A *visible* sentence, not a `visually-hidden` one and not a toast: the reward for a
+        catch is the single most important thing this activity says, and the pre-Phase-17 build
+        said it in two `console.log` calls - which is to say, nowhere a learner can read it.
+        Rendered whenever there is something to say, so a decision's outcome survives the dialog
+        closing, and announced politely because it replaces what was on screen.
+      */}
+      {fishing.status !== null ? (
+        <p className="fishing-recall__outcome" role="status" aria-live="polite">
+          {fishing.status}
         </p>
       ) : null}
 
@@ -836,26 +812,14 @@ export function VillageScreen(): JSX.Element {
         onCloseSpriteEditor={() => setMakeItYoursOpen(false)}
         fishStandOpen={showFishStand}
         onCloseFishStand={() => setShowFishStand(false)}
-        fishCatch={fishCaughtData}
-        onKeepFish={() => {
-          if (fishCaughtData !== null) void handleKeepFishClicked(fishCaughtData);
-        }}
-        onReleaseFish={() => setFishCaughtData(null)}
-        recallQuestion={showRecallModal ? recallQuestionData : null}
-        onSelfEvaluate={(result) => {
-          if (result === 'correct') {
-            if (fishCaughtData !== null) handleKeepFish(fishCaughtData);
-          } else {
-            setFishCaughtData(null);
-            setShowRecallModal(false);
-            setRecallQuestionData(null);
-          }
-        }}
-        onCancelRecall={() => {
-          setFishCaughtData(null);
-          setShowRecallModal(false);
-          setRecallQuestionData(null);
-        }}
+        fishCatch={fishing.catch}
+        onKeepFish={fishing.onKeep}
+        onReleaseFish={fishing.onRelease}
+        showRecallModal={fishing.recallOpen}
+        recallQuestion={fishing.recallQuestion}
+        onRecallDecision={fishing.onDecide}
+        onCancelRecall={fishing.onCancelRecall}
+        recallDestination={fishing.recallDestination}
         welcomeMessage={welcomeMessage}
         onDismissWelcome={() => setWelcomeMessage(null)}
       />

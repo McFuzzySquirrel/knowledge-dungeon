@@ -62,6 +62,11 @@ const REQUIRED_MODULES: readonly string[] = [
   'useVillageNpcSurface.ts',
   'useVillageSurfaceMode.ts',
   'villageTypes.ts',
+  // Phase 17's addition, and the list's standing purpose rather than a favour to it: the
+  // entry is what makes the "walk finds the modules" check below non-vacuous for a module
+  // added after this file was written, and the two gates that read the tree - the renderer
+  // boundary and the 44px floor - then cover it without being asked to.
+  'villagePlayerPosition.ts',
 ];
 
 function sourceFilesIn(directory: string): string[] {
@@ -214,12 +219,20 @@ describe('no village panel needs a renderer object to exist', () => {
   });
 
   it('reads the renderer only through the two optional capability members, by name', () => {
-    // The one legitimate reach: the two members the contract declares optional
-    // while the adapters are being wired. `readPoi` is here because the compass
-    // still samples it (outside React - see the compass test), not because a panel
-    // holds a handle.
+    // The one legitimate reach: the members the contract declares optional while the
+    // adapters are being wired. `readPoi` is here because the compass still samples it
+    // (outside React - see the compass test), not because a panel holds a handle.
+    // `readVillagePlayerGridPosition` is Phase 17's `data-village-player` read: it reaches
+    // the neutral port through `villagePlayerPosition.ts`'s feature detection rather than
+    // through a member the contract declares today, and naming it here is what stops a
+    // later edit from reaching past that module into an adapter object directly.
     const screen = codeOf(readFileSync(path.join(REPO_ROOT, SCREEN), 'utf8'));
-    for (const member of ['readNpcSnapshot', 'invokeAction', 'readPoi']) {
+    for (const member of [
+      'readNpcSnapshot',
+      'invokeAction',
+      'readPoi',
+      'readVillagePlayerGridPosition',
+    ]) {
       expect(screen, `${member} is not feature-detected in the screen`).toContain(member);
     }
     // And it never fabricates a stand-in: a no-op dispatcher would be the silent

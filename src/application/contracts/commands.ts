@@ -56,8 +56,28 @@
  * stops it from becoming a fifth review route, and it is written as a named
  * `Exclude` with the reason here rather than as a silent filter.
  */
+
+/**
+ * ## Phase 17 adds the `fishing/*` commands
+ *
+ * `FishingScene` embedded its whole state machine in a private field, and the catch
+ * transaction lived in `VillageScreen.handleKeepFish` as three store calls with no
+ * idempotency. The Phase 17 block below is the command form of the six things a
+ * fishing surface can ask for, and `src/application/fishingCommands.ts` executes them.
+ *
+ * Every payload that can commit something carries a `FishingSubjectContext`, and the
+ * command layer **refuses** when it disagrees with the open session's. That refusal is
+ * the fix for plan 5.3's "fishing eligibility, recall selection, and persistence may
+ * use different subject contexts".
+ *
+ * `fishing/enter` and `fishing/exit` above are **not** this block's session commands.
+ * They are the world-mount pair the village flow uses to swap the renderer; the block
+ * below owns what happens inside a pond.
+ */
 import type { EdgeRelationType } from '@/core/validation/persistence';
 import type { QualityRating } from '@/core/review/spacedRepetition';
+import type { FishingSubjectContext } from '@/core/fishing/fishingContext';
+import type { FishDirection } from '@/core/fishing/fishingTypes';
 import type { FloorTransitionDirection } from './events';
 
 /** Payload of every application command, keyed by command name. */
@@ -242,7 +262,141 @@ export interface WorldCommandPayloadMap {
   'review/session-discard': { roomId: string };
   /** Archaeologist: re-enter an interrupted review. Reports whether one existed. */
   'review/session-resume': { roomId: string };
+
+  // ── Fisher's Rest fishing (Phase 17) ────────────────────────────────────────
+  //
+  // One pond visit, one subject context, six commands. The context is created by
+  // `session-begin` and carried unchanged in every later payload, and the command
+  // layer refuses a payload whose context disagrees with the open session's. That is
+  // the fix for plan 5.3's "fishing eligibility, recall selection, and persistence
+  // may use different subject contexts".
+  //
+  // **Why the catalogue roll arrives from the caller rather than being drawn here.**
+  // `fishingStateMachine` owns the seeded stream and reproduces `FishingScene`'s draw
+  // order, so re-rolling in this layer would consume a second stream and take the
+  // reproducibility away. The command layer's job is the *identity* and the
+  // *persistence*, not the randomness.
+  //
+  // **`kept-without-recall` is a member of the recall union, not an inference.** A
+  // fish kept because there was no question to answer is a different event from a
+  // question answered correctly, plan 17 says so in as many words, and a caller that
+  // wanted to conflate them would have to write it in the payload rather than have it
+  // happen by default.
+
+  /**
+   * Fisher's Rest: enter a pond and begin a session.
+   *
+   * Mints the one context every later command is committed against. Writes nothing
+   * and awards nothing - it is a read of the subject's cleared rooms.
+   */
+  'fishing/session-begin': {
+    /** The pond the learner entered. An app-minted structure id. */
+    pondId: string;
+    /**
+     * The subject the pond was entered from.
+     *
+     * The caller's *active* subject, deliberately, rather than the village layout's
+     * nearest portal slot - which is what `studyFlow.enterFishing` uses today and what
+     * makes eligibility disagree with persistence.
+     */
+    subjectId: string;
+    /** The subject's display name, for the persisted fish entry's record text. */
+    subjectName: string;
+    /** The room the pond was entered from, when there was one. */
+    roomId?: string | null;
+  };
+  /** Fisher's Rest: the cast landed and a fish is swimming in. Reports the roll. */
+  'fishing/cast-complete': {
+    subject: FishingSubjectContext;
+    /**
+     * Which cast in the session this is, one-based.
+     *
+     * The machine's `castNumber`, which is monotonic for the life of a session and is
+     * half of the catch identity. Not a counter a surface keeps.
+     */
+    castNumber: number;
+    /** The canonical catalogue id the machine rolled. */
+    catalogId: string;
+    /** Which side the fish is swimming in from. Presentation, reported for the HUD. */
+    fishDirection: FishDirection;
+  };
+  /** Fisher's Rest: the bite resolved. Hooked, or missed. Awards nothing either way. */
+  'fishing/bite-resolve': {
+    subject: FishingSubjectContext;
+    castNumber: number;
+    /** `'missed'` needs no catalogue id: there is no catch. */
+    resolution: 'hooked' | 'missed';
+    /** Required when `resolution` is `'hooked'`. */
+    catalogId?: string;
+  };
+  /**
+   * Fisher's Rest: keep the fish.
+   *
+   * The whole transaction - fish entry, XP, rank, badges, ledger entry - in one record
+   * write, and idempotent for the catch identity, so a double dispatch, a retried
+   * click, and a reload all award at most once.
+   */
+  'fishing/catch-keep': {
+    subject: FishingSubjectContext;
+    castNumber: number;
+    /** The canonical catalogue id of the caught fish. */
+    catalogId: string;
+    /**
+     * How the recall resolved.
+     *
+     * `answered-correct` and `answered-incorrect` pay XP or do not, and
+     * `answered-incorrect` writes nothing at all. `kept-without-recall` keeps the fish
+     * and its badges and pays no XP - the rule and its argument are on
+     * `CATCH_XP_BY_OUTCOME` in `src/core/fishing/catchRewards.ts`.
+     */
+    recall: FishingRecallOutcome;
+  };
+  /**
+   * Fisher's Rest: throw the fish back.
+   *
+   * Awards nothing, adds no fish, unlocks no badge, and writes no record at all.
+   */
+  'fishing/catch-release': {
+    subject: FishingSubjectContext;
+    castNumber: number;
+    /** The canonical catalogue id of the caught fish. */
+    catalogId: string;
+  };
+  /** Fisher's Rest: read the session's context, eligibility, and ledger count. */
+  'fishing/state-read': {
+    /**
+     * Optional, and defaults to "no candidate": a read has nothing to check, so it
+     * does not need to carry a context. Supplying one still enforces the mismatch
+     * refusal, which is what a surface that has one should do.
+     */
+    subject?: FishingSubjectContext;
+  };
 }
+
+/**
+ * How a catch's recall resolved.
+ *
+ * Discriminated on `kind`, with `roomId` present only on the two answered cases -
+ * so "there was no question" is structurally impossible to confuse with "the room was
+ * blank". All three `roomId` values are app-minted room ids, never topics.
+ */
+export type FishingRecallOutcome =
+  /** The learner answered the recall question and reported it correct. */
+  | { kind: 'answered-correct'; roomId: string }
+  /**
+   * The learner could not recall. Nothing is written: no fish, no XP, no badge.
+   *
+   * Plan 17's exit criterion is "release and failed recall do not mutate progression",
+   * and the fish collection lives in the progression record - so the fish goes back.
+   */
+  | { kind: 'answered-incorrect'; roomId: string }
+  /**
+   * The learner kept a fish the pond had no question for.
+   *
+   * The fish is kept and counts toward every fishing badge; it pays no XP. Not the
+   * same event as a correct answer, and not recorded as one.
+   */
+  | { kind: 'kept-without-recall' };
 
 /** Every application command name. */
 export type WorldCommandName = keyof WorldCommandPayloadMap;
@@ -354,3 +508,40 @@ export type ReviewSessionResumePayload = WorldCommandPayload<'review/session-res
 export type ReviewCommand = {
   [C in ReviewCommandName]: { type: C; payload: WorldCommandPayloadMap[C] };
 }[ReviewCommandName];
+
+// ── Fisher's Rest fishing ─────────────────────────────────────────────────────
+//
+// Derived from the payload map, exactly as the `graph/*`, `encounter/*`, and `review/*`
+// aliases above are, so the map stays the single source of truth and the controller's
+// method signatures cannot drift from the command union.
+
+/**
+ * Every Fisher's Rest fishing command name Phase 17 introduces.
+ *
+ * `fishing/enter` and `fishing/exit` are excluded by name, and deliberately: they are
+ * the pre-Phase-2 world-mount pair `studyFlow.enterFishing` / `exitFishing` use to swap
+ * the renderer in and out, not session commands. Folding them into this union would
+ * give `FishingController.dispatch` two commands it cannot answer.
+ */
+export type FishingCommandName = Exclude<
+  Extract<WorldCommandName, `fishing/${string}`>,
+  'fishing/enter' | 'fishing/exit'
+>;
+
+/** Payload of `fishing/session-begin`. */
+export type FishingSessionBeginPayload = WorldCommandPayload<'fishing/session-begin'>;
+/** Payload of `fishing/cast-complete`. */
+export type FishingCastCompletePayload = WorldCommandPayload<'fishing/cast-complete'>;
+/** Payload of `fishing/bite-resolve`. */
+export type FishingBiteResolvePayload = WorldCommandPayload<'fishing/bite-resolve'>;
+/** Payload of `fishing/catch-keep`. */
+export type FishingCatchKeepPayload = WorldCommandPayload<'fishing/catch-keep'>;
+/** Payload of `fishing/catch-release`. */
+export type FishingCatchReleasePayload = WorldCommandPayload<'fishing/catch-release'>;
+/** Payload of `fishing/state-read`. */
+export type FishingStateReadPayload = WorldCommandPayload<'fishing/state-read'>;
+
+/** The tagged form of every Fisher's Rest fishing command Phase 17 introduces. */
+export type FishingCommand = {
+  [C in FishingCommandName]: { type: C; payload: WorldCommandPayloadMap[C] };
+}[FishingCommandName];

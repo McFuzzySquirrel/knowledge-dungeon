@@ -143,9 +143,13 @@ describe('the canvas-pointer lane is bound and can fail', () => {
 
   it('adds a step, not a build, a download, or a browser install', () => {
     const job = jobBlock(PIXI_POINTER_LANE.ciJob);
-    // One install and one production download, both pre-existing.
+    // One install, and the artifact downloads pinned exactly. This was two and is now three: the
+    // production artifact, the Pixi-flagged one this lane reuses, and the Pixi-fishing-flagged one
+    // the Phase 17 lane added below them. Each is a named step preceded by its own `rm -rf dist`,
+    // and a *fourth* would be an artifact nobody declared — so the count stays exact rather than
+    // becoming a floor. This lane still adds none of them; it reuses the second.
     expect([...job.matchAll(/^\s*- run: npx playwright install[^\n]*$/gm)].length).toBe(1);
-    expect([...job.matchAll(/^\s*uses: actions\/download-artifact[^\n]*$/gm)].length).toBe(2);
+    expect([...job.matchAll(/^\s*uses: actions\/download-artifact[^\n]*$/gm)].length).toBe(3);
     // The lane reuses the flagged artifact the memory lane already downloaded.
     expect([...job.matchAll(/^\s*- run: npm run build:web[^\n]*$/gm)].length).toBe(0);
     expect([...job.matchAll(/^\s*- run: npm run build:web:pixi[^\n]*$/gm)].length).toBe(0);

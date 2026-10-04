@@ -1035,6 +1035,38 @@ export function createVillageScene(
     readPoi: () => readPoi(),
 
     /**
+     * Where the learner is, in the tile grid the renderer itself works in.
+     *
+     * The same `tile` this scene placed every structure with, and `player.x`/`player.y`
+     * the same values `updateStructureProximity` measures from - so the published tile
+     * and the tile the scene is currently testing proximity against cannot disagree.
+     *
+     * **Computed on read, never cached.** `readPoi` above can cache, because a POI is
+     * recomputed every frame anyway and a read inside that frame is the only read that
+     * matters. A position is different: it changes continuously, so a cached copy is
+     * correct for one frame and stale for every frame after it. A read that returns
+     * "wherever the marker is right now" is the whole claim, and a field cannot keep it.
+     *
+     * **No `null` branch here, and that is deliberate.** `player` is a `const` built
+     * during scene construction and never nulled: this scene object does not exist
+     * before the player does, so "no world yet" is not a state this code can observe.
+     * That state is produced one layer up - `VillageRenderer` answers `null` while
+     * `host.capabilities` is `undefined`, and `VillageWorld`'s handle answers `null`
+     * while its renderer ref is empty. A ternary here would be a branch that can never
+     * be taken, and a reader would have no way to know which layer owns the `null`.
+     *
+     * `Math.floor` and not a rounding: the tile is a *region*, so the tile that owns
+     * a pixel is the one it falls inside, and a learner at 47.9 px on the tile is on
+     * that tile and not on the next. Structure centres are placed at
+     * `(gridX + width / 2) * tile`, i.e. always inside their own tile, so the same
+     * rule that places a structure also names the tile a consumer aims at.
+     */
+    readPlayerGridPosition: () => ({
+      gridX: Math.floor(player.x / tile),
+      gridY: Math.floor(player.y / tile),
+    }),
+
+    /**
      * One coherent read of the NPC surface.
      *
      * Data out of a port, not a handle on the scene, for the reason `readPoi` set:

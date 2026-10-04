@@ -1,0 +1,417 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+ * The fishing surfaces: the HUD, the catch panel, the recall dialog, and the Fish
+ * Stand collection view.
+ *
+ * ## Why this file is colocated rather than added to `src/styles.css`
+ *
+ * A gate, not a preference: `tests/phase8/qa-verification.test.ts` pins the exact line count
+ * of `src/styles.css`, so a handful of rules for one component family would be a line-count
+ * failure in a phase that has nothing to do with Cozy tokens. `src/ui/study/study.css` and
+ * `src/ui/village/villagePanels.css` set the precedent and give the reason: these rules
+ * belong to one family, and colocating them means the family moves as a unit.
+ * `scripts/check-cc0-assets.mjs` classifies `.css` as non-media, so nothing here needs a
+ * registry entry.
+ *
+ * ## Tokens, not invented colours
+ *
+ * Every colour below is one of the Phase 8 bridged custom properties
+ * (`--text-primary`, `--bg-panel-soft`, `--accent`, `--good`, `--bad`, `--border-soft`) or a
+ * `COZY_*` spacing, radius, or focus variable. There is no literal hex in this file, which is
+ * what makes the whole family follow a theme change: a colour that is not a token is a colour
+ * that survives `data-theme` switching as the wrong colour.
+ *
+ * The two exceptions are the fish rarity badges, which are *copied* from the three existing
+ * `.fish-rarity-badge[data-rarity=...]` rules in `src/styles.css` rather than reinvented -
+ * a rarity has to look like the same rarity in the catch panel and in the collection view.
+ *
+ * ## What every rule here obeys
+ *
+ * 1. **44 by 44 CSS pixels on every control**, from `var(--cozy-s-target-min)` with a `44px`
+ *    literal fallback for the default build where the Cozy scope does not match. The floor is
+ *    *also* written inline by the components (as `villagePanels` and `study.css` both do),
+ *    because a stylesheet rule cannot be asserted by a component test.
+ * 2. **No colour-only state.** The power meter prints its percentage; the phase chip prints
+ *    its phase name; a collapsed region toggles a word; a caught card says "caught". A rule
+ *    here never carries a state on its own.
+ * 3. **Reduced motion** removes every transition below, and none of them carried information -
+ *    they are hover and focus affordances and the power meter's width, which is also printed
+ *    as a number.
+ * 4. **System fonts only**, from `--cozy-s-font-body` with a stack fallback, so the surfaces
+ *    render before any download and on a device with none.
+ * 5. **320 CSS pixels.** Every grid is `auto-fill, minmax(...)` and every long value
+ *    (`overflow-wrap: anywhere`) wraps rather than widening the viewport.
+ */
+
+/* === The HUD '================================================================ */
+
+.fishing-hud {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-2, 8px);
+  padding: var(--cozy-s-space-3, 12px);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  font-family: var(--cozy-s-font-body, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+  font-size: var(--cozy-s-font-size-md, 14px);
+  line-height: var(--cozy-s-line-height-normal, 1.5);
+}
+
+.fishing-hud__heading {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-lg, 16px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+}
+
+/*
+ * The phase chip. The *word* is the state; the accent bar beside it is the Cozy
+ * selected/active signal, so the chip is still readable in greyscale and in forced
+ * colours. `border-inline-start` rather than `border-left` so a right-to-left locale
+ * mirrors it.
+ */
+.fishing-hud__phase {
+  display: flex;
+  align-items: baseline;
+  gap: var(--cozy-s-space-2, 8px);
+  margin: 0;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+}
+
+.fishing-hud__phase-name {
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  border-inline-start: 4px solid var(--accent);
+  padding-inline-start: var(--cozy-s-space-2, 8px);
+}
+
+.fishing-hud__phase-status,
+.fishing-hud__instruction,
+.fishing-hud__walk-hint {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+}
+
+.fishing-hud__instruction {
+  color: var(--text-primary);
+  font-weight: var(--cozy-s-font-weight-medium, 600);
+}
+
+/* The power meter: a track, a fill, and the number. */
+.fishing-hud__power {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-1, 4px);
+}
+
+.fishing-hud__power-track {
+  display: block;
+  width: 100%;
+  height: 14px;
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-sm, 6px);
+  overflow: hidden;
+}
+
+.fishing-hud__power-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--cozy-s-duration-quick, 120ms) var(--cozy-s-easing-standard, ease);
+}
+
+.fishing-hud__power-readout {
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The control row. `flex-wrap` so a 320-pixel viewport stacks the four controls rather
+ * than clipping them, and the walk pair keeps its own row because it is two targets.
+ */
+.fishing-hud__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cozy-s-space-2, 8px);
+  align-items: stretch;
+}
+
+.fishing-hud__walk {
+  display: flex;
+  gap: var(--cozy-s-space-2, 8px);
+  flex-wrap: wrap;
+}
+
+.fishing-hud__control {
+  flex: 1 1 auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--cozy-s-space-2, 8px) var(--cozy-s-space-3, 12px);
+  background: var(--control-bg, var(--bg-panel-soft));
+  color: var(--text-primary);
+  border: 1px solid var(--control-border, var(--border-soft));
+  border-radius: var(--cozy-s-radius-md, 10px);
+  font-family: inherit;
+  font-size: var(--cozy-s-font-size-md, 14px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  cursor: pointer;
+  /* Touch-action: the charge control is a press-and-hold, and without this a drag of
+     the finger would scroll the page instead of staying a charge. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/*
+ * The pressed shape. `border-width` grows rather than only `background`, because a
+ * border-width is one of the two non-colour state signals `COZY_STATE_SIGNALS` names,
+ * and a control whose only pressed signal were a tint would be colour-only state.
+ */
+.fishing-hud__control[aria-pressed='true'] {
+  background: var(--control-selected-bg, var(--bg-panel-soft));
+  color: var(--control-selected-text, var(--text-primary));
+  border-color: var(--control-selected-border, var(--accent));
+  border-width: var(--cozy-s-border-state, 2px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+.fishing-hud__control[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fishing-hud__control-hint {
+  display: block;
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  font-weight: var(--cozy-s-font-weight-regular, 400);
+  color: var(--text-muted);
+}
+
+/* === The catch panel '======================================================== */
+
+.fishing-catch-panel {
+  max-width: 420px;
+  width: 90%;
+}
+
+.fishing-catch-panel__actions,
+.fishing-recall__actions,
+.fish-stand__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cozy-s-space-2, 8px);
+  margin-top: var(--cozy-s-space-3, 12px);
+}
+
+.fishing-recall__question {
+  margin: 0;
+  padding: var(--cozy-s-space-3, 12px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  color: var(--text-primary);
+  font-size: var(--cozy-s-font-size-md, 14px);
+}
+
+.fishing-recall__outcome {
+  margin: 0 0 var(--cozy-s-space-2, 8px);
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+}
+
+/* The reward sentence. A refusal is `role="status"` text a learner can read, never a
+   tint and never a silent no-op. */
+.fishing-recall__refusal {
+  margin: 0 0 var(--cozy-s-space-2, 8px);
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--bad);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  border-inline-start: 4px solid var(--bad);
+  padding-inline-start: var(--cozy-s-space-2, 8px);
+}
+
+/* === The Fish Stand collection view '======================================== */
+
+.fish-stand-panel {
+  position: relative;
+  max-width: 640px;
+  width: 92%;
+  max-height: 85vh;
+  max-height: 85dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-3, 12px);
+  font-family: var(--cozy-s-font-body, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+  color: var(--text-primary);
+}
+
+.fish-stand__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cozy-s-space-2, 8px);
+}
+
+.fish-stand__stat {
+  flex: 1 1 120px;
+  padding: var(--cozy-s-space-2, 8px) var(--cozy-s-space-3, 12px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+}
+
+.fish-stand__stat-label {
+  display: block;
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  color: var(--text-muted);
+}
+
+.fish-stand__stat-value {
+  display: block;
+  font-size: var(--cozy-s-font-size-xl, 20px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The catalogue grid. Every catalogue entry gets a cell whether or not it has been
+ * caught, because a collection view that only shows what you have is a list, not a
+ * collection. An uncaught cell says "Not caught yet" in words; the muted border is a
+ * second signal, never the only one.
+ */
+.fish-stand__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--cozy-s-space-2, 8px);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fish-stand__cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-1, 4px);
+  padding: var(--cozy-s-space-2, 8px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+}
+
+.fish-stand__cell--uncaught {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.fish-stand__cell-name {
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  font-size: var(--cozy-s-font-size-md, 14px);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.fish-stand__cell--uncaught .fish-stand__cell-name {
+  color: var(--text-muted);
+}
+
+/* The per-subject catch list. One row per (subject, catalogue id) pair, keyed by the
+   subject id - an app-minted identifier, never a display name. */
+.fish-stand__subject-group + .fish-stand__subject-group {
+  margin-top: var(--cozy-s-space-3, 12px);
+}
+
+.fish-stand__subject-name {
+  margin: 0 0 var(--cozy-s-space-1, 4px);
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+}
+
+.fish-stand__subject-name--deleted {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.fish-stand__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-1, 4px);
+}
+
+.fish-stand__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cozy-s-space-2, 8px);
+  align-items: baseline;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+  padding: var(--cozy-s-space-1, 4px) 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.fish-stand__row-name {
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.fish-stand__row-date {
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fish-stand__empty,
+.fish-stand__complete {
+  margin: 0;
+  padding: var(--cozy-s-space-3, 12px);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  font-size: var(--cozy-s-font-size-md, 14px);
+}
+
+.fish-stand__empty {
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  color: var(--text-secondary);
+}
+
+.fish-stand__complete {
+  background: var(--bg-panel-soft);
+  border: 2px solid var(--accent);
+  color: var(--text-primary);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+}
+
+/* === Shared focus and motion '============================================== */
+
+/*
+ * Visible focus, restated for these four surfaces.
+ *
+ * `src/styles/cozy.css` already upgrades `:focus-visible` globally when the Cozy build
+ * flag is on, and the legacy sheet already establishes *a* focus style. This is the
+ * third signal: a 3px offset `outline`, which survives forced-colours mode - where
+ * Windows High Contrast replaces author colours wholesale but still honours
+ * `outline`. A learner on a Chromebook in Windows therefore still sees where they are,
+ * with the Cozy flag off.
+ */
+.fishing-hud :focus-visible,
+.fishing-catch-panel :focus-visible,
+.fishing-recall__dialog :focus-visible,
+.fish-stand__dialog :focus-visible {
+  outline: var(--cozy-s-focus-ring-width, 3px) solid var(--accent);
+  outline-offset: var(--cozy-s-focus-ring-offset, 2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fishing-hud__power-fill,
+  .fishing-hud__control,
+  .fish-stand__cell {
+    transition: none;
+  }
+}

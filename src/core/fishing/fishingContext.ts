@@ -26,7 +26,15 @@ export type { CanonicalFishEntry, FishCatalogIdSource } from './fishingTypes';
 export interface FishingSubjectContext {
   subjectId: string;
   subjectName: string;
-  roomId: string | null;
+  /**
+   * The room the pond was opened from, or `null`.
+   *
+   * Optional on a *candidate*, because a caller that holds only the subject may pass
+   * `{ subjectId, subjectName }` and correctly assert nothing about the room -
+   * `isSameFishingSubject` treats an absent `roomId` as "not asserted" rather than as
+   * "asserted to be none", which is what would make every room-opened session refuse.
+   */
+  roomId?: string | null;
 }
 
 /**
@@ -37,7 +45,7 @@ export interface FishingSubjectContext {
  * set from the catch event and are the only fish identity a caller may carry.
  * A display name is deliberately absent: catalog identity is what persists.
  */
-export interface FishingContext extends FishingSubjectContext {
+export interface FishingContext extends Required<FishingSubjectContext> {
   /** Opaque identifier for this fishing session. Never a learner value. */
   contextId: string;
   /** Opaque pond identifier the session started at. */
@@ -104,6 +112,10 @@ export function createFishingContext(input: CreateFishingContextInput): FishingC
     enteredAt: input.enteredAt,
     subjectId,
     subjectName,
+    // Normalised to `string | null` for the concrete context, even though the candidate
+    // type accepts an absent room. The concrete value always carries an explicit
+    // `null`, which is what makes a *later* candidate that omits the room distinguishable
+    // from one that asserts there was no room.
     roomId: normalizeRoomId(input.roomId),
     catalogId: null,
     rarity: null,

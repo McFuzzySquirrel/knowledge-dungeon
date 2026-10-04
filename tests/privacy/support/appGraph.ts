@@ -50,11 +50,54 @@ const ALIAS_PREFIX = '@/';
  * the planted probe as a real offender - a genuine cross-suite flake, because the
  * two suites run in parallel.
  *
- * So the planting is declared here, once, and the other gate reads this list rather
+ * So the planting is declared here, once, and the other gates read this list rather
  * than repeating the name. Declaring the *directory* is not by itself an exemption;
  * see {@link writePlantingMarker} and {@link isTestOwnedTransientPath}.
+ *
+ * ## Why this is a list and not one entry
+ *
+ * It began as one entry, and one entry was the whole of the privacy gate's own
+ * planting. It stayed one entry after three *other* gates started planting the same
+ * way, which left the protocol inert for them: {@link writePlantingMarker} wrote a
+ * declaration, and {@link isTestOwnedTransientPath} could not read it, because the
+ * directory it named was not on this list. The symptom was an intermittent failure of
+ * `tests/phase17/fishing-renderer-boundary.test.ts` naming
+ * `src/ui/study/__boundary_probe__/probe.ts` as an offender - roughly one `npm test`
+ * run in four - because Phase 14's positive control had that probe on disk while
+ * Phase 17's "study shell is renderer-free" walk read it as a shell module reaching a
+ * renderer. The probe is *deliberately* such an import; it is a positive control, not a
+ * defect.
+ *
+ * Each name is now a constant rather than a literal at the point of use, so a gate
+ * takes its own directory from here and a new planting cannot appear without someone
+ * adding it to this inventory - which `tests/phase4/plantingExemptionAdversarial.test.ts`
+ * pins to an exact set. Two properties the original one-entry assertion had are
+ * preserved and neither is weakened: the list is still a deliberate inventory that
+ * cannot change without a visible edit, and the **marker is still what exempts
+ * anything** - a directory on this list is not an exemption, only a place to look for
+ * a declaration.
+ *
+ * ## What is deliberately not on this list
+ *
+ * A probe directory that only its own gate reads, and which that gate filters out of
+ * its own scans by name, needs no entry here: `__data_gate_probe__` is skipped by
+ * `tests/data/support/importGraph.ts` at the point of enumeration, and the
+ * `qaHardening` probes either live outside the trees its gate scans or exist precisely
+ * to prove that an undeclared directory is *not* exempt. Adding a name here that no
+ * live planting declaration can ever be scoped to would weaken the inventory, because
+ * the list is the thing that makes "declared" mean "deliberate".
  */
-export const TEST_OWNED_SOURCE_DIRECTORIES: readonly string[] = ['__privacy_probe__'];
+export const PRIVACY_PROBE_DIRECTORY = '__privacy_probe__';
+export const PHASE14_BOUNDARY_PROBE_DIRECTORY = 'ui/study/__boundary_probe__';
+export const PHASE16_BOUNDARY_PROBE_DIRECTORY = 'renderers/__phase16_boundary_probe__';
+export const PHASE17_FISHING_PROBE_DIRECTORY = 'renderers/__phase17_fishing_probe__';
+
+export const TEST_OWNED_SOURCE_DIRECTORIES: readonly string[] = Object.freeze([
+  PRIVACY_PROBE_DIRECTORY,
+  PHASE14_BOUNDARY_PROBE_DIRECTORY,
+  PHASE16_BOUNDARY_PROBE_DIRECTORY,
+  PHASE17_FISHING_PROBE_DIRECTORY,
+]);
 
 /**
  * The file a planting test writes for as long as its probe exists, and removes when
@@ -162,6 +205,19 @@ export function isTestOwnedTransientPath(absolutePath: string): boolean {
     return plantedPathsFor(name).has(repoPath(absolutePath));
   }
   return false;
+}
+
+/**
+ * {@link isTestOwnedTransientPath} for the **repo-relative** form the module enumerators hand
+ * out.
+ *
+ * A boundary gate that already holds {@link allFirstPartyModules}' output has repo-relative
+ * paths and would otherwise have to re-join every one against the repository root to ask the
+ * question — which is the kind of duplication that produces a second, quietly divergent copy of
+ * the predicate. Same three conditions, same result; only the input shape differs.
+ */
+export function isTestOwnedTransientModule(repoRelativePath: string): boolean {
+  return isTestOwnedTransientPath(join(REPO_ROOT, repoRelativePath));
 }
 
 /** Extensions a first-party specifier may resolve to, in probe order. */

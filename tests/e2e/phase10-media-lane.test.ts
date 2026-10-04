@@ -627,7 +627,7 @@ type WiringCheck =
   | 'step-adds-nothing'
   | 'job-no-production-build'
   | 'job-one-browser-install'
-  | 'job-two-artifact-downloads'
+  | 'job-three-artifact-downloads'
   | 'job-one-npm-ci'
   | 'step-inside-the-production-window';
 
@@ -741,10 +741,22 @@ const WIRING_CHECKS: Record<WiringCheck, (wiring: Wiring) => string | null> = {
     if (installs !== 1) return `${PHASE10_MEDIA_CI_JOB} installs a browser ${installs} times; it is entitled to the one it already had.`;
     return null;
   },
-  'job-two-artifact-downloads': (wiring) => {
+  /*
+   * The number of artifact downloads in this job, pinned **exactly**.
+   *
+   * It was two — the production artifact and the Pixi-flagged one — and it is now three, because
+   * the Phase 17 fishing lane measures a *third* flagged artifact and `actions/download-artifact`
+   * extracts into the working directory rather than replacing it, so each needs its own named step
+   * and its own `rm -rf dist`. The property this check protects is that **this lane adds none of
+   * them**: a Phase 10 step that downloaded an artifact would be measuring a build it chose rather
+   * than the one its job certified. So the count stays exact, and a mutation that adds a download
+   * to *this lane's step* still moves it; the mutation below was retargeted to a fourth download so
+   * it keeps failing for the right reason now that the baseline is three.
+   */
+  'job-three-artifact-downloads': (wiring) => {
     if (wiring.jobText === '') return `ci.yml has no ${PHASE10_MEDIA_CI_JOB} job.`;
     const downloads = countMatching(wiring.jobText, ARTIFACT_DOWNLOAD_STEP);
-    if (downloads !== 2) return `${PHASE10_MEDIA_CI_JOB} downloads an artifact ${downloads} times; it has the production one and the Pixi-flagged one.`;
+    if (downloads !== 3) return `${PHASE10_MEDIA_CI_JOB} downloads an artifact ${downloads} times; it has the production one, the Pixi-flagged one and the Pixi-fishing-flagged one.`;
     return null;
   },
   'job-one-npm-ci': (wiring) => {
@@ -894,8 +906,8 @@ const WIRING_MUTATIONS: readonly WiringMutation[] = [
     apply: (text) => rewrite(text, LANE_STEP_TEXT, `${LANE_STEP_TEXT}      - run: npx playwright install --with-deps chromium\n`),
   },
   {
-    what: 'a third artifact download is added to the job',
-    check: 'job-two-artifact-downloads',
+    what: 'a fourth artifact download is added to the job',
+    check: 'job-three-artifact-downloads',
     apply: (text) => rewrite(text, LANE_STEP_TEXT, `${LANE_STEP_TEXT}      - name: Download the production artifact again\n        uses: actions/download-artifact@v4\n`),
   },
   {
@@ -1010,14 +1022,16 @@ describe('phase 10 media CI wiring (ci.yml)', () => {
     expectWiringHolds('step-adds-nothing', wiring);
     expectWiringHolds('job-no-production-build', wiring);
     expectWiringHolds('job-one-browser-install', wiring);
-    expectWiringHolds('job-two-artifact-downloads', wiring);
+    expectWiringHolds('job-three-artifact-downloads', wiring);
     expectWiringHolds('job-one-npm-ci', wiring);
     // The numbers the Phase 9 gates pin in this job, restated so a red run says which
-    // count moved. One checkout, one install, the production artifact and the
-    // Pixi-flagged one, and no production build outside `web-build`.
+    // count moved. One checkout, one install, and three artifact downloads — the production
+    // artifact, the Pixi-flagged one and the Pixi-fishing-flagged one, the last of them added by
+    // the Phase 17 lane and every one of them a named step with its own discard. No production
+    // build outside `web-build`.
     expect(countMatching(wiring.jobText, NPM_CI_STEP)).toBe(1);
     expect(countMatching(wiring.jobText, BROWSER_INSTALL_STEP)).toBe(1);
-    expect(countMatching(wiring.jobText, ARTIFACT_DOWNLOAD_STEP)).toBe(2);
+    expect(countMatching(wiring.jobText, ARTIFACT_DOWNLOAD_STEP)).toBe(3);
     expect(countMatching(wiring.jobText, PRODUCTION_BUILD_STEP)).toBe(0);
   });
 

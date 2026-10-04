@@ -425,10 +425,22 @@ describe('pixi memory CI wiring (ci.yml)', () => {
     // as the word, because this job's own comments name the property they preserve.
     expect(body).toContain('npx playwright install --with-deps chromium');
     expect([...body.matchAll(/^\s*- run: npx playwright install[^\n]*$/gm)].length).toBe(1);
-    // Two downloads, not one and not three: the production artifact this job's first
-    // suite certified, and the flagged one this lane measures. Each is a step, so a
-    // third download would be a second artifact arriving unannounced.
-    expect([...body.matchAll(/^\s*uses: actions\/download-artifact@v4[^\n]*$/gm)].length).toBe(2);
+    /*
+     * Downloads, pinned **exactly**, and the number moved from two to three.
+     *
+     * The property is that every artifact arriving in this job is a *named step*, so no artifact
+     * can show up unannounced; the count is how that property is enforced. The three are the
+     * production artifact this job's first suite certified, the Pixi-flagged one this lane
+     * measures, and the Pixi-fishing-flagged one the Phase 17 lane measures — each downloaded
+     * after its own `rm -rf dist`, because a download extracts *into* the working directory
+     * rather than replacing it. A **fourth** download would be an artifact nobody declared, so
+     * the count stays exact rather than becoming a floor; the Phase 17 lane's own gate asserts
+     * the third one's name so this number cannot be satisfied by an unnamed download.
+     */
+    expect([...body.matchAll(/^\s*uses: actions\/download-artifact@v4[^\n]*$/gm)].length).toBe(3);
+    for (const artifact of ['web-artifact', PIXI_MEMORY_CI_UPLOAD_ARTIFACT, 'pixi-fishing-web-artifact']) {
+      expect(body, `${artifact} is not downloaded in ${PIXI_MEMORY_CI_JOB}`).toContain(`name: ${artifact}`);
+    }
     // Counted as run steps, not as the word: this job's own comments name the
     // property they are preserving, and a comment must not make it look violated.
     expect([...body.matchAll(/^\s*- run: npm ci[^\n]*$/gm)].length).toBe(1);
@@ -491,9 +503,19 @@ describe('pixi memory CI wiring (ci.yml)', () => {
     expect(upload).toContain(`name: ${PIXI_MEMORY_CI_UPLOAD_ARTIFACT}`);
     expect(upload).toContain(PIXI_MEMORY_MANIFEST_PATH);
     expect(upload).toContain('dist');
-    // One artifact more than the release, not one *instead* of it, and the set of
-    // uploads is pinned exactly: build metadata, the release artifact, and the
-    // flagged one. A fourth upload would be a second production artifact.
+    /*
+     * Flagged artifacts in addition to the release, not instead of it, and the set of uploads is
+     * pinned exactly: build metadata, the release artifact, and then one per flagged build. A
+     * **fifth** upload would be a second production artifact, so the list stays exact rather than
+     * becoming a floor.
+     *
+     * The list grew from three to four when the Phase 17 Pixi-fishing artifact joined this job,
+     * for the reason its own block gives: `VITE_PIXI_FISHING` is a build-time flag, so the only
+     * way the flagged pond can be measured in a browser is for this job to build it, and eleven
+     * wiring gates assert that no other job runs any `build:web*` script. Every entry below is
+     * still a *named* upload of either the release or one flagged build, and each carries its own
+     * manifest, so none can be read as another.
+     */
     const uploadStepNames = [
       ...buildJob.matchAll(/- name: ([^\n]+)\n\s+uses: actions\/upload-artifact@v4/g),
     ].map((match) => match[1]?.trim());
@@ -501,6 +523,7 @@ describe('pixi memory CI wiring (ci.yml)', () => {
       'Upload build metadata',
       'Upload the shared production web artifact',
       PIXI_MEMORY_CI_UPLOAD_STEP,
+      'Upload the Pixi-fishing-flagged web artifact',
     ]);
     // And the release identity is still recorded and uploaded exactly once, so a
     // flagged upload can never be read as the release.

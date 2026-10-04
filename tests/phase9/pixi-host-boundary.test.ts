@@ -99,6 +99,16 @@ const PIXIJS_IMPORTERS: readonly string[] = [
   'src/renderers/pixi/dungeon/createDungeonScene.ts',
   'src/renderers/pixi/dungeon/RoomNode.ts',
   'src/renderers/pixi/dungeon/CorridorLayer.ts',
+  // Phase 17 added one for the fishing pond, and it is the same decision as the eight above
+  // taken for a ninth world: a scene draws display objects, the renderer-neutral host hands it
+  // an `Application` and a theme, and the alternatives - widening the host to carry display
+  // classes, or a neutral shape abstraction that would be a second renderer for one world -
+  // are the ones already recorded above. Unlike the dungeon it is not split, because the pond
+  // is one scene with no separately-testable sub-layer: its machine, its art, and its teardown
+  // are only meaningful together. `FishingController.ts` and `FishingWorld.tsx` are deliberately
+  // absent - they reach the engine only through `createPixiApplication`, `createFishingScene`,
+  // and the React bindings, which is what makes them testable without an engine.
+  'src/renderers/pixi/fishing/createFishingScene.ts',
 ];
 
 /** Layers that must not reach a renderer, matching `eslint.config.js`. */

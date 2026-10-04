@@ -23,9 +23,20 @@ import {
 import { STORAGE_KEYS, getActiveSubjectId } from '@/services/persistence/subjectPersistence';
 import { writeThroughInBackground } from '@/services/persistence/v2/dualWrite';
 import { currentStorageV2Repository } from '@/services/persistence/v2/repositorySelection';
-import type { FishEntry, FishRarity, FishCollection } from '@/core/fishing/fishingTypes';
+import type { FishEntry, FishRarity, FishCollection, FishCatalogEntry } from '@/core/fishing/fishingTypes';
 import { FISH_RARITY_XP_MULTIPLIER, FISH_CATALOG } from '@/core/fishing/fishingTypes';
 import { createFishId, addFishToCollection, countUniqueTypes } from '@/core/fishing/fishCollectionService';
+import {
+  CATCH_OUTCOME_POLICY,
+  createCanonicalFishEntry,
+  createFishEntrySuffix,
+  decideCatchReward,
+  writeCatchRewardLedgerToFields,
+  withRecallRoom,
+  type CatchDeclinedOutcome,
+  type CatchOutcome,
+  type CatchRewardIdentity,
+} from '@/core/fishing/catchRewards';
 import {
   CANONICAL_PROGRESSION_VERSION,
   makeDefaultSubjectProgression,
@@ -115,6 +126,36 @@ export interface RoomClearRewardOutcome {
 export interface ReviewPassAwardOutcome {
   awarded: boolean;
   duplicate: boolean;
+}
+
+/**
+ * What `recordCatch` reports about the whole transaction.
+ *
+ * Phase 17. Additive, so every existing reader of the fishing actions is unaffected.
+ * `duplicate` is the signal a caller needs in order not to announce a reward that did
+ * not happen, for the same reason as the two outcomes above - and the third cause is
+ * unique to fishing:
+ *
+ * - `duplicate: true` - the durable ledger already held this catch.
+ * - `duplicate: false, awarded: false` - the outcome was **declined**, which is
+ *   `released` or `answered-incorrect`. Nothing was written, and `reason` says which.
+ *
+ * A caller that branches on `!awarded` alone will tell a learner a sentence about a
+ * repeat when a release produced it.
+ */
+export interface CatchRecordOutcome {
+  awarded: boolean;
+  duplicate: boolean;
+  xpGained: number;
+  /** `null` when nothing was written. */
+  newRank: RankTier | null;
+  rankChanged: boolean;
+  unlockedBadges: string[];
+  /** The persisted entry's id, or `null` when nothing was written. */
+  fishEntryId: string | null;
+  /** Why nothing was written, when nothing was. `null` on an award. */
+  declinedReason: CatchDeclinedOutcome | null;
+  unlockedAchievements: string[];
 }
 
 /**
@@ -439,12 +480,98 @@ export interface ProgressionStoreState {
    * `save` of the same marker is the same record.
    */
   writeReviewSession: (write: ProgressionReviewSessionWrite) => void;
-  /** Fisher's Rest: add a caught fish to the active subject's collection */
+  /**
+   * Fisher's Rest: add a caught fish to the active subject's collection.
+   *
+   * **Phase 17 carve-out, deliberately unchanged.** This action, `awardFishingXp`,
+   * and `checkFishingBadges` are the *pre-Phase-17* chain. They are kept working
+   * exactly as they were, and the reason has changed during the phase:
+   *
+   * - At `ade1f78` their only production caller was `VillageScreen.handleKeepFish`,
+   *   reached through the Phase 15 rollback lane (`VITE_PIXI_FISHING=false`).
+   * - **`handleKeepFish` no longer exists.** Phase 17 moved the catch transaction to
+   *   `src/ui/fishing/fishingSession.ts`, which commits through `recordCatch` below
+   *   as one deduplicated command. That is true on **both** lanes: the DOM calls
+   *   `recordCatch` whether the pond is the Pixi world or the Phaser `FishingScene`,
+   *   so the rollback lane is not a second code path any more - there is one.
+   * - `grep -rn "addFish\|awardFishingXp\|checkFishingBadges" src/ tests/` now finds
+   *   **no production caller** of these three store actions. The remaining hits are
+   *   `fishCollectionService`'s own `addFishToCollection` (a different, pure function
+   *   in `src/core/fishing/`), the Phaser and Pixi renderers' private
+   *   `addFishToBucket` (a scene-graph bucket, not a collection write), and this note.
+   *
+   * So they are kept because **removing them is a separate decision**, not because
+   * anything still needs them. Two of the three carry defects `recordCatch` fixes:
+   *
+   * - The id prefix is derived from the **display name**
+   *   (`name.toLowerCase().replace(/\s+/g, '-')`) rather than the catalogue id, and
+   *   `catalogId` is never set, so `resolveFishCatalogId` falls through its
+   *   `entry-id-prefix` branch to `catalog-name-match`. That works today only because
+   *   every catalogue name slugs to its own id - a coincidence between
+   *   `fishingTypes.ts` and `fishCollectionService.ts`, not a contract. `recordCatch`
+   *   builds the id from the catalogue id and sets `catalogId` explicitly.
+   * - `awardFishingXp` has **no idempotency guard at all**, so a double dispatch pays
+   *   twice. `recordCatch` consults the durable ledger in the same record write as
+   *   the reward.
+   *
+   * Neither defect is reachable from any caller, which is exactly why neither is
+   * fixed here: a repair with no caller is a change nobody can observe. A follow-up
+   * should either delete all three or keep them with this note, and should say which.
+   * `fishingCommandStoreBinding.test.ts` asserts the unguarded `awardFishingXp` **as
+   * the defect**, so a future guard has to update that test and its stated reason.
+   */
   addFish: (input: { name: string; rarity: FishEntry['rarity']; subjectId: string; subjectName: string }) => FishEntry;
-  /** Fisher's Rest: award XP for correctly answering a fishing recall question */
+  /**
+   * Fisher's Rest: award XP for a fishing recall answer.
+   *
+   * **Unguarded, and unchanged.** Phase 17 carve-out; see `addFish`. The new path
+   * pays XP through `recordCatch`, which consults the durable ledger first.
+   */
   awardFishingXp: (rarity: FishRarity) => { xpGained: number; newRank: RankTier; rankChanged: boolean };
-  /** Fisher's Rest: check and award any fishing badges based on current collection */
+  /**
+   * Fisher's Rest: check and award fishing badges from the current collection.
+   *
+   * **Unchanged, including its separate `set` per badge and its name-based unique
+   * count.** Phase 17 carve-out; see `addFish`. `recordCatch` computes the same badges
+   * from `evaluateFishingBadgeUnlocks`, which counts **canonical catalogue ids** and
+   * returns them for one combined write.
+   */
   checkFishingBadges: () => FishingBadgeId[];
+  /**
+   * Phase 17: the whole catch transaction, in **one `set` of one record**.
+   *
+   * The fish entry, the XP, the rank, the fishing badge unlocks, and the durable
+   * catch-reward ledger entry land together, so there is no partial-reward window: a
+   * failed write persists the reward *and* its guard together or neither, and a retry
+   * can never find a fish whose ledger entry is missing. See
+   * `src/core/fishing/catchRewards.ts` for the identity and the argument.
+   *
+   * **`subjectId` is a parameter, not `activeSubjectId`.** That is the fix for plan
+   * 5.3's "fishing eligibility, recall selection, and persistence may use different
+   * subject contexts": the three steps that read `activeSubjectId`, the village
+   * layout's nearest portal slot, and `Object.keys(bySubject)[n - 1]` all disagreed,
+   * and an action that could only pay the *active* subject could not honour a session
+   * whose subject had since changed. The top-level flat mirror fields are updated
+   * **only** when the written subject is the active one, so writing a catch for a
+   * non-active subject cannot corrupt the header a panel reads.
+   *
+   * **A declined outcome writes nothing at all.** `released` and `answered-incorrect`
+   * return before any `set`, which is what makes "release and failed recall do not
+   * mutate progression" true by construction rather than by convention.
+   */
+  recordCatch: (input: {
+    /** The subject the catch belongs to. App-minted. */
+    subjectId: string;
+    /** Which (session, species, cast) this is. */
+    identity: CatchRewardIdentity;
+    outcome: CatchOutcome | CatchDeclinedOutcome;
+    /** The catalogue entry that was caught. */
+    catalogEntry: FishCatalogEntry;
+    /** The subject's display name, for the persisted entry's record text. */
+    subjectName: string;
+    /** The app-minted recall room id, or `null`. Never a topic. */
+    recallRoomId: string | null;
+  }) => CatchRecordOutcome;
   /** Track 3c: equip an equippable item */
   equipItem: (itemId: string) => boolean;
   /** Track 3c: unequip an item */
@@ -686,6 +813,153 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     }
 
     return newlyAwarded;
+  },
+
+  // ── Fisher's Rest: recordCatch (Phase 17, the whole transaction) ───────────
+  //
+  // The replacement for the `addFish` -> `awardFishingXp` -> `checkFishingBadges`
+  // chain, which **no production caller uses any more.** Those three actions are
+  // unchanged; see the carve-out note on `addFish`. `recordCatch` is the only
+  // production caller of `decideCatchReward`, and it is the catch transaction on
+  // both lanes.
+
+  recordCatch(input) {
+    const { subjectId, identity, outcome, catalogEntry, subjectName, recallRoomId } = input;
+    const policy = CATCH_OUTCOME_POLICY[outcome];
+    const declined = (reason: CatchDeclinedOutcome): CatchRecordOutcome => ({
+      awarded: false,
+      duplicate: false,
+      xpGained: 0,
+      newRank: null,
+      rankChanged: false,
+      unlockedBadges: [],
+      fishEntryId: null,
+      declinedReason: reason,
+      unlockedAchievements: [],
+    });
+
+    // A declined outcome writes nothing at all: no `set`, no save, no `Math.random`.
+    // This is the whole of "release and failed recall do not mutate progression",
+    // and it is a real early return rather than a `set` of an unchanged record,
+    // which would still have re-persisted the record and re-written the mirror.
+    if (!policy.mutatesProgression) {
+      return declined(outcome as CatchDeclinedOutcome);
+    }
+
+    const normalizedSubjectId = subjectId.trim();
+    if (normalizedSubjectId.length === 0) {
+      // A catch with no subject cannot be recorded against one, and the old chain's
+      // `addFish` wrote to `activeSubjectId` regardless - the exact mismatch this
+      // action removes. Refuse rather than guess.
+      return declined('released');
+    }
+
+    const state = get();
+    const current = getSubjectProgression(state.bySubject, normalizedSubjectId);
+
+    // Phase 17: the durable awarded-once check, taken *before* any id is minted so a
+    // suppressed catch burns no `Math.random` and performs no write at all. The
+    // decision is a single pure value and it lands in the same `set` below as the
+    // fish entry, the XP, the rank, and the badges - so a failed write leaves the
+    // reward and its guard in the same state, never one without the other, and two
+    // calls in one tick cannot both decide to award.
+    //
+    // The clock and the id suffix are injected here rather than read inside
+    // `createFishId`, so a test gets a reproducible entry id. The *format* is
+    // `createFishId`'s, so an entry written here is indistinguishable in shape from
+    // one written by `addFish` and `resolveFishCatalogId`'s `entry-id-prefix` branch
+    // keeps resolving every pre-Phase-17 entry.
+    const nowMs = Date.now();
+    const decision = decideCatchReward({
+      extraFields: current.extraFields,
+      identity,
+      outcome,
+      xpTotal: current.xpTotal,
+      rank: current.rank,
+      collection: current.fishCollection,
+      heldBadges: current.badges,
+      fishEntry: createCanonicalFishEntry({
+        catalogEntry,
+        subjectId: normalizedSubjectId,
+        subjectName,
+        caughtAt: new Date(nowMs).toISOString(),
+        entrySuffix: createFishEntrySuffix(nowMs, Math.random()),
+      }),
+      awardedAt: new Date(nowMs).toISOString(),
+    });
+
+    if (decision.outcome === 'already-awarded') {
+      return {
+        awarded: false,
+        duplicate: true,
+        xpGained: 0,
+        newRank: null,
+        rankChanged: false,
+        unlockedBadges: [],
+        fishEntryId: null,
+        declinedReason: null,
+        unlockedAchievements: [],
+      };
+    }
+    if (decision.outcome === 'declined') {
+      return declined(decision.declinedOutcome);
+    }
+
+    if (decision.fishEntry === null) {
+      // Only reachable if `createCanonicalFishEntry` produced `null`, which it cannot
+      // do - its four inputs are all required and it returns an object. Guarded
+      // anyway so a future edit to the decision cannot write `null` into a collection
+      // whose type says `FishEntry`.
+      return declined('released');
+    }
+
+    // The ledger carries the room the recall came from, so Phase 17's local
+    // "navigation back to the relevant room" and Phase 18's statistics have a
+    // subject-scoped handle without re-deriving one from learner material. It is
+    // deliberately **not** part of the digest.
+    const withRoom = withRecallRoom({ ...decision, fishEntry: decision.fishEntry }, recallRoomId);
+    const extraFields = writeCatchRewardLedgerToFields(current.extraFields, withRoom.ledger);
+
+    // ONE record, ONE `set`. Fish entry, XP, rank, badges, and the ledger entry
+    // move together or not at all.
+    const nextSubject: PersistedSubjectProgression = {
+      ...current,
+      fishCollection: [withRoom.fishEntry, ...current.fishCollection],
+      xpTotal: withRoom.nextXpTotal,
+      rank: withRoom.rank,
+      badges: [...current.badges, ...withRoom.badgesUnlocked],
+      extraFields,
+    };
+    const bySubject = { ...state.bySubject, [normalizedSubjectId]: nextSubject };
+
+    // The flat top-level fields mirror the **active** subject only. A catch written
+    // for another subject must not overwrite the header a panel reads, which is why
+    // this is conditional where the three Phase 15/16 writes were not: those could
+    // only ever write the active subject.
+    set(
+      state.activeSubjectId === normalizedSubjectId
+        ? { bySubject, ...nextSubject }
+        : { bySubject },
+    );
+    savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    // Cross-subject achievements are a **separate** `set` per achievement and are not
+    // in this transaction, exactly as after `awardRoomClear` and `awardReviewPass`.
+    // They are already idempotent (`awardBadge` returns `false` for a held badge), so
+    // the exposure is a lag rather than a double count.
+    const unlockedAchievements = get().checkCrossSubjectAchievements();
+
+    return {
+      awarded: true,
+      duplicate: false,
+      xpGained: withRoom.xpAwarded,
+      newRank: withRoom.rank,
+      rankChanged: withRoom.rankChanged,
+      unlockedBadges: [...withRoom.badgesUnlocked],
+      fishEntryId: withRoom.fishEntry.id,
+      declinedReason: null,
+      unlockedAchievements,
+    };
   },
 
   awardRoomClear({

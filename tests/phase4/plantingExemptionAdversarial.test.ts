@@ -32,6 +32,19 @@
  * repo-relative paths the planting created, and only those are exempt. A planting
  * that cannot state its files, or states them malformed, is exempt for nothing.
  *
+ * ── Why the inventory is four entries and not one ───────────────────────────
+ *
+ * The list in `appGraph.ts` named only the privacy gate's own directory for a long
+ * after three *other* boundary gates started planting the same way, which left the
+ * declaration protocol inert for them: their markers were written and nothing could
+ * read them. The symptom was an intermittent failure of
+ * `tests/phase17/fishing-renderer-boundary.test.ts` naming
+ * `src/ui/study/__boundary_probe__/probe.ts` as an offender, roughly one `npm test` run in
+ * four. The exactness assertion below therefore pins the **whole sorted set** rather than a
+ * single entry: the property it exists to protect is that the inventory is deliberate and
+ * symmetric - it cannot gain an entry without a visible edit, and it cannot lose one either,
+ * because a lost name silently turns a boundary gate's exclusion into a no-op.
+ *
  * ── Why this file never plants a forbidden file under `src/` ────────────────
  *
  * `isTestOwnedTransientPath` is a *path predicate*: it stats the marker, reads the
@@ -196,9 +209,42 @@ describe('planting exemption: boundaries hold', () => {
     expect(modulesTheGateSees()).toContain(repoPath(planted));
   });
 
-  it('the declared name is the only exempt name, and only one is declared', () => {
-    expect(TEST_OWNED_SOURCE_DIRECTORIES).toEqual([DECLARED]);
+  /*
+   * The inventory, pinned exactly.
+   *
+   * This used to read `expect(TEST_OWNED_SOURCE_DIRECTORIES).toEqual([DECLARED])`, which said the
+   * same thing for one entry and for four: **the exemption list is a deliberate inventory and
+   * cannot change without someone editing this file on purpose.** Widening it is the only way a
+   * directory could stop being scanned, and a widening that is not pinned is a gate that got
+   * quietly weaker.
+   *
+   * So the assertion moved from "there is exactly one entry" to "the entries are exactly this
+   * sorted list", which keeps the property and adds the other half: a name cannot be *dropped*
+   * either, because a dropped name silently turns a boundary gate's exclusion into a no-op and
+   * the cross-suite flake comes back. The literal list below is the pin; adding a fifth planting
+   * directory means adding a line here, which is the point.
+   */
+  const PINNED_DECLARED_DIRECTORIES = [
+    '__privacy_probe__',
+    'renderers/__phase16_boundary_probe__',
+    'renderers/__phase17_fishing_probe__',
+    'ui/study/__boundary_probe__',
+  ];
+
+  it('the declared set is pinned exactly, and the marker is what exempts anything', () => {
+    expect([...TEST_OWNED_SOURCE_DIRECTORIES].sort()).toEqual(PINNED_DECLARED_DIRECTORIES);
+    // The inventory is a place to *look* for a declaration. It is not an exemption, and the two
+    // tests above are what prove that: an undeclared name, a lookalike, and a marker-less
+    // leftover are all still scanned.
     expect(PLANTING_MARKER_NAME).toBe('.test-planted');
+    // And every declared name is a live-planting directory, not a file: `testOwnedDirectory`
+    // joins it onto `src/`, so a name that stopped being a directory path would quietly match
+    // nothing and the boundary gates' exclusion would be inert.
+    for (const name of TEST_OWNED_SOURCE_DIRECTORIES) {
+      expect(name.startsWith('/')).toBe(false);
+      expect(name.endsWith('/')).toBe(false);
+      expect(repoPath(testOwnedDirectory(name))).toBe(`src/${name}`);
+    }
   });
 });
 
