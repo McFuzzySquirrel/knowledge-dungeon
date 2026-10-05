@@ -7320,8 +7320,15 @@ Run the common gate.
 
 ### Verification evidence
 
-Recorded on 2026-10-05. `not-started` -> `in-progress` -> `verified`. **Not committed, pushed, or
-deployed** - that needs explicit maintainer authorization. Phase 20 has not been started.
+Recorded on 2026-10-05. `not-started` -> `in-progress` -> `verified`. The maintainer authorized the
+commit and push, and the phase was committed as `bbb142e` and pushed to `origin/main`. **Acceptance is
+still pending** and Phase 20 has not been started: two questions are open with the maintainer, namely
+whether to build the flagged assistance lane now or in Phase 21, and whether
+`deps.setDualWriteSink` / `deps.setSessionSource` in `bootstrap.ts` should be wired. **Not deployed** -
+no deployment was performed or authorized.
+
+The text originally recorded the phase as not yet committed, pushed, or deployed; that statement was
+true when written and is superseded by that commit.
 
 #### Baseline
 
