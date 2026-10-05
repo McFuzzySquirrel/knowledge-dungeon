@@ -36,6 +36,7 @@ import {
   type InterruptedReviewSessionWrite,
 } from '@/core/review/interruptedReviewSession';
 import type { RankTier } from '@/core/progression/types';
+import { endStatisticsSession } from '@/core/statistics/activitySink';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 import { createTutorialSubject, TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 import {
@@ -410,6 +411,24 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
   const villageStore = village?.store ?? null;
   const villageUi = village?.ui ?? null;
   const fishing = village?.fishing ?? null;
+
+  /**
+   * Close the open study session, if the statistics layer is wired.
+   *
+   * Phase 18. This module must not import the session service - the application layer has
+   * no store or service dependency by construction, and a `returnToVillage` that could
+   * throw because a session could not be written would be a worse bug than the one it
+   * fixes. So the end is requested through a core sink the award sites also use, and it is
+   * a silent no-op when nothing is installed.
+   *
+   * Deliberately **not** awaited and deliberately not allowed to reject: leaving the
+   * dungeon must not wait on persistence, and the session record is already written on
+   * every activity, so the worst a failed write costs is one missing `endedAt` - which
+   * recovery closes at the session's own `lastActivityAt` rather than at recovery time.
+   */
+  function endStudySession(): void {
+    endStatisticsSession();
+  }
 
   // Deferred archaeologist review: a cleared room remembers that its panel was
   // opened so closing the panel records the review pass exactly once.
@@ -866,6 +885,13 @@ export function createStudyFlowController(deps: StudyFlowDeps): StudyFlowControl
 
   function returnToVillage(): void {
     store.closeMapView();
+    // Phase 18: leaving the dungeon is one of the five signals that end a study session.
+    // It is idempotent - the lifecycle finds nothing open the second time - and it is
+    // called *before* the active subject is released below, so the session that ends is the
+    // one that was actually being studied. The store-driven `activeScreen` transition in
+    // `src/store/sessionLifecycleBinding.ts` is the backstop for a route change that does
+    // not come through here.
+    endStudySession();
     // Phase 16: leaving with a review open is a **decision**, not a silent drop.
     // The default is to SAVE - keep the marker so the review is resumable - because
     // save is the only branch that cannot lose committed work, and

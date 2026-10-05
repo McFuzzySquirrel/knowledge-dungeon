@@ -61,6 +61,23 @@ import {
   applyInterruptedReviewSessionWrite,
   type InterruptedReviewSessionWrite,
 } from '@/core/review/interruptedReviewSession';
+import {
+  localDateKey,
+  toFishingOutcomeEvent,
+  toNoteSubmissionEvent,
+  toReviewCompletionEvent,
+  toXpAwardEvent,
+  noteSubmissionEventSourceIdentity,
+  reviewCompletionEventSourceIdentity,
+  fishingOutcomeEventSourceIdentity,
+  writeStatisticsEventLedgerToFields,
+  decideStatisticsEvent,
+  decideNoteSubmission,
+  deriveNoteSubmissionSourceIdentity,
+  type NoteSubmissionEventIdentity,
+  type StatisticsEvent,
+} from '@/core/statistics';
+import { emitStatisticsActivity } from '@/core/statistics/activitySink';
 
 export type LootItem = CanonicalLootItem;
 export type CollectedNoteEntry = CanonicalCollectedNote;
@@ -79,20 +96,225 @@ type PersistedSubjectProgression = CanonicalSubjectProgressionWriteShape;
 const REVIEW_PASS_XP = 6;
 
 /**
+ * Write Phase 18's statistics events into a record's preserved fields.
+ *
+ * Each event is decided through {@link decideStatisticsEvent} and only an event that was
+ * actually recorded is written, so a repeated decision is a no-op rather than a second
+ * ledger row. Called **inside** the same `set` of one record as the reward, which is the
+ * whole reason the statistic cannot disagree with the award: a failed write persists the
+ * reward, its guard, and its statistic together or none of them.
+ *
+ * Returns `extraFields` **unchanged** - including `undefined` - when there is nothing to
+ * write, so a call that records no statistics gains no `extraFields` key. That is now a
+ * statement about the *call*, not about the lane: Phase 18 restricted this to `clear`-bearing
+ * calls so that a shipped lane kept gaining no key, which meant a completed note on the default
+ * artifact recorded nothing anywhere. Every lane that names a room records; only a call that names
+ * no room still writes the pre-Phase-18 byte sequence.
+ */
+function writeStatisticsEventsToFields(
+  extraFields: Record<string, unknown> | undefined,
+  events: readonly StatisticsEvent[],
+): Record<string, unknown> | undefined {
+  if (events.length === 0) return extraFields;
+  let next: Record<string, unknown> | undefined = extraFields;
+  for (const event of events) {
+    const decision = decideStatisticsEvent({ extraFields: next, event });
+    if (decision.outcome !== 'recorded') continue;
+    next = writeStatisticsEventLedgerToFields(next ?? {}, decision.ledger);
+  }
+  return next;
+}
+
+/**
+ * The local calendar day an event was recorded on, and the ISO instant it was recorded at.
+ *
+ * Read once per award so the two agree: a write that crossed local midnight would otherwise
+ * put an event on a day its own timestamp does not name.
+ */
+function statisticsStamp(): { localDate: string; recordedAt: string } {
+  const recordedAt = new Date().toISOString();
+  return { localDate: localDateKey(recordedAt), recordedAt };
+}
+
+/**
+ * The statistics events one awarded room clear records.
+ *
+ * **Two events, not one.** The note and the XP it paid are separate entries because they are
+ * separate questions - "how many notes did this learner write" and "how much XP did they earn
+ * this subject" - and a surface that wants one must not have to sum the other. The XP event's
+ * identity is derived from the *same* `(room, clear generation)` components as the note event,
+ * so the two are suppressed by the same rule and can never disagree.
+ *
+ * Both are built by the core constructors, which derive the identity from the same components
+ * the event stores, so a caller cannot build an event whose identity was derived from
+ * something it does not carry.
+ */
+function noteStatisticsEvents(input: {
+  subjectId: string;
+  identity: NoteSubmissionEventIdentity;
+  xpAwarded: number;
+}): readonly StatisticsEvent[] {
+  const { localDate, recordedAt } = statisticsStamp();
+  const identity = input.identity;
+  return [
+    toNoteSubmissionEvent({
+      subjectId: input.subjectId,
+      identity,
+      localDate,
+      recordedAt,
+      xpAwarded: input.xpAwarded,
+    }),
+    toXpAwardEvent({
+      subjectId: input.subjectId,
+      source: 'note-submission',
+      sourceIdentity: noteSubmissionEventSourceIdentity(identity),
+      localDate,
+      recordedAt,
+      amount: input.xpAwarded,
+    }),
+  ];
+}
+
+/**
+ * The statistics events one awarded review pass records. See {@link noteStatisticsEvents}.
+ */
+function reviewStatisticsEvents(input: {
+  subjectId: string;
+  roomId: string;
+  passNumber: number;
+  /** The digest the award site already computed. Part of the identity, never re-derived. */
+  reviewIdentity: string;
+  xpAwarded: number;
+}): readonly StatisticsEvent[] {
+  const { localDate, recordedAt } = statisticsStamp();
+  // The `reviewIdentity` the reward site already computed is part of the identity, so the
+  // event is suppressed by exactly the rule that suppressed the award.
+  const identity: ReviewPassRewardIdentity = {
+    roomId: input.roomId,
+    passNumber: input.passNumber,
+    reviewIdentity: input.reviewIdentity,
+  };
+  return [
+    toReviewCompletionEvent({
+      subjectId: input.subjectId,
+      identity,
+      localDate,
+      recordedAt,
+      xpAwarded: input.xpAwarded,
+    }),
+    toXpAwardEvent({
+      subjectId: input.subjectId,
+      source: 'review-completion',
+      sourceIdentity: reviewCompletionEventSourceIdentity(identity),
+      localDate,
+      recordedAt,
+      amount: input.xpAwarded,
+    }),
+  ];
+}
+
+/**
+ * The statistics events one awarded catch records. See {@link noteStatisticsEvents}.
+ *
+ * Only an **awarded** catch produces events. A declined outcome - a release or a wrong
+ * recall - returns from `recordCatch` before any `set`, which is Phase 17's "a declined
+ * outcome writes nothing at all", and it writes nothing here too. The session record still
+ * learns about it through `emitStatisticsActivity`, which is a statistics fact about the
+ * session rather than a mutation of progression.
+ */
+function fishingStatisticsEvents(input: {
+  subjectId: string;
+  identity: CatchRewardIdentity;
+  xpAwarded: number;
+}): readonly StatisticsEvent[] {
+  const { localDate, recordedAt } = statisticsStamp();
+  return [
+    toFishingOutcomeEvent({
+      subjectId: input.subjectId,
+      identity: {
+        catalogId: input.identity.catalogId,
+        contextId: input.identity.contextId,
+        castNumber: input.identity.castNumber,
+        catchIdentity: input.identity.catchIdentity,
+      },
+      localDate,
+      recordedAt,
+      xpAwarded: input.xpAwarded,
+    }),
+    toXpAwardEvent({
+      subjectId: input.subjectId,
+      source: 'fishing-outcome',
+      sourceIdentity: fishingOutcomeEventSourceIdentity({
+        catalogId: input.identity.catalogId,
+        contextId: input.identity.contextId,
+        castNumber: input.identity.castNumber,
+        catchIdentity: input.identity.catchIdentity,
+      }),
+      localDate,
+      recordedAt,
+      amount: input.xpAwarded,
+    }),
+  ];
+}
+
+/**
+ * What a room clear reports when a durable ledger already held it.
+ *
+ * Named rather than inlined twice, because the two guards that can produce it - the Phase 15
+ * clear ledger and the Phase 18 statistics ledger - must not be able to drift into reporting
+ * different things. `xpGained: 0` is the load-bearing part: a caller that announces a reward from
+ * `xpGained` has nothing to announce.
+ *
+ * The rank is the record's own, not `Novice`: a suppressed clear changed nothing, so reporting a
+ * rank as if it were the default would describe a learner who had earned nothing as a beginner.
+ */
+function releasedRoomClear(currentRank: RankTier): {
+  xpGained: number;
+  newRank: RankTier;
+  rankChanged: false;
+  unlockedBadges: string[];
+  loot: null;
+  unlockedAchievements: string[];
+  awarded: false;
+  duplicate: true;
+} {
+  return {
+    xpGained: 0,
+    newRank: currentRank,
+    rankChanged: false,
+    unlockedBadges: [],
+    loot: null,
+    unlockedAchievements: [],
+    awarded: false,
+    duplicate: true,
+  };
+}
+
+/**
  * The room and clear generation a room-clear reward belongs to.
  *
  * Phase 15. Supplied by `encounter/note-submit`, which is the only caller that
  * knows the graph the note was validated against (see
  * `deriveRoomClearIdentity`). Omitting it keeps the pre-Phase-15 behaviour
- * exactly - an unconditional award - which is what keeps the two byte-comparison
- * lanes and every direct store caller honest. The rollback lane that still uses
- * `NoteEditorModal` is therefore unchanged too, and that is the documented
- * Phase 15 rollback, not an oversight.
+ * exactly - an unconditional award.
+ *
+ * ## Phase 18: no longer the only identity the store accepts
+ *
+ * This type used to be the *only* way to name a clear, which meant the shipping lane - the one
+ * `NoteEditorModal` drives, and the only lane the default artifact has - could not say which room
+ * it was paying for at all. It therefore recorded no room-clear ledger, no statistics events, no
+ * session activity, and no awarded-once guard: a resubmitted valid note paid again, and nothing
+ * anywhere counted it.
+ *
+ * `roomId` is now accepted on its own (see {@link AwardRoomClearRoomId}), and the store derives
+ * the weaker per-room identity from it. Both lanes now name the clear, both are guarded, and both
+ * record. Omitting *both* keeps the pre-Phase-15 unconditional award, which is what the
+ * byte-comparison fixtures' no-identity call shape exercises.
  */
 export interface RoomClearRewardIdentity {
   /** The room the learner cleared. */
   roomId: string;
-  /** The digest of the graph generation the clear was validated in. */
+  /** The digest naming which clear of this room, per the caller's derivation rule. */
   clearIdentity: string;
 }
 
@@ -415,11 +637,23 @@ export interface ProgressionStoreState {
     /**
      * Phase 15: which (room, clear generation) this reward is for.
      *
-     * Present makes the award idempotent for that identity; absent preserves the
-     * pre-Phase-15 unconditional award that the rollback lane and the
-     * byte-comparison fixtures depend on.
+     * Present makes the award idempotent for that identity, and carries the Phase 15
+     * room-clear ledger. Absent, but with `roomId` present, the weaker per-room identity applies.
+     * Absent with no `roomId` either, the pre-Phase-15 unconditional award is preserved.
      */
     clear?: RoomClearRewardIdentity;
+    /**
+     * Phase 18: which room this reward is for, for a lane that has no clear identity.
+     *
+     * This is what the **default production artifact** supplies: `NoteEditorModal` knows the room
+     * it submitted for and does not derive a graph digest. Naming the room is what lets this
+     * action record the note submission and its XP as statistics, and - because the statistics
+     * ledger is the awarded-once ledger - what stops a resubmitted valid note paying twice.
+     *
+     * Ignored when `clear` is present: `clear` already names the room, and a caller that
+     * contradicted it would get an identity it did not mean.
+     */
+    roomId?: string;
   }) => {
     xpGained: number;
     newRank: RankTier;
@@ -918,7 +1152,21 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     // subject-scoped handle without re-deriving one from learner material. It is
     // deliberately **not** part of the digest.
     const withRoom = withRecallRoom({ ...decision, fishEntry: decision.fishEntry }, recallRoomId);
-    const extraFields = writeCatchRewardLedgerToFields(current.extraFields, withRoom.ledger);
+    const extraFields = writeCatchRewardLedgerToFields(
+      // Phase 18: the kept catch and its XP join the same record write, under the same
+      // `(context, species, cast)` identity the award already uses. Only an awarded catch
+      // reaches this line - a declined outcome returned before any `set` - so a release and
+      // a wrong recall still write nothing at all, here and everywhere else.
+      writeStatisticsEventsToFields(
+        current.extraFields,
+        fishingStatisticsEvents({
+          subjectId: normalizedSubjectId,
+          identity: input.identity,
+          xpAwarded: withRoom.xpAwarded,
+        }),
+      ),
+      withRoom.ledger,
+    );
 
     // ONE record, ONE `set`. Fish entry, XP, rank, badges, and the ledger entry
     // move together or not at all.
@@ -942,6 +1190,19 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
         : { bySubject },
     );
     savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    // Phase 18: the session record's display counters, after the record write. Only an
+    // awarded catch reaches this line, so a declined outcome reports nothing: Phase 17's
+    // invariant is that a release and a wrong recall write nothing at all, and a
+    // session-side counter is a write. A declined cast's absence from the statistics is the
+    // correct record - "no catch was kept" is exactly what it means.
+    emitStatisticsActivity({
+      kind: 'fishing-outcome',
+      catalogId: input.identity.catalogId,
+      castNumber: input.identity.castNumber,
+      xpAwarded: withRoom.xpAwarded,
+      awarded: true,
+    });
 
     // Cross-subject achievements are a **separate** `set` per achievement and are not
     // in this transaction, exactly as after `awardRoomClear` and `awardReviewPass`.
@@ -971,6 +1232,7 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     isBossEncounter = false,
     bossMinLootRarity,
     clear,
+    roomId,
   }) {
     const state = get();
     if (!state.activeSubjectId) {
@@ -986,6 +1248,33 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       };
     }
     const current = getSubjectProgression(state.bySubject, state.activeSubjectId);
+    const subjectId = state.activeSubjectId;
+
+    // Phase 18: one identity per lane, resolved before anything is paid, and `null` whenever the
+    // caller named no usable room.
+    //
+    // - `clear` present: the Phase 15 per-graph-generation digest, unchanged, and the better rule.
+    // - `roomId` alone: the default artifact's lane. `deriveNoteSubmissionSourceIdentity` mints the
+    //   weaker per-room digest from the only fact that lane has. Deriving it *here* rather than in
+    //   the modal is the point: one implementation, so the two lanes cannot drift into minting
+    //   different digests for one submission, which would pay twice and look like nothing.
+    // - neither, **or a `roomId` that names no room**: the pre-Phase-15 unconditional award,
+    //   preserved for the no-identity call shape that the byte-comparison fixtures and
+    //   `tests/phase15/**` depend on.
+    //
+    // A blank or whitespace-only `roomId` is the second case, not the first, because it is the
+    // absence of a room wearing a value's clothing: `''` and `'   '` are distinct strings, so
+    // minting an identity for each produced two counted, paid submissions for one room that does
+    // not exist. `undefined` already took the uncounted lane; a blank id now takes the same one, so
+    // the fallback's contract stays "one lane, one behaviour" instead of growing a third answer that
+    // depends on which flavour of "no room" the caller used.
+    let submissionIdentity: NoteSubmissionEventIdentity | null = null;
+    if (clear !== undefined) {
+      submissionIdentity = { roomId: clear.roomId, clearIdentity: clear.clearIdentity };
+    } else if (roomId !== undefined) {
+      const sourceIdentity = deriveNoteSubmissionSourceIdentity({ roomId });
+      submissionIdentity = sourceIdentity === null ? null : { roomId, clearIdentity: sourceIdentity };
+    }
 
     // Phase 15: the durable awarded-once check, taken *before* any reward is
     // computed so a suppressed clear rolls no loot, burns no `Math.random`, and
@@ -1002,17 +1291,27 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
         awardedAt: new Date().toISOString(),
       });
       if (decision.outcome === 'already-awarded') {
-        return {
-          xpGained: 0,
-          newRank: current.rank,
-          rankChanged: false,
-          unlockedBadges: [],
-          loot: null,
-          unlockedAchievements: [],
-          awarded: false,
-          duplicate: true,
-        };
+        return releasedRoomClear(current.rank);
       }
+    }
+
+    // Phase 18: the awarded-once check for **every** lane, including the one with no Phase 15
+    // clear ledger. Taken before the reward for the same reason as the check above, and against
+    // the same read of `extraFields`, so the two guards cannot disagree about one call.
+    //
+    // This is the guard the shipping lane never had. Without it, supplying `roomId` would have
+    // recorded the submission twice and paid twice - the statistics fix would have re-opened
+    // plan §5.3's duplicate-reward defect on the default artifact.
+    const submissionDecision =
+      submissionIdentity === null
+        ? null
+        : decideNoteSubmission({
+            extraFields: current.extraFields,
+            subjectId,
+            identity: submissionIdentity,
+          });
+    if (submissionDecision?.outcome === 'already-recorded') {
+      return releasedRoomClear(current.rank);
     }
 
     // Compute equip bonuses
@@ -1064,15 +1363,35 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     // Phase 15: the ledger rides in the record's preserved app-owned fields, so
     // it reaches the legacy mirror (the shipping repository), the storage-v2
     // generation, and both backup products through the machinery that already
-    // exists. A record with no ledger decision and no preserved fields gains no
-    // new key, which is what keeps the byte-comparison lanes byte-identical.
-    // Carrying `extraFields` forward unconditionally is also a preservation fix:
-    // this action previously rebuilt the record field by field and dropped every
-    // preserved unknown app-owned field on every room clear.
-    const extraFields =
+    // exists. Carrying `extraFields` forward unconditionally is also a preservation
+    // fix: this action previously rebuilt the record field by field and dropped
+    // every preserved unknown app-owned field on every room clear.
+    const clearFields =
       decision === null
         ? current.extraFields
         : writeRoomClearRewardLedgerToFields(current.extraFields, decision.ledger);
+
+    // Phase 18: the note and its XP are recorded as counted-once statistics events in the
+    // **same record write** as the reward, under the same identity the award was decided
+    // against. That is what makes "one clear paid" and "one note counted" the same fact
+    // rather than two counters kept in step by hand - and it is why a suppressed clear records
+    // nothing: both early returns above happen before this line.
+    //
+    // **Every lane that named a room.** Phase 18 shipped this restricted to `clear`, on the
+    // reasoning that the no-identity lane should keep gaining no `extraFields` key. That
+    // protected a fixture from recording the fact that the *shipping* artifact recorded nothing:
+    // a completed note on the default build left `notesSubmitted: 0`, `xpEarned: 0`, and no
+    // statistics ledger at all. A lane that records nothing is a worse defect than a lane whose
+    // record shape changed, so the record shape changed. Only a caller that named **no room** -
+    // the byte-comparison fixtures' call shape - still gains no key.
+    const statisticsFields =
+      submissionIdentity === null
+        ? clearFields
+        : writeStatisticsEventsToFields(clearFields, noteStatisticsEvents({
+          subjectId,
+          identity: submissionIdentity,
+          xpAwarded: value.xpBreakdown.totalDelta,
+        }));
 
     const nextSubject: PersistedSubjectProgression = {
       xpTotal: value.xpTotalAfter,
@@ -1088,11 +1407,24 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
       artifacts: current.artifacts,
       bossesDefeated,
       fishCollection: current.fishCollection,
-      ...(extraFields !== undefined ? { extraFields } : {}),
+      ...(statisticsFields !== undefined ? { extraFields: statisticsFields } : {}),
     };
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
     savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    // Phase 18: the session record's own display counters. Emitted **after** the record
+    // write, because they live on a different record and a failure here must not roll back
+    // a reward the learner earned. Emitted for every awarded clear that named a room, which
+    // is what makes the shipping lane's session record non-zero; the durable statistics ledger
+    // above already guarantees it happens once per identity.
+    if (submissionIdentity !== null) {
+      emitStatisticsActivity({
+        kind: 'note-submission',
+        roomId: submissionIdentity.roomId,
+        xpAwarded: value.xpBreakdown.totalDelta,
+      });
+    }
 
     // Check cross-subject achievements
     const unlockedAchievements = get().checkCrossSubjectAchievements();
@@ -1167,6 +1499,20 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
         kind: 'discard',
         roomId: review.roomId,
       });
+      // Phase 18: the review completion and its XP join the same record write, under the
+      // same `(room, pass)` identity the award already uses. See
+      // `src/core/statistics/statisticsEvents.ts` for why the ledger lives in this carrier
+      // and not in a store of its own.
+      extraFields = writeStatisticsEventsToFields(
+        extraFields,
+        reviewStatisticsEvents({
+          subjectId: state.activeSubjectId,
+          roomId: review.roomId,
+          passNumber: review.passNumber,
+          reviewIdentity: review.reviewIdentity,
+          xpAwarded: xpEarned,
+        }),
+      );
     }
 
     const nextSubject: PersistedSubjectProgression = {
@@ -1179,6 +1525,17 @@ export const useProgressionStore = create<ProgressionStoreState>((set, get) => (
     const bySubject = { ...state.bySubject, [state.activeSubjectId]: nextSubject };
     set({ bySubject, ...nextSubject });
     savePersistedBySubject(bySubject, state.crossSubjectAchievements);
+
+    // Phase 18: the session record's display counters, after the record write. See
+    // `awardRoomClear` for why this is a separate step and why being late to it is safe.
+    if (review !== undefined) {
+      emitStatisticsActivity({
+        kind: 'review-completion',
+        roomId: review.roomId,
+        passNumber: review.passNumber,
+        xpAwarded: xpEarned,
+      });
+    }
 
     const unlockedAchievements = get().checkCrossSubjectAchievements();
 

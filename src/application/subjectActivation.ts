@@ -12,8 +12,23 @@
  * point both the session and the progression stores at
  * `loaded.dungeon.dungeonId`. Calling it repeatedly is safe: the result is the
  * same active state, and the store writes are idempotent.
+ *
+ * ## Phase 18: a study session starts here
+ *
+ * This is the **single canonical subject-activation path** - `useLoadSubjectFlow` and the
+ * village world both reach it - so it is also the one place a study session starts, and no
+ * second activation site is added anywhere. The report goes through the nullable sink in
+ * `@/core/statistics/activitySink` rather than through a direct call, for the same reason
+ * every store here takes its effects as injected ports: `subjectActivation.ts` must not
+ * import a store, and the sink keeps the dependency direction one-way. With no sink
+ * installed - a unit test, a rollback build, a host that has not installed the statistics
+ * layer - the report is a silent no-op and nothing else changes.
+ *
+ * The report happens **after** both store writes and only on `activated: true`, so a
+ * failed load cannot start a session for a subject that never loaded.
  */
 import type { SubjectSnapshot } from '@/core/validation/persistence';
+import { emitSubjectActivated } from '@/core/statistics/activitySink';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
@@ -64,5 +79,12 @@ export async function activateSubject(
   const activeId = loaded.dungeon.dungeonId;
   deps.setSessionActiveSubjectId(activeId);
   deps.setProgressionActiveSubject(activeId);
+  // Phase 18: the canonical activation is where a study session starts. A no-op when no
+  // statistics sink is installed, and idempotent for a repeated activation of the same
+  // subject - the lifecycle returns the session already open and writes nothing.
+  emitSubjectActivated({
+    subjectId: activeId,
+    subjectName: loaded.dungeon.subjectName,
+  });
   return { activated: true, subjectId: activeId, snapshot: loaded };
 }

@@ -55,13 +55,21 @@ import { QUEST_LABELS, QUEST_ORDER, type QuestStep } from '@/store/sessionStore'
 import type { VillageNearbyTarget } from '@/application/contracts/villageNpc';
 
 import { useModalFocus } from '@/ui/hooks/useModalFocus';
+import { STUDY_STATS_DISABLED_HUD_NOTE } from '@/ui/study/stats/studyStatsCopy';
+import { useStudyStatsDashboardEnabled } from '@/ui/study/stats/studyStatsGate';
+import { STUDY_STATS_IDS } from '@/ui/study/stats/studyStatsTestIds';
 
 import { NearbyActionList } from './NearbyActionList';
 import { VillageQuestOverview } from './QuestBoard';
 import { useVillageSurfaceMode } from './useVillageSurfaceMode';
-import type { VillageSubjectSummary } from './villageTypes';
+import { VILLAGE_TOUCH_TARGET_STYLE, type VillageSubjectSummary } from './villageTypes';
 
 import './villagePanels.css';
+// `src/ui/study/stats/studyStats.css` is deliberately not imported here. That file is
+// declared by `StudyStatsDashboard.tsx`, which is statically reachable from `src/main.tsx`
+// through the stats launcher, so its one rule this file uses - `.study-stats-hud-note` - is
+// in the initial bundle without a second edge here, and one import per stylesheet family is
+// the colocated-CSS idiom.
 
 export interface VillageHudProps {
   /** The learner's current quest step. */
@@ -178,6 +186,20 @@ export function VillageHud(props: VillageHudProps): ReactNode {
   const [hudOpen, setHudOpen] = useState(!collapsible);
   const regionId = useId();
   const statusId = useId();
+  /*
+   * Phase 18's rollback gate, read here rather than in `VillageLaunchers`.
+   *
+   * The gate hides the dashboard; this is where the *entry point* has to know, because a
+   * control that opens a panel which then says "this is switched off" is a dead end, and a
+   * control that silently does nothing is worse. So the Stats button stays in the tab order
+   * with `aria-disabled` and a described-by explanation, which is the ARIA pattern for
+   * "present, not actionable, and here is why" - the button is still reachable, still
+   * announces as disabled, and still hands a screen-reader user the reason.
+   *
+   * In the default build `statsEnabled` is `true`, the note is not rendered, the button has
+   * no `aria-disabled`, and this HUD is byte-identical to the one before Phase 18.
+   */
+  const statsEnabled = useStudyStatsDashboardEnabled();
   const sheetRef = useModalFocus<HTMLDivElement>({
     active: collapsible && hudOpen,
     onEscape: collapsible && hudOpen ? () => setHudOpen(false) : null,
@@ -324,7 +346,22 @@ export function VillageHud(props: VillageHudProps): ReactNode {
         <button type="button" className="village-action-btn" onClick={onCreateSubject}>
           + Create New
         </button>
-        <button type="button" className="village-action-btn" onClick={onStatsClick}>
+        {statsEnabled ? null : (
+          <p className="study-stats-hud-note" id={STUDY_STATS_IDS.hudDisabledNote}>
+            {STUDY_STATS_DISABLED_HUD_NOTE}
+          </p>
+        )}
+        <button
+          type="button"
+          className="village-action-btn"
+          // Only wired when it can be honoured. With the gate off the handler is absent, so
+          // clicking cannot open a panel that has nothing to show.
+          onClick={statsEnabled ? onStatsClick : undefined}
+          aria-disabled={statsEnabled ? undefined : true}
+          aria-describedby={statsEnabled ? undefined : STUDY_STATS_IDS.hudDisabledNote}
+          data-study-stats-touch-target="village-stats"
+          style={VILLAGE_TOUCH_TARGET_STYLE}
+        >
           <span aria-hidden="true">📊</span> Stats
         </button>
         <button

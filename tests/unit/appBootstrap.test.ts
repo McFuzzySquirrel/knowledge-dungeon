@@ -176,6 +176,8 @@ function harness(overrides: Partial<BootstrapDeps> = {}): { deps: BootstrapDeps;
     storageWarningFor: () => 'synthetic storage warning',
     setDualWriteSink: () => undefined,
     setSessionSource: () => undefined,
+    installSessionLifecycle: () => undefined,
+    hydrateStatisticsSessions: () => undefined,
     hydratePreferences: (persisted) => {
       order.push('preferences');
       recorded.preferences = persisted;

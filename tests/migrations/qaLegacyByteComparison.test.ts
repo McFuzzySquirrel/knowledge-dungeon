@@ -11,9 +11,28 @@
  * `knowledge-dungeon:v1:progression` write path, recorded here so it cannot be
  * discovered later as a surprise.
  *
+ * ## Phase 18 changed one of them, and case 5 is the record of why
+ *
+ * Case 5 used to be byte-identical too - but only because the scenario called the store the way
+ * **no production caller does**, naming neither a room nor a Phase 15 clear identity. `qa-engineer`
+ * reproduced in real Chromium against the default `dist` that a completed note on the shipping
+ * lane (`NoteEditorModal`, because `VITE_SCRIBE_ENCOUNTER_WORKSPACE` defaults to `false`) awarded
+ * XP and recorded nothing anywhere: `extraFields: null`, session `notesSubmitted: 0`. This file
+ * stayed green through that defect because it was pinning the shape of a call production had
+ * stopped making.
+ *
+ * Case 5 now makes the call `NoteEditorModal.handleSubmit` makes and pins the single documented
+ * difference; case 5b keeps the no-room call pinned for the rollback lane. A fixture that pins the
+ * old shape is a fixture that was asserting the bug.
+ *
  * All values are synthetic. `Math.random` and the clock are pinned.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  eventsOfKind,
+  readStatisticsEventLedgerFromFields,
+  totalXpAwarded,
+} from '@/core/statistics/statisticsEvents';
 
 const PROGRESSION_KEY = 'knowledge-dungeon:v1:progression';
 const ACTIVE_SUBJECT_KEY = 'knowledge-dungeon:v1:activeSubjectId';
@@ -42,6 +61,29 @@ const HEAD_FRESH_SUBJECT =
   '{"version":3,"bySubject":{"subject-qa-fresh":{"xpTotal":0,"rank":"Novice","badges":[],"inventory":[],"equippedItems":[],"collectedNotes":[],"streakCount":0,"subjectsMastered":0,"roomsCleared":0,"reviewPasses":0,"artifacts":0,"bossesDefeated":0,"fishCollection":[]}},"crossSubjectAchievements":[]}';
 
 const HEAD_ROOM_CLEAR = "{\"version\":3,\"bySubject\":{\"subject-qa-roomclear\":{\"xpTotal\":26,\"rank\":\"Novice\",\"badges\":[\"CreatorPhaseComplete\"],\"inventory\":[{\"id\":\"gear-mufil8k5-4fzz\",\"name\":\"Scholar's Cap\",\"description\":\"A velvet cap that sharpens the mind. +1 quality bonus on note submissions.\",\"rarity\":\"common\",\"acquiredAt\":\"2026-09-24T12:34:56.789Z\",\"equipSlot\":\"head\",\"qualityBonus\":1,\"equipped\":false}],\"equippedItems\":[],\"collectedNotes\":[],\"streakCount\":1,\"subjectsMastered\":0,\"roomsCleared\":1,\"reviewPasses\":0,\"artifacts\":0,\"bossesDefeated\":0,\"fishCollection\":[]}},\"crossSubjectAchievements\":[]}";
+
+/**
+ * The thirteen keys the pre-phase build wrote, in the order it wrote them.
+ *
+ * Declared once and used by both the byte-equality cases and the structural "one documented
+ * difference" checks, so a change to the legacy key order cannot make one case disagree with
+ * another.
+ */
+const PRE_PHASE_SUBJECT_KEYS = [
+  'xpTotal', 'rank', 'badges', 'inventory', 'equippedItems', 'collectedNotes',
+  'streakCount', 'subjectsMastered', 'roomsCleared', 'reviewPasses',
+  'artifacts', 'bossesDefeated', 'fishCollection',
+];
+
+/**
+ * `HEAD_ROOM_CLEAR` plus the one key Phase 18 added, flattened after the thirteen legacy keys.
+ *
+ * Reproducible: `beforeEach` pins the clock and `Math.random`, and neither the ledger nor the
+ * event digests read anything else. Case 5 asserts this literal **and** asserts structurally that
+ * removing `statisticsEventLedger` returns exactly `HEAD_ROOM_CLEAR`, so the added key is the
+ * whole difference rather than one difference among several.
+ */
+const SHIPPING_LANE_ROOM_CLEAR = "{\"version\":3,\"bySubject\":{\"subject-qa-roomclear\":{\"xpTotal\":26,\"rank\":\"Novice\",\"badges\":[\"CreatorPhaseComplete\"],\"inventory\":[{\"id\":\"gear-mufil8k5-4fzz\",\"name\":\"Scholar's Cap\",\"description\":\"A velvet cap that sharpens the mind. +1 quality bonus on note submissions.\",\"rarity\":\"common\",\"acquiredAt\":\"2026-09-24T12:34:56.789Z\",\"equipSlot\":\"head\",\"qualityBonus\":1,\"equipped\":false}],\"equippedItems\":[],\"collectedNotes\":[],\"streakCount\":1,\"subjectsMastered\":0,\"roomsCleared\":1,\"reviewPasses\":0,\"artifacts\":0,\"bossesDefeated\":0,\"fishCollection\":[],\"statisticsEventLedger\":{\"version\":1,\"events\":[{\"kind\":\"xp-award\",\"eventId\":\"sevt-9dc2c804\",\"localDate\":\"2026-09-24\",\"recordedAt\":\"2026-09-24T12:34:56.789Z\",\"source\":\"note-submission\",\"amount\":26},{\"eventId\":\"sevt-e757dc53\",\"localDate\":\"2026-09-24\",\"recordedAt\":\"2026-09-24T12:34:56.789Z\",\"kind\":\"note-submission\",\"roomId\":\"room-qa-roomclear\",\"xpAwarded\":26}]}}},\"crossSubjectAchievements\":[]}";
 
 const V1_FLAT = JSON.stringify({
   xpTotal: 315,
@@ -104,7 +146,77 @@ describe('QA no default behavior change: legacy progression key vs pre-phase HEA
     expect(raw()).toBe(HEAD_FRESH_SUBJECT);
   });
 
-  it('case 5 - a room clear writes the pre-phase bytes exactly', async () => {
+  it('case 5 - a room clear on the SHIPPING lane writes the pre-phase bytes plus ONE documented key', async () => {
+    // CHANGED IN PHASE 18, deliberately, and this is the record of why.
+    //
+    // This case used to assert that a room clear wrote `HEAD_ROOM_CLEAR` byte-for-byte, which
+    // was true only because the scenario called the store the way *no production caller does*:
+    // with no room and no clear identity at all. `qa-engineer` then reproduced in real Chromium
+    // against the default `dist` that a completed note on the shipping lane awarded XP and
+    // recorded no statistics anywhere - `extraFields: null`, session `notesSubmitted: 0`. The
+    // byte-comparison lane was pinning the shape of a call production had stopped making, so it
+    // stayed green through the defect. It now calls `awardRoomClear` the way
+    // `NoteEditorModal.handleSubmit` does, and pins the one documented difference.
+    //
+    // The change: a call that names a room writes `statisticsEventLedger`, flattened after the
+    // thirteen legacy keys. It is the ledger the Phase 18 statistics layer reads, and it is also
+    // the lane's awarded-once guard. A lane that records nothing is a worse defect than a lane
+    // whose record gained a key the pre-phase reader ignores.
+    const { useProgressionStore } = await loadStore();
+    useProgressionStore.getState().setActiveSubject('subject-qa-roomclear');
+    useProgressionStore.getState().awardRoomClear({
+      qualityBonus: 5,
+      totalRooms: 2,
+      creatorMappedRooms: 2,
+      scribeClearedRooms: 1,
+      archaeologistFullReviewPasses: 0,
+      roomId: 'room-qa-roomclear',
+    });
+
+    // The exact bytes. The clock and `Math.random` are pinned in `beforeEach`, and neither the
+    // event digests nor the ledger depend on anything else, so this is reproducible.
+    expect(raw()).toBe(SHIPPING_LANE_ROOM_CLEAR);
+
+    // ── The "one documented difference" property, stated structurally so it stays reviewable:
+    // delete the single added key and the record is byte-identical to the pre-phase build.
+    const written = JSON.parse(raw()) as { bySubject: Record<string, Record<string, unknown>> };
+    const writtenRecord = written.bySubject['subject-qa-roomclear'];
+    expect(Object.keys(writtenRecord).slice(0, 13)).toEqual(PRE_PHASE_SUBJECT_KEYS);
+    expect(Object.keys(writtenRecord).slice(13)).toEqual(['statisticsEventLedger']);
+    const withoutLedger = { ...writtenRecord };
+    delete withoutLedger.statisticsEventLedger;
+    expect(
+      JSON.stringify({
+        version: 3,
+        bySubject: { 'subject-qa-roomclear': withoutLedger },
+        crossSubjectAchievements: [],
+      }),
+    ).toBe(HEAD_ROOM_CLEAR);
+
+    // ── The added key carries the counted facts, not a marker. Asserted by value, so a digest
+    // that stopped distinguishing rooms, or an XP that stopped being recorded, fails here.
+    const ledger = readStatisticsEventLedgerFromFields(writtenRecord);
+    expect(eventsOfKind(ledger, 'note-submission')).toHaveLength(1);
+    expect(eventsOfKind(ledger, 'note-submission')[0]).toMatchObject({
+      roomId: 'room-qa-roomclear',
+      xpAwarded: 26,
+      // Pinned digest: a change to `deriveRoomClearSubmissionIdentity` must break this fixture
+      // deliberately, because a silently changed identity re-keys a room's awarded-once history.
+      eventId: 'sevt-e757dc53',
+    });
+    expect(totalXpAwarded(ledger)).toBe(26);
+  });
+
+  it('case 5b - a room clear by a caller that names no room writes the pre-phase bytes exactly', async () => {
+    // The shape this file used to use, kept for the one caller shape that still exists: a direct
+    // store caller that names neither a room nor a clear generation. It cannot record
+    // statistics - a `note-submission` event requires an app-minted `roomId`, so there is no
+    // honest event to write - and it remains an unconditional award, which is the pre-Phase-15
+    // behaviour a rollback build would take.
+    //
+    // No production caller uses this shape: `NoteEditorModal` names its room, and
+    // `encounter/note-submit` supplies a clear identity. It is here so the rollback lane stays
+    // pinned, not because the shipping build depends on it.
     const { useProgressionStore } = await loadStore();
     useProgressionStore.getState().setActiveSubject('subject-qa-roomclear');
     useProgressionStore.getState().awardRoomClear({
@@ -146,14 +258,9 @@ describe('QA no default behavior change: legacy progression key vs pre-phase HEA
     const record = written.bySubject['subject-qa-v1']!;
 
     // Everything the pre-phase build wrote is present, in the pre-phase order.
-    const PRE_PHASE_KEYS = [
-      'xpTotal', 'rank', 'badges', 'inventory', 'equippedItems', 'collectedNotes',
-      'streakCount', 'subjectsMastered', 'roomsCleared', 'reviewPasses', 'artifacts',
-      'bossesDefeated', 'fishCollection',
-    ];
-    expect(Object.keys(record).slice(0, PRE_PHASE_KEYS.length)).toEqual(PRE_PHASE_KEYS);
+    expect(Object.keys(record).slice(0, PRE_PHASE_SUBJECT_KEYS.length)).toEqual(PRE_PHASE_SUBJECT_KEYS);
     // The ONLY difference: the unknown envelope field survives.
-    expect(Object.keys(record).slice(PRE_PHASE_KEYS.length)).toEqual(['legacyOnlyField']);
+    expect(Object.keys(record).slice(PRE_PHASE_SUBJECT_KEYS.length)).toEqual(['legacyOnlyField']);
     expect(record.legacyOnlyField).toBe('synthetic-legacy-only');
     // Nothing canonical-only leaked onto the legacy key.
     expect(record).not.toHaveProperty('subjectId');
@@ -174,13 +281,8 @@ describe('QA no default behavior change: legacy progression key vs pre-phase HEA
       crossSubjectAchievements: string[];
     };
     const record = written.bySubject['subject-qa-unknown']!;
-    const PRE_PHASE_KEYS = [
-      'xpTotal', 'rank', 'badges', 'inventory', 'equippedItems', 'collectedNotes',
-      'streakCount', 'subjectsMastered', 'roomsCleared', 'reviewPasses', 'artifacts',
-      'bossesDefeated', 'fishCollection',
-    ];
-    expect(Object.keys(record).slice(0, PRE_PHASE_KEYS.length)).toEqual(PRE_PHASE_KEYS);
-    expect(Object.keys(record).slice(PRE_PHASE_KEYS.length)).toEqual(['qaUnknownField', 'anotherUnknown']);
+    expect(Object.keys(record).slice(0, PRE_PHASE_SUBJECT_KEYS.length)).toEqual(PRE_PHASE_SUBJECT_KEYS);
+    expect(Object.keys(record).slice(PRE_PHASE_SUBJECT_KEYS.length)).toEqual(['qaUnknownField', 'anotherUnknown']);
     expect(record.qaUnknownField).toEqual({ marker: 'synthetic-unknown-field' });
     expect(record.anotherUnknown).toBe(42);
     expect(written.crossSubjectAchievements).toEqual(['meta-subjects-5']);

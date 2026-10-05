@@ -44,6 +44,8 @@ import {
 } from '@/services/persistence/subjectPersistence';
 import { getStorageThreshold } from '@/services/errorRecovery';
 import { setSessionSource, type SessionSource } from '@/services/sessionTracker';
+import { installSessionLifecycleBinding } from '@/store/sessionLifecycleBinding';
+import { useStatisticsStore } from '@/store/statisticsStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -168,6 +170,29 @@ export interface BootstrapDeps {
   readonly setDualWriteSink: (sink: DualWriteSink | null) => void;
   readonly setSessionSource: (source: SessionSource | null) => void;
 
+  /**
+   * Phase 18: install the statistics and session-lifecycle wiring.
+   *
+   * Injected like every other store effect, so the bootstrap stays testable without the DOM
+   * listeners it installs and so a host can substitute a no-op. The default reads
+   * `installSessionLifecycleBinding`, which is idempotent - a second call returns the first
+   * disposer rather than installing a second set of listeners, because two sets would double
+   * every room visit.
+   */
+  readonly installSessionLifecycle: () => void;
+
+  /**
+   * Phase 18: publish the session records the bootstrap read into the statistics store.
+   *
+   * `state.sessions` is `null` on a device with nothing stored, which the statistics store
+   * reads as "fall back to the legacy key" rather than "there are no sessions", because the
+   * storage-v2 read is authoritative only on the flagged build and the legacy key is the
+   * shipping repository.
+   */
+  readonly hydrateStatisticsSessions: (
+    sessions: AppPersistedState['sessions'],
+  ) => void;
+
   // Store effects.
   readonly hydratePreferences: (persisted: AppPersistedState['preferences']) => void;
   readonly hydrateShortcuts: (persisted: NonNullable<AppPersistedState['shortcuts']> | null) => void;
@@ -209,6 +234,12 @@ export function createDefaultBootstrapDeps(
     storageWarningFor: (level) => STORAGE_WARNINGS[level],
     setDualWriteSink,
     setSessionSource,
+    installSessionLifecycle: () => {
+      installSessionLifecycleBinding();
+    },
+    hydrateStatisticsSessions: (sessions) => {
+      useStatisticsStore.getState().hydrateSessions(sessions);
+    },
     hydratePreferences: (persisted) =>
       usePreferencesStore.getState().hydratePreferences(persisted),
     hydrateShortcuts: (persisted) => useShortcutStore.getState().hydrateShortcuts(persisted),
@@ -501,6 +532,14 @@ function commitPlan(deps: BootstrapDeps, plan: BootstrapPlan): void {
   deps.hydrateShortcuts(state.shortcuts);
   deps.hydrateProgression(state.progression);
   deps.setSubjectSnapshot(plan.releasedSubject);
+
+  // Phase 18: the wiring is installed **after** every store is hydrated and **before** the
+  // first render returns, so the first activity of the session cannot happen before the
+  // sinks exist. Installation itself writes nothing, and it triggers recovery of an
+  // unterminated session without awaiting it - see
+  // `src/store/sessionLifecycleBinding.ts`.
+  deps.installSessionLifecycle();
+  deps.hydrateStatisticsSessions(state.sessions);
 
   if (plan.releasedSubject !== null) {
     deps.setSessionActiveSubjectId(null);

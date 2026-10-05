@@ -32,6 +32,11 @@ vi.mock('@/services/persistence/subjectPersistence', async (importOriginal) => {
 });
 
 import { runtimeConfig } from '@/config/featureFlags';
+import {
+  eventsOfKind,
+  readStatisticsEventLedgerFromFields,
+  totalXpAwarded,
+} from '@/core/statistics/statisticsEvents';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
@@ -121,6 +126,94 @@ describe('the rollback lane: the pre-Phase-15 modal still works end to end', () 
     // The artifact is written on the room and *not* in the journal: generation and pickup are
     // still separate actions in the rollback lane too.
     expect(useProgressionStore.getState().collectedNotes).toEqual([]);
+  });
+
+  it('records the note and its XP as statistics, which the default build did not before Phase 18', async () => {
+    // The Phase 18 blocker, driven through the **real modal** rather than through a store call.
+    // `qa-engineer` reproduced it in Chromium against the default `dist`: the toast said
+    // "Room cleared! +26 XP" and every statistic was zero, because this lane supplied no room to
+    // `awardRoomClear` and the store wrote statistics only for a call that named one.
+    //
+    // Nothing here can be satisfied by the store behaving correctly on its own: if the modal
+    // stopped passing `roomId`, this case fails while every store-level test still passes.
+    render(<NoteEditorModal />);
+
+    const editor = (await screen.findByLabelText('Summary')) as HTMLTextAreaElement;
+    fireEvent.change(editor, { target: { value: QA_VALID_NOTE } });
+    const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    fireEvent.click(checkbox);
+    const submit = await screen.findByRole('button', { name: /defeat encounter|save draft/i });
+    fireEvent.click(submit);
+
+    await waitFor(() => {
+      expect(useProgressionStore.getState().roomsCleared).toBe(1);
+    });
+    const xpTotal = useProgressionStore.getState().xpTotal;
+    expect(xpTotal).toBeGreaterThan(0);
+
+    // The progression record now carries the ledger, in the record that paid for it.
+    const preserved = useProgressionStore.getState().readProgressionPreservedFields() ?? {};
+    const ledger = readStatisticsEventLedgerFromFields(preserved);
+    const notes = eventsOfKind(ledger, 'note-submission');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].roomId).toBe(TARGET_ROOM);
+    expect(totalXpAwarded(ledger)).toBeGreaterThan(0);
+    // And it reaches the shipping repository's key, so it survives a reload on the default build.
+    const persisted = window.localStorage.getItem('knowledge-dungeon:v1:progression');
+    expect(persisted).not.toBeNull();
+    expect(persisted).toContain('statisticsEventLedger');
+  });
+
+  it('releases a resubmitted valid note instead of paying and counting it again', async () => {
+    // The trap. Phase 15 closed the double count with the clear identity, which this lane does not
+    // have - so recording statistics here without an equivalent guard would have made the default
+    // build pay every time the learner resubmits a note they already passed. Driven through the
+    // real modal, so the assertion is about the shipped path rather than about a store call shape.
+    render(<NoteEditorModal />);
+
+    /** Fill the modal in and press its own button, exactly as the learner would. */
+    const submitValidNote = async (): Promise<void> => {
+      const editor = (await screen.findByLabelText('Summary')) as HTMLTextAreaElement;
+      fireEvent.change(editor, { target: { value: QA_VALID_NOTE } });
+      const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      if (!checkbox.checked) fireEvent.click(checkbox);
+      const submit = await screen.findByRole('button', { name: /defeat encounter|save draft/i });
+      await waitFor(() => {
+        expect(submit.hasAttribute('disabled')).toBe(false);
+      });
+      fireEvent.click(submit);
+    };
+
+    // ── First submission: pays, counts, clears.
+    await submitValidNote();
+    await waitFor(() => {
+      expect(useProgressionStore.getState().roomsCleared).toBe(1);
+    });
+    const xpAfterFirst = useProgressionStore.getState().xpTotal;
+    expect(xpAfterFirst).toBeGreaterThan(0);
+    const countedOnce = () => eventsOfKind(
+      readStatisticsEventLedgerFromFields(
+        useProgressionStore.getState().readProgressionPreservedFields() ?? {},
+      ),
+      'note-submission',
+    );
+    expect(countedOnce()).toHaveLength(1);
+    expect(countedOnce()[0].roomId).toBe(TARGET_ROOM);
+
+    // ── The same still-valid note, submitted again. The modal closed itself after the clear, so
+    // re-open it the way the room panel does.
+    useSessionStore.setState({ isNoteEditorOpen: true, noteEditorRoomId: TARGET_ROOM });
+    await submitValidNote();
+    await waitFor(() => {
+      // The save itself ran: the room is still a final pass.
+      expect(room().validationState.finalPass).toBe(true);
+    });
+
+    // ── Released, not paid and not counted a second time.
+    expect(useProgressionStore.getState().roomsCleared).toBe(1);
+    expect(useProgressionStore.getState().xpTotal).toBe(xpAfterFirst);
+    expect(useProgressionStore.getState().streakCount).toBe(1);
+    expect(countedOnce()).toHaveLength(1);
   });
 
   it('renders, and the rollback modal owns the one dialog in the tree', async () => {

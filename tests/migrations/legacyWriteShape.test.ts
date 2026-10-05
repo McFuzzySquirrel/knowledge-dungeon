@@ -117,18 +117,25 @@ describe('legacy progression write shape', () => {
 
     // Repeated writes must not accumulate an identity either.
     useProgressionStore.getState().awardBadge('synthetic-badge');
+    // `roomId` because that is what `NoteEditorModal` passes, and this fixture must describe the
+    // shipping lane's call rather than a shape no production caller uses. The room clear therefore
+    // also writes the Phase 18 statistics ledger (see `qaLegacyByteComparison` case 5); what this
+    // test owns is that no `subjectId` appears and the thirteen legacy keys keep their order.
     useProgressionStore.getState().awardRoomClear({
       qualityBonus: 5,
       totalRooms: 2,
       creatorMappedRooms: 2,
       scribeClearedRooms: 1,
       archaeologistFullReviewPasses: 0,
+      roomId: 'room-scratch-new-a',
     });
 
     const record = (readParsedProgression().bySubject as Record<string, Record<string, unknown>>)[
       'subject-scratch-new'
     ];
-    expect(Object.keys(record)).toEqual(PRE_PHASE_SUBJECT_KEYS);
+    expect(Object.keys(record).slice(0, PRE_PHASE_SUBJECT_KEYS.length)).toEqual(PRE_PHASE_SUBJECT_KEYS);
+    // The one documented addition, and nothing else.
+    expect(Object.keys(record).slice(PRE_PHASE_SUBJECT_KEYS.length)).toEqual(['statisticsEventLedger']);
     expect(record).not.toHaveProperty('subjectId');
   });
 

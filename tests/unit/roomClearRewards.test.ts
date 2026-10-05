@@ -51,6 +51,7 @@ import {
   normalizeProgressionRecord,
   serializeCanonicalProgression,
 } from '@/core/progression/canonicalProgression';
+import { STATISTICS_EVENT_LEDGER_KEY } from '@/core/statistics/statisticsEvents';
 import { validateProgressionRecord } from '@/services/persistence/v2/validation';
 import { readArchive } from '@/services/persistence/v2/archive';
 import { exportFullDeviceBackup } from '@/services/persistence/products/fullDeviceBackup';
@@ -586,9 +587,19 @@ describe('roomClearRewards - the ledger survives every persistence product', () 
     expect(ledger.entries).toEqual([expect.objectContaining({ roomId: ROOM_ID })]);
 
     // And a record with the ledger is still exactly the thirteen known keys plus
-    // the ledger: the ledger is additive, not a replacement.
+    // the ledgers: each ledger is additive, not a replacement, and each lands in
+    // the same preserved bag.
+    //
+    // Phase 18 added `statisticsEventLedger` here. That the assertion is now
+    // thirteen keys plus *two* is the property worth keeping: the legacy mirror
+    // still flattens every preserved field, so a third ledger costs the record
+    // nothing structural, and none of the three displaces another.
     expect(Object.keys(mirrored).sort()).toEqual(
-      [...LEGACY_V3_SUBJECT_PROGRESSION_KEYS, ROOM_CLEAR_REWARD_LEDGER_KEY].sort(),
+      [
+        ...LEGACY_V3_SUBJECT_PROGRESSION_KEYS,
+        ROOM_CLEAR_REWARD_LEDGER_KEY,
+        STATISTICS_EVENT_LEDGER_KEY,
+      ].sort(),
     );
   });
 

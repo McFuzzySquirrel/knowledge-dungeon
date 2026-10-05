@@ -241,9 +241,14 @@ describe('reviewController against the real stores', () => {
       bound.controller.sessionSave({ roomId: ROOM_A, qualityRating: null });
 
       const fields = bound.progression.getState().readProgressionPreservedFields() ?? {};
+      // Phase 18 added a third ledger to the same bag: the statistics event ledger, written
+      // in the same record write as each reward and sharing its identity. The point of this
+      // assertion is that they *share one bag* and that none of them costs another one, so
+      // the exact list grows by the new key and the "share" property is unchanged.
       expect(Object.keys(fields).sort()).toEqual([
         'interruptedReviewSession',
         'roomClearRewardLedger',
+        'statisticsEventLedger',
       ]);
     });
   });

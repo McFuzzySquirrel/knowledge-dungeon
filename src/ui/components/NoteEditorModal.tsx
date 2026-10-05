@@ -263,6 +263,16 @@ export function NoteEditorModal(): JSX.Element | null {
           creatorMappedRooms: totalRooms,
           scribeClearedRooms: cleared + 1,
           archaeologistFullReviewPasses: 0,
+          // Phase 18: which room this clear was for. The modal is the **default artifact's**
+          // submit path, and it knows the room it just submitted for. Without this the reward had
+          // no identity at all, so it recorded no note-submission event, no XP award event, and
+          // no session activity - and re-submitting this same valid note paid again.
+          //
+          // Deliberately the room id and nothing else. This modal must not derive the Phase 15
+          // clear digest: that would be a second implementation of a domain decision in a React
+          // component, and a drifted digest pays twice while looking correct. The store derives
+          // the identity, so the command lane and this one cannot disagree.
+          roomId: room.roomId,
           isBossEncounter: (() => {
             const hierarchy = deriveGraphHierarchy(snapshot!.dungeon);
             const floorIds = hierarchy.floorIds;

@@ -131,7 +131,35 @@ describe('Phase 4 privacy gate 1: the application import graph', () => {
 
     // The graph is a proper subset of the tree: a walker that silently globbed
     // src/ would pass the count check above while proving nothing.
-    expect(graph.modules.length).toBeLessThan(allModules.length);
+    //
+    // **This was a count comparison and is now a set comparison, and the reason is
+    // mechanical rather than stylistic.** The two counts were never measuring the same set.
+    // `walkAppGraph()` follows *every* import edge the resolver accepts, and
+    // `RESOLVABLE_EXTENSIONS` includes `.json` - so the walk reaches stylesheets-adjacent
+    // assets and locale JSON that `allFirstPartyModules()` does not list, because
+    // `MODULE_FILE_PATTERN` is `.ts/.tsx/.mts/.js/.jsx/.mjs` only. As the application grew,
+    // the two totals drifted towards each other and then coincided exactly:
+    // `walkCount 277`, `allCount 277`, with 11 modules reachable-but-not-listed (9
+    // stylesheets, 2 locale JSON) and 11 listed-but-unreachable (Electron `main.ts` and
+    // `preload.ts`, five legacy `src/game/systems/*`, three dead modules). A
+    // `toBeLessThan` on two differently-populated counters is not a subset test; it is a
+    // race between two lists, and its margin had collapsed to zero.
+    //
+    // The set difference is the property the comment claims. A walker that globbed `src/`
+    // would reach every listed module, so the difference would be empty and this fails; and
+    // the "reached too little" direction is carried by the two checks above it (the
+    // `>= 60` module count and the `APP_ENTRY_MODULE` containment), which are untouched.
+    const reachable = new Set(paths);
+    const unreached = allModules.filter((candidate) => !reachable.has(candidate));
+    expect(
+      unreached.length,
+      'the walk reached every first-party module, so it globbed src/ rather than following imports. ' +
+        `Reached ${reachable.size}, listed ${allModules.length}.`,
+    ).toBeGreaterThan(0);
+    // The same claim from the other direction, so a walker that reached a *phantom* set -
+    // one that listed files it invented, and so passed the containment check while proving
+    // nothing - is caught here rather than by the per-file `existsSync` loop alone.
+    expect(paths.length, 'the walk reported duplicates, so its module list is not a set').toBe(reachable.size);
     expect(allModules.length).toBeGreaterThanOrEqual(120);
 
     // Every reached file exists on disk, so no phantom module inflates the count.

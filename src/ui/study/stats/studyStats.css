@@ -1,0 +1,715 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+ * The statistics dashboard: the dialog frame, the totals tiles, the daily-activity
+ * chart, the retention rows, the per-subject cards, and the recent-session list.
+ *
+ * ## Why this file is colocated under `src/ui/study/stats/`
+ *
+ * The same reason `src/ui/fishing/fishing.css` and `src/ui/study/study.css` give, and it is
+ * a gate rather than a preference: `tests/phase8/qa-verification.test.ts` pins the SHA-256,
+ * byte length and line count of `src/styles.css`, so *any* edit to the global sheet - even a
+ * handful of rules for one component family - fails a phase that has nothing to do with Cozy
+ * tokens. `scripts/check-cc0-assets.mjs` classifies `.css` as non-media, so nothing here
+ * needs a registry entry.
+ *
+ * ## What this file deliberately does NOT reuse
+ *
+ * The pre-Phase-18 panel painted itself with `.stats-card`, `.stats-row`,
+ * `.stats-session-row` and friends out of the global sheet. Those names are **not** reused,
+ * for a reason a reviewer can check: the legacy rules are unscoped and would leak into this
+ * markup, so a redesign that kept the class names would be half-painted by the old sheet and
+ * could not be reasoned about. Every rule below is `study-stats__*`, so the whole family
+ * moves together and there is nothing to disentangle later.
+ *
+ * ## Tokens, not invented colours
+ *
+ * Every colour below is a Phase 8 bridged custom property that already meets the plan's
+ * contrast floors, or a `COZY_*` spacing / radius / focus / target variable. There is no
+ * literal hex in this file, which is what makes the family follow a `data-theme` switch and
+ * the high-contrast variants instead of surviving them as the wrong colour.
+ *
+ * The three review states are the file's reason for existing in the way it is. The legacy
+ * panel coloured "due today" `var(--accent)` and "overdue" `var(--bad)` and printed nothing
+ * else, so the whole urgency model was one hue on a number: unreadable in greyscale, in a
+ * colour-vision deficiency, in Windows High Contrast, and in a monochrome print. Here each
+ * state gets **four** non-colour signals - a word from `REVIEW_URGENCY_COPY`, a distinct
+ * glyph, a distinct `border-width`, and a distinct `border-style` - and the colour is the
+ * fourth one rather than the only one.
+ *
+ * ## The rules every rule here obeys
+ *
+ * 1. **44 by 44 CSS pixels on every control**, from `var(--cozy-s-target-min)` with a `44px`
+ *    literal fallback. The floor is *also* written inline by the components as
+ *    `STUDY_STATS_TOUCH_TARGET_STYLE`, because a stylesheet rule cannot be asserted by a
+ *    component test - jsdom computes no layout - and this is a backstop for a control added
+ *    later without it.
+ * 2. **No colour-only state.** Selected window button: font weight plus an inset bar. Today
+ *    in the chart: the word `Today`. A reviewed or cleared subject: the mastery sentence. An
+ *    empty day: the words `no activity`. A master run: a bold prefix. Nothing here carries a
+ *    fact on hue.
+ * 3. **No hover-only action.** The only `:hover` rules below restate the focus affordance on
+ *    a pointer device; every action in this surface is reachable by Tab and operable by
+ *    Enter and Space, and each of them exists in the tab order without a pointer.
+ * 4. **Reduced motion** removes every transition in this file. None of them carried
+ *    information: they are hover and focus affordances and the dialog's entrance.
+ * 5. **System fonts only**, from `--cozy-s-font-body` with a stack fallback, so the panel
+ *    renders before any download and on a device with none.
+ * 6. **320 CSS pixels and 200% zoom.** Every grid is `auto-fill` with a `min(100%, …)` track,
+ *    every `<dl>` is a two-column grid that collapses to one, and every value carries
+ *    `overflow-wrap: anywhere`, so a long subject name or a 14-day row wraps instead of
+ *    widening the viewport.
+ */
+
+/* === The dialog frame '======================================================= */
+
+/*
+ * The legacy `.modal` rule in the global sheet sets `width: min(620px, 100%)`, which at a
+ * 320 CSS-pixel viewport leaves a 620px design inside a 320px window once the backdrop's
+ * 20px padding is taken. This rule restates the frame with a viewport-relative width so the
+ * dashboard uses the width it has at every size, and it keeps `.modal` for the backdrop
+ * position, the scroll container and the entrance animation the sheet already establishes.
+ */
+.study-stats__dialog {
+  width: min(860px, 100%);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-4, 16px);
+  font-family: var(--cozy-s-font-body, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif);
+  color: var(--text-primary);
+  /* A long subject name is a learner's own text and can be arbitrarily long. */
+  overflow-wrap: anywhere;
+}
+
+.study-stats__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cozy-s-space-3, 12px);
+}
+
+.study-stats__title {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-xxl, 26px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  line-height: var(--cozy-s-line-height-tight, 1.25);
+  color: var(--text-primary);
+}
+
+.study-stats__subtitle {
+  margin: var(--cozy-s-space-1, 4px) 0 0;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+}
+
+.study-stats__close {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--cozy-s-space-2, 8px) var(--cozy-s-space-3, 12px);
+  background: var(--control-bg, var(--bg-panel-soft));
+  color: var(--text-primary);
+  border: 1px solid var(--control-border, var(--border-soft));
+  border-radius: var(--cozy-s-radius-md, 10px);
+  font-family: inherit;
+  font-size: var(--cozy-s-font-size-md, 14px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  cursor: pointer;
+}
+
+.study-stats__close:hover {
+  background: var(--control-hover-bg, var(--bg-panel-soft));
+}
+
+/* === Sections '=============================================================== */
+
+.study-stats__dashboard,
+.study-stats__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-6, 24px);
+}
+
+.study-stats__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-2, 8px);
+  margin: 0;
+}
+
+.study-stats__heading {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-lg, 16px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+  /* The accent bar is a decoration on a heading that already reads as a heading; the word
+     `Totals` is the fact. */
+  border-inline-start: 4px solid var(--accent);
+  padding-inline-start: var(--cozy-s-space-2, 8px);
+}
+
+.study-stats__section-note,
+.study-stats__note {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+  line-height: var(--cozy-s-line-height-normal, 1.5);
+}
+
+/* === The totals tiles '======================================================= */
+
+/*
+ * `auto-fill` with a `min(100%, 150px)` track, so the grid is a single column at 320 pixels
+ * and at 200% zoom rather than a 150px track that overflows. The tile carries both its label
+ * and its value in text; there is no icon-only tile and no tile whose value is a colour.
+ */
+.study-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  gap: var(--cozy-s-space-2, 8px);
+  margin: 0;
+}
+
+.study-stats__tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-1, 4px);
+  padding: var(--cozy-s-space-3, 12px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  min-width: 0;
+}
+
+.study-stats__tile-label {
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  color: var(--text-secondary);
+}
+
+.study-stats__tile-value {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-xl, 20px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* === Label / value rows '===================================================== */
+
+.study-stats__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  overflow: hidden;
+  background: var(--bg-panel-soft);
+}
+
+.study-stats__rows--tight {
+  border-radius: var(--cozy-s-radius-sm, 6px);
+}
+
+/*
+ * A two-column grid rather than a flex row, so a long label wraps under itself instead of
+ * squeezing the value out of the panel at 320 pixels. The value column is `min-content` so
+ * the number never wraps mid-figure, and the label takes the rest.
+ */
+.study-stats__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min-content;
+  gap: var(--cozy-s-space-3, 12px);
+  align-items: baseline;
+  padding: var(--cozy-s-space-2, 8px) var(--cozy-s-space-3, 12px);
+  border-top: 1px solid var(--border-soft);
+}
+
+.study-stats__row:first-child {
+  border-top: none;
+}
+
+.study-stats__row-label {
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.study-stats__row-value {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-md, 14px);
+  font-weight: var(--cozy-s-font-weight-medium, 600);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* === Notices: restored, open sessions, empty '================================ */
+
+.study-stats__notice {
+  margin: 0;
+  padding: var(--cozy-s-space-3, 12px);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  color: var(--text-primary);
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  line-height: var(--cozy-s-line-height-normal, 1.5);
+}
+
+/*
+ * A restored-history notice is a *notice*, not a warning: `role="status"` in the component,
+ * and here a 2px dashed border rather than the `--bad` rule. A learner whose history came
+ * back from a backup should not be shown a panel that looks like an error.
+ */
+.study-stats__notice--restored {
+  border: 2px dashed var(--border-soft, var(--control-border));
+}
+
+.study-stats__notice--open {
+  border-inline-start: 4px solid var(--accent);
+  font-weight: var(--cozy-s-font-weight-medium, 600);
+}
+
+.study-stats__notice-heading {
+  margin: 0 0 var(--cozy-s-space-1, 4px);
+  font-size: var(--cozy-s-font-size-md, 14px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+}
+
+.study-stats__notice-body {
+  margin: 0;
+}
+
+.study-stats__notice-body + .study-stats__notice-body {
+  margin-top: var(--cozy-s-space-2, 8px);
+}
+
+.study-stats__note--scope {
+  border-inline-start: 4px solid var(--border-soft, var(--control-border));
+  padding-inline-start: var(--cozy-s-space-2, 8px);
+  color: var(--text-secondary);
+}
+
+.study-stats__empty {
+  margin: 0;
+  padding: var(--cozy-s-space-4, 16px);
+  background: var(--bg-panel-soft);
+  border: 2px solid var(--accent);
+  border-radius: var(--cozy-s-radius-lg, 16px);
+  color: var(--text-primary);
+}
+
+.study-stats__empty-heading {
+  margin: 0 0 var(--cozy-s-space-2, 8px);
+  font-size: var(--cozy-s-font-size-lg, 16px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+}
+
+.study-stats__empty-body {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-md, 14px);
+  line-height: var(--cozy-s-line-height-relaxed, 1.7);
+  color: var(--text-secondary);
+}
+
+.study-stats__empty-body + .study-stats__empty-body {
+  margin-top: var(--cozy-s-space-2, 8px);
+}
+
+.study-stats__disabled {
+  margin: 0;
+  padding: var(--cozy-s-space-4, 16px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-lg, 16px);
+  color: var(--text-primary);
+}
+
+.study-stats__disabled-heading {
+  margin: 0 0 var(--cozy-s-space-2, 8px);
+  font-size: var(--cozy-s-font-size-lg, 16px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+}
+
+.study-stats__disabled-body {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-md, 14px);
+  line-height: var(--cozy-s-line-height-relaxed, 1.7);
+  color: var(--text-secondary);
+}
+
+.study-stats__privacy {
+  margin: 0;
+  padding-top: var(--cozy-s-space-3, 12px);
+  border-top: 1px solid var(--border-soft);
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  color: var(--text-secondary);
+}
+
+/* === The activity window control '============================================ */
+
+/*
+ * The selected button is signposted by a font weight and a 3px inset bar, the two shapes
+ * `COZY_STATE_SIGNALS.selected` names and the two `src/styles/state-signals.css` uses for
+ * the flag-off build. `aria-pressed` carries the same fact to a screen reader, and the class
+ * carries nothing on its own.
+ */
+.study-stats__window {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cozy-s-space-2, 8px);
+}
+
+.study-stats__window-button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--cozy-s-space-2, 8px) var(--cozy-s-space-3, 12px);
+  background: var(--control-bg, var(--bg-panel-soft));
+  color: var(--text-primary);
+  border: 1px solid var(--control-border, var(--border-soft));
+  border-radius: var(--cozy-s-radius-pill, 999px);
+  font-family: inherit;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  font-weight: var(--cozy-s-font-weight-medium, 600);
+  cursor: pointer;
+}
+
+.study-stats__window-button:hover {
+  background: var(--control-hover-bg, var(--bg-panel-soft));
+}
+
+.study-stats__window-button[aria-pressed='true'] {
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  border-color: var(--control-selected-border, var(--accent));
+  background: var(--control-selected-bg, var(--bg-panel-soft));
+  color: var(--control-selected-text, var(--text-primary));
+  box-shadow: inset 0 -3px 0 0 var(--control-selected-border, var(--accent));
+}
+
+/* === The daily-activity chart '=============================================== */
+
+/*
+ * Each day is a `<li>` carrying a decorative bar, the day's label, and one sentence with
+ * every number in it. The bar is `aria-hidden` in the component; the sentence is the data.
+ * `minmax(min(100%, 92px))` means 320 pixels renders one column per row rather than three
+ * clipped ones, and `auto-fill` means a wide viewport fills the row with more days instead of
+ * stretching seven columns across 900 pixels.
+ */
+.study-stats__activity {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 92px), 1fr));
+  gap: var(--cozy-s-space-2, 8px);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.study-stats__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-1, 4px);
+  padding: var(--cozy-s-space-2, 8px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  min-width: 0;
+}
+
+/* Today's cell is marked by a border *width*, not a border colour. */
+.study-stats__day[data-study-stats-day-today='yes'] {
+  border-width: var(--cozy-s-border-state, 2px);
+  border-color: var(--control-selected-border, var(--accent));
+}
+
+.study-stats__bar-track {
+  display: block;
+  width: 100%;
+  height: 64px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-sm, 6px);
+  overflow: hidden;
+}
+
+.study-stats__bar {
+  display: block;
+  width: 100%;
+  /* A zero-minute day is a zero-height bar. A minimum-height stub would be a mark saying
+     "something happened" in the one channel a chart speaks in, contradicted only by the
+     sentence printed underneath it. */
+  background: var(--accent);
+  transition: height var(--cozy-s-duration-base, 200ms) var(--cozy-s-easing-standard, ease);
+}
+
+.study-stats__day-label {
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  font-weight: var(--cozy-s-font-weight-medium, 600);
+  color: var(--text-primary);
+}
+
+/* Today's cell: a heavier label *and* a border width, alongside the word `Today`. */
+.study-stats__day[data-study-stats-day-today='yes'] .study-stats__day-label {
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+}
+
+.study-stats__day-detail {
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  color: var(--text-secondary);
+  line-height: var(--cozy-s-line-height-snug, 1.4);
+}
+
+/* === Subject cards '========================================================== */
+
+.study-stats__subjects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-3, 12px);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.study-stats__subject {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cozy-s-space-2, 8px);
+  padding: var(--cozy-s-space-4, 16px);
+  background: var(--bg-panel-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-lg, 16px);
+  min-width: 0;
+}
+
+/*
+ * The card's own left rule is the *urgency* signal's second non-colour channel, and it
+ * differs in width and style as well as in colour:
+ *
+ * - `clear`   - 1px solid, the card's own border width;
+ * - `due`     - 4px solid;
+ * - `overdue` - 6px double.
+ *
+ * A double rule is a different *shape*, so it survives forced colours, greyscale, and a
+ * monochrome print - and the chip inside the card carries the same fact as a word and a glyph
+ * before any of this is read.
+ */
+.study-stats__subject--clear {
+  border-inline-start: 1px solid var(--border-soft);
+}
+
+.study-stats__subject--due {
+  border-inline-start: 4px solid var(--accent);
+}
+
+.study-stats__subject--overdue {
+  border-inline-start: 6px double var(--bad);
+}
+
+.study-stats__subject-name {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-lg, 16px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+}
+
+.study-stats__subject-mastery,
+.study-stats__subject-rooms,
+.study-stats__subject-proven,
+.study-stats__subject-review-detail {
+  margin: 0;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  color: var(--text-secondary);
+}
+
+/* The mastery sentence is the state. It is never a colour and never a tint alone. */
+.study-stats__subject-mastery {
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+}
+
+.study-stats__subject-proven {
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+  border: 2px solid var(--good);
+  border-radius: var(--cozy-s-radius-sm, 6px);
+  padding: var(--cozy-s-space-1, 4px) var(--cozy-s-space-2, 8px);
+  align-self: flex-start;
+}
+
+.study-stats__subject-subheading {
+  margin: var(--cozy-s-space-1, 4px) 0 0;
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+  text-transform: none;
+}
+
+/*
+ * The review chip: glyph + word + a border shape. Three channels, one of which is text.
+ * `--bad` appears here for `overdue` and `--accent` for `due`, so the two urgency levels
+ * still differ in hue for a learner who reads colour - but neither hue is load-bearing.
+ */
+.study-stats__chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--cozy-s-space-2, 8px);
+  align-self: flex-start;
+  margin: 0;
+  padding: var(--cozy-s-space-1, 4px) var(--cozy-s-space-3, 12px);
+  border-radius: var(--cozy-s-radius-pill, 999px);
+  background: var(--bg-panel);
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+}
+
+.study-stats__chip--clear {
+  border: 1px solid var(--good);
+}
+
+.study-stats__chip--due {
+  border: 2px solid var(--accent);
+}
+
+.study-stats__chip--overdue {
+  border: 4px double var(--bad);
+}
+
+.study-stats__chip-glyph {
+  font-size: var(--cozy-s-font-size-md, 14px);
+}
+
+/* === Recent sessions '======================================================== */
+
+.study-stats__sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--cozy-s-radius-md, 10px);
+  background: var(--bg-panel-soft);
+  overflow: hidden;
+}
+
+.study-stats__session {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) min-content;
+  gap: var(--cozy-s-space-1, 4px) var(--cozy-s-space-3, 12px);
+  align-items: baseline;
+  padding: var(--cozy-s-space-2, 8px) var(--cozy-s-space-3, 12px);
+  border-top: 1px solid var(--border-soft);
+}
+
+.study-stats__session:first-child {
+  border-top: none;
+}
+
+.study-stats__session-when {
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  color: var(--text-primary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cozy-s-space-2, 8px);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.study-stats__session-duration {
+  font-size: var(--cozy-s-font-size-sm, 13px);
+  font-weight: var(--cozy-s-font-weight-medium, 600);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.study-stats__session-detail {
+  grid-column: 1 / -1;
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* An open session says so in words and carries a dashed rule, not just a missing duration. */
+.study-stats__open-flag {
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  font-weight: var(--cozy-s-font-weight-bold, 700);
+  border: 2px dashed var(--accent);
+  border-radius: var(--cozy-s-radius-pill, 999px);
+  padding: 0 var(--cozy-s-space-2, 8px);
+}
+
+.study-stats__session[data-study-stats-session-open='yes'] {
+  border-inline-start: 4px dashed var(--accent);
+}
+
+/* === The HUD's explanation for a disabled Stats control '====================== */
+
+/*
+ * Visible, not screen-reader-only. A reason a sighted learner cannot see is a reason half the
+ * learners do not have, and this rule only applies when the Phase 18 rollback gate is off,
+ * which is never the default build.
+ */
+.study-stats-hud-note {
+  margin: 0;
+  padding: var(--cozy-s-space-2, 8px);
+  background: var(--bg-panel-soft);
+  border: 1px dashed var(--border-soft, var(--control-border));
+  border-radius: var(--cozy-s-radius-md, 10px);
+  font-size: var(--cozy-s-font-size-xs, 12px);
+  color: var(--text-secondary);
+  line-height: var(--cozy-s-line-height-normal, 1.5);
+}
+
+.study-stats-hud-note[hidden] {
+  display: none;
+}
+
+/* === The footer '============================================================= */
+
+.study-stats__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--cozy-s-space-2, 8px);
+}
+
+/* === Focus and motion '====================================================== */
+
+/*
+ * Visible focus, restated for this surface.
+ *
+ * `src/styles/cozy.css` already upgrades `:focus-visible` globally when the Cozy build flag
+ * is on, and the legacy sheet establishes *a* focus style for buttons. This is the third
+ * signal: a 3px offset `outline`, which survives forced-colours mode - where Windows High
+ * Contrast replaces author colours wholesale but still honours `outline`. A learner on a
+ * Chromebook in Windows therefore still sees where they are with the Cozy flag off.
+ */
+.study-stats__dialog :focus-visible {
+  outline: var(--cozy-s-focus-ring-width, 3px) solid var(--accent);
+  outline-offset: var(--cozy-s-focus-ring-offset, 2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * The legacy `.modal` and `.modal-backdrop` entrance animations live in the global sheet,
+   * which this phase does not edit, so the entrance is cancelled here by name. The animation
+   * moved the panel 20px and scaled it 0.96 - motion that carried no information, and motion
+   * that is exactly what `prefers-reduced-motion` asks to be removed.
+   */
+  .study-stats__dialog,
+  .study-stats__dialog .modal-backdrop {
+    animation: none;
+  }
+
+  .study-stats__bar,
+  .study-stats__close,
+  .study-stats__window-button {
+    transition: none;
+  }
+}

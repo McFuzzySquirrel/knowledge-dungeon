@@ -53,6 +53,7 @@ vi.mock('@/services/persistence/subjectPersistence', async (importOriginal) => {
   return { ...actual, saveSubjectSnapshot: vi.fn(async () => ({ success: true })) };
 });
 
+import { readStatisticsEventLedgerFromFields } from '@/core/statistics/statisticsEvents';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
@@ -177,10 +178,22 @@ describe('the orchestrator ruling, measured on the rollback lane', () => {
       withoutGeneratedLine(result.firstArtifact),
     );
 
-    // (c) The rollback lane still double-awards, because it calls `awardRoomClear` with no
-    // clear identity. Documented, expected, and the reason the ledger exists - recorded here so
-    // the two lanes' divergence is measured rather than assumed.
-    expect(useProgressionStore.getState().roomsCleared).toBe(2);
+    // (c) CHANGED IN PHASE 18. This used to read: "the rollback lane still double-awards, because
+    // it calls `awardRoomClear` with no clear identity. Documented, expected, and the reason the
+    // ledger exists" - and it asserted `roomsCleared === 2`. That was plan §5.3's known defect,
+    // measured rather than assumed, and it was left open precisely because the lane named no
+    // identity to guard on.
+    //
+    // Phase 18 gave the lane an identity of its own (`roomId`, from which the store derives a
+    // per-room digest) and made the statistics event ledger the awarded-once ledger, so the second
+    // submission of the same still-valid note is released instead of paid. The lane now agrees
+    // with the workspace on the award; the note and artifact rewriting in (a) and (b) are
+    // untouched and still measured above.
+    expect(useProgressionStore.getState().roomsCleared).toBe(1);
+    // And the count moved with the award rather than independently of it.
+    const preserved = useProgressionStore.getState().readProgressionPreservedFields() ?? {};
+    const ledger = readStatisticsEventLedgerFromFields(preserved);
+    expect(ledger.events.filter((event) => event.kind === 'note-submission')).toHaveLength(1);
   });
 
   it('the new workspace does NOT reproduce either defect: stable note, single award', async () => {
@@ -197,7 +210,9 @@ describe('the orchestrator ruling, measured on the rollback lane', () => {
     // submit. The learner's markdown structure survives.
     expect(result.secondNote).toBe(result.firstNote);
     expect(result.secondNote).toContain('## Summary');
-    // ...and the reward is awarded once, which is the criterion the phase is judged on.
+    // ...and the reward is awarded once. Since Phase 18 this is no longer what distinguishes the two
+    // lanes - the modal awards once too, under its own per-room identity - so the criterion that
+    // still separates them is the stable note above.
     expect(useProgressionStore.getState().roomsCleared).toBe(1);
   });
 });
