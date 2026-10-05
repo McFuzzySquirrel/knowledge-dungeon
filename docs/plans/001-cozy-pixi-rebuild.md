@@ -764,7 +764,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 16 | complete | Redesign the Archaeologist flow. |
 | 17 | complete | Rebuild fishing in Pixi. |
 | 18 | complete | Wire and redesign study statistics. |
-| 19 | not-started | Add local adaptive assistance. |
+| 19 | in-progress | Add local adaptive assistance. |
 | 20 | not-started | Redesign private share cards. |
 | 21 | not-started | Complete accessibility and responsive verification. |
 | 22 | not-started | Complete performance, memory, and offline hardening. |
@@ -6978,8 +6978,12 @@ Manual checks:
 
 Recorded on 2026-10-05. `not-started` -> `in-progress` -> `verified` -> `complete`. The maintainer
 accepted the verified checkpoint on 2026-10-05 and instructed that Phase 19 follow, so Phase 18 is
-`complete`. **Not committed, pushed, or deployed** - that needs separate explicit maintainer
-authorization. Phase 19 was `not-started` at this checkpoint and requires separate authorization.
+`complete`. The phase was committed as `b110d85` and pushed to `origin/main`. The text originally
+recorded the phase as not yet committed, pushed, or deployed; that statement was true when written and
+is superseded by that commit. **Not deployed** - no deployment was performed or authorized.
+
+Phase 19 was authorized at the same time and is opened by this documentation commit, so the Phase 18
+feature commit contains Phase 18 work and the Phase 14-17 status corrections only.
 
 #### Baseline
 
@@ -7256,7 +7260,7 @@ Phases 19, 20, and 21.
 
 ## Phase 19: Adaptive Learner Assistance
 
-**Status:** not-started
+**Status:** in-progress
 **Objective:** Add deterministic, local, explainable assistance across the learning and fishing flows.
 
 ### Prerequisites
