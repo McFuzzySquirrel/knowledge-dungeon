@@ -64,6 +64,56 @@
     "journal": "Diario",
     "noSubject": "Sin materia cargada"
   },
+  "assistance": {
+    "title": {
+      "creator": {
+        "missing-branch": "Añade una sala bajo la primera sala",
+        "cross-link": "Conecta dos salas que comparten una etiqueta"
+      },
+      "scribe": {
+        "missing-section": "Añade una sección a esta nota",
+        "related-topic": "Enlaza esta nota con una sala cercana",
+        "rubric-hint": "Prueba una pista para una parte de esta nota"
+      },
+      "archaeologist": {
+        "due-room": "Prueba a repasar esta sala",
+        "low-recall": "Prueba con otra pregunta en esta sala"
+      },
+      "fishing": {
+        "navigation-after-miss": "Abre la sala de la que salió esa pregunta"
+      },
+      "device": {
+        "due-today": "Mira qué está pendiente de repaso"
+      }
+    },
+    "detail": {
+      "graph-no-branch": "La primera sala de esta materia no tiene salas secundarias debajo.",
+      "graph-related-tag-unlinked": "Dos salas de esta materia tienen la misma etiqueta y nada las enlaza entre sí.",
+      "note-missing-required-section": "El corrector de la nota marcó una sección obligatoria que esta nota no tiene.",
+      "note-validation-failed": "El corrector de la nota señaló una comprobación que esta nota no supera.",
+      "note-adjacent-room-unreferenced": "Esta sala obtuvo un cero en referencias cruzadas, y hay una sala vecina a la que podría apuntar.",
+      "note-rubric-criterion-low": "El corrector de la nota dio un cero a un criterio de esta sala.",
+      "review-due": "Ya llegó la fecha de repaso de esta sala.",
+      "review-low-recall": "La última valoración que diste a esta sala quedó por debajo del aprobado.",
+      "fishing-recall-missed": "Una pregunta de repaso del estanque se quedó sin responder en esta visita.",
+      "device-reviews-due": "Hay salas de esta materia con un repaso pendiente."
+    },
+    "evidence": {
+      "failed-checks": "Comprobaciones de la nota sin superar",
+      "missing-sections": "Secciones obligatorias que faltan",
+      "repeated-drafts": "Notas guardadas otra vez con una comprobación abierta",
+      "low-recall-ratings": "Valoraciones por debajo del umbral",
+      "review-due-rooms": "Salas con repaso pendiente",
+      "overdue-days": "Días de retraso",
+      "overdue-rooms": "Salas fuera de fecha",
+      "unlinked-related-rooms": "Salas relacionadas sin enlace",
+      "low-rubric-criteria": "Partes de la comprobación con un cero",
+      "fishing-recall-misses": "Preguntas del estanque sin responder",
+      "active-study-days": "Días con actividad registrada",
+      "rooms-cleared": "Salas superadas",
+      "subject-rooms": "Salas en esta materia"
+    }
+  },
   "settings": {
     "title": "Configuración",
     "theme": "Tema de Interfaz",
@@ -77,7 +127,8 @@
       "theme": "Tema",
       "language": "Idioma",
       "shortcuts": "Atajos",
-      "audio": "Audio"
+      "audio": "Audio",
+      "assistance": "Asistencia"
     },
     "audioPanel": "Ajustes de sonido",
     "audioDescription": "Elige qué suena y con qué volumen. No suena nada hasta que interactúas con la página, y todo lo que elijas aquí se recuerda en este dispositivo.",

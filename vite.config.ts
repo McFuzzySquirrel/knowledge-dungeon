@@ -126,11 +126,130 @@ export function packageNameFromModuleId(id: string): string | undefined {
 }
 
 /**
+ * ── The assistance lane census ──────────────────────────────────────────────
+ *
+ * {@link RENDERER_CHUNK_PREFIX} can assert the *presence* of a renderer because a
+ * renderer is an npm package and a package can be claimed by name. Phase 19's
+ * assistance code is project source, so there is no package to name, and the first
+ * attempt to solve that by declaring a `manualChunks` group for it was **wrong in a way
+ * worth recording**, because it cost headroom on the production build and the mistake is
+ * the kind that looks correct in review:
+ *
+ * Claiming `src/core/assistance/` and `src/store/assistanceStore` into a manual group
+ * made rolldown hoist every module **shared** between that group and the rest of the
+ * graph into the group. `assistanceStore` imports `zustand`, `zustand` imports
+ * `use-sync-external-store`, and React itself is shared with the entry - so
+ * `node_modules/react/index.js` and `node_modules/react/cjs/react.production.js` moved
+ * out of `vendor-react` and into the assistance group. The entry needs React, so
+ * `index -> feature-assistance` became a **static** import edge, Vite wrote a
+ * `<link rel="modulepreload">` for it, and every Welcome visitor downloaded 10.28 KiB of
+ * assistance-group bytes on a build where `VITE_ADAPTIVE_ASSISTANCE` is `false`. That is
+ * the same violation plan section 10.2 states for the renderer - "no eager Phaser or Pixi
+ * load on Welcome" - applied to a feature, and it defeats the entire purpose of a
+ * `productionDefault: false` cutover flag.
+ *
+ * So there is no assistance `manualChunks` group, and nothing below claims one. The lane
+ * is identified the only way that cannot hoist anything: **by which module ids a chunk
+ * contains**, read from the emitted bundle. That is a stronger identity than a chunk name
+ * - it cannot be renamed, it cannot be satisfied by an unrelated chunk, and it needs no
+ * bundler cooperation - and it is what lets the guard assert two different properties:
+ * that the lane is *reachable* when the flag is on, and that it is *not statically
+ * reachable* when the flag is off.
+ */
+
+/**
+ * The module paths that must be present and fetchable for this build to count as carrying
+ * the Phase 19 assistance lane. Both are required, and each is a **named load-bearing
+ * module** rather than a directory.
+ *
+ * A learner is assisted by two things and neither is optional: the ranking
+ * (`assistanceEngine`) and the state (`assistanceStore`). Naming the modules rather than the
+ * directory is not fussiness - it is the difference between a check that works and one that is
+ * satisfied by a type. Measured on the default build: `assistanceStore` imports
+ * `@/core/assistance/types`, so a **directory**-level requirement is met by a chunk carrying
+ * the vocabulary alone, and a build that shipped the store and never shipped the ranking would
+ * pass. Naming `assistanceEngine` makes that build fail.
+ *
+ * Naming modules rather than directories is also what dissolves the tension between the
+ * chunking question and this one. The dead-lane criterion is "is the ranking reachable and is
+ * the state reachable", which says nothing about which chunk either lands in - so the
+ * `manualChunks` group could be deleted outright, which is what fixes the eager preload,
+ * without the guard losing any sensitivity. Before: "a chunk named `feature-assistance`
+ * exists", which could not tell a live lane from a store-only build. Now: two named modules
+ * are reachable, which can.
+ *
+ * Paths are repository-relative and POSIX, and matched against the project-source form of the
+ * module id (see {@link projectSourcePath}) rather than the raw id, for the reason
+ * {@link packageNameFromModuleId} documents. Each is a module **stem** prefix, so
+ * `src/store/assistanceStore.test.ts` also matches - harmless, because a test module is never
+ * in a production graph. A stem that stops matching is a loud failure: the build error names
+ * the path and its role, and `tests/e2e/assistance-build-lane.test.ts` asserts both modules
+ * still exist at these paths, so a rename is a red run in two places rather than a silently
+ * weaker guard.
+ */
+export const ASSISTANCE_LANE_PATHS: readonly string[] = Object.freeze([
+  'src/core/assistance/assistanceEngine',
+  'src/store/assistanceStore',
+]);
+
+/**
+ * What each entry of {@link ASSISTANCE_LANE_PATHS} is, for the build error message.
+ *
+ * A build failing on a path it has never heard of learns nothing from the path alone. This
+ * map is the difference between "src/core/assistance/assistanceEngine is unreachable" and
+ * "the ranking is unreachable", and it is also what makes a future rename diagnosable from the
+ * build log instead of only from the source.
+ */
+export const ASSISTANCE_LANE_ROLE: Readonly<Record<string, string>> = Object.freeze({
+  'src/core/assistance/assistanceEngine': 'the ranking',
+  'src/store/assistanceStore': 'the state',
+});
+
+/**
+ * The repository-relative project-source path for a module id, or `undefined` for a
+ * dependency.
+ *
+ * Two separations are load-bearing:
+ *
+ * - A module id containing `node_modules` is never project source, whatever it is called. A
+ *   dependency whose own source directory is named `src/core/assistance` is not part of
+ *   this project's assistance lane.
+ * - A module id may be absolute (`/repo/src/core/assistance/assistanceEngine.ts`), root
+ *   relative (`/src/core/assistance/assistanceEngine.ts`), or carry a query suffix, so the
+ *   tail after the *last* `/src/` is normalised to one `src/`-prefixed form and all three
+ *   spellings compare equal.
+ *
+ * Returning `undefined` for anything outside `src/` keeps the predicate unable to reach a
+ * file the project did not write.
+ */
+export function projectSourcePath(id: string): string | undefined {
+  const normalized = id.replace(/\\/g, '/').split(/[?#]/, 1)[0] as string;
+  if (normalized.includes('/node_modules/') || normalized.startsWith('node_modules/')) {
+    return undefined;
+  }
+  const match = /(?:^|\/)src\/(.+)$/.exec(normalized);
+  return match ? `src/${match[1]}` : undefined;
+}
+
+/** The declared lane path a module id belongs to, or `undefined` for a non-lane module. */
+export function assistanceLanePathFor(id: string): string | undefined {
+  const sourcePath = projectSourcePath(id);
+  if (sourcePath === undefined) return undefined;
+  return ASSISTANCE_LANE_PATHS.find((prefix) => sourcePath.startsWith(prefix));
+}
+
+/**
  * The `manualChunks` group for a module id, or `undefined` to leave it alone.
  *
  * The order is the order the groups are tested, and Phaser is tested first
  * because its predicate is the pre-existing substring test and changing its
  * precedence would change the current production artifact.
+ *
+ * Every group here is a **vendor** group, and that is the rule this file learned the
+ * expensive way: a `manualChunks` group takes its shared dependencies with it. See the
+ * header of the assistance lane census for the measured 10.28 KiB. A future phase that
+ * needs a project-source feature group must identify it by module membership in the
+ * emitted bundle, not by claiming it into a chunk here.
  */
 export function manualChunkFor(id: string): string | undefined {
   if (id.includes('phaser')) {
@@ -158,6 +277,17 @@ export interface EmittedChunk {
   readonly isEntry?: boolean;
   readonly imports?: readonly string[];
   readonly dynamicImports?: readonly string[];
+  /**
+   * Module ids in this chunk, keyed by id - Rollup's `OutputChunk.modules`.
+   *
+   * The lane census is the only reader. {@link EmittedChunk} is declared here rather than
+   * importing Rollup's type because this module is loaded by Vite's own config pipeline and
+   * by Vitest, and a structural declaration keeps both from having to agree on a bundler
+   * type package. A chunk that omits `modules` - a fixture, or a bundler that declines to
+   * report them - yields "this chunk contains no lane modules", which is the safe reading:
+   * a lane cannot be proved by a chunk whose contents are unknown.
+   */
+  readonly modules?: Readonly<Record<string, unknown>>;
 }
 
 export type EmittedBundle = Readonly<Record<string, EmittedChunk>>;
@@ -180,6 +310,102 @@ export function rendererChunkFamily(fileName: string): RendererChunkFamily | und
 }
 
 /**
+ * The assistance lane census.
+ *
+ * Two facts per chunk that contains lane code, and both are read from the emitted bundle
+ * rather than inferred from a chunk name:
+ *
+ * - `staticReachable` - in the entry's **static** closure, which is the set Vite writes
+ *   `modulepreload` links for and therefore the set a Welcome visitor downloads whether or
+ *   not the feature is switched on.
+ * - `fetchable` - in the entry's **fetchable** closure, which additionally follows dynamic
+ *   imports. A chunk reachable only dynamically is a working lazy lane, not a dead one.
+ *
+ * `lanePaths` records which of {@link ASSISTANCE_LANE_PATHS} the chunk actually carries,
+ * so a build that shipped the engine without the store is distinguishable from one that
+ * shipped neither.
+ */
+export interface AssistanceLaneCensusEntry {
+  readonly fileName: string;
+  /** The declared {@link ASSISTANCE_LANE_PATHS} entries present in this chunk. */
+  readonly lanePaths: readonly string[];
+  /** In the module entry's static closure - Vite emits a `modulepreload` for these. */
+  readonly staticReachable: boolean;
+  /** In the module entry's closure following `imports` and `dynamicImports`. */
+  readonly fetchable: boolean;
+}
+
+export interface AssistanceLaneAudit {
+  /** Entry chunks of the module bundle, the release path. */
+  readonly moduleEntryChunks: readonly string[];
+  /** Every chunk carrying at least one lane module, sorted. */
+  readonly laneChunks: readonly AssistanceLaneCensusEntry[];
+  /**
+   * Lane paths carried by at least one **fetchable** chunk, in declaration order.
+   *
+   * A flagged build has to cover every entry in {@link ASSISTANCE_LANE_PATHS} here; that is
+   * the whole of the dead-lane criterion.
+   */
+  readonly fetchableLanePaths: readonly string[];
+  /**
+   * Lane paths carried by at least one chunk the module entry **statically** reaches. Every
+   * one of these is bytes a Welcome visitor downloads before any application code runs.
+   */
+  readonly eagerLanePaths: readonly string[];
+}
+
+/**
+ * Audits an emitted bundle for the Phase 19 assistance lane.
+ *
+ * Unlike the renderer census this does **not** need a `manualChunks` group to find its
+ * chunks, and that is the point: a group would let the bundler decide what else ends up in
+ * the same file, which is how 13 unrelated modules - including React itself - came to be
+ * shipped as "assistance". Module membership cannot be influenced by the bundler.
+ */
+export function auditAssistanceLane(bundle: EmittedBundle): AssistanceLaneAudit {
+  const moduleEntryChunks = Object.values(bundle)
+    .filter((chunk) => chunk.type !== 'asset' && chunk.isEntry === true)
+    .map((chunk) => chunk.fileName)
+    .filter((fileName) => !isLegacyEmission(fileName))
+    .sort();
+
+  const staticClosure = collectStaticClosure(bundle, moduleEntryChunks);
+  const fetchableClosure = collectFetchableClosure(bundle, moduleEntryChunks);
+
+  const laneChunks: AssistanceLaneCensusEntry[] = [];
+  for (const [fileName, chunk] of Object.entries(bundle)) {
+    if (chunk.type === 'asset') continue;
+    const lanePaths = [
+      ...new Set(
+        Object.keys(chunk.modules ?? {})
+          .map((id) => assistanceLanePathFor(id))
+          .filter((lanePath): lanePath is string => lanePath !== undefined),
+      ),
+    ].sort();
+    if (lanePaths.length === 0) continue;
+    laneChunks.push({
+      fileName,
+      lanePaths,
+      staticReachable: staticClosure.has(fileName),
+      fetchable: fetchableClosure.has(fileName),
+    });
+  }
+  laneChunks.sort((a, b) => a.fileName.localeCompare(b.fileName));
+
+  const carriedBy = (predicate: (entry: AssistanceLaneCensusEntry) => boolean): string[] =>
+    ASSISTANCE_LANE_PATHS.filter((lanePath) =>
+      laneChunks.some((entry) => predicate(entry) && entry.lanePaths.includes(lanePath)),
+    );
+
+  return {
+    moduleEntryChunks,
+    laneChunks,
+    fetchableLanePaths: carriedBy((entry) => entry.fetchable),
+    eagerLanePaths: carriedBy((entry) => entry.staticReachable),
+  };
+}
+
+/**
  * The chunks statically reachable from `roots`, following `imports` only.
  *
  * This is the same edge set Vite uses to decide what to put in
@@ -193,8 +419,39 @@ export function rendererChunkFamily(fileName: string): RendererChunkFamily | und
  * `dynamicImports` is deliberately not followed. A dynamic import is the whole
  * mechanism plan section 10.2 relies on, and reaching a renderer through one is
  * the intended outcome rather than a violation.
+ *
+ * {@link collectFetchableClosure} is the other half: it follows both edge kinds, and
+ * answers "can the browser get to this chunk at all" rather than "does it fetch it
+ * unprompted".
  */
 export function collectStaticClosure(bundle: EmittedBundle, roots: Iterable<string>): Set<string> {
+  return collectClosure(bundle, roots, (chunk) => chunk.imports ?? []);
+}
+
+/**
+ * The chunks reachable from `roots` through `imports` **or** `dynamicImports`.
+ *
+ * This is the looser of the two closures and answers a different question: not "what does
+ * the entry download before any code runs" but "what could a browser fetch once the
+ * application is running". It is the right closure for asking whether a lane is *live* - a
+ * dead lane is one no sequence of user actions can ever reach, and a dynamic import is
+ * exactly the mechanism that makes it reachable.
+ */
+export function collectFetchableClosure(
+  bundle: EmittedBundle,
+  roots: Iterable<string>,
+): Set<string> {
+  return collectClosure(bundle, roots, (chunk) => [
+    ...(chunk.imports ?? []),
+    ...(chunk.dynamicImports ?? []),
+  ]);
+}
+
+function collectClosure(
+  bundle: EmittedBundle,
+  roots: Iterable<string>,
+  edgesOf: (chunk: EmittedChunk) => readonly string[],
+): Set<string> {
   const seen = new Set<string>();
   const queue = [...roots];
   while (queue.length > 0) {
@@ -205,7 +462,7 @@ export function collectStaticClosure(bundle: EmittedBundle, roots: Iterable<stri
     // cannot extend the graph.
     if (!chunk || chunk.type === 'asset') continue;
     seen.add(next);
-    for (const imported of chunk.imports ?? []) {
+    for (const imported of edgesOf(chunk)) {
       if (!seen.has(imported)) queue.push(imported);
     }
   }
@@ -253,6 +510,26 @@ export function isLegacyEmission(fileName: string): boolean {
 }
 
 /**
+ * Family-then-file-name ordering, shared by the renderer and feature censuses.
+ *
+ * The family is compared as a `string` rather than as its literal union on purpose. A
+ * single-member union such as `FeatureChunkFamily = 'assistance'` makes
+ * `a.family === b.family` always true, so TypeScript narrows the other arm to `never` and
+ * `a.family.localeCompare(...)` stops compiling. That would force either a `String()`
+ * cast at every comparison or a comparator that only works while a family has one member -
+ * and the second option fails the moment a phase adds the next family, which is the
+ * change that would be least welcome as a type error.
+ */
+function byFamilyThenFileName<E extends { readonly family: string; readonly fileName: string }>(
+  a: E,
+  b: E,
+): number {
+  return a.family === b.family
+    ? a.fileName.localeCompare(b.fileName)
+    : a.family.localeCompare(b.family);
+}
+
+/**
  * Audits an emitted bundle for the renderer chunk boundary. See `collectStaticClosure`.
  *
  * Both bundles in a `@vitejs/plugin-legacy` build are separated, because they
@@ -274,6 +551,12 @@ export function isLegacyEmission(fileName: string): boolean {
  * Splitting the two is also what keeps the audit non-vacuous in either pass: a build
  * emits exactly one module bundle and one legacy bundle, and a bundle with no module
  * entry is reported as "not audited" rather than as a pass.
+ *
+ * The census is two independent passes over the same bundle: `rendererChunks` for the
+ * engines, and {@link auditAssistanceLane} for the Phase 19 feature lane. They share the
+ * entry-closure computation and nothing else, because they answer different questions - a
+ * renderer chunk the entry can reach is a plan section 10.2 violation, while a lane chunk's
+ * reachability is a dead-lane finding that depends on the flag set for this build.
  */
 export function auditRendererChunkBoundary(bundle: EmittedBundle): RendererChunkAudit {
   const entryChunks = Object.values(bundle)
@@ -298,9 +581,7 @@ export function auditRendererChunkBoundary(bundle: EmittedBundle): RendererChunk
       legacyEager: legacyClosure.has(fileName),
     });
   }
-  rendererChunks.sort((a, b) =>
-    a.family === b.family ? a.fileName.localeCompare(b.fileName) : a.family.localeCompare(b.family),
-  );
+  rendererChunks.sort(byFamilyThenFileName);
 
   const eagerRendererChunks = rendererChunks.filter((entry) => entry.entryReachable);
   const eagerPixiChunks = eagerRendererChunks.filter((entry) => entry.family === 'pixi');
@@ -368,6 +649,29 @@ export interface RendererChunkBoundaryOptions {
    * with `worldRenderer` alone - keeps compiling and keeps its current behaviour.
    */
   readonly pixiFishing?: boolean;
+  /**
+   * Whether this build was asked for adaptive learner assistance, from
+   * `VITE_ADAPTIVE_ASSISTANCE`.
+   *
+   * Optional and additive, for the same reason as `pixiFishing`, and `undefined` is
+   * treated exactly as `false` so every existing caller keeps compiling and keeps its
+   * current behaviour.
+   *
+   * This one is not a renderer switch, so it is independent of all four above in a stronger
+   * sense than "the build script happens to leave them off": `build:web:assistance` turns on
+   * exactly one flag and turns on **no** renderer, so there is no Pixi chunk to look for and
+   * looking for one would be checking the wrong question.
+   *
+   * It drives two checks that are mirror images of each other, both stated over the
+   * {@link ASSISTANCE_LANE_PATHS} module census rather than over a chunk name:
+   *
+   * - **on** - every declared lane path must be carried by a chunk the entry graph can
+   *   actually reach. A lane that is emitted but never fetched is the Phase 17 dead lane.
+   * - **off**, or unset, i.e. the production default - the entry must not *statically* reach
+   *   any lane code, because a static edge becomes a `modulepreload` that every Welcome
+   *   visitor downloads regardless of what the flag says.
+   */
+  readonly adaptiveAssistance?: boolean;
 }
 
 /**
@@ -379,15 +683,21 @@ export interface RendererChunkBoundaryOptions {
  *    rule the phase is about. Vite emits a `modulepreload` for every such chunk,
  *    so the Welcome route would fetch the Pixi runtime before running a line of
  *    application code.
- * 2. **A build that asked for Pixi and emitted no Pixi chunk.** Reached by
+ * 2. **A build that asked for something and emitted nothing for it.** Reached by
  *    `VITE_WORLD_RENDERER=pixi` (the Phase 9 renderer switch), and additively by
  *    `VITE_PIXI_VILLAGE=true` (the Phase 11 village switch), `VITE_PIXI_DUNGEON=true`
- *    (the Phase 13 dungeon switch), and `VITE_PIXI_FISHING=true` (the Phase 17 fishing
- *    switch). Each is a build-time contract that CI has to exercise, and a switched build
- *    that contains no switched renderer is the shape of a check that reports success
- *    because it measured nothing. The four are independent because each of those build
- *    scripts leaves `VITE_WORLD_RENDERER=phaser`: the renderer check cannot cover any of
- *    them.
+ *    (the Phase 13 dungeon switch), `VITE_PIXI_FISHING=true` (the Phase 17 fishing
+ *    switch), and `VITE_ADAPTIVE_ASSISTANCE=true` (the Phase 19 assistance lane). Each is
+ *    a build-time contract that CI has to exercise, and a switched build that contains no
+ *    switched renderer is the shape of a check that reports success because it measured
+ *    nothing. The first four are independent because each of those build scripts leaves
+ *    `VITE_WORLD_RENDERER=phaser`: the renderer check cannot cover any of them.
+ *
+ * 3. **Assistance code the entry document can statically reach.** The mirror of finding 2,
+ *    and only on a build with the flag at its production default - see
+ *    {@link auditAssistanceLane}. A feature behind a cutover flag that is *eagerly fetched
+ *    while switched off* spends the Welcome budget on a disabled feature, which is the same
+ *    class of problem as finding 1 and defeats the flag.
  *
  * The Phaser side is reported rather than enforced. `vendor-phaser-*` is already
  * named by the entry document's `modulepreload` links in the current production
@@ -544,6 +854,79 @@ export function rendererChunkBoundaryPlugin(options: RendererChunkBoundaryOption
           ].join('\n'),
         );
       }
+
+      // The Phase 19 assistance lane, enforced independently of all four renderer switches
+      // and for a different reason.
+      //
+      // `build:web:assistance` turns on exactly one flag and turns on **no** renderer, so a
+      // Pixi-chunk check would report on a switch nobody set. There is no assistance
+      // `manualChunks` group either - see the lane census header for why a group cannot be
+      // used here - so the lane is found by which modules a chunk contains, and the two
+      // checks below are stated over that census.
+      const lane = auditAssistanceLane(bundle as EmittedBundle);
+      report(
+        `assistance lane: ${lane.laneChunks.length} chunk(s), ` +
+          `${lane.fetchableLanePaths.length}/${ASSISTANCE_LANE_PATHS.length} declared path(s) fetchable, ` +
+          `${lane.eagerLanePaths.length} statically reachable from the entry`,
+      );
+      for (const chunk of lane.laneChunks) {
+        report(
+          `  ${chunk.fileName} [${chunk.lanePaths.join(', ')}] ` +
+            `${chunk.staticReachable ? 'EAGER' : 'lazy'}`,
+        );
+      }
+
+      // Check 1, flag on: every declared lane path must be carried by a chunk a browser can
+      // actually reach. "Emitted" is not "fetched", and the failure mode is the Phase 17 dead
+      // lane - a build configured for a feature that verifies nothing. Both load-bearing
+      // modules are required separately, so a build that ships the state and the vocabulary
+      // but never the ranking fails here by name instead of passing on a `types.ts` that the
+      // store drags in for free.
+      //
+      // Deliberately **not** guarded on `worldRenderer`, unlike the three renderer-adjacent
+      // blocks above. Those guard to avoid printing one finding twice for one root cause;
+      // here a missing renderer chunk and a missing lane module are two independent facts,
+      // and on a build that set both flags both findings are true and both belong on the record.
+      if (options.adaptiveAssistance === true) {
+        const missing = ASSISTANCE_LANE_PATHS.filter(
+          (lanePath) => !lane.fetchableLanePaths.includes(lanePath),
+        );
+        if (missing.length > 0) {
+          this.error(
+            [
+              '[renderer-chunks] VITE_ADAPTIVE_ASSISTANCE=true, but no chunk the browser can reach carries: ' +
+                `${missing.map((lanePath) => `${ASSISTANCE_LANE_ROLE[lanePath] ?? 'lane code'} (${lanePath})`).join(', ')}.`,
+              'Emitted is not fetched. Lane modules nothing reachable imports are a configured lane that verifies nothing, which is the failure mode this check exists for.',
+              'Reach the assistance lane through a dynamic import (React.lazy, or await import()) from a module the entry graph can reach, ' +
+                'or build without VITE_ADAPTIVE_ASSISTANCE until the surface exists.',
+            ].join('\n'),
+          );
+        }
+      }
+
+      // Check 2, flag at its production default: the entry must not statically reach any lane
+      // code, because a static edge becomes a <link rel="modulepreload"> in dist/index.html and
+      // every Welcome visitor downloads those bytes whatever the flag says.
+      //
+      // This is plan section 10.2's renderer rule - "no eager Phaser or Pixi load on
+      // Welcome" - applied to a feature behind a cutover flag, and it is the check that
+      // exists because the `manualChunks` group it replaces put React itself into an
+      // "assistance" chunk and spent 10.28 KiB of the Welcome budget on a disabled feature.
+      //
+      // Stated for the flag-off build only. On a flagged build, eagerness is a measured
+      // Welcome-budget question owned by `npm run check:budget:welcome`, and the line above
+      // prints the verdict on every build so a flagged build that is eager is visible without
+      // this becoming a second rule to relax.
+      if (options.adaptiveAssistance !== true && lane.eagerLanePaths.length > 0) {
+        this.error(
+          [
+            '[renderer-chunks] VITE_ADAPTIVE_ASSISTANCE is at its production default, but the entry document can statically reach: ' +
+              `${lane.eagerLanePaths.map((lanePath) => ASSISTANCE_LANE_ROLE[lanePath] ?? lanePath).join(', ')}.`,
+            'A static import edge makes Vite emit a <link rel="modulepreload"> for the lane chunk, so every Welcome visitor downloads those bytes on a build where the feature is switched off. That defeats the point of a productionDefault:false cutover flag and is the same violation plan section 10.2 states for the renderer.',
+            'Reach the assistance lane through a dynamic import (React.lazy, or await import()) so the router, not the entry, decides when it loads.',
+          ].join('\n'),
+        );
+      }
     },
   };
 }
@@ -576,6 +959,7 @@ export default defineConfig(({ mode }) => {
         pixiVillage: runtimeConfig.pixiVillage,
         pixiDungeon: runtimeConfig.pixiDungeon,
         pixiFishing: runtimeConfig.pixiFishing,
+        adaptiveAssistance: runtimeConfig.adaptiveAssistance,
       }),
     ],
     resolve: {

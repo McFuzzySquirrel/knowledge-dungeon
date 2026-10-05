@@ -44,7 +44,13 @@ import {
 } from '@/services/persistence/subjectPersistence';
 import { getStorageThreshold } from '@/services/errorRecovery';
 import { setSessionSource, type SessionSource } from '@/services/sessionTracker';
+import type { AssistanceRecordValue } from '@/services/persistence/v2/schema';
 import { installSessionLifecycleBinding } from '@/store/sessionLifecycleBinding';
+// Type-only, so it costs no bytes. The **values** are reached through `loadAssistanceStore()`
+// below, because an eager import here would put a 666-line feature store - and the persistence
+// modules behind it - into the Welcome closure of a build where `VITE_ADAPTIVE_ASSISTANCE=false`
+// renders no card at all.
+import type { AssistanceSource } from '@/store/assistanceStore';
 import { useStatisticsStore } from '@/store/statisticsStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -193,6 +199,58 @@ export interface BootstrapDeps {
     sessions: AppPersistedState['sessions'],
   ) => void;
 
+  /**
+   * Phase 19: install the storage-v2 assistance read path.
+   *
+   * `null` on the legacy repository, which is what the default build uses and what a rollback
+   * build needs. Called in Phase A, once the repository is known, so a read during Phase B cannot
+   * race a repository selection that has not happened yet.
+   *
+   * The same seam shape as `setDualWriteSink` and `setSessionSource`, and installed for the same
+   * reason: it keeps `src/store/` free of a hard dependency on the storage-v2 repository.
+   *
+   * **Optional, and that is a deliberate exception to the rule above.** A required member would
+   * break every `BootstrapDeps` literal in the tree, including
+   * `tests/phase18/statisticsBootstrapWiring.test.ts` - the independent gate that exists precisely
+   * because two no-op deps shipped in Phase 18 - and editing another owner's in-flight gate to
+   * accommodate a Phase 19 seam is how two gates end up measuring different things.
+   *
+   * Optional here does **not** mean optional in effect. Every one of the three Phase 19 members
+   * falls back to the real store operation at the call site, so there is no value of any of them
+   * under which the wiring does nothing: an absent dep gets the production behaviour, and a
+   * supplied dep is a test observing or substituting the real thing. The Phase 18 failure was a
+   * dep that was present, defaulted to a **no-op**, and was never called; this is the opposite
+   * shape.
+   */
+  readonly setAssistanceSource?: (source: AssistanceSource | null) => void;
+
+  /**
+   * Phase 19: read the persisted assistance record, following the selected repository.
+   *
+   * Asynchronous because the storage-v2 lane is asynchronous, and it lives on the **read** half
+   * of this module's contract rather than the commit half: `readPlan` awaits it into
+   * {@link BootstrapPlan}, so a learner whose stored mode is `off` has it applied **before the
+   * first render** and never sees a card they had turned off.
+   *
+   * That is the reason this is a read dep and not a bare `hydrateAssistanceFromRepository()` call
+   * at commit time. An un-awaited hydration settles after `main.tsx` resumes, so the first paint
+   * would render `DEFAULT_ASSISTANCE_MODE` and then correct itself - and since the default is
+   * `'standard'` and `off` is the mode a learner is most likely to have chosen, the flash would
+   * show exactly the suggestions someone had asked not to see.
+   *
+   * Returns `null` for "nothing usable is stored", which the store documents as its documented
+   * defaults rather than as an error.
+   */
+  readonly readAssistance?: () => Promise<AssistanceRecordValue | null>;
+
+  /**
+   * Phase 19: apply the record {@link BootstrapDeps.readAssistance} produced.
+   *
+   * Synchronous and taking the value, like every other commit in {@link commitPlan}. Taking
+   * nothing would mean reading and committing in one step, which is the flash above.
+   */
+  readonly hydrateAssistance?: (record: AssistanceRecordValue | null) => void;
+
   // Store effects.
   readonly hydratePreferences: (persisted: AppPersistedState['preferences']) => void;
   readonly hydrateShortcuts: (persisted: NonNullable<AppPersistedState['shortcuts']> | null) => void;
@@ -240,6 +298,19 @@ export function createDefaultBootstrapDeps(
     hydrateStatisticsSessions: (sessions) => {
       useStatisticsStore.getState().hydrateSessions(sessions);
     },
+    setAssistanceSource: (source) => {
+      assistanceStore().setAssistanceSource(source);
+    },
+    readAssistance: async () => {
+      // `await loadAssistanceStore()` rather than assuming Phase A ran: this dep is also reachable
+      // through `createDefaultBootstrapDeps()` on its own, and a dep that throws when used outside
+      // `runBootstrap` would be a worse contract than one that resolves what it needs.
+      await loadAssistanceStore();
+      return readAssistanceRecord();
+    },
+    hydrateAssistance: (record) => {
+      assistanceStore().useAssistanceStore.getState().hydrateAssistance(record);
+    },
     hydratePreferences: (persisted) =>
       usePreferencesStore.getState().hydratePreferences(persisted),
     hydrateShortcuts: (persisted) => useShortcutStore.getState().hydrateShortcuts(persisted),
@@ -260,6 +331,122 @@ interface BootstrapPlan {
   readonly activeSubjectId: string | null;
   /** The subject the device was last in, when one was loaded. */
   readonly releasedSubject: SubjectSnapshot | null;
+  /** Phase 19: the assistance record, or `null` when nothing usable is stored. */
+  readonly assistance: AssistanceRecordValue | null;
+}
+
+/**
+ * The assistance store module, loaded once, on demand.
+ *
+ * `null` until {@link loadAssistanceStore} has resolved it. Every Phase 19 dep in this module
+ * reads it through this holder, and every one of them **throws** rather than skipping when it is
+ * absent - because the alternative, a silent no-op, is precisely the Phase 18 defect that shipped
+ * two unwired deps into a bootstrap that 5,900 tests could not see.
+ */
+let assistanceStoreModule: typeof import('@/store/assistanceStore') | null = null;
+
+/**
+ * Load the store module, memoised.
+ *
+ * A dynamic import in a module the entry statically reaches produces a **separate chunk** that
+ * `dist/index.html` does not name, so `check:budget:welcome` does not count it. The same mechanism
+ * `openRepository` already uses for the storage-v2 repository, and for the same reason.
+ *
+ * Awaited in `runBootstrap` before Phase A, so every consumer below finds it present. Hydration is
+ * unconditional - a learner who set `off` on the flagged build must still have that mode on the
+ * next launch, on the rollback build, and after a roll-forward - so this cannot be gated on the
+ * feature flag.
+ */
+async function loadAssistanceStore(): Promise<typeof import('@/store/assistanceStore')> {
+  assistanceStoreModule ??= await import('@/store/assistanceStore');
+  return assistanceStoreModule;
+}
+
+/** The loaded store module, or a thrown error naming what went wrong. */
+function assistanceStore(): typeof import('@/store/assistanceStore') {
+  if (assistanceStoreModule === null) {
+    throw new Error(
+      'bootstrap: the assistance store module was used before loadAssistanceStore() resolved. ' +
+        'Every Phase 19 dependency must be reached through runBootstrap, which awaits it first.',
+    );
+  }
+  return assistanceStoreModule;
+}
+
+/**
+ * Phase 19: the storage-v2 assistance read path, in the store's own {@link AssistanceSource} shape.
+ *
+ * The repository has no `listAssistance`; assistance records are one store among the ten
+ * `readRecords` returns, so this adapter resolves the **active** generation itself and returns
+ * `[]` when there is none. Two consequences worth stating rather than leaving implicit:
+ *
+ * - `readActiveGenerationId()` returning `null` means the device has no generation, so there is
+ *   nothing to read and the legacy key stands. It is not an error.
+ * - A repository whose `readRecords` rejects is handled one layer up: `readAssistanceRecord`
+ *   catches, and falls back to the legacy read. Losing the storage-v2 record must not cost the
+ *   learner their stored mode.
+ */
+function assistanceSourceFor(handle: StorageV2Repository): AssistanceSource {
+  return {
+    async list(): Promise<AssistanceRecordValue[]> {
+      const generationId = await handle.readActiveGenerationId();
+      if (generationId === null) return [];
+      const snapshot = await handle.readRecords(generationId);
+      return snapshot.records.assistance.map(
+        (envelope) => envelope.value as AssistanceRecordValue,
+      );
+    },
+  };
+}
+
+/**
+ * Phase 19: read the persisted assistance record, following the selected repository.
+ *
+ * ## The rule this reproduces, and why it is reproduced rather than exported
+ *
+ * `src/store/assistanceStore.ts` owns a private `readAssistanceWithSource` whose documented
+ * rule is: **the legacy key is read first and on its own, the injected source's records are
+ * layered on top, a source that rejects falls back to the legacy read, and the highest
+ * `assistanceId` in code-unit order wins.** The store also exposes both of its two primitives -
+ * `readPersistedAssistance()` and `currentAssistanceSource()` - so this function is the
+ * composition of two published halves rather than a second reader.
+ *
+ * It is nevertheless a restatement, and that is a real cost: two places now describe the
+ * de-duplication rule. The alternative - making this dep call the store's composite read - would
+ * move the store's own write into the bootstrap's **read** phase, which is the flash described on
+ * {@link BootstrapDeps.readAssistance}. Between a duplication in the read half and a visible
+ * flash of suggestions a learner had turned off, the duplication is the cheaper defect, and it
+ * is the one that cannot be seen from the outside.
+ *
+ * **Reported to `core-logic-engineer`** as a follow-up: exporting `readAssistanceWithSource`
+ * collapses this function to a one-line re-export and removes the duplication entirely. Until
+ * then this is the only restatement, and it is here rather than in a component for that reason.
+ */
+async function readAssistanceRecord(): Promise<AssistanceRecordValue | null> {
+  const store = assistanceStore();
+  const legacy = store.readPersistedAssistance();
+  const source = store.currentAssistanceSource();
+  if (source === null) return legacy;
+  let fromSource: AssistanceRecordValue | null = null;
+  try {
+    const listed = await source.list();
+    // Highest id in code-unit order, so the choice is a property of the data rather than of the
+    // order the repository happened to return records in.
+    const parsed = listed
+      .map(store.parseAssistanceRecord)
+      .filter((record): record is AssistanceRecordValue => record !== null);
+    fromSource =
+      parsed.length === 0
+        ? null
+        : parsed.reduce((best, record) =>
+            record.assistanceId > best.assistanceId ? record : best,
+          );
+  } catch {
+    // A source that rejects must not cost the learner their stored mode.
+    return legacy;
+  }
+  // Storage-v2 is authoritative on the flagged build, so its record wins.
+  return fromSource ?? legacy;
 }
 
 /**
@@ -312,6 +499,10 @@ function degradedResult(
 }
 
 async function runBootstrap(deps: BootstrapDeps): Promise<BootstrapResult> {
+  // Phase 19: load the store module before anything can reach it. Deliberately **not** gated on
+  // the feature flag - see `loadAssistanceStore`.
+  await loadAssistanceStore();
+
   const failures: BootstrapFailureCode[] = [];
   let migration: MigrationState | null = null;
   let repository: StorageRepository = 'legacy';
@@ -349,6 +540,23 @@ async function runBootstrap(deps: BootstrapDeps): Promise<BootstrapResult> {
   } else {
     selectLegacyRepository();
   }
+
+  // Phase 19: install the assistance read path **now**, once the repository is known and before
+  // Phase B reads anything.
+  //
+  // Placed here rather than inside the `v2` branch because the legacy branch is the one that
+  // needs the explicit `null`: without it, a device that ran the storage-v2 lane and then came
+  // back on a legacy build would keep reading the old source, and `readAssistance` would layer
+  // records from a repository this run never selected. This is the rollback path working - the
+  // flag-off build reads the legacy key and nothing else.
+  const installAssistanceSource =
+    deps.setAssistanceSource ??
+    ((source: AssistanceSource | null) => {
+      assistanceStore().setAssistanceSource(source);
+    });
+  installAssistanceSource(
+    repository === 'v2' && handle !== null ? assistanceSourceFor(handle) : null,
+  );
 
   // ── Phase B: read everything, touching no store ──
   const plan = await readPlan(deps, handle, failures);
@@ -512,7 +720,20 @@ async function readPlan(
     releasedSubject = await deps.loadSubjectSnapshot(activeSubjectId);
   }
 
-  return { state, activeSubjectId, releasedSubject };
+  // Phase 19: the assistance record joins the plan, and it is read **here** rather than in
+  // `commitPlan` for the reason on `BootstrapDeps.readAssistance` - a learner whose stored mode is
+  // `off` must have it applied before the first render, not after it. A read that rejects or
+  // resolves to nothing is not a failure: it becomes `null`, which the store documents as its
+  // defaults, exactly as an absent preferences key does.
+  const readAssistance = deps.readAssistance ?? readAssistanceRecord;
+  let assistance: AssistanceRecordValue | null = null;
+  try {
+    assistance = await readAssistance();
+  } catch {
+    assistance = null;
+  }
+
+  return { state, activeSubjectId, releasedSubject, assistance };
 }
 
 async function safeList(deps: BootstrapDeps, failures: BootstrapFailureCode[]): Promise<string[]> {
@@ -540,6 +761,12 @@ function commitPlan(deps: BootstrapDeps, plan: BootstrapPlan): void {
   // `src/store/sessionLifecycleBinding.ts`.
   deps.installSessionLifecycle();
   deps.hydrateStatisticsSessions(state.sessions);
+  const hydrateAssistance =
+    deps.hydrateAssistance ??
+    ((record: AssistanceRecordValue | null) => {
+      assistanceStore().useAssistanceStore.getState().hydrateAssistance(record);
+    });
+  hydrateAssistance(plan.assistance);
 
   if (plan.releasedSubject !== null) {
     deps.setSessionActiveSubjectId(null);

@@ -1,0 +1,208 @@
+/**
+ * Assistance styles.
+ *
+ * ## What is here that is not decoration
+ *
+ * - {@link .assistance-sr-only} hides text visually while leaving it in the accessibility tree.
+ *   `display: none` and `visibility: hidden` would do the opposite - they remove the text from
+ *   both - and the live regions' only job is to be read.
+ * - Every focusable control has a `:focus-visible` outline that is thicker than the 1px default
+ *   and drawn with `outline-offset`, so it is visible against a card whose background is a token
+ *   the learner can change.
+ * - {@link prefers-reduced-motion} removes the one transition. A card appearing is not motion
+ *   worth animating, and the announcement region's timing must not depend on a fade.
+ *
+ * ## What is deliberately absent
+ *
+ * **No colour carries meaning on its own.** A suggestion's intensity is stated as a word in the
+ * markup ({@link ASSISTANCE_INTENSITY_ATTRIBUTE}) and this stylesheet does not give the three
+ * intensities different colours. A learner in greyscale, with a colour-vision deficiency, or in
+ * Windows High Contrast reads the same three words. `tests/phase19/assistanceUiAccessibility.test.ts`
+ * asserts there is no intensity-keyed colour rule, because "we did not write one" is not the
+ * same claim as "there is none".
+ *
+ * ## Tokens, not literals
+ *
+ * Every colour, radius, and spacing value is a Cozy token (`var(--...)`), for the reason
+ * `implement-visual-theme` records: a second source of truth for a colour is a second source of
+ * truth. Where a token this stylesheet needs does not exist yet, the literal is commented as such
+ * rather than introduced silently - see {@link .assistance-card__dismiss}.
+ */
+
+.assistance-card {
+  /* The left rule is a **shape**, not a colour cue: it marks the card as advisory without
+     changing hue, so it survives greyscale and forced-colours modes. */
+  border-inline-start: 4px solid var(--border, currentColor);
+  border-radius: var(--radius-md, 8px);
+  padding: 0.75rem;
+  margin-block: 0.75rem;
+  background: var(--surface, transparent);
+  color: var(--text, inherit);
+}
+
+.assistance-card__heading,
+.assistance-suggestion__title,
+.assistance-suggestion__evidence-heading,
+.assistance-settings__heading,
+.assistance-settings__dismissals-heading {
+  margin-block: 0 0.35rem;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.assistance-card__list {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.assistance-suggestion {
+  margin-block: 0.75rem;
+}
+
+.assistance-suggestion__detail,
+.assistance-suggestion__offer,
+.assistance-suggestion__evidence-empty,
+.assistance-suggestion__evidence-row,
+.assistance-card__note,
+.assistance-card__dismissed {
+  margin-block: 0.25rem;
+  line-height: 1.5;
+}
+
+.assistance-suggestion__intensity {
+  /* Not a colour. A word, set off by weight and spacing so it reads as a label. */
+  margin-block: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.assistance-suggestion__evidence {
+  margin-block: 0.5rem;
+  padding-inline-start: 0.75rem;
+  /* A dotted rule rather than a solid one, so the evidence block is distinguishable from the
+     offer block without either being distinguished by colour. */
+  border-inline-start: 2px dotted var(--border, currentColor);
+}
+
+.assistance-suggestion__evidence-list {
+  margin: 0;
+  padding-inline-start: 1.1rem;
+}
+
+.assistance-suggestion__evidence-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.assistance-suggestion__offer-verb {
+  font-weight: 600;
+}
+
+.assistance-card__note,
+.assistance-settings__purpose {
+  font-size: 0.875rem;
+}
+
+.assistance-suggestion__dismiss,
+.assistance-settings__clear {
+  /* The 44x44 floor is **also** written inline on the element, in the JSX, because jsdom
+     computes no layout and a stylesheet rule is therefore not assertable by a test. This rule is
+     the real one a browser applies; the inline one is what a test can read. */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border, currentColor);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface, transparent);
+  color: var(--text, inherit);
+  font: inherit;
+  cursor: pointer;
+  /* A larger tap area than the label needs: WCAG 2.2 target size is a floor, and a Dismiss
+     button pressed by mistake is the one mistake here that loses a suggestion's visibility. */
+  touch-action: manipulation;
+}
+
+.assistance-suggestion__dismiss:focus-visible,
+.assistance-settings__clear:focus-visible,
+.assistance-settings__mode input:focus-visible {
+  /* Thicker than the 1px default and offset, so it is visible against a card whose background is
+     a token the learner can change. `outline` rather than `box-shadow` because forced-colours
+     mode drops box-shadows and keeps outlines. */
+  outline: 3px solid var(--focus, currentColor);
+  outline-offset: 2px;
+}
+
+.assistance-settings {
+  margin-block: 1rem;
+}
+
+.assistance-settings__modes {
+  border: 1px solid var(--border, currentColor);
+  border-radius: var(--radius-sm, 4px);
+  padding: 0.75rem;
+  margin-block: 0.75rem;
+}
+
+.assistance-settings__modes-legend {
+  padding-inline: 0.25rem;
+  font-weight: 600;
+}
+
+.assistance-settings__mode {
+  margin-block: 0.5rem;
+}
+
+.assistance-settings__mode input {
+  /* Inline-block and a real 1.5em box, so the radio itself is a comfortable target rather than
+     the 13px default circle. A 44px radio is unusual; a 21px one is the browser default and is
+     below the floor. */
+  inline-size: 1.5em;
+  block-size: 1.5em;
+  margin-inline-end: 0.5rem;
+  vertical-align: middle;
+}
+
+.assistance-settings__mode-note {
+  margin-block: 0.15rem 0;
+  font-size: 0.875rem;
+}
+
+/**
+ * Visually hidden, still announced.
+ *
+ * `clip-path` plus a 1px box rather than `display: none`: the first keeps the element in the
+ * accessibility tree and out of the visual one, and the second would remove both. The `overflow`
+ * and absolute positioning are what stop the 1px box from affecting layout at 320 CSS pixels.
+ */
+.assistance-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistance-suggestion__dismiss,
+  .assistance-settings__clear {
+    /* The only transition this stylesheet declares. A suggestion appearing is not motion worth
+       animating, and the live region's timing must not depend on a fade. */
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .assistance-card,
+  .assistance-suggestion__evidence,
+  .assistance-suggestion__dismiss,
+  .assistance-settings__clear,
+  .assistance-settings__modes {
+    /* `currentColor` so Windows High Contrast Mode substitutes its own palette, which is the
+       entire point of that mode. */
+    border-color: currentColor;
+  }
+}

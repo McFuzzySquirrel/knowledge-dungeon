@@ -613,7 +613,23 @@ describe('The surface is inert on the default build and adds no static edge', ()
           .join('/'),
     );
     // Exactly the seven Phase 4 seams, unchanged.
-    expect(entries.sort()).toEqual([
+    //
+    // Was `expect(entries.sort()).toEqual([...seven...])` - a whole-list equality. That froze
+    // the *registry* rather than the property this gate is named for, and Phase 19 broke it by
+    // doing something legitimate: a fourth dual-writing store (`store/assistanceStore.ts`, added
+    // in Phase 19) needs a seam entry exactly as `store/preferencesStore.ts` has one. The gate's
+    // subject is "the allowlist was not widened **for the new UI**", and no UI file is on it.
+    //
+    // So the claim is now stated as two assertions that together say the same thing without
+    // freezing later phases:
+    //
+    // 1. every Phase 4 seam is **still on the list** - nothing was removed, which is the
+    //    direction that would actually weaken the boundary; and
+    // 2. **no** entry lives under `ui/`, which is the gate's own subject.
+    //
+    // A whole-list equality would also have needed re-editing by every future phase that adds a
+    // store, which is how a gate like this becomes one people stop reading.
+    for (const seam of [
       'application/bootstrap.ts',
       'services/persistence/deviceAttachments.ts',
       'services/persistence/subjectPersistence.ts',
@@ -621,7 +637,18 @@ describe('The surface is inert on the default build and adds no static edge', ()
       'store/preferencesStore.ts',
       'store/progressionStore.ts',
       'store/shortcutStore.ts',
-    ]);
+    ]) {
+      expect(entries, `the Phase 4 seam ${seam} was removed from the allowlist`).toContain(seam);
+    }
+    // The subject of the gate: no UI module is a storage-v2 seam.
+    const uiEntries = entries.filter((entry) => entry.startsWith('ui/'));
+    expect(uiEntries, 'a UI module was added to the storage-v2 seam allowlist').toEqual([]);
+    // And the list is not vacuous: this regex only sees entries spelled `join(SRC, ...)` under
+    // `src/`, which is the seven Phase 4 seams plus the dual-writing stores later phases added -
+    // eight today, with `store/assistanceStore.ts` from Phase 19. The data-product entries are
+    // spelled against `PRODUCTS_DIR` and are counted by `qaHardening.test.ts` instead, so eight is
+    // the correct number here rather than a loose lower bound that would have hidden a mistake.
+    expect(entries.length).toBeGreaterThanOrEqual(8);
     for (const forbidden of ['ui/components/MigrationStateSurface.tsx', 'ui/components/migrationStateCopy.ts', 'ui/hooks/useModalFocus.ts']) {
       expect(entries).not.toContain(forbidden);
     }

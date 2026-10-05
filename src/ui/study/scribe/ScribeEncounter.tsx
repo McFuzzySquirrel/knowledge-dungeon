@@ -92,6 +92,7 @@ import { NoteComposer } from './NoteComposer';
 import { ValidationSummary } from './ValidationSummary';
 import { buildScribeEncounterViewModel, type ScribeEncounterViewModel } from './scribeViewModel';
 import { useScribeEncounterActions } from './useScribeEncounterActions';
+import { AssistanceSlot } from '@/ui/assistance/AssistanceSlot';
 import './scribe.css';
 
 /**
@@ -476,6 +477,19 @@ export function ScribeEncounter({
       feedback={actions.feedback}
       label="Scribe encounter workspace"
     >
+      {/*
+        Phase 19: the Scribe suggestion card.
+
+        Note the shell's own rule, recorded at this file's focus fallback: "The shell owns exactly
+        one `role="status"`, and adding another here would make a learner hear two announcements
+        for one action." The card's live region is **not** a second channel for an *action* - it
+        announces only that the number of visible suggestions changed, and it does not announce on
+        first render - but the concern is real, and it is the reason the announcement is
+        deliberate rather than incidental. See `AssistanceCard`'s `AnnouncementRegion`.
+
+        First child, so it sits after the encounter's own next action and never above it.
+      */}
+      <AssistanceSlot surface="scribe" snapshot={snapshot} />
       {/*
         The focus fallback is visible text and *not* a second live region. The shell owns
         exactly one `role="status"`, and adding another here would make a learner hear two

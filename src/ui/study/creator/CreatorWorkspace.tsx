@@ -54,6 +54,7 @@ import {
   type CreatorNextActionSuggestion,
 } from './creatorViewModel';
 import { useCreatorGraphActions } from './useCreatorGraphActions';
+import { AssistanceSlot } from '@/ui/assistance/AssistanceSlot';
 
 export interface CreatorWorkspaceProps {
   readonly snapshot: SubjectSnapshot;
@@ -378,6 +379,18 @@ export function CreatorWorkspace({
       feedback={actions.feedback}
       label="Creator workspace"
     >
+      {/*
+        Phase 19: the Creator suggestion card.
+
+        First child of the shell, so it sits directly after the workspace's own next action -
+        never above it. Advice that outranks the primary recommendation would make assistance look
+        like the main path, and "advisory" is the whole claim this feature makes.
+
+        Rendered with no `flagEnabled` prop, so it takes `runtimeConfig.adaptiveAssistance` and
+        the rollback lane is the flag's own: with `VITE_ADAPTIVE_ASSISTANCE=false` this component
+        renders `null` and the pre-Phase-14 Creator view is byte-identical.
+      */}
+      <AssistanceSlot surface="creator" snapshot={snapshot} />
       {focusProblem === null ? null : (
         <p className="study-action__note study-action__note--refusal" role="status">
           {focusProblem}

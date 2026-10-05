@@ -44,6 +44,7 @@ import { useVillageNpcSurface, type VillageActionBridge } from '@/ui/village/use
 import { useVillageSurfaceMode } from '@/ui/village/useVillageSurfaceMode';
 import { VillageHud } from '@/ui/village/VillageHud';
 import { VillageLaunchers } from '@/ui/village/VillageLaunchers';
+import { AssistanceSlot } from '@/ui/assistance/AssistanceSlot';
 import type { VillageCollectionTotals, VillageStudyTotals, VillageSubjectSummary } from '@/ui/village/villageTypes';
 
 // The panel-arrival announcement this screen renders is the only thing here that
@@ -788,6 +789,27 @@ export function VillageScreen(): JSX.Element {
           {fishing.status}
         </p>
       ) : null}
+
+      {/*
+        Phase 19: the fishing suggestion card, mounted here rather than inside either fishing lane.
+
+        Two reasons, and both are about the rollback lane. `renderControls` is the Pixi lane's HUD
+        hook and the Phaser \`FishingScene\` has its own DOM, so mounting in either would leave the
+        other without the feature; mounting here covers both because this screen is the parent of
+        both. And with the production default \`VITE_ADAPTIVE_ASSISTANCE=false\` the slot renders
+        \`null\`, so the Phaser rollback lane is byte-identical to what it was.
+
+        Gated on \`fishing.assistance !== null\`, which is the hook's own "a recall question was
+        actually missed on this visit" fact - so on the common visit the card is never mounted and
+        its lazily-loaded chunk is never requested.
+      */}
+      {fishing.assistance === null ? null : (
+        <AssistanceSlot
+          surface="fishing"
+          snapshot={fishing.assistance.snapshot}
+          fishing={fishing.assistance.fishing}
+        />
+      )}
 
       <DataManagementDialog
         open={dataOpen}

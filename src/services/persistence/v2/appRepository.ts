@@ -30,6 +30,7 @@ import type { SubjectSnapshot } from '@/core/validation/persistence';
 import { ensureInitialGeneration, INITIAL_GENERATION_ID } from './appState';
 import type { StorageV2Repository } from './repository';
 import type {
+  AssistanceRecordValue,
   PreferenceRecordValue,
   ProgressionRecordValue,
   SessionRecordValue,
@@ -207,6 +208,44 @@ export async function publishShortcutsToActiveGeneration(
     shiftKey: binding.shiftKey,
   }));
   await repository.putRecords(generationId, { shortcuts });
+}
+
+/**
+ * Publish one assistance record.
+ *
+ * Phase 19. **One record per write**, keyed by its own `assistanceId`, which is the same rule
+ * `publishSessionToActiveGeneration` follows: publishing a whole store would make two
+ * concurrent writes publish two complete stores and the second would drop the first, and
+ * `putRecords` merges by record id, so a re-publish of the same id supersedes rather than
+ * duplicates.
+ *
+ * The record is written **verbatim**. In particular:
+ *
+ * - `signals` is not filtered to the keys this build knows. A record written by a newer build
+ *   must survive a write on this one, and `src/services/persistence/products/idRemapping.ts`
+ *   already treats the map as opaque counts it carries verbatim.
+ * - `mode` is not re-derived. The store is the authority on the learner's chosen mode, and a
+ *   validator that "helpfully" corrected it would overwrite a preference the learner made.
+ *
+ * `updatedAt` is supplied by the caller rather than read here, for the same reason
+ * `now` is a parameter on every function in this module.
+ */
+export async function publishAssistanceToActiveGeneration(
+  repository: StorageV2Repository,
+  record: AssistanceRecordValue,
+  now: string,
+): Promise<void> {
+  const generationId = await activeGenerationForWrite(repository, now);
+  await repository.putRecords(generationId, {
+    assistance: [
+      {
+        ...record,
+        // The envelope timestamp is the storage layer's business, and it is derived from the
+        // caller's clock rather than read from an ambient one.
+        updatedAt: record.updatedAt.length > 0 ? record.updatedAt : now,
+      },
+    ],
+  });
 }
 
 /** Publish one finished study session. */

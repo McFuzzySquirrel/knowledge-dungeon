@@ -7260,7 +7260,7 @@ Phases 19, 20, and 21.
 
 ## Phase 19: Adaptive Learner Assistance
 
-**Status:** in-progress
+**Status:** verified
 **Objective:** Add deterministic, local, explainable assistance across the learning and fishing flows.
 
 ### Prerequisites
@@ -7317,6 +7317,263 @@ npm run test:e2e
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-10-05. `not-started` -> `in-progress` -> `verified`. **Not committed, pushed, or
+deployed** - that needs explicit maintainer authorization. Phase 20 has not been started.
+
+#### Baseline
+
+Green at `4c47c0f` before any Phase 19 change: `npm run lint` 0, `npm run typecheck` 0, `npm test`
+**289 files / 5923 tests**, `npm run build:web` 0, `npm run check:bundle-size` **5.28 MB / 153
+files**, `npm run check:budget:welcome` **263.77 KiB / 300.00 KiB**. No baseline repair was needed.
+
+#### Commands
+
+```text
+npm run lint                                    exit 0
+npm run typecheck                               exit 0
+npm test                                        308 files / 6306 tests passed   (was 289 / 5923)
+npm run build:web                               exit 0
+npm run build:web:assistance                    exit 0
+npm run check:bundle-size                       5.37 MB / 162 files   (was 5.28 / 153)
+npm run check:budget:welcome                    266.40 KiB / 300.00 KiB   (was 263.77)
+npm run test:privacy                            6 files / 34 tests passed
+npm run test:licenses                           PASSED, 99 entries, 0 media under src/
+npm test -- tests/unit/assistanceEngine.test.ts   41 passed   (previously matched NO file, exit 0)
+npm run test:e2e                                34 passed / 14 skipped / 0 failed  (3.7m)
+```
+
+The plan's named unit command was **vacuous before this phase**: `tests/unit/assistanceEngine.test.ts`
+did not exist and `npm test --` on it exited 0 without running anything.
+
+#### What the phase actually found
+
+**HIGH - the engine was not time-zone independent, and the defect travelled in an archive.**
+`assistanceEngine.ts`'s own header claimed *"Compared by UTC epoch, so the host time zone cannot change
+the answer."* That was false. `Date.parse` reads an offset-less ISO date-time as **local** time,
+`toAssistanceRoom` accepted such a value, and **no validator in `src/` rejected one** - so a
+`.kdsubject` carried it verbatim. Measured across five zones, one archive and one `nowIso`:
+
+| zone | `daysUntilDue('2026-03-17T04:00:00', ...)` | `Z`-suffixed control |
+| --- | --- | --- |
+| UTC, America/New_York | **1** (not due) | 1 |
+| Asia/Kolkata, Australia/Adelaide, Pacific/Chatham | **0** (due now) | 1 |
+
+End to end the ranked result differed: **1 suggestion under UTC, 3 under Kolkata**, adding
+`archaeologist.due-room` at priority 40 and `device.due-today`. Two devices, one archive, different
+assistance. Found by `qa-engineer` attacking the determinism claim; three other agents had signed the
+engine off.
+
+Fixed by routing every timestamp through one parser, `readUtcEpochMs`, which accepts an explicit
+offset (or a date-only value, UTC by specification) and reads an offset-less date-time as **UTC wall
+clock**; everything else is `null`. `Date.parse`'s legacy parser is host-local too -
+`'March 17, 2026 04:00:00'` diverged across all five zones - so the rule is by shape, not by marker.
+
+**The reject-option was considered and declined**, and the reasoning is recorded because it is the more
+interesting half. A refused due date is not one missing card: `archaeologistDueRoomRule` and
+`deviceReviewsDueRule` would stop speaking about that room until a review rewrote the field, so the
+learner permanently loses both the prioritisation and the device summary it feeds. A UTC reading is
+wrong by at most one offset, identically on every device, and self-corrects on the next review. The
+residual cost is stated rather than assumed away: a foreign tool that wrote its own local wall clock
+is now read as UTC. Migration cost is zero - this is a read-time interpretation, and no stored value
+is rewritten.
+
+**MEDIUM - two evidence keys whose names did not match their values.** Found by
+`village-content-designer` trying to write honest copy, and it refused to paper over either:
+
+- `evidence.rooms-cleared` carried a **hardcoded literal `1`** under `graph-no-branch`, so a learner
+  with an unstarted five-room subject was shown "1 room cleared" - a false claim about their own
+  progress, on the one surface whose entire purpose is to be trustworthy.
+- `evidence.overdue-rooms` carried **days** under `review-due` and a **room count** under
+  `device-reviews-due`. No phrasing is both specific and true.
+
+The content designer's response was to degrade the wording - "Rooms" instead of "Rooms cleared",
+"Past due", grammatically incomplete but true under both - which is the correct instinct and the wrong
+place to stop. Fixed at source: `evidence.subject-rooms` now carries the room count, and
+`evidence.overdue-days` / `evidence.overdue-rooms` are split by unit. "Rooms cleared" is now true
+everywhere it appears. The invariant is now written on `ASSISTANCE_EVIDENCE_KEYS`: **one key, one
+unit - a key's noun is the unit its value is counted in, and a row with no honest key is omitted, not
+re-labelled.**
+
+**HIGH - the default build eagerly fetched a feature whose flag was `false`.** The DOM integration
+became the first importer of the engine, and `vite.config.ts`'s `feature-assistance` `manualChunks`
+group took its shared dependencies with it: `assistanceStore` -> `zustand` ->
+`use-sync-external-store` -> **React**, which the entry also needs. Rolldown hoisted React into the
+group, `index -> feature-assistance` became a **static** edge, and Vite wrote a `modulepreload` for it.
+`dist/index.html` shipped a 10.28 KiB counted preload for a feature that could never fire, and Welcome
+went **263.77 -> 272.50 KiB**, spending 24% of the remaining headroom.
+
+Root cause verified from a dump of the emitted `chunk.modules`, not attributed: the group held **17
+modules of which 4 were assistance code**. `vendor-react` simultaneously shrank 57.50 -> 55.28 KiB,
+which is the same two React modules moving - both are back. The group was deleted and replaced with a
+**module-membership plus reachability census**: with the flag on, both load-bearing modules must be in
+the **fetchable** closure (`imports` + `dynamicImports`); with it off, no lane module may be in the
+**static** closure. Welcome returned to **266.40 KiB**, `dist/index.html` now contains **zero**
+references to any assistance chunk, and the flagged build costs **0.01 KiB** against the default - the
+flag is free on Welcome. The whole DOM stage costs **+2.61 KiB** against the pre-phase baseline.
+
+**HIGH - the Settings modal offered configuration for a feature that could not appear.**
+`SettingsModal.tsx` listed the `assistance` tab in a **static** array, un-gated. With the production
+default `false`, a learner could open Settings, switch assistance to Gentle, and then see no assistance
+anywhere - because the flag is build-time and no runtime action can change it. That reads as a broken
+feature, and it is the mirror of the failure the `false` default exists to prevent. Now gated on
+`runtimeConfig.adaptiveAssistance` through a pure `visibleSettingsTabs(tabs, flagEnabled)`, with the
+full `SETTINGS_TABS` array kept separate from the visible list so a later edit cannot silently trim it.
+
+**MEDIUM - `findSubjectIdForRoom` read `subjects` in the caller's order**, flipping `action.subjectId`
+when two subjects shared a room id. Now sorted by code unit. Its comment had claimed `tests/phase19/`
+"pins the multi-subject case explicitly" and the function appeared in **no test in the repository** -
+the same failure class as the evidence keys, where the next person words the comment instead of the
+engine.
+
+#### Exit-criteria assessment
+
+1. **Identical state always yields identical assistance** - met, and it is the criterion jsdom can
+   actually prove. Proved over a corpus by byte comparison, under UTC, `Asia/Kolkata`,
+   `America/New_York` and `Pacific/Chatham`, with a guard that `process.env.TZ` took effect. The
+   cross-zone divergence above was found by attacking this, not by reading it.
+2. **Assistance remains local and explainable** - met. Every suggestion carries a `reasonCode` the
+   content designer worded from its documented trigger, plus evidence rows of counts only. The
+   catalogue is 32 keys in `en` and `es`, with parity asserted **in both directions**.
+3. **Off mode removes proactive suggestions** - met structurally, not by filtering. Three layers:
+   `ProactiveAssistanceMode = Exclude<AssistanceMode,'off'>` makes `mode:'off'` a **typecheck error**,
+   asserted negatively with `@ts-expect-error`; the function throws; and `evaluatedRuleKinds` reports
+   which rules actually executed. A **filter-based** Off would pass every other observable test -
+   probe P07 reverts to exactly that and only the trace catches it. `ui-engineer` proved the four
+   silent states are indistinguishable from absence, asserting `container.innerHTML === ''` **byte-
+   identical** across flag-off, mode-off and no-suggestions, behind a positive control that must render
+   a real card first.
+4. **Suggestions never alter deterministic outcomes by themselves** - met, proven structurally four ways
+   of increasing strength: the engine's runtime closure is `src/core/` only; no suggestion member is a
+   function, checked recursively; a full before/after fingerprint of progression, subject, sessions,
+   **every storage-v2 generation store** and every non-assistance `localStorage` key is unchanged
+   across 50 mode changes and 10 dismissals, with a **baseline-substance assertion** so an empty
+   fingerprint cannot pass; and `dismissalCount` is **not an input to `rankAssistance` at all**, so
+   non-punitive dismissal is a type-level fact rather than a review request. `dismissSuggestion()`
+   takes **no argument**, so there is nowhere for a suppression to live.
+5. **Assistance survives backup and restore** - met. `.kdbak` and `.kdsubject` byte-for-byte into a
+   different device; three corruptions leave the device byte-identical; validation accepts well-formed
+   and rejects hostile records.
+6. **No raw learner behaviour leaves the device** - met. A whole recorded session makes zero network
+   and zero console calls; no room id, subject id, topic, prose, keystroke or trait reaches any record,
+   archive member, manifest string, filename, URL or log. Planted `fetch('...collector.invalid...')` and
+   `console.warn` both turn the suite red.
+
+#### Gates changed, and the rulings
+
+| Gate | Ruling |
+| --- | --- |
+| `tests/privacy/uploadBoundary.test.ts` (Phase 18) | Confirmed at Phase 18; unchanged here. |
+| `tests/phase17/fishingPhaseInvariants.test.ts` - `dualWrite.ts` left a byte-identity list | **Legitimate, and strengthened twice.** It now permits exactly one added union member and requires that removing that line reproduce the baseline byte-for-byte, while `records.ts` and `generations.ts` remain byte-identical - so the property the original list protected (no new store or generation member) stays **absolute**. QA mutation-tested all four directions and found the comment **overclaimed**: reordering the union is GREEN. The comment was corrected to a measured statement. |
+| `tests/phase4/uiSurfaceAudit.test.tsx` - whole-list equality of seven seams | **Legitimate, and the pair holds the boundary.** This one is a **net reduction in strictness** and is recorded as such. It asserts every Phase 4 seam is still present, **no `ui/` entry** (the gate's own subject, now asserted directly and exactly), and a `length >= 8` non-vacuity floor. QA measured that adding a bogus **non-UI** entry passes it - the strictness it gave up - while `qaHardening`'s "the only importers of storage-v2 outside the v2 tree are the declared seams" goes RED. The whole-list equality's real job was enforcing that the registry means something, and that invariant lives in the authoritative registry. |
+| `tests/migrations/qaHardening.test.ts` - one additive seam entry | **Legitimate.** Additive with a per-entry justification, and `qa-engineer` found the justification was **unenforced** - nothing iterated `.values()`, so an entry added with `''` passed. Now enforced, with a uniqueness rule that mutation proved **wrong rather than the data**: the three dual-writing stores legitimately share one reason, so the rule was removed and the reason recorded. |
+| `tests/unit/audioSettingsTab.test.tsx` - whole-list tab equality broke | **Not amended, and that is the ruling.** The break was legitimate - Phase 19 added a Settings tab - but the repair belonged in the **product**. With the tab gated on the flag, the default tablist is the original four again and the gate passes **23/23 unchanged**, still a whole-list equality. |
+| `tests/phase19/assistanceNonVacuity.test.ts` P17 residue gate | **Legitimate.** It failed while four agents worked concurrently, because its permitted list named paths other owners had not yet created. Extended to the exact 14 paths rather than prefixes, and the list is now complete for the phase. |
+
+#### Non-vacuity evidence
+
+Five owners ran probes; every one verified green **before** mutating, and restored with checksum
+verification. Reported rather than counted:
+
+- **Two probes declared PARTIAL.** `core-logic-engineer` found that noon-anchored date arithmetic makes
+  its behavioural tests unable to distinguish it from a millisecond variant, and measured 33,120
+  date/zone samples to establish why.
+- **Three vacuous probes found in Phase 18's own engine tests**, including a `MAXIMAL_SIGNALS` built
+  with `Object.fromEntries` over same-keyed maps that kept only the last value, silently weakening every
+  "Off produced nothing" assertion.
+- **`core-logic-engineer` reported two probes it could not make go red** with the structural reason: one
+  rule's candidates are per-room and key-deduplicated so no input order can change them, and a
+  fractional-score mutation cancelled because the clamp is applied twice per candidate.
+- **`qa-engineer` reported six first-attempt green probes**, named five as its own harness faults, and
+  replaced them; two are honest negatives. It also **measured rather than assumed** that
+  `expect(f).toBe(-b)` and a `forward + backward === 0` sum both fail under the same mutation, and
+  declined to credit either with more than it earns.
+- **`ui-engineer` disclosed that four probes read as vacuous at baseline and were harness bugs** -
+  `perl -0pi -e 's/^…/'` anchors `^` to the start of the *file*, so three mutations silently no-opped.
+  Rewritten in Python with an applied-verification step that now hard-fails an invalid probe.
+- **`ui-engineer` reported two probes vacuous and deleted the code they guarded** rather than writing
+  tests for it. The `activeTab` clamp protected a state no input could reach, since the state is
+  written only by clicking a *rendered* tab. The clamp and `resolveActiveSettingsTab` were removed: an
+  unobservable branch that *looks* defensive is worse than no branch.
+- **A vacuous test caught in its own closure scanner**: a type-stripping regex was over-greedy and
+  deleted a whole import statement, erasing a real `react` edge. An erased edge is an unmeasured one,
+  which is the dangerous direction for a "reaches no writer" gate.
+- **A silent vacuity caught by reasoning**: an assertion that `evidence.overdue-rooms` is *absent* for a
+  room due now would have kept passing after the key split - for the wrong reason, since that arm no
+  longer emits it at all.
+
+#### Rollback
+
+`VITE_ADAPTIVE_ASSISTANCE=false`, the flag this phase's owner entry already declared. Verified rather
+than assumed: with the flag off, `dist/index.html` contains **zero** references to any assistance
+chunk, the Settings tab is absent, `AssistanceSlot` returns `null` before the `lazy()` boundary, and the
+card region renders nothing. Stored records are left untouched, and re-enabling restores the same
+numbers. `src/config/featureFlags.ts` and `runtimeConfig.ts` are **byte-identical to `HEAD`** and
+`NON_CUTOVER_FLAG_KEYS` remains exactly `['audioEnabled']`.
+
+The dead-lane guard means the reverse failure is now impossible too: a `build:web:assistance` that
+contained no assistance code is a **red build**, not a green lane. Before this phase a configured lane
+could verify nothing - which is exactly how Phase 17's fishing lane reported green while its host
+published nothing.
+
+#### Known limitations and UNVERIFIED
+
+- **No browser evidence of the feature existing.** `npm run test:e2e` runs the default artifact, where
+  the flag is `false`, so the honest browser result is **absence**: no assistance UI appears, no
+  assistance code is fetched, nothing breaks. That is a real result and it is what the `false` default
+  exists to make checkable. `build:web:assistance` now works, but **no flagged Playwright lane was
+  built**, so nothing has observed a suggestion rendering in a real browser.
+- **Touch viewports skip the lifecycle lane**, as in Phase 18: the Phaser dungeon does not deliver its
+  interact key on `tablet` / `tablet-landscape`, and the reason is recorded in the test.
+- **Contrast, real rendered touch-target size, 200% zoom, 320 CSS-pixel viewport, screen-reader
+  announcement order, and forced-colours are UNVERIFIED.** jsdom computes no colours and no layout.
+  Phase 21 owns the audit.
+- **Chromium only.** No compatibility lane was run for this surface.
+- **Archive restore for the assistance record is proven in `fake-indexeddb`**, not a real browser.
+- **`device.due-today` is dark in Standard mode.** It fires in Gentle; Standard needs the `study`
+  aggregate, which this phase does not supply, and `study` was deliberately **not** wired because doing
+  so would break the structural property that the card imports no store at all. Standard's
+  `active-study-days` and `rooms-cleared` evidence rows therefore read 0. A named scope boundary, not
+  an oversight.
+- **`bumpSignals` is not idempotent** - a retried call adds twice. Accepted on the stated ground that
+  these numbers only raise a priority and no suggestion can write; QA verified the ceiling holds and
+  absurd signals saturate rather than reaching arbitrary priority. A retry is not reachable through the
+  shipping path, whose write queue serialises.
+- **`readUtcEpochMs` reads a foreign tool's local wall clock as UTC.** Deterministic and identical on
+  every device, off by that tool's offset. The UTC assumption is justified from what this app writes
+  and is **not** empirically validated against real third-party writers.
+- **One observed flake**, `assistanceAdvisoryBoundary` byte-identity, failed once in a combined run and
+  passed in isolation and two later wide runs. Not reproduced, cause unknown.
+- **Two e2e failures during the phase did not reproduce in a clean tree** and are recorded as
+  contamination from concurrent edits, which is what `qa-engineer` suspected but could not prove while
+  three agents were writing.
+
+#### Follow-up work found and deliberately not done (working rule 13)
+
+- **`deps.setDualWriteSink` and `deps.setSessionSource` are declared, defaulted, and never called** in
+  `bootstrap.ts`. This is the same defect class Phase 18 shipped, caught again here and pinned by
+  behavioural spies that assert the zeros are measurements rather than a broken spy. Installing them
+  changes storage-v2 behaviour on lanes nothing has tested. **Open, not resolved.**
+- **Build the flagged assistance lane, or defer it to Phase 21** - the maintainer's ruling, not the
+  phase's. It would require a record/verify step, a preflight script, a Playwright project and config,
+  a spec, and CI wiring. Phase 21 would get the project for free inside the accessibility audit it
+  already has to run.
+- `findSubjectIdForRoom` is now sorted, but the multi-subject case is only covered by a test added in
+  this phase; the shipping room-id factory's uniqueness is what keeps it MEDIUM rather than HIGH, and
+  that assumption is unpinned outside this phase.
+- Systemic brittleness: **three whole-list-equality gates broke on legitimate list growth in two
+  phases** (`qaHardening`, `uiSurfaceAudit`, `audioSettingsTab`). Two were repaired by asserting the
+  property instead of the membership; the third was repaired in the product. Worth a deliberate pass.
+- The content designer's unit gate keys off a hand-listed set of eight count keys - the one part of
+  that gate a human maintains, deliberately, because a new count key means someone picked a unit.
+- The bootstrap composite read restates ~14 lines of the store's documented merge rule; exporting
+  `readAssistanceWithSource` from the store would collapse it.
+- Carried from Phase 18 and still open: the 32-bit statistics digest is a one-way door; `daysUntilReview`
+  still divides by `86_400_000` while the dashboard disagrees with it; the subject-copy ID remapper does
+  not rewrite room ids inside any of the four ledgers; eight colocated stylesheets sit outside the
+  Phase 8 font scan; and the fishing rollback lane is still absent from CI.
 
 ### Exit criteria
 

@@ -126,6 +126,7 @@ import {
   type ReviewNextStepKind,
 } from './reviewViewModel';
 import { REVIEW_COMMAND_SCOPES, useReviewActions } from './useReviewActions';
+import { AssistanceSlot } from '@/ui/assistance/AssistanceSlot';
 import './review.css';
 
 /**
@@ -615,6 +616,24 @@ export function ArchaeologistWorkspace({
       feedback={actions.feedback}
       label="Archaeologist review workspace"
     >
+      {/*
+        Phase 19: the review card, and the `device` card with it.
+
+        Two surfaces render here, and the reason is the engine's own vocabulary rather than a
+        taste decision. `archaeologist.due-room` and `archaeologist.low-recall` are about the
+        room under review; `device.due-today` is about reviews waiting across the whole subject,
+        and the review surface is where a learner goes to decide what to review next. The `device`
+        suggestion is therefore rendered *on this surface, filtered to it* rather than in a fifth
+        card somewhere else.
+
+        Two slots rather than one combined slot, because the filter is the engine's `surface`
+        field and merging them would mean a card showing a room suggestion and a device suggestion
+        under one heading that named neither.
+
+        First child, so both sit after the review's own next action and never above it.
+      */}
+      <AssistanceSlot surface="archaeologist" snapshot={snapshot} />
+      <AssistanceSlot surface="device" snapshot={snapshot} />
       {/*
         * The focus fallback is visible text and *not* a second live region. The shell owns
         * exactly one `role="status"`, and adding another here would make a learner hear two

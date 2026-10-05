@@ -64,6 +64,56 @@
     "journal": "Journal",
     "noSubject": "No subject loaded"
   },
+  "assistance": {
+    "title": {
+      "creator": {
+        "missing-branch": "Add a room under the first room",
+        "cross-link": "Connect two rooms that share a tag"
+      },
+      "scribe": {
+        "missing-section": "Add a section to this note",
+        "related-topic": "Point this note at a nearby room",
+        "rubric-hint": "Try a hint for one part of this note"
+      },
+      "archaeologist": {
+        "due-room": "Try reviewing this room",
+        "low-recall": "Try a different prompt for this room"
+      },
+      "fishing": {
+        "navigation-after-miss": "Open the room that question came from"
+      },
+      "device": {
+        "due-today": "See what is due for review"
+      }
+    },
+    "detail": {
+      "graph-no-branch": "The first room in this subject has no sub-topic rooms branching out under it.",
+      "graph-related-tag-unlinked": "Two rooms in this subject carry the same tag, and nothing links them to each other.",
+      "note-missing-required-section": "The note checker listed a required section that this note does not contain.",
+      "note-validation-failed": "The note checker flagged a check that this note does not pass.",
+      "note-adjacent-room-unreferenced": "This room scored zero for cross-references, and there is a neighboring room it could point at.",
+      "note-rubric-criterion-low": "The note checker gave one criterion in this room a score of zero.",
+      "review-due": "This room's review date has arrived.",
+      "review-low-recall": "The last rating you gave for this room was below the passing mark.",
+      "fishing-recall-missed": "A recall question at the pond went unanswered on this visit.",
+      "device-reviews-due": "Rooms in this subject have reviews waiting."
+    },
+    "evidence": {
+      "failed-checks": "Note checks not passed",
+      "missing-sections": "Required sections missing",
+      "repeated-drafts": "Notes saved again with a check still open",
+      "low-recall-ratings": "Ratings below the passing mark",
+      "review-due-rooms": "Rooms due for review",
+      "overdue-days": "Days past due",
+      "overdue-rooms": "Rooms past due",
+      "unlinked-related-rooms": "Related rooms with no link",
+      "low-rubric-criteria": "Check parts scored zero",
+      "fishing-recall-misses": "Pond questions left unanswered",
+      "active-study-days": "Days with activity recorded",
+      "rooms-cleared": "Rooms cleared",
+      "subject-rooms": "Rooms in this subject"
+    }
+  },
   "settings": {
     "title": "Settings",
     "theme": "UI Theme",
@@ -77,7 +127,8 @@
       "theme": "Theme",
       "language": "Language",
       "shortcuts": "Shortcuts",
-      "audio": "Audio"
+      "audio": "Audio",
+      "assistance": "Assistance"
     },
     "audioPanel": "Audio settings",
     "audioDescription": "Choose what plays and how loud it is. Nothing plays until you interact with the page, and every choice here is remembered on this device.",

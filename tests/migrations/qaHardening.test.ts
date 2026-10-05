@@ -128,6 +128,17 @@ const STORAGE_V2_SEAMS: ReadonlyMap<string, string> = new Map([
   [extensionless(join(SRC, 'store', 'shortcutStore.ts')), 'dual-writes the legacy mirror'],
   [extensionless(join(SRC, 'store', 'preferencesStore.ts')), 'shares the persisted-state shape'],
   [extensionless(join(SRC, 'services', 'sessionTracker.ts')), 'dual-writes the legacy mirror'],
+  // Phase 19. The assistance store is the fourth dual-writing store, and it is the same seam as
+  // its three siblings: the legacy key is the rollback mirror, the generation publish is the
+  // primary, and the repository handle comes from `repositorySelection` rather than from a module
+  // that opens a database. Its storage-v2 **adapter** is reached by a dynamic `import`, so a
+  // default build that never selects storage-v2 does not carry those bytes - which is also why
+  // this entry records a store and not a product: the product modules below read a generation
+  // through the repository directly, and this one does not.
+  [
+    extensionless(join(SRC, 'store', 'assistanceStore.ts')),
+    'dual-writes the legacy mirror; lazily imports the record adapter',
+  ],
   // Phase 5. The full-device backup product reads a generation through the
   // repository and verifies archive members through the audited ZIP codec; it is
   // the product's own tree and is not in the application graph, which
@@ -1177,6 +1188,41 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
     for (const key of STORAGE_V2_SEAMS.keys()) {
       expect(existsSync(`${key}.ts`) || existsSync(`${key}.tsx`), key).toBe(true);
     }
+  });
+
+  it('every declared seam carries a justification, so the list cannot be extended silently', () => {
+    // **This was a hole, and it was found by mutating the gate rather than by reading it.**
+    // `STORAGE_V2_SEAMS` is a `Map<path, reason>`, and only `.has()` was ever consulted, so the
+    // second half of every entry was documentation: an entry added as `[path, '']` widened the
+    // permission list and every assertion in this file still passed. A permission list whose
+    // justifications cannot be wrong is a list whose justifications will rot, and the value in
+    // the `Map` is the only place a future seam's *reason* is recorded.
+    //
+    // So the rule is enforced, not merely stated. Three properties:
+    //
+    // 1. Every reason is a non-empty string that says something. A bare `''` is the failure this
+    //    gate exists to make impossible; a single word is rejected too, because `x` is not a
+    //    justification either and it would be the next easy thing to write.
+    // 2. Every reason is a *sentence fragment about that module's role*, checked by refusing a
+    //    file path. A reason that names a path is a second, prose copy of the key, and it drifts
+    //    from the key the moment the file moves.
+    // 3. The list is not empty, so none of the above can pass by having nothing to check.
+    //
+    // **Reasons are deliberately allowed to repeat.** An earlier draft of this gate also required
+    // them to be unique, and mutation proved that rule wrong rather than the data: the three
+    // dual-writing stores legitimately share one reason, because being the fourth name for the
+    // same seam *is* why their reason is the same words. Uniqueness would have forced one of them
+    // to say something false just to pass. What distinguishes Phase 19's entry is that it says
+    // what is different about it - the lazy adapter import - and that difference is now required
+    // to be at least as specific as the shared reason it sits beside, by assertion 2.
+    const reasons = [...STORAGE_V2_SEAMS.values()];
+    for (const [key, reason] of STORAGE_V2_SEAMS) {
+      expect(typeof reason, `${key} has a non-string reason`).toBe('string');
+      expect(reason.trim().length, `${key} has no justification`).toBeGreaterThan(0);
+      expect(reason.trim().split(/\s+/).length, `${key} has a one-word justification`).toBeGreaterThan(2);
+      expect(reason, `${key} names a path in its justification`).not.toMatch(/[\\/]/);
+    }
+    expect(reasons.length, 'the seam list is empty').toBeGreaterThan(0);
   });
 
   it('no module outside the v2 tree statically imports a storage-v2 implementation module', () => {

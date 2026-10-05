@@ -32,6 +32,7 @@ export type DualWriteOperation =
   | 'preferences'
   | 'shortcuts'
   | 'sessions'
+  | 'assistance'
   | 'attachment.bytes';
 
 /** Machine-readable failure codes. No message ever carries record content. */

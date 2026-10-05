@@ -93,12 +93,92 @@ describe('Phase 17 invariants - the subject schema', () => {
     for (const path of [
       'src/services/persistence/v2/records.ts',
       'src/services/persistence/v2/generations.ts',
-      'src/services/persistence/v2/dualWrite.ts',
     ]) {
       if (!existsSync(path)) continue;
       const baseline = baselineBytes(path);
       if (baseline === null) continue;
       expect(readFileSync(path, 'utf8')).toBe(baseline);
+    }
+    // `dualWrite.ts` left this list in Phase 19, and the reason is the subject of the next test
+    // rather than an omission. Listing it here as well would have produced one absolute
+    // assertion and one contradictory one, and the reader would have had to work out which to
+    // believe. The property this list protects - no storage-v2 **store** and no **generation
+    // member** was added - is fully intact: `records.ts` and `generations.ts` are the files that
+    // define those, and both are still checked byte for byte.
+  });
+
+  it('records a change to `dualWrite.ts` as a union member, or nothing at all', () => {
+    // The byte-identity assertion above is absolute, and Phase 19 legitimately had to violate it:
+    // `DualWriteOperation` is a closed union of *report names*, and a fourth dual-writing store
+    // (`src/store/assistanceStore.ts`) needs a name of its own. Reusing an existing member would
+    // have been the alternative, and it would have mislabelled every assistance write as
+    // `sessions` or `preferences` in a recovery screen - which is worse than an honest diff here.
+    //
+    // So this test states what the change is *allowed* to be, rather than dropping the check: the
+    // file must differ from the baseline by nothing except added members of that union. A removed
+    // member, a renamed member, a changed failure code, a changed outcome, and any edit outside
+    // the union all fail here. That is a **tighter** constraint than "unmodified" for the thing
+    // this phase changed, and it keeps the guarantee that matters - no storage-v2 *store* or
+    // *generation member* was added - fully intact, which the two other paths above still assert
+    // byte for byte.
+    //
+    // ## What this gate does **not** detect, measured rather than assumed
+    //
+    // An earlier version of this comment claimed "a reordered union" among the failures. It is
+    // **GREEN** for a reorder, and the reason is structural rather than accidental:
+    //
+    // - {@link unionMembers} collects members into a `Set`, so member order is discarded.
+    // - The byte-identity check is `current.replace("\n  | 'assistance'", '') === baseline`, and
+    //   `String.prototype.replace` without `/g` removes the **first** occurrence wherever it sits.
+    //   Removing the added line from a reordered union therefore reproduces the baseline
+    //   **sequence** exactly, because the pre-existing members never moved relative to each other.
+    //
+    // Measured against this file: moving `| 'assistance'` to the first union position, to the last,
+    // and to the middle are all GREEN; swapping two **pre-existing** members (`'sessions'` with
+    // `'preferences'`, and `'subject.save'` with `'subject.delete'`) is RED, caught by the
+    // byte-identity check. So the gate pins the *relative order of the pre-existing members* and
+    // the *identity of the added ones*, and does not pin where in the union the added member sits.
+    // That is not worth closing: a union's order has no runtime meaning, and pinning a member's
+    // position would make every future addition a question about this list rather than about the
+    // type. The claim in this comment is now exactly the claim the assertions make.
+    //
+    // Phase 17's own fishing modules were verified against the absolute check before Phase 19
+    // existed, and `src/core/progression/canonicalProgression.ts` and
+    // `src/services/persistence/v2/validation.ts` are still checked that way in the suite below.
+    const path = 'src/services/persistence/v2/dualWrite.ts';
+    const baseline = baselineBytes(path);
+    if (baseline === null) return;
+    const current = readFileSync(path, 'utf8');
+
+    const unionMembers = (source: string): Set<string> => {
+      const start = source.indexOf('export type DualWriteOperation =');
+      expect(start, `${path} no longer declares DualWriteOperation`).toBeGreaterThan(-1);
+      const end = source.indexOf(';', start);
+      const body = source.slice(start, end);
+      return new Set([...body.matchAll(/\|\s*'([^']+)'/g)].map((match) => match[1]));
+    };
+
+    const before = unionMembers(baseline);
+    const after = unionMembers(current);
+    // Nothing removed, nothing renamed: `after` is a strict superset of `before`.
+    expect([...before].filter((member) => !after.has(member)), `${path} removed a member`).toEqual([]);
+    expect([...after].filter((member) => !before.has(member)), `${path} added a member`).toEqual([
+      'assistance',
+    ]);
+
+    // And *nothing else* in the file moved. Removing the added line reproduces the baseline
+    // byte for byte, which is the whole claim: the diff is exactly one union member.
+    const addedLines = current.split('\n').filter((line) => !baseline.includes(line));
+    expect(addedLines, `${path} has changed lines other than the added member`).toEqual([
+      "  | 'assistance'",
+    ]);
+    expect(current.replace(`\n  | 'assistance'`, '')).toBe(baseline);
+
+    // The failure-code and outcome vocabularies - the parts a recovery screen reads - are untouched.
+    for (const declaration of ['DualWriteFailureCode', 'DualWriteOutcome']) {
+      expect(current, `${declaration} moved`).toContain(
+        baseline.slice(baseline.indexOf(`export type ${declaration}`), baseline.indexOf(';', baseline.indexOf(`export type ${declaration}`)) + 1),
+      );
     }
   });
 });

@@ -87,6 +87,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 
 import { useSubjectStore } from '@/store/subjectStore';
+import type { SubjectSnapshot } from '@/core/validation/persistence';
+import type { AssistanceFishingFacts } from '@/ui/assistance/AssistanceSlot';
 import { getClearedRooms, pullRecallQuestion } from '@/core/fishing/fishingMechanics';
 import type { SelfCheckPrompt } from '@/core/review/types';
 import type { FishRarity } from '@/core/fishing/fishingTypes';
@@ -170,6 +172,21 @@ export interface UseVillageFishing {
   readonly onRelease: () => void;
   readonly onDecide: (choice: FishingRecallChoice, roomId: string | null) => void;
   readonly onCancelRecall: () => void;
+  /**
+   * Phase 19: what the fishing lane needs to build the engine's `fishing` input, or `null` when
+   * there is nothing to offer.
+   *
+   * `null` until a recall question has actually been missed on this visit, so the fishing card is
+   * not mounted - and therefore not fetched - for the overwhelmingly common case of a learner who
+   * answers everything. `subjectId` is the **session's** subject rather than the loaded snapshot's
+   * active id: the recall material was pulled from the session's subject, and offering navigation
+   * into a different subject's room would be exactly the mismatch this module's header exists to
+   * prevent.
+   */
+  readonly assistance: {
+    readonly snapshot: SubjectSnapshot | null;
+    readonly fishing: AssistanceFishingFacts;
+  } | null;
 }
 
 /**
@@ -191,6 +208,28 @@ export function useVillageFishing(
   const [showRecallModal, setShowRecallModal] = useState(false);
   const [recallQuestionData, setRecallQuestionData] = useState<FishingRecallQuestion | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  /**
+   * The last room whose recall question the learner did not answer, and how many have been missed
+   * on this visit. Phase 19's `AssistanceFishingInput`, minus the subject id, which is read from
+   * the open session where the card is built.
+   *
+   * Component state and deliberately **not** persisted: "the room you missed on this visit" is a
+   * fact about a visit, and a device that remembered it across sessions would keep offering
+   * navigation to a room from a pond visit days ago. The durable half - how many recall questions
+   * have gone unanswered on this device - is the `fishingRecallMiss` signal.
+   */
+  const [missedRecall, setMissedRecall] = useState<{ roomId: string; count: number } | null>(null);
+  /**
+   * The subject snapshot, read as a **selector** rather than through `getState()`.
+   *
+   * `getState()` is right in the callbacks above, where a value is needed at event time and the
+   * callback already closed over everything it depends on. It is wrong here: a `useMemo` that
+   * calls `getState()` is not subscribed, so the memo would keep whichever snapshot it read on its
+   * last run while the store moved on - correct for the frame that produced it and wrong for every
+   * frame after, which is the Phase 17 rule about a cached value read outside the frame it was
+   * captured in.
+   */
+  const subjectSnapshot = useSubjectStore((state) => state.snapshot);
 
   /**
    * The catch's identity for the transaction: canonical catalogue id, rarity, and the cast that
@@ -261,6 +300,10 @@ export function useVillageFishing(
    * the pond closing is not a reason to withdraw a sentence that is still true.
    */
   const endSession = useCallback(() => {
+    // Phase 19: the missed-room fact is a fact about a visit, so it does not survive the pond.
+    // The device-wide `fishingRecallMiss` counter deliberately does - it is what makes a cue
+    // stronger over time rather than identical on every visit.
+    setMissedRecall(null);
     setSessionOpen(false);
     setFishCaughtData(null);
     setCatchContext(null);
@@ -427,6 +470,33 @@ export function useVillageFishing(
   const onDecide = useCallback(
     (choice: FishingRecallChoice, roomId: string | null) => {
       if (fishCaughtData === null || catchContext === null) return;
+      // Phase 19: a room id here means the learner did not recall the answer for that room.
+      // Recorded **inside** this handler and nowhere else, because `bumpSignals` is a counter and
+      // not an idempotent event: recording it from an effect would count every re-render of a
+      // closed dialog, and a double-counted hesitation produces a slightly stronger cue at best.
+      if (roomId !== null && roomId.length > 0) {
+        // A **dynamic** import, and the reason is the Welcome budget rather than taste. This module
+        // is statically reachable from the entry, so one static value import here would put the
+        // assistance store in the entry document's static closure and spend Welcome budget on a
+        // feature whose flag is `false` by default. `vite.config.ts`'s reachability census now
+        // fails the build if that happens, which is what makes this a constraint rather than a
+        // preference - and the response to that failure is to keep the import dynamic.
+        //
+        // The write therefore lands a microtask later than the click. That is visible in one place
+        // and only one: the card region reads `signals` when it mounts, so on the first render
+        // after a miss it may see a zero count, render nothing, and re-render with the suggestion
+        // once the counter arrives. A deferred counter, not a lost event - and the same thing would
+        // happen if a learner dismissed and reopened the panel.
+        void import('@/store/assistanceStore').then((store) => {
+          store.useAssistanceStore.getState().bumpSignals({ fishingRecallMiss: 1 });
+        });
+        // One counter for the whole visit, so a second miss on a different room strengthens the
+        // cue rather than replacing it. Reset when the session closes, below.
+        setMissedRecall((previous) => ({
+          roomId,
+          count: previous === null ? 1 : previous.count + 1,
+        }));
+      }
       setStatus(fishingRewardSentence(keepFishingCatch(catchContext, choice, roomId)));
       setFishCaughtData(null);
       setShowRecallModal(false);
@@ -490,5 +560,20 @@ export function useVillageFishing(
     onRelease,
     onDecide,
     onCancelRecall,
+    assistance: useMemo(() => {
+      if (missedRecall === null) return null;
+      const session = readFishingSession();
+      // No open session means no navigation route to offer, so there is nothing to say. The
+      // same rule the recall dialog's own `recallDestination` uses.
+      if (session === null || session.subjectId.length === 0) return null;
+      return {
+        snapshot: subjectSnapshot,
+        fishing: {
+          subjectId: session.subjectId,
+          lastMissedRoomId: missedRecall.roomId,
+          missedThisVisit: missedRecall.count,
+        },
+      };
+    }, [missedRecall, subjectSnapshot]),
   };
 }
