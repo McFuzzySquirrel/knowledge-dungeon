@@ -51,6 +51,11 @@ import {
   PIXI_POINTER_PREVIEW_PORT,
   PIXI_POINTER_PREVIEW_SCRIPT,
 } from '../e2e/pixi-memory-lane';
+import {
+  DOWNLOAD_DECLARATION,
+  auditJobTransfers,
+  transferMutationResults,
+} from '../e2e/artifact-transfer-wiring';
 
 const REPO_ROOT = process.cwd();
 const PACKAGE_JSON = path.join(REPO_ROOT, 'package.json');
@@ -143,13 +148,19 @@ describe('the canvas-pointer lane is bound and can fail', () => {
 
   it('adds a step, not a build, a download, or a browser install', () => {
     const job = jobBlock(PIXI_POINTER_LANE.ciJob);
-    // One install, and the artifact downloads pinned exactly. This was two and is now three: the
-    // production artifact, the Pixi-flagged one this lane reuses, and the Pixi-fishing-flagged one
-    // the Phase 17 lane added below them. Each is a named step preceded by its own `rm -rf dist`,
-    // and a *fourth* would be an artifact nobody declared — so the count stays exact rather than
-    // becoming a floor. This lane still adds none of them; it reuses the second.
+    // One install, and the artifact downloads held as a property rather than as a count. This
+    // was `toBe(3)`, and it had been `toBe(2)`; Phase 17, Phase 19 and Phase 21 each grew the
+    // real number and each had to amend it here, which is the whole of what
+    // `tests/e2e/artifact-transfer-wiring.ts` was written to end. What this lane needs to know
+    // is unchanged: it adds **none** of the downloads, and reuses the second one. The property
+    // says that structurally - every arriving artifact is a named step that declares itself, in
+    // the declared order, each after its own `rm -rf dist` - so a sixth download and an unnamed
+    // fifth one both fail, and this lane cannot be what introduced either.
     expect([...job.matchAll(/^\s*- run: npx playwright install[^\n]*$/gm)].length).toBe(1);
-    expect([...job.matchAll(/^\s*uses: actions\/download-artifact[^\n]*$/gm)].length).toBe(3);
+    expect(
+      auditJobTransfers(workflow, PIXI_POINTER_LANE.ciJob, DOWNLOAD_DECLARATION),
+      'the pointer lane shares a job whose artifact transfers are not the declared ones',
+    ).toEqual([]);
     // The lane reuses the flagged artifact the memory lane already downloaded.
     expect([...job.matchAll(/^\s*- run: npm run build:web[^\n]*$/gm)].length).toBe(0);
     expect([...job.matchAll(/^\s*- run: npm run build:web:pixi[^\n]*$/gm)].length).toBe(0);
@@ -168,6 +179,33 @@ describe('the canvas-pointer lane is bound and can fail', () => {
     ].map((name) => jobScoped.indexOf(`name: ${name}`));
     expect(order.every((index) => index > -1), 'all six steps are in this job').toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('the transfer property it now asserts can fail, and fails for the right reason', () => {
+    /*
+     * This file's own header states the standard it holds its gates to: "A gate nobody has
+     * seen go red is a gate nobody should trust." Rewriting a working assertion is exactly when
+     * that matters, so the rewrite is checked rather than assumed - and checked in *both*
+     * directions, because the upload mutations land in `web-build` and the assertion above only
+     * reads `browser-smoke`.
+     *
+     * Each mutation must be rejected by the check it names, and must have changed the workflow
+     * at all. The second half is not pedantry: a mutation whose anchor stopped matching returns
+     * the text unchanged, and a loop that only asserted "the audit found nothing" would report
+     * such a mutation as a clean pass - a green proof of nothing, which is the failure this
+     * repository has already found in its own gates.
+     */
+    const results = transferMutationResults(workflow);
+    expect(results.length, 'the mutation table is empty, so nothing was proved').toBeGreaterThanOrEqual(7);
+    for (const result of results) {
+      expect(result.changed, `${result.what}: the mutation changed nothing`).toBe(true);
+      expect(
+        result.caught,
+        `${result.what}: expected \`${result.check}\` to reject it, and the findings were ${
+          result.fired.join(', ') || '(none)'
+        }`,
+      ).toBe(true);
+    }
   });
 
   it('replaces the production dist rather than merging the flagged build into it', () => {

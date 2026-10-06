@@ -181,18 +181,55 @@ describe('the Audio tab', () => {
     expect(screen.queryByRole('tabpanel', { name: 'Theme settings' })).not.toBeInTheDocument();
   });
 
+  /*
+   * Phase 21: this assertion changed, and the reason is recorded rather than the expectation quietly
+   * retyped.
+   *
+   * It asserted the theme radios' exact `textContent`. The radio members now render a `✓` mark for the
+   * checked one, because Phase 21 requires every coloured state to have a non-colour equivalent and the
+   * accent fill is the only signal this picker had. `textContent` therefore now reads
+   * `'✓ NightDeep navy…'`.
+   *
+   * The **property worth asserting** is unchanged and is now asserted in two pieces rather than one:
+   *
+   * 1. the picker's *content* is exactly the three themes, each with its own title and description -
+   *    compared with the mark stripped, because the mark is state, not content;
+   * 2. the checked state is carried by `aria-checked` **and** by a mark that is in the DOM and hidden
+   *    from the accessibility tree, so it is neither invisible to a screen reader nor noisy in its
+   *    announcement.
+   *
+   * A single `textContent` equality could not express (2), and expressing (1) as "text plus possibly a
+   * mark" would have let a second mark slip in unnoticed.
+   */
   it('leaves the theme picker exactly as it found it', () => {
     render(<SettingsModal currentTheme="dark" onThemeChange={() => {}} onClose={() => {}} />);
     fireEvent.click(screen.getByRole('tab', { name: 'Theme' }));
 
-    const themes = within(screen.getByRole('radiogroup', { name: 'UI theme choices' })).getAllByRole(
-      'radio',
-    );
-    expect(themes.map((theme) => theme.textContent)).toEqual([
+    const group = within(screen.getByRole('radiogroup', { name: 'UI theme choices' }));
+    const themes = group.getAllByRole('radio');
+
+    // (1) The content, with the state mark removed.
+    expect(
+      themes.map((theme) => (theme.textContent ?? '').replace('✓', '')),
+    ).toEqual([
       'NightDeep navy UI chrome with balanced contrast for long sessions.',
       'ArcadeA brighter, more saturated UI palette with energetic cyan accents.',
       'AuroraA neon-teal and violet variant with stronger contrast on buttons and headers.',
     ]);
+
+    // (2) The state: one checked member, carrying both channels, and the mark excluded from the
+    // accessibility tree so it is not announced twice.
+    expect(themes.map((theme) => theme.getAttribute('aria-checked'))).toEqual(['true', 'false', 'false']);
+    const marks = document.querySelectorAll('.settings-choice-mark');
+    expect(marks, 'the checked theme has no non-colour mark').toHaveLength(1);
+    expect(marks[0]?.closest('button')).toBe(themes[0]);
+    expect(marks[0]?.getAttribute('aria-hidden'), 'the mark would be announced as well as checked').toBe(
+      'true',
+    );
+
+    // The accessible name is unchanged by the mark, because the mark is `aria-hidden`.
+    expect(group.getByRole('radio', { name: /^Night/ })).toBe(themes[0]);
+
     // The Cozy parchment recipe is not reachable from the picker, and this phase
     // does not make it reachable.
     expect(document.body.textContent).not.toContain('Parchment');

@@ -615,14 +615,45 @@ describe('the HUD is a labelled region on a wide viewport', () => {
     expect(onSelectClass).toHaveBeenCalledTimes(1);
   });
 
-  it('marks the current colour theme with aria-pressed', () => {
+  /*
+   * Phase 21: this assertion changed, and the reason is recorded rather than the expectation retyped.
+   *
+   * It read `getByRole('group')` and then looked for the single `aria-pressed="true"` button. The colour
+   * picker is a **radio group** now: three mutually exclusive choices, so three toggle buttons each claiming
+   * to be independently pressable was the wrong shape, and axe reported `critical: aria-allowed-attr` on the
+   * Settings dialog's equivalent markup because those members carried both `aria-checked` and `aria-pressed`.
+   *
+   * The property worth asserting is the same one - "the current theme is marked, and only the current theme
+   * is" - expressed against the role that actually carries it: `role="radiogroup"`, `role="radio"`,
+   * `aria-checked`. Two things are added rather than replaced, because they are the properties the role adds:
+   * the group is **one tab stop**, and the chosen member carries a `✓` in the DOM so the state survives for a
+   * learner who cannot separate the gold accent from the panel behind it.
+   */
+  it('marks the current colour theme as the one checked radio, and nothing else', () => {
     render(<VillageHud {...HUD_PROPS} colorTheme="colorful" />);
-    const group = screen.getByRole('group', { name: 'Colour theme' });
-    const pressed = within(group)
-      .getAllByRole('button')
-      .filter((button) => button.getAttribute('aria-pressed') === 'true');
-    expect(pressed).toHaveLength(1);
-    expect(pressed[0]?.textContent).toBe('Arcade');
+    const group = screen.getByRole('radiogroup', { name: 'Colour theme' });
+    const themes = within(group).getAllByRole('radio');
+
+    expect(themes.map((theme) => theme.getAttribute('aria-checked'))).toEqual([
+      'false',
+      'true',
+      'false',
+    ]);
+    // `textContent` includes the `✓` because it is a real character in the DOM - which is the point of
+    // putting it there rather than in a `::before` pseudo. The *label* is asserted through the accessible
+    // name, which excludes the `aria-hidden` mark.
+    expect(within(group).getByRole('radio', { checked: true })).toHaveAccessibleName('Arcade');
+
+    // One tab stop, and it is the checked member.
+    expect(themes.filter((theme) => theme.getAttribute('tabindex') === '0')).toHaveLength(1);
+    expect(themes[1]).toHaveAttribute('tabindex', '0');
+
+    // The non-colour half of the state: a mark in the DOM, hidden from the accessibility tree so a screen
+    // reader hears "checked" once rather than "checked, check mark".
+    const marks = group.querySelectorAll('.village-theme-picker__mark');
+    expect(marks, 'the selected theme has no non-colour mark').toHaveLength(1);
+    expect(marks[0]?.closest('button')).toBe(themes[1]);
+    expect(marks[0]?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('makes the quest steps real, labelled buttons rather than clickable spans', async () => {

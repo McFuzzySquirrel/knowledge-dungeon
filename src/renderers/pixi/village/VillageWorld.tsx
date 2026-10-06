@@ -41,15 +41,18 @@ import {
   useRef,
   useState,
   type JSX,
+  type CSSProperties,
 } from 'react';
 
 import { PixiCanvas } from '@/renderers/pixi/runtime/PixiCanvas';
 import { resolveCozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
 import { useWorldQuality } from '@/renderers/pixi/runtime/useWorldQuality';
+import type { CameraState } from '@/renderers/pixi/camera/CameraRig';
 import type { VillageNpcHost, WorldGridPosition } from '@/application/contracts/renderer';
 import { createVillageNpcSnapshot } from '@/application/contracts/villageNpc';
 import type { WorldPointOfInterest, VillageWorldModel } from '@/application/contracts/world';
 import type { VillageStructure } from '@/data/villageLayout';
+import { VILLAGE_ZOOM_STEP } from './createVillageScene';
 import {
   createPixiVillageRenderer,
   type PixiVillageRenderer,
@@ -97,6 +100,24 @@ export interface VillageWorldHandle extends VillageNpcHost {
    * must never be is a tile the renderer did not measure.
    */
   readPlayerGridPosition(): WorldGridPosition | null;
+  /**
+   * Zoom the camera by a delta in zoom units.
+   *
+   * Added in Phase 21 so a screen can offer the village zoom from a control of its own.
+   * The two buttons this component renders are the in-app route; this is the seam a
+   * surface that wants its own zoom placement - a drawer, a settings row - drives, and
+   * it is the same `zoomBy` the buttons use, so there is one zoom.
+   */
+  zoomBy(delta: number): void;
+  /**
+   * The camera as one value, or `null` before the renderer exists.
+   *
+   * Present so a surface can state the current zoom rather than leaving the factor to be
+   * guessed at from the picture. A read, never a subscription: the camera changes every
+   * frame while the learner walks, and a per-frame publish would re-render every
+   * `aria-live` region in the mirror sixty times a second.
+   */
+  readCameraState(): CameraState | null;
 }
 
 const DEFAULT_SURFACE_ID = 'pixi-village-world';
@@ -263,6 +284,11 @@ const VillageWorld = forwardRef<VillageWorldHandle, VillageWorldProps>(function 
       readNpcSnapshot: () =>
         rendererRef.current?.readNpcSnapshot() ?? EMPTY_NPC_SNAPSHOT,
       invokeAction: (invocation) => rendererRef.current?.invokeAction(invocation),
+      // Phase 21's camera members, forwarded like every other one. `readCameraState`
+      // answers `null` while the renderer ref is empty, which is the same "before a world
+      // exists" case `readPoi` answers `null` for.
+      zoomBy: (delta) => rendererRef.current?.zoomBy(delta),
+      readCameraState: (): CameraState | null => rendererRef.current?.readCameraState() ?? null,
     }),
     [],
   );
@@ -270,6 +296,50 @@ const VillageWorld = forwardRef<VillageWorldHandle, VillageWorldProps>(function 
   const onInteract = useCallback(() => {
     rendererRef.current?.triggerInteract();
   }, []);
+
+  /**
+   * Zoom one step in each direction, through the renderer's camera members.
+   *
+   * `VILLAGE_ZOOM_STEP` rather than a number here, so a button press and a wheel notch move
+   * the camera by the same amount: a learner who tries both finds them consistent, and a
+   * learner who only has one of them is not left with a control that behaves differently
+   * from the gesture its own label describes.
+   */
+  const onZoomIn = useCallback(() => {
+    rendererRef.current?.zoomBy(VILLAGE_ZOOM_STEP);
+  }, []);
+
+  const onZoomOut = useCallback(() => {
+    rendererRef.current?.zoomBy(-VILLAGE_ZOOM_STEP);
+  }, []);
+
+  /**
+   * The one button style every control in this component shares.
+   *
+   * Hoisted out of the interact button because there are now three controls and the
+   * `touchTargetMin` floor is a property of *all* of them: an inline copy pasted into a
+   * fourth button is how a 30-pixel control appears in a group that is otherwise keyboard-
+   * and touch-usable. Memoized on the theme so the object identity is stable across renders
+   * and React skips the style diff on every unrelated state change.
+   */
+  const controlStyle: CSSProperties = useMemo(
+    () => ({
+      minWidth: px(theme.touchTargetMin),
+      minHeight: px(theme.touchTargetMin),
+      padding: `${px(theme.space['2'])} ${px(theme.space['4'])}`,
+      fontFamily: theme.fontFamily.body,
+      fontSize: px(theme.fontSize.md),
+      fontWeight: theme.fontWeight.medium,
+      lineHeight: theme.lineHeight.normal,
+      color: cssHex(theme.color.textPrimary),
+      background: cssHex(theme.color.surfaceRaised),
+      border: `${px(theme.border.state)} solid ${cssHex(theme.color.borderControl)}`,
+      borderRadius: px(theme.radius.md),
+      cursor: 'pointer',
+      touchAction: 'manipulation',
+    }),
+    [theme],
+  );
 
   return (
     <div
@@ -317,27 +387,57 @@ const VillageWorld = forwardRef<VillageWorldHandle, VillageWorldProps>(function 
           type="button"
           onClick={onInteract}
           aria-describedby={`${surfaceId}-interact-hint`}
-          style={{
-            minWidth: px(theme.touchTargetMin),
-            minHeight: px(theme.touchTargetMin),
-            padding: `${px(theme.space['2'])} ${px(theme.space['4'])}`,
-            fontFamily: theme.fontFamily.body,
-            fontSize: px(theme.fontSize.md),
-            fontWeight: theme.fontWeight.medium,
-            lineHeight: theme.lineHeight.normal,
-            color: cssHex(theme.color.textPrimary),
-            background: cssHex(theme.color.surfaceRaised),
-            border: `${px(theme.border.state)} solid ${cssHex(theme.color.borderControl)}`,
-            borderRadius: px(theme.radius.md),
-            cursor: 'pointer',
-            touchAction: 'manipulation',
-          }}
+          style={controlStyle}
         >
           Interact (E or Space)
         </button>
         <span id={`${surfaceId}-interact-hint`} style={visuallyHidden}>
           Interacts with the nearest structure or non-player character. You can also press E or Space,
           or tap the village on the canvas.
+        </span>
+
+        {/*
+          Zoom, which Phase 21's audit found to be the one canvas gesture with no DOM route.
+
+          The village zooms from a wheel notch and from a pinch, and both are pointer-only - so
+          before these two buttons the village camera had **no keyboard route at all**, which is
+          exactly the canvas-only shape plan 10.1 forbids. They could not be `WorldAction`s:
+          `VILLAGE_ACTIONS` is pinned to length 1 by
+          `tests/phase12/village-npc-renderer.test.ts` so that it matches the closed
+          `VillageActionId` union in the renderer-neutral contract, and widening it needs a
+          contract change `core-logic-engineer` owns. So they reach the renderer's own camera
+          members, which is where the dungeon's zoom lives too.
+
+          Real `<button>`s, so Enter and Space activate them by the browser's own behaviour, each
+          at the 44 by 44 CSS-pixel minimum, and each with a hidden hint that names the pointer
+          gestures as well - so a learner who discovers zoom by scrolling the page learns that
+          these are the same two controls.
+        */}
+        <button
+          type="button"
+          onClick={onZoomIn}
+          aria-describedby={`${surfaceId}-zoom-in-hint`}
+          data-village-action="zoom-in"
+          style={controlStyle}
+        >
+          Zoom in
+        </button>
+        <span id={`${surfaceId}-zoom-in-hint`} style={visuallyHidden}>
+          Moves the village view closer, one step. You can also scroll the mouse wheel over the
+          village, or pinch the canvas with two fingers.
+        </span>
+        <button
+          type="button"
+          onClick={onZoomOut}
+          aria-describedby={`${surfaceId}-zoom-out-hint`}
+          data-village-action="zoom-out"
+          style={controlStyle}
+        >
+          Zoom out
+        </button>
+        <span id={`${surfaceId}-zoom-out-hint`} style={visuallyHidden}>
+          Moves the village view further away, one step. You can also scroll the mouse wheel over
+          the village, or pinch the canvas with two fingers.
         </span>
       </div>
     </div>

@@ -351,7 +351,7 @@ async function seedReturningLearner(page: Page): Promise<void> {
 
 /** Dismiss the gameplay onboarding modal if it is showing. It carries no audio. */
 async function dismissOnboarding(page: Page): Promise<void> {
-  const dialog = page.getByRole('dialog', { name: 'Gameplay onboarding' });
+  const dialog = page.getByTestId('gameplay-onboarding');
   if ((await dialog.count()) === 0) return;
   await dialog.getByRole('button').last().click();
   await dialog.waitFor({ state: 'detached' });

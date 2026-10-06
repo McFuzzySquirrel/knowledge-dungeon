@@ -71,7 +71,7 @@ import { getBiomePalette, resolveFloorBiome, type FloorBiomeId } from '@/core/bi
 import type { DungeonMap, DungeonRoom } from '@/core/layout/dungeonTypes';
 import type { DungeonRendererCapabilities } from '@/application/contracts/renderer';
 import type { FloorVisibilityModel, PlayerClassId } from '@/application/contracts/world';
-import { createCameraRig, type CameraRig } from '@/renderers/pixi/camera/CameraRig';
+import { createCameraRig, type CameraRig, type CameraState } from '@/renderers/pixi/camera/CameraRig';
 import { createWorldInputController } from '@/renderers/pixi/input/WorldInputController';
 import type { PixiApplication } from '@/renderers/pixi/runtime/createPixiApplication';
 import type { CozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
@@ -298,6 +298,16 @@ export interface DungeonScene extends WorldScene<DungeonRendererCapabilities> {
    * lets a DOM control offer a pickup without having to be the callback's recipient.
    */
   readArtifactSnapshot(): DungeonArtifactSnapshot;
+  /**
+   * The camera as one frozen value: centre, zoom, and viewport.
+   *
+   * Added in Phase 21 for two reasons, both of which are questions a DOM surface or a gate
+   * cannot answer by looking at the picture. A zoom status sentence wants the factor, and
+   * the reduced-motion gate wants to see whether the follow easing is still running - which
+   * is the one claim in this world a boolean cannot establish, because a camera that eases
+   * at a thousandth of its speed still eases.
+   */
+  readCameraState(): CameraState;
 }
 
 /* ── The scene ─────────────────────────────────────────────────────────────── */
@@ -1024,9 +1034,28 @@ export function createDungeonScene(
     checkArtifactCollection();
     checkGuideRange();
 
-    camera.follow(rigX(player.x), rigY(player.y));
-    camera.update(deltaMs);
+    // Camera follow. The zoom tween above is already reduced-motion aware; this is the other
+    // easing in this world, and Phase 21 found it running. A camera that closes 8% of the
+    // remaining distance every frame keeps sliding the whole dungeon across the screen for
+    // as long as the learner holds a direction key, and no travel token expresses that -
+    // `motion.scale` multiplies one object's offset, and this is a viewport-sized
+    // translation.
+    //
+    // `snapTo`, not `follow` plus a lerp of `1`. Both settle on the same frame, but `snapTo`
+    // also writes the follow target, so the next `follow` starts from where the camera
+    // actually is rather than easing toward a point the player left frames ago.
+    if (motion.scale > 0) {
+      camera.follow(rigX(player.x), rigY(player.y));
+      camera.update(deltaMs);
+    } else {
+      camera.snapTo(rigX(player.x), rigY(player.y));
+    }
     applyCamera();
+  }
+
+  /** The camera as one frozen value, for a DOM status sentence and for the motion gate. */
+  function readCameraState(): CameraState {
+    return Object.freeze({ ...camera.getState() });
   }
 
   function onResize(width: number, height: number): void {
@@ -1108,6 +1137,7 @@ export function createDungeonScene(
     activate,
     readState,
     readArtifactSnapshot,
+    readCameraState,
     update,
     onResize,
     setMotionProfile,

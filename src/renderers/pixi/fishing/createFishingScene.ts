@@ -262,6 +262,14 @@ const BOBBER_BOB_PX = 4;
 const FISHING_FLEE_MS = 800;
 /** The bite pulse's radius. The machine owns the proximity *threshold*; this is decoration. */
 const BITE_PULSE_RADIUS_PX = 26;
+/**
+ * The scale a caught fish's bucket glyph settles at.
+ *
+ * Named because Phase 21 reads it from two places - the glyph's birth scale and the pop-in
+ * loop's ceiling - and a literal repeated in both would be the kind of duplication that
+ * leaves a glyph that grows toward a size nothing ever reaches.
+ */
+const BUCKET_GLYPH_RESTING_SCALE = 0.4;
 /** The power meter, in CSS pixels. `FishingScene.createPowerBar`'s 320 x 24. */
 const POWER_BAR_WIDTH = 320;
 const POWER_BAR_HEIGHT = 24;
@@ -951,7 +959,15 @@ export function createFishingScene(
     const glyph = new Graphics();
     glyph.label = `fishing-bucket-fish-${index}`;
     drawFish(glyph, 30, 16, rarityColor(rarity));
-    glyph.scale.set(0);
+    // Placed at its resting size under reduced motion, rather than at zero and grown.
+    //
+    // Phase 21's audit: this pop-in was the pond's one decorative animation still running
+    // under `prefers-reduced-motion`. Seeding the *birth* scale matters rather than only
+    // snapping on the next frame, because `addFishToBucket` runs inside `applyEffects` -
+    // and a `dispatch` can come from `activate`, which a DOM control calls outside the
+    // frame loop. A glyph born at zero and corrected next frame is one frame of a missing
+    // fish on the shore.
+    glyph.scale.set(motion.scale > 0 ? 0 : BUCKET_GLYPH_RESTING_SCALE);
     glyph.position.set(
       bucketX() + ((index % 3) - 1) * 6,
       shoreY - BUCKET_LIFT_PX - 2 - Math.floor(index / 3) * 8,
@@ -1261,12 +1277,26 @@ export function createFishingScene(
     }
   }
 
-  /** The pop-in for a newly caught glyph, on the same cosmetic clock. */
+  /**
+   * The pop-in for a newly caught glyph, on the same cosmetic clock.
+   *
+   * Under reduced motion the glyph is **placed** at its resting size and the loop returns.
+   * The distinction is the whole point: the loop still runs every frame (it is one `for` over
+   * the bucket), so multiplying its step by a small scale would leave a loop that keeps
+   * running - the exact shape Phase 21's exit criterion rejects, and one that passes every
+   * flag-reading test while the trace shows the loop alive. Placing the value instead means
+   * the loop has nothing to advance.
+   */
   function advanceBucketPopIn(deltaMs: number): void {
-    const target = 0.4;
+    if (motion.scale === 0) {
+      for (const glyph of bucketFish) glyph.scale.set(BUCKET_GLYPH_RESTING_SCALE);
+      return;
+    }
     for (const glyph of bucketFish) {
-      if (glyph.scale.x >= target) continue;
-      glyph.scale.set(Math.min(target, glyph.scale.x + (deltaMs / 250) * target));
+      if (glyph.scale.x >= BUCKET_GLYPH_RESTING_SCALE) continue;
+      glyph.scale.set(
+        Math.min(BUCKET_GLYPH_RESTING_SCALE, glyph.scale.x + (deltaMs / 250) * BUCKET_GLYPH_RESTING_SCALE),
+      );
     }
   }
 

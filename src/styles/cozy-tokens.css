@@ -67,6 +67,7 @@
   --control-selected-bg: #8f4316;
   --control-selected-text: #fdf6e8;
   --control-selected-border: #f5c563;
+  --control-text-on-accent: #191410;
   --text-title: #f5c563;
   --cozy-s-radius-none: 0px;
   --cozy-s-radius-sm: 6px;
@@ -166,6 +167,7 @@
   --control-selected-bg: #8f4316;
   --control-selected-text: #fdf6e8;
   --control-selected-border: #f5c563;
+  --control-text-on-accent: #191410;
   --text-title: #f5c563;
 }
 
@@ -221,6 +223,7 @@
   --control-selected-bg: #8f4316;
   --control-selected-text: #fdf6e8;
   --control-selected-border: #f5c563;
+  --control-text-on-accent: #190d12;
   --text-title: #f5c563;
 }
 
@@ -276,6 +279,7 @@
   --control-selected-bg: #8f4316;
   --control-selected-text: #fdf6e8;
   --control-selected-border: #ffc87a;
+  --control-text-on-accent: #1c1310;
   --text-title: #ffc87a;
 }
 
@@ -332,6 +336,7 @@
   --control-selected-bg: #241a11;
   --control-selected-text: #fdf8ee;
   --control-selected-border: #fdf8ee;
+  --control-text-on-accent: #fdf8ee;
   --text-title: #7f370c;
 }
 
@@ -390,6 +395,7 @@
   --control-selected-bg: #6e2f0b;
   --control-selected-text: #ffffff;
   --control-selected-border: #ffd782;
+  --control-text-on-accent: #000000;
   --text-title: #ffd782;
 }
 
@@ -439,6 +445,7 @@
   --control-selected-bg: #6e2f0b;
   --control-selected-text: #ffffff;
   --control-selected-border: #ffd782;
+  --control-text-on-accent: #000000;
   --text-title: #ffd782;
 }
 }
@@ -489,6 +496,7 @@
   --control-selected-bg: #2b2118;
   --control-selected-text: #ffffff;
   --control-selected-border: #ffffff;
+  --control-text-on-accent: #ffffff;
   --text-title: #7a2c00;
 }
 
@@ -537,6 +545,7 @@
   --control-selected-bg: #2b2118;
   --control-selected-text: #ffffff;
   --control-selected-border: #ffffff;
+  --control-text-on-accent: #ffffff;
   --text-title: #7a2c00;
 }
 }

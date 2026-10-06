@@ -12,6 +12,7 @@ import { deriveGraphHierarchy } from '@/core/graph';
 import { isBossFloor } from '@/core/layout/bossRooms';
 import { isElectronAvailable } from '@/services/electronBridge';
 import { ToastStack } from '@/ui/components/ToastStack';
+import { AccessibleDialog } from '@/ui/components/AccessibleDialog';
 import { Markdown } from '@/ui/utils/markdown';
 import {
   composeNoteSections,
@@ -312,8 +313,27 @@ export function NoteEditorModal(): JSX.Element | null {
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Note editor">
-      <div className={`modal note-editor-modal${expanded ? ' note-editor-modal--expanded' : ''}`}>
+    <div className="modal-backdrop">
+      {/*
+        Phase 21. The `role="dialog" aria-modal="true"` was on the **backdrop** here, and the dialog
+        element inside it carried neither - so the accessibility tree's only dialog was an empty
+        scrim with no name, no focus trap, no initial focus, no Escape and no restoration. A keyboard
+        learner editing a note could Tab into the page behind, and closing the editor dropped focus at
+        the top of the document.
+
+        `onEscape` is `close`, the store's own `closeNoteEditor`, deliberately **not** a guard on
+        `dirty`: an unsaved-draft confirmation is a real product decision and this phase is not where
+        to invent one. The editor is the one dialog on this surface where Escape-as-cancel could lose
+        work, and `ScribeEncounterDialog` - the replacement this component's header describes - also
+        treats Escape as close. What is fixed here is that Escape now does the one thing the markup
+        claimed it could.
+      */}
+      <AccessibleDialog
+        className={`modal note-editor-modal${expanded ? ' note-editor-modal--expanded' : ''}`}
+        active
+        onEscape={close}
+        label="Note editor"
+      >
         <h2>Encounter: {room.topic}</h2>
         <div className="note-editor-toolbar">
           <button
@@ -777,7 +797,7 @@ export function NoteEditorModal(): JSX.Element | null {
                 : 'Save draft'}
           </button>
         </div>
-      </div>
+      </AccessibleDialog>
     </div>
   );
 }

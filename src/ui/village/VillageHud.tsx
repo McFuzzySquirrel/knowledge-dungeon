@@ -48,7 +48,14 @@
  * together. The cost is that the slide-in transition no longer runs on open, which
  * is motion that carried no information.
  */
-import { useCallback, useId, useState, type MouseEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useId,
+  useRef,
+  useState,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 
 import { PLAYER_CLASSES } from '@/game/systems/playerClasses';
 import { QUEST_LABELS, QUEST_ORDER, type QuestStep } from '@/store/sessionStore';
@@ -118,9 +125,28 @@ export interface VillageHudProps {
 /**
  * The colour-theme control.
  *
- * Kept byte-for-byte in behaviour: three buttons, the current one carrying
- * `className="active"`, which the legacy stylesheet paints. This phase does not
- * restyle themes, and the Cozy work for them is Phase 8's existing layer.
+ * ## Why this is a radio group and not three toggle buttons
+ *
+ * Phase 21. This control was three buttons each carrying `aria-pressed`, so a screen reader
+ * announced three independent toggles when the fact is one choice out of three. It is a
+ * `radiogroup` now: one tab stop for the whole set, arrows to move, and `aria-checked` on the
+ * member that is chosen. That is the ARIA pattern for "exactly one of these", and it is what makes
+ * the set announce as one thing rather than three.
+ *
+ * ## Roving tabindex, and why the arrows both move *and* select
+ *
+ * A radio group has a single tab stop. Exactly one member carries `tabindex=0` - the checked one,
+ * or the first when none is checked - and the rest carry `tabindex=-1`. Arrow keys move focus
+ * between members and select as they go, which is the behaviour `role="radio"` promises and which a
+ * plain button cannot: `Space` and `Enter` on a native button already activate it, so the only
+ * keyboard contract this control has to write is the arrow movement and the roving index.
+ *
+ * ## The non-colour half of "which theme is on"
+ *
+ * Three, deliberately redundant, because no one of them is sufficient alone: `aria-checked` for a
+ * screen reader, a `✓` mark in the DOM for a learner who cannot separate the gold accent from the
+ * panel behind it, and the underline the stylesheet adds to `.active`. Removing colour is what
+ * Phase 21 requires, and leaving only the colour is what it forbids.
  */
 function ThemePicker({
   current,
@@ -134,21 +160,70 @@ function ThemePicker({
     { id: 'colorful', label: 'Arcade' },
     { id: 'aurora', label: 'Aurora' },
   ];
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const selectedIndex = themes.findIndex((theme) => theme.id === current);
+  // One tab stop, and it is never -1 for the whole group: with nothing checked the first member
+  // takes the stop, so the group is always reachable by Tab.
+  const rovingIndex = selectedIndex >= 0 ? selectedIndex : 0;
+
+  /** Move focus to a member, and check it. Arrow keys in a radio group do both. */
+  const selectAt = useCallback(
+    (index: number) => {
+      const bounded = ((index % themes.length) + themes.length) % themes.length;
+      const theme = themes[bounded];
+      if (theme === undefined) return;
+      onChange(theme.id);
+      // After `onChange` the control re-renders with this member checked, so focusing it now
+      // leaves focus and `aria-checked` agreeing.
+      buttonRefs.current[bounded]?.focus();
+    },
+    [onChange],
+  );
+
   return (
-    <div className="village-theme-picker" role="group" aria-label="Colour theme">
-      {themes.map((theme) => (
-        <button
-          key={theme.id}
-          type="button"
-          className={current === theme.id ? 'active' : ''}
-          // `aria-pressed` is the non-colour half of "which theme is on". The
-          // `active` class is decoration and is not what a screen reader reads.
-          aria-pressed={current === theme.id}
-          onClick={() => onChange(theme.id)}
-        >
-          {theme.label}
-        </button>
-      ))}
+    <div className="village-theme-picker" role="radiogroup" aria-label="Colour theme">
+      {themes.map((theme, index) => {
+        const checked = theme.id === current;
+        return (
+          <button
+            key={theme.id}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            ref={(node) => {
+              buttonRefs.current[index] = node;
+            }}
+            tabIndex={index === rovingIndex ? 0 : -1}
+            className={checked ? 'active' : ''}
+            onClick={() => onChange(theme.id)}
+            onKeyDown={(event) => {
+              // Arrow keys move and select. `Home` and `End` are the two the pattern also
+              // allows, and they are cheap once the index arithmetic is written.
+              let next: number | null = null;
+              if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = index + 1;
+              else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = index - 1;
+              else if (event.key === 'Home') next = 0;
+              else if (event.key === 'End') next = themes.length - 1;
+              if (next === null) return;
+              // The arrows move focus inside the group and are not page scrolling.
+              event.preventDefault();
+              selectAt(next);
+            }}
+          >
+            {/*
+              The check mark is `aria-hidden` because `aria-checked` already says it, and a screen
+              reader that read both would say "checked Night check mark" every time it passed the
+              control. It is here for a learner looking at the screen.
+            */}
+            {checked ? (
+              <span className="village-theme-picker__mark" aria-hidden="true">
+                ✓
+              </span>
+            ) : null}
+            {theme.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -376,6 +451,26 @@ export function VillageHud(props: VillageHudProps): ReactNode {
           type="button"
           className="village-action-btn"
           onClick={onSettingsClick}
+          /*
+           * Phase 21: an explicit `aria-label` on this one launcher, and the reason is not cosmetic.
+           *
+           * Its accessible name was already "Settings" - the platform excludes the `aria-hidden` gear glyph
+           * from the computation - so nothing about what a screen reader says has changed. What changed is
+           * that the name is **stated** rather than derived from a decorative glyph that sits *before* the
+           * label in the DOM.
+           *
+           * That matters because the control is the thing focus is restored to when the Settings dialog
+           * closes, and `tests/e2e/a11yAudit.spec.ts`'s focus-restoration probe identifies the opener by
+           * `aria-label` **or** by trimmed `textContent`. With only the glyph-plus-text, the probe reads
+           * `"⚙ Settings"` and cannot match `"Settings"` - so a dialog that genuinely restored focus was
+           * reported as one that did not.
+           *
+           * `aria-label` also fails nothing here: axe's `label-content-name-mismatch` requires the visible
+           * text to be contained in the accessible name, and "Settings" is contained in "Settings". The same
+           * treatment is deliberately **not** given to the Data launcher, whose probe is not part of any
+           * dialog's focus-restoration contract, and giving it one would be an edit nobody asked for.
+           */
+          aria-label="Settings"
           style={{ fontSize: 11, opacity: 0.7 }}
         >
           <span aria-hidden="true">⚙</span> Settings

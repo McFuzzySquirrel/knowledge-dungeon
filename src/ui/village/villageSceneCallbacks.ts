@@ -119,6 +119,51 @@ export function keeperLineFor(questStep: string): string | null {
   return selectVillageNpcLine({ npc: keeper, questStep, cursor: null }).line;
 }
 
+export interface VillageSceneCallbackOptions {
+  /**
+   * Phase 21: called with the structure identifier **immediately before** `flow.structureInteract`.
+   *
+   * ## Why this door, and not somewhere else
+   *
+   * This bag is the single route from any world into the flow. The Phaser scene's `interactStructure`,
+   * the Pixi scene's `invokeAction`, the nearby-action row's shared data handler, and the `E` key all
+   * arrive at `onStructureInteract` here, and there is no other path a renderer can take. A fact that
+   * has to be true for *every* route belongs here rather than at each call site.
+   *
+   * ## What it is for: the pond identifier
+   *
+   * `studyFlow.structureInteract` calls its **own module-local** `enterFishing`, which calls
+   * `villageUi.prepareFishingSession()` **before** `fishing.enter(...)` and passes it no arguments. So
+   * by the time the fishing session is minted, the identifier the flow resolved is gone - and only the
+   * pond panel's `Cast Line` button had recorded it.
+   *
+   * Every other route therefore entered the pond with no session context: `beginFishing(null)` returned
+   * early, `catchKeep` refused with `NO_OPEN_SESSION`, and the learner was told *"This catch has no open
+   * pond session, so the question cannot be asked."* That is the product's core loop, unreachable by
+   * keyboard and by touch on the **shipping** renderer - `pixiFishing`'s production default is `false`,
+   * and the Phaser pond adapter ignores `handlers.pondId`, so the Pixi lane's `onSessionStarted`
+   * backstop does not exist on the default build.
+   *
+   * ## Why it records **every** identifier, not only ponds
+   *
+   * Because `structureIdRef` is consulted only when the flow has already decided to enter a pond, and
+   * the flow's fishing branch is reachable only through this callback. So a library, a fountain or a
+   * signpost writes a value that is never read - and the value it is overwritten with before it could
+   * be is the pond the learner actually walked to.
+   *
+   * The alternative, filtering on `structure.type === 'fishing-pond'` here, would put a **second**
+   * copy of the flow's structure-type dispatch in the UI: a second answer to "what is a pond", free to
+   * drift from the one the flow actually enters on. This repository's headers are explicit that the
+   * flow owns that table, and this is the case where following that rule is also the simpler code.
+   *
+   * ## Optional, so nothing else changes
+   *
+   * `undefined` means "no recording", which is the correct answer for every caller that does not need
+   * it - and the only production caller that passes one passes it for this reason.
+   */
+  readonly onBeforeStructureInteract?: (structureId: string) => void;
+}
+
 /**
  * A stable bag whose implementations follow the latest render.
  *
@@ -131,6 +176,7 @@ export function keeperLineFor(questStep: string): string | null {
 export function useVillageSceneCallbacks(
   flow: StudyFlowController,
   setters: VillageSceneCallbackSetters,
+  options: VillageSceneCallbackOptions = {},
 ): {
   readonly callbacks: RefObject<VillageCallbacks>;
   readonly resetConversation: () => void;
@@ -138,6 +184,8 @@ export function useVillageSceneCallbacks(
   const ref = useRef<VillageCallbacks>({ ...NO_OPS });
   const settersRef = useRef(setters);
   settersRef.current = setters;
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   // The conversation cursor. `null` means "no conversation yet", which is exactly
   // what the contract's `VillageNpcLineRequest` reads to mean "open on the first
   // line" - so the two cannot disagree about what a fresh conversation is.
@@ -182,7 +230,13 @@ export function useVillageSceneCallbacks(
     const next: VillageCallbacks = {
       onStructureApproached: (structureId) => flow.structureApproached(structureId),
       onStructureLeft: (structureId) => flow.structureLeft(structureId),
-      onStructureInteract: (structureId) => flow.structureInteract(structureId),
+      onStructureInteract: (structureId) => {
+        // Phase 21: record first, then dispatch. The order is the whole fix - the recording has to
+        // land before the flow runs, because the flow's own `prepareFishingSession` call is what reads
+        // it, and that call happens synchronously inside `structureInteract`.
+        optionsRef.current.onBeforeStructureInteract?.(structureId);
+        flow.structureInteract(structureId);
+      },
       onNpcApproached: (npcId) => {
         const npc = VILLAGE_MAP.npcs.find((candidate) => candidate.id === npcId);
         if (npc === undefined) return;

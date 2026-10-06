@@ -64,6 +64,12 @@ import { STORAGE_KEYS } from '@/services/persistence/subjectPersistence';
 import { CURRENT_BUILD_TEST_FILE, SUPPORT_MATRIX } from './support-matrix';
 import { PIXI_MEMORY_TEST_FILE } from './pixi-memory-lane';
 import {
+  DOWNLOAD_DECLARATION,
+  UPLOAD_DECLARATION,
+  auditJobTransfers,
+  transferMutationResults,
+} from './artifact-transfer-wiring';
+import {
   approachBursts,
   approachKey,
   burstMsFor,
@@ -1783,35 +1789,66 @@ describe('fishing lane CI wiring (ci.yml)', () => {
     expect(ciStepFor(buildJob, PHASE17_BUILD_STEP)).not.toContain('playwright');
   });
 
-  it('counts every artifact this run produces, so a fourth download or upload is a failing edit', () => {
+  it('every artifact crossing a job boundary is a named, declared, ordered, discard-backed transfer', () => {
     /*
-     * The count is the assertion: every artifact arriving in `browser-smoke` and every artifact
-     * leaving `web-build` is a *named step*, so no artifact can show up unannounced. Adding this
-     * lane made both counts one larger — a third download and a fourth upload — and each count is
-     * asserted against the names rather than against a bare number, so a count that is satisfied by
-     * an unnamed download fails here.
+     * This test was `toBe(3)` over the downloads and `toEqual([...])` over a four-entry upload
+     * list, and both had been amended once before for the same reason - Phase 17 grew each by
+     * one when this lane arrived. Phase 19 and Phase 21 grew them again, which is what the
+     * Phase 21 audit inherited as six red files.
+     *
+     * So both are replaced by the property they were standing in for, stated once in
+     * `tests/e2e/artifact-transfer-wiring.ts`: **every artifact arriving in this job or
+     * leaving the build job is a named step that declares which artifact it moves, it is one of
+     * the declared transfers, it runs in the declared order, and every download after the first
+     * is preceded by its own `rm -rf dist`.** That is strictly stronger than the count it
+     * replaces - a count is satisfied by an anonymous download step, which is the defect that
+     * would actually matter in this job, where several working gates find a step *by name*.
+     *
+     * The lane-specific claims are untouched and still asserted in the three tests above: this
+     * lane's own discard and download, its six-step ordering, and the fact that its build
+     * appears exactly once in the workflow. What this test adds to them is the whole-run
+     * statement, so the property a fourth flagged artifact has to satisfy is stated once rather
+     * than reconstructed from four files.
      */
-    const downloads = [...smokeJob.matchAll(/^\s*uses: actions\/download-artifact@v4[^\n]*$/gm)];
-    expect(downloads.length).toBe(3);
-    for (const artifact of ['web-artifact', 'pixi-web-artifact', PHASE17_ARTIFACT_NAME]) {
-      expect(smokeJob, `${artifact} is not downloaded in ${CI_BROWSER_JOB}`).toContain(`name: ${artifact}`);
-    }
-    const uploads = [...buildJob.matchAll(/- name: ([^\n]+)\n\s+uses: actions\/upload-artifact@v4/g)].map(
-      (match) => match[1]?.trim(),
-    );
-    expect(uploads).toEqual([
-      'Upload build metadata',
-      'Upload the shared production web artifact',
-      'Upload the Pixi-flagged web artifact',
-      PHASE17_UPLOAD_STEP,
-    ]);
-    // The release artifact is uploaded exactly once, so a flagged upload can never be read as it.
+    expect(
+      auditJobTransfers(ciWorkflow, CI_BROWSER_JOB, DOWNLOAD_DECLARATION),
+      `${CI_BROWSER_JOB} moves something other than the declared downloads`,
+    ).toEqual([]);
+    expect(
+      auditJobTransfers(ciWorkflow, CI_BUILD_JOB, UPLOAD_DECLARATION),
+      `${CI_BUILD_JOB} uploads something other than the declared artifacts`,
+    ).toEqual([]);
+    // The release artifact is uploaded exactly once, so a flagged upload can never be read as
+    // it. A count of *one name*, which is not a count that has to grow.
     expect(ciWorkflow.split('Upload the shared production web artifact').length - 1).toBe(1);
     // The bundle budget runs against the flagged build too: the pond is a lazy chunk the release
     // path does not ship, and a chunk that arrives oversized has to fail in the job that produced
     // it rather than in whichever lane looks at it first.
     expect(buildJob).toContain(`npm run ${FISHING_LANE.buildScript}`);
     expect(ciWorkflow.split(`npm run ${FISHING_LANE.buildScript}`).length - 1).toBe(1);
+  });
+
+  it('rejects every way that transfer property has been got wrong, in both directions', () => {
+    /*
+     * The gate above is only a gate if it can go red, and this is the evidence that it can. It is
+     * not a formality: the counts this replaced were, in the end, *stronger* at rejecting the
+     * four mutations that removed them than they were at describing the wiring - they would have
+     * rejected a sixth artifact for the wrong reason, and they would have accepted an unnamed
+     * fifth one without a murmur. The four mutations here are the four ways this wiring has
+     * actually been got wrong, and each names the check that has to reject it.
+     */
+    const results = transferMutationResults(ciWorkflow);
+    // Not empty, so the loop below cannot pass by having nothing to prove.
+    expect(results.length).toBeGreaterThanOrEqual(7);
+    for (const result of results) {
+      expect(result.changed, `${result.what}: the mutation changed nothing`).toBe(true);
+      expect(
+        result.caught,
+        `${result.what}: expected \`${result.check}\` to reject it, and the findings were ${
+          result.fired.join(', ') || '(none)'
+        }`,
+      ).toBe(true);
+    }
   });
 
   it('uploads the lane evidence through the existing allowlist, and nothing else leaves the runner', () => {

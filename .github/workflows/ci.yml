@@ -293,6 +293,43 @@ jobs:
             artifacts/web-artifact-manifest-pixi-fishing.json
           if-no-files-found: error
           retention-days: 14
+      # Phase 19 assistance-flagged artifact, and the fourth artifact this run produces.
+      #
+      # `VITE_ADAPTIVE_ASSISTANCE` is a build-time flag like the three above, and its browser lane
+      # had **no** artifact until this step - Phase 19 deferred it to Phase 21 on 2026-10-05 and
+      # authorised it on 2026-10-06, on the grounds that Phase 21 runs the accessibility audit
+      # anyway. Every property here is the one the three blocks above already have:
+      #
+      # - It runs strictly AFTER the production artifact has been recorded, verified and uploaded.
+      #   Nothing downstream reads this runner's `dist` - the browser jobs download the uploaded
+      #   artifacts - so this rebuild cannot be mistaken for the artifact that shipped.
+      # - It records and uploads no second **production** artifact. The production default stays
+      #   `VITE_ADAPTIVE_ASSISTANCE` absent, so `check:budget:welcome` below still measures the
+      #   default. This is a flagged build that exists to be measured and then discarded, and its
+      #   identity goes to its OWN manifest, so it can never overwrite the release identity.
+      # - It installs no browser, exactly like the build job's other three flagged builds.
+      #
+      # `vite.config.ts` already refuses to emit a build whose assistance lane modules are not
+      # fetchable, so a dropped flag fails this step rather than producing a lane that verifies
+      # nothing - and `scripts/require-assistance-lane-artifact.mjs` reads the compiled flag constant
+      # out of the emitted bytes before Playwright starts, which is the check that would catch a
+      # lane pointed at the wrong `dist`.
+      - name: Build the Phase 19 assistance-flagged artifact
+        run: npm run build:web:assistance
+      - run: npm run check:bundle-size
+      - name: Record the assistance-flagged artifact identity
+        run: npm run record:web-artifact:assistance
+      - name: Verify the assistance-flagged artifact identity
+        run: npm run verify:web-artifact:assistance
+      - name: Upload the assistance-flagged web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: assistance-web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest-assistance.json
+          if-no-files-found: error
+          retention-days: 14
 
   browser-smoke:
     name: Browser Smoke (Chromium Matrix)
@@ -496,6 +533,80 @@ jobs:
         run: npm run verify:web-artifact:pixi-fishing
       - name: Run the Pixi fishing lane
         run: npm run test:e2e:fishing:recorded
+      # Phase 19 assistance lane, on a fourth flagged artifact, in this same job.
+      #
+      # It needs a *third* flagged artifact, so it is fetched here rather than built, and the
+      # fetch is preceded by its own discard for exactly the reason the two above exist: the
+      # download action extracts **into** the working directory, so a fourth fetch merged into the
+      # tree the third left behind would be a union of two flagged builds that is neither of them.
+      # The identity check would catch it, and a red run is a worse outcome than a correct one, so
+      # the tree is replaced explicitly.
+      #
+      # Two lanes and two steps, not one, because a lane that proves presence and a lane that
+      # proves absence are separate claims about separate artifacts and a test's premise must be
+      # true of the artifact it runs against. The flagged lane observes a real suggestion card -
+      # the first browser evidence Phase 19's learner-facing half ever had - and the default lane
+      # drives the identical journey and observes nothing, which is what makes the first one a
+      # statement about a gate rather than about a card that is always on screen.
+      #
+      # The step is not exempt from failing. A lane that reported green while observing nothing would
+      # be the Phase 17 dead lane in new clothing, and `scripts/require-assistance-lane-artifact.mjs`
+      # exists to stop it before Playwright starts. The wording of this block deliberately avoids
+      # naming the exemption key, because several wiring gates assert on the raw text of this job -
+      # and it equally deliberately avoids the literal names of the download and browser-install
+      # actions, because `tests/e2e/fishing-lane.test.ts` slices a step's block **including the
+      # comments above it** and then asserts that the Phase 17 lane's own step contains neither.
+      # A comment naming those actions inside a neighbouring step's slice reads as a violation.
+      - name: Discard the fishing dist before the assistance download
+        run: rm -rf dist
+      - name: Download the assistance-flagged web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: assistance-web-artifact
+          path: .
+      - name: Verify the assistance-flagged artifact identity
+        run: npm run verify:web-artifact:assistance
+      - name: Run the flagged assistance lane
+        run: npm run test:e2e:assistance:recorded
+      - name: Discard the assistance dist before the production re-download
+        # The mirror image, and the half that cannot be inferred. This lane previews the
+        # **production** artifact, so the production tree is downloaded back and its own identity
+        # re-verified first: a lane claiming "the card is absent" while pointed at a flagged build
+        # would describe something other than what it claims, which is the same shape of defect the
+        # discards above exist to prevent.
+        run: rm -rf dist
+      - name: Download the shared production artifact for the absence lane
+        uses: actions/download-artifact@v4
+        with:
+          name: web-artifact
+          path: .
+      - name: Verify the production artifact identity again
+        run: npm run verify:web-artifact
+      - name: Run the default-artifact assistance lane
+        run: npm run test:e2e:assistance:default:recorded
+      # Phase 21 automated accessibility suite.
+      #
+      # Placed here because the artifact and the single Chromium install both already exist, so a
+      # job of its own would add cost, a second `npm ci`, and a second production build for no new
+      # evidence. It runs the **`runnable` scope**, not the plan's `host` scope and not `matrix`:
+      # "everything this runner could have done on this host, it did, and it passed". That is the
+      # only claim a single-OS job can honestly make, and the runner prints every cell it could not
+      # run together with the reason - `compat-webkit` is macOS-only, `compat-edge` is Windows-only -
+      # so the coverage block in this job's log is not a partial matrix presented as a complete one.
+      #
+      # `test:a11y:complete` is deliberately NOT wired here. It exits 3 on a single-host runner by
+      # construction, because the five manual physical-device gates - ChromeVox, a physical
+      # Chromebook, a touch-platform screen reader, a real macOS Safari, a real desktop profile - need
+      # hardware no runner has. A permanently-red PR gate carries no information, which is the same
+      # failure as a permanently-green one. The complete-matrix gate is the phase exit criterion and
+      # is run per host by a person, with the absences in its output.
+      #
+      # It gates. `tests/phase21/infraA11ySuite.test.ts` asserts that this step is not exempt from
+      # failing and that no CI step runs the complete scope, so a regression to a warning cannot
+      # land quietly. The wording avoids naming the exemption key, because several wiring gates
+      # assert on the raw text of this job whose comments are part of what they check.
+      - name: Run the Phase 21 automated accessibility audit
+        run: npm run test:a11y:runnable
       - name: Upload sanitized browser-smoke evidence
         # Allowlist: sanitized per-run JSON evidence only, on the same terms as the
         # storage-v2 and compatibility lanes. Nothing else leaves the runner, and

@@ -765,8 +765,8 @@ Phase 24 Remove Phaser and legacy renderer
 | 17 | complete | Rebuild fishing in Pixi. |
 | 18 | complete | Wire and redesign study statistics. |
 | 19 | complete | Add local adaptive assistance. |
-| 20 | verified | Redesign private share cards. |
-| 21 | not-started | Complete accessibility and responsive verification. |
+| 20 | complete | Redesign private share cards. |
+| 21 | complete | Complete accessibility and responsive verification. |
 | 22 | not-started | Complete performance, memory, and offline hardening. |
 | 23 | not-started | Cut over production and complete the soak. |
 | 24 | not-started | Remove Phaser and temporary migration infrastructure. |
@@ -7612,7 +7612,7 @@ Phase 20.
 
 ## Phase 20: Private Share Cards
 
-**Status:** verified
+**Status:** complete
 **Objective:** Retain private progress sharing with redesigned, privacy-conscious cards.
 
 ### Prerequisites
@@ -7669,8 +7669,11 @@ Run the common gate.
 
 ### Verification evidence
 
-Recorded on 2026-10-06. `not-started` -> `in-progress` -> `verified`. Committed locally; **not pushed** and
-**not deployed** - no deployment was performed or authorized. **Acceptance pending.**
+Recorded on 2026-10-06. `not-started` -> `in-progress` -> `verified` -> `complete`. Committed as `35694d9`
+and **not pushed**; **not deployed** - no deployment was performed or authorized. **Accepted by the
+maintainer on 2026-10-06**, who also ruled that `playwright.config.ts` is left byte-identical to `HEAD`
+and the two Pixi village walk tests' ~53s intrinsic variance against a 180s timeout is carried to
+Phase 22 rather than fixed by raising the timeout in this phase.
 
 #### Baseline
 
@@ -7902,7 +7905,7 @@ Phase 21.
 
 ## Phase 21: Accessibility and Responsive-Device Audit
 
-**Status:** not-started
+**Status:** complete
 **Objective:** Prove the entire application is operable across the approved web OS/browser/device matrix, including Chromebook and tablet, without canvas-only behavior.
 
 ### Prerequisites
@@ -7968,6 +7971,306 @@ npm run test:e2e -- --project=tablet-landscape
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-10-06. `not-started` -> `in-progress` -> `verified` -> `complete`. Committed and pushed
+to `origin/main`; **not deployed** - no deployment was performed or authorized.
+
+**Accepted by the maintainer on 2026-10-06.** The acceptance covers the phase's **automated** criteria.
+It does **not** discharge the five manual gates: physical Chromebook, physical tablet, ChromeVox, touch
+screen reader, and real Safari/Edge remain **UNVERIFIED**, and the four macOS/Windows engine-family pairs
+remain **NOT MET**. Rather than being softened into a pass, they are carried forward as **release
+blockers for Phase 23**, which must not claim a release while they are open. The discharge kit exists to
+close them.
+
+#### Baseline
+
+Green at `35694d9` before any Phase 21 change: `npm run lint` 0, `npm run typecheck` 0, `npm test`
+**316 files / 6626 tests**, `npm run build:web` 0, `npm run check:bundle-size` **5.42 MB / 167 files**,
+`npm run check:budget:welcome` **266.32 KiB / 300.00 KiB**, `npm run test:licenses` PASSED,
+`npm run test:privacy` **6 files / 34 tests**. No baseline repair was needed.
+
+`npm run test:a11y` **did not exist**. Creating it is a deliverable of this phase.
+
+#### Commands
+
+```text
+npm run lint                                        exit 0
+npm run typecheck                                   exit 0
+npm test                                            329 files / 6928 tests passed
+npm run build:web                                   exit 0
+npm run check:bundle-size                           5.43 MB / 167 files
+npm run check:budget:welcome                        267.86 KiB / 300.00 KiB   (was 266.32; accepted as-is)
+npm run test:licenses                               PASSED, 0 media under src/
+npm run test:privacy                                6 files / 34 tests passed
+npm run test:a11y                                   44 expected / 0 unexpected / 4 skipped
+                                                    exit 3, verdict COVERAGE: INCOMPLETE
+npm run test:e2e                                    34 passed / 14 skipped
+npm run test:e2e:compat                             4 passed / 4 skipped
+npm run test:e2e -- --project=chromebook            9 passed / 3 skipped
+npm run test:e2e -- --project=tablet                8 passed / 4 skipped
+npm run test:e2e -- --project=tablet-landscape      8 passed / 4 skipped
+npm run check:manual-verification                   exit 0, 0/5 discharged
+flagged assistance lane (playwright.assistance)     4 passed
+default assistance lane (absence)                   3 passed
+```
+
+#### What the phase actually found
+
+**HIGH - a critical ARIA violation on a surface the audit had never looked at.** Settings carried
+`<button role="radio" aria-checked=... aria-pressed=...>`. `aria-pressed` is a *button* state, so each
+control claimed to be a radio **and** a toggle button at once. Fixed by choosing the role the control
+actually is - a radio in a `radiogroup` - and then adding the keyboard contract that role promises and
+the markup never had: roving tabindex, arrows that move *and* select, `Home`/`End`, wrap-around.
+`aria-pressed` is now written **nowhere**, not conditionally omitted, so a later edit that reaches for
+it fails the audit. A consequence nobody had noticed: three CSS selectors keyed on
+`[aria-pressed='true']` matched **nothing** afterwards, so the selected theme and language would have
+had no styling at all.
+
+**HIGH - one Escape closed two dialogs, and Tab containment was broken the same way.** On a touch
+viewport the village HUD renders as a `sheet` and Settings opens above it. Both registered a
+**capture-phase** `keydown` on `document`; the drawer registered first, so its handler dismissed and
+unmounted the HUD column *before* the dialog's handler ran - and the dialog's restore target was by then
+**disconnected**, so focus went to the drawer toggle. Tab was the same defect: focus oscillated
+`['drawer', 'settings']`. Fixed in `useModalFocus` with a module-scoped **stack**, so only the topmost
+scope acts. **`AccessibleDialog`, `VillageHud`, `SettingsModal` and `useVillageSurfaceMode` are
+byte-identical to baseline** - the fix needed no caller change, which is the design's main claim. The
+rejected alternative is recorded with its reason: *nearest-in-DOM-wins* answers the opposite way the
+moment a dialog is portalled, because DOM depth here is a styling artefact; open order is a property of
+what the learner did.
+
+**HIGH - the recall question was unreachable on the shipping renderer.** Pressing the nearby-action row
+reaches `studyFlow.enterFishing` through `structureInteract` **without** passing through `castFrom`, so
+`structureIdRef.current` is `null`, `beginFishing` returns early, and the learner is told *"This catch
+has no open pond session, so the question cannot be asked."* Only the pond panel's `Cast Line` minted a
+session. Worse than first reported: `pixiFishing`'s production default is `false`, so the default build
+uses the **Phaser** pond, whose adapter ignores `handlers.pondId` - the Pixi lane's `onSessionStarted`
+backstop that masks this **does not exist on the artifact a learner downloads**. The question was
+unreachable by keyboard, by touch, and by `E`. The first proposed fix - wrapping `flow.enterFishing` in
+the screen - **did not work**, and its own test caught it: `structureInteract` calls its own module-local
+`enterFishing`, so the wrapper never saw the broken route. The fix is at the single door every route
+uses, `onBeforeStructureInteract`.
+
+**MEDIUM - six dialogs had no focus management at all.** `SettingsModal`, `NoteEditorModal`,
+`FullMapView`, `MakeItYoursModal`, `GameplayOnboardingModal` and `HelpOverlay` declared `role="dialog"`
+with **no** hook: a keyboard learner could Tab out of Settings into the page behind, and **HelpOverlay
+could not be left by keyboard at all** - whose own copy claims "`?` toggles this overlay". Two of the
+six put the role on the **backdrop**, not the dialog. `AccessibleDialog` was built as a thin wrapper over
+the existing `useModalFocus` rather than rewriting twenty working dialogs.
+
+**MEDIUM - the new focus component's first version shipped a bug for one test run.**
+`AccessibleDialog` fell `label` through to the `labelledBy` branch, producing an `aria-labelledby`
+pointing at nothing. Caught by the second run of the test written for exactly that.
+
+**MEDIUM - a dead keyboard route.** `FishingHud`'s `CHARGE_KEYS` omitted `'Space'`, which **both**
+renderer normalizers accept. On any platform reporting `key === 'Space'` the learner held the space bar
+and nothing happened, while the canvas route worked. The test now reads the spellings **out of the
+renderer normalizers' own source**, so a fourth spelling added to the renderer without being added here
+is red.
+
+**MEDIUM - the village had no keyboard route to zoom at all**, pointer-only twice over (wheel and
+pinch). Now two buttons plus a read-out (`Zoom is now one and a quarter times normal.`) reading the
+newly exposed `readCameraState()`, hidden until a world exists so the Phaser rollback lane answers `null`
+honestly.
+
+**MEDIUM - reduced motion was set while the movement continued, three times.** The village and dungeon
+cameras eased toward the player under reduced motion, and a caught fish's glyph grew into the bucket.
+All three are the Phase 19 *filter-based-Off* shape: a flag that is set while the loop still runs.
+Cameras cannot be fixed by scaling - `motion.scale` cannot express moving a whole viewport - so the lerp
+was removed rather than shortened. One loop is deliberately **not** suppressed, pinned by a test: a
+villager's patrol is **world state**, because `readNpcSnapshot` and `selectNearbyTargets` measure
+against it, so freezing it would strand learners out of range and delete the nearby-action rows Phase 12
+exists to provide.
+
+**MEDIUM - a blocking e2e regression introduced by this phase's own dialog migration.** Moving
+`GameplayOnboardingModal` to `AccessibleDialog` dropped `aria-label="Gameplay onboarding"`; the dialog is
+now named from its heading. Four lanes located it by the old name, so the dismissal never fired, the
+onboarding backdrop stayed mounted, and it **intercepted pointer events** over the Note editor -
+`chromebook` and `desktop-chromium` failed deterministically. **The one-line revert was considered and
+rejected**: `AccessibleDialog` documents that `aria-labelledby` on the heading is preferred so the name
+cannot drift from what the learner reads, and that writing both is the defect it exists to prevent. The
+name change was correct; the **lanes** were stale. They now use a stable `data-testid`, with the real
+accessible name asserted **once**, in one place, so naming is still gated without welding four lanes to
+onboarding copy.
+
+**MEDIUM - the a11y audit's own probes contained two vacuous assertions.** One waited on
+`body[data-world]`, an attribute that exists **only** on the village screen root and can **never** be set
+on `body` - an expected-red dressed as a failure. One asserted `role="tabpanel"` count `1` both before
+and after a tab swap: the count was **invariant across the interaction it claimed to verify**, because
+`hidden` removes inactive panels from the accessibility tree either way. Both replaced, every bare
+`getByRole` in the file narrowed, and the general rule recorded: **a count assertion is only evidence if
+the count changes when the behaviour it names changes.**
+
+**MEDIUM - touch form factors were not being audited at all.** `openVillage` waited for
+`[data-village-nearby="true"]` to be *visible*, but on a coarse/hoverless pointer `useVillageSurfaceMode`
+returns `sheet` and `VillageHud` **unmounts the entire column**. Village and Settings were therefore
+**unscanned on both tablet cells**. Checked before deciding: that toggle is the **only** route to both
+surfaces on touch, so the drawer **is** how a touch learner gets there - the probe now presses the real
+labelled toggle, branching on the toggle's presence rather than the form factor. Surface coverage is now
+reported **per cell** and folds into the verdict as incompleteness, not failure.
+
+**LOW - four exact-count CI gates were hardened instead of bumped a fifth time.** Adding the assistance
+artifact moved `download-artifact` counts 3 -> 5 in four files. Extending the literals would have been
+the fourth growth of the same number; Phase 19 recorded three such gates breaking on legitimate list
+growth and Phase 20 hit two more. Six assertions now go through one declaration of the property - *every
+transfer is a named step, it is declared, transfers run in declared order, every download after the
+first has its own `rm -rf dist`* - so a sixth artifact, an **unnamed** step, a missing discard, or a
+transposition each fail.
+
+#### Gates changed, and the rulings
+
+| Gate | Ruling |
+| --- | --- |
+| `tests/phase8/qa-verification.test.ts` (5 assertions) | **Legitimate break, and strengthened.** It pinned `src/styles.css` byte-for-byte against a pre-Phase-8 fixture plus a SHA-256. Freezing that digest at a Phase-21 baseline would have replaced *"identical to the pre-Phase-8 legacy system"* with *"identical to whatever it was last reviewed as"* - the exact property the file exists to prevent. Now states 13 enumerated `was`/`now` pairs, each asserted to occur exactly once and reverted before comparison; any other edit in those 5,813 lines still fails. |
+| `tests/e2e/{pixi-memory-lane,fishing-lane,phase10-media-lane}.test.ts`, `tests/phase9/pixi-pointer-lane-wiring.test.ts` | **Legitimate break, replaced by the property.** Six exact-count assertions became one shared transfer audit, proven sensitive to a sixth, an unnamed, a missing-discard and a transposed transfer. |
+| `tests/phase12/village-panels.test.tsx`, `tests/unit/audioSettingsTab.test.tsx` | **Legitimate break.** Both read `aria-pressed` off controls that are now honest radios; re-pointed at `role`/`aria-checked` plus the one-tab-stop and non-colour-mark properties the role adds. |
+| `tests/phase12/village-shell-split.test.ts` | **Legitimate break, and the product took the gate's side.** The composition-root budget was heading to 949; `useVillageZoomReader` was extracted and rationales moved to the modules that own them, bringing it to **898**. Not raised. |
+| `tests/data/localDownloadOnly.test.ts`, `tests/phase19/assistanceNonVacuity.test.ts` | **Red during the phase, green in a clean run.** Both fail when another writer changes the tree mid-run. Verified by running each alone. Contamination, not regression. |
+
+#### Non-vacuity evidence
+
+Every owner probed; each probe was green before mutation and restored with checksum verification.
+Reported rather than counted:
+
+- **`game-engineer` caught three of its own probes nearly shipping a vacuous test.** `user.keyboard('{ }')`
+  on an **unfocused** element delivers no keydown, so a charge test asserted `toHaveBeenCalledTimes(1)`
+  against a call that could never happen. 30 frames x 100 ms is **exactly two** 1500 ms bob periods, so
+  comparing endpoints reported "still" for a bob moving every frame between them. And a camera clamp
+  pinned the centre at the same value under both motion profiles, so the easing assertion could not
+  fail. All three rewritten, each with the reason.
+- **`ui-engineer` proved the Escape fix by mutation, and one probe was only trustworthy after
+  instrumenting `focusin`** - the first Tab test passed pre-fix because the dialog's own repair masked
+  the transient. Rewritten to assert from a **middle** control, plus a wrap-around case.
+- **`infrastructure-engineer` verified its harness could see a failure three times, and each time the
+  green was a lie**: `--reporter=basic` is an unresolvable *reporter* (a startup error, not a test
+  failure); a duplicate import made an unparseable file report as *"1 failed | no tests"*; and an exit-3
+  proof initially read `FAILED` only because a `/tmp` config cannot resolve `@playwright/test`.
+- **`infrastructure-engineer` retracted a wrong inference rather than shipping it.** It first concluded
+  the e2e failures were a Phase 20 regression, then found the comparison had pitted 1 project against 4.
+  Corrected to: both walk tests pass individually, and HEAD passes under the same 4-project load.
+- **A runner count defect was found while validating another count.** `perProjectCounts`
+  **double-counted skipped tests** - a cell with one skip printed `skipped 2` while the report's own
+  stats said 1. Fixed with a regression test and a red proof (guard 1 / pre-fix 2).
+- **The schema validator was proven to discriminate, not merely to reject.** A genuine manual record
+  exits 0 with 1/5 discharged; a wrong schema version, an `emulated-viewport` evidence class, and a
+  record deriving a manual gate from the `tablet` cell each exit 1 with a named reason.
+- **The assistance preflight is non-vacuous because the obvious discriminator is wrong.** Both builds
+  emit `AssistanceRegion-*.js` and `assistanceStore-*.js`, and the census reports `2/2 declared path(s)
+  fetchable` for **both** - so a chunk-presence check would pass on a default `dist/`. What differs is
+  the compiled constant, so the preflight reads that out of the emitted bytes.
+- **`ui-engineer` fixed a real bug its own gate found**: an assertion matched its own prose documenting
+  the defect it prevents - fixed by comment-stripping, the same lesson the Phase 19 file needed.
+
+#### Exit-criteria assessment
+
+1. **Zero serious or critical automated accessibility violations** - met **on the cells that ran**:
+   **44 expected / 0 unexpected / 4 skipped**, 3/3 surfaces on every cell. Both genuine violations were
+   fixed and neither was silenced; the one recorded pre-existing exception
+   (`.welcome-checklist-status--done`) is untouched and no exception list was extended.
+2. **The complete learning path works through DOM controls and keyboard** - met and **inventoried per
+   world**: every canvas interaction in village, dungeon and fishing now has a keyboard-reachable DOM
+   equivalent with an accessible name. The two gaps found were real - village zoom had no keyboard route
+   at all, and fishing's charge control was dead on `key === 'Space'`.
+3. **Touch use does not depend on hover or precision gestures** - met, and the audit now actually
+   reaches the touch surfaces, because the drawer path is the only route on touch.
+4. **Core layouts work at 200% zoom and a 320 CSS-pixel viewport** - **partially verified.** The
+   properties that *produce* overflow are asserted and a real long-label overflow was found and fixed in
+   the theme picker. **Real layout at 200% zoom is not measured** - jsdom computes no layout.
+5. **Reduced-motion mode has no continuous decorative movement** - met for every decoration, with one
+   documented exception (villager patrol, which is world state) pinned by a test. Proved by a tick
+   counter that does not advance, not by a boolean.
+6. **ChromeVox and the selected touch screen-reader script pass** - **NOT DISCHARGED. UNVERIFIED.**
+7. **Every required OS/browser compatibility cell passes the core-flow smoke** - **NOT MET.**
+   `compat-chromium` and `compat-firefox` pass; `compat-webkit` and `compat-edge` are
+   `host-not-approved` on Linux; and the four macOS/Windows engine-family pairs are unmet by ruling.
+8. **The full learning path remains keyboard- and DOM-operable in the selected accessibility cells** -
+   met on `desktop-chromium`, `chromebook`, `tablet`, `tablet-landscape`, `compat-chromium`,
+   `compat-firefox`.
+9. **Viewport emulation is not reported as physical Chromebook or tablet verification** - met
+   **mechanically, not by prose**: no matrix cell claims `physical-device-manual`, the discharge kit can
+   record **only** that class, and a record derived from an emulated cell is rejected by name.
+10. **Actual Safari, Edge, ChromeVox and touch-screen-reader evidence is distinguished from automated
+    Playwright evidence** - met as a **structure**. The distinction exists, is enforced, and defaults to
+    UNVERIFIED. **No such evidence has been gathered.**
+
+#### The discharge kit (deliverable)
+
+The plan asks for a screen-reader verification record and keyboard/touch scripts, and requires actual
+Safari, Edge, ChromeVox and touch-screen-reader evidence to be recorded separately from automated
+evidence. This container has none of that hardware, so the phase produced the **kit** rather than the
+evidence:
+
+- `tests/e2e/PHASE21-MANUAL-VERIFICATION.md` - a written procedure per gate: what to do, what to
+  observe, what counts as a pass, and a JSON template. Gate 2 documents the drawer path explicitly,
+  because on touch the HUD column does not exist until the toggle is pressed.
+- `tests/e2e/manual-verification.ts` + `manual-verification-record.json` - a fixed schema, five entries,
+  all `unverified`.
+- `scripts/check-manual-verification.mjs` - one line per gate, defaulting to UNVERIFIED; a `discharged`
+  verdict requires a full nine-field attestation, and an emulated cell cannot be promoted.
+- Appendix A: the keyboard-only path through Welcome -> Village -> Creator -> Scribe -> Archaeologist ->
+  Statistics -> Fishing -> Data Center -> Settings -> share dialog. Appendix B: the three worlds' DOM
+  mirrors.
+
+#### Rollback
+
+Revert individual accessibility fixes. No renderer or storage rollback is required. Every change is
+additive except three `camera.follow`+`update` pairs that now branch, and the modal-focus stack, which
+`AccessibleDialog` reaches without any caller change.
+
+#### Known limitations and UNVERIFIED
+
+- **Five manual gates are UNDISCHARGED**: physical Chromebook, physical tablet, ChromeVox, touch screen
+  reader, and real Safari/Edge. They are recorded UNVERIFIED and the discharge kit exists to close them.
+  The maintainer accepted this phase on its automated criteria and carried these forward as **release
+  blockers for Phase 23** - see the acceptance note above. They are not discharged by acceptance.
+- **The four macOS/Windows engine-family pairs are NOT MET** by maintainer ruling, rather than an
+  unverified claim being entered.
+- **`compat-webkit` and `compat-edge` never ran** - `host-not-approved` on Linux. `support-matrix.ts`
+  was **not** edited to force them.
+- **Real layout at 200% zoom and 320 CSS pixels is not measured**, and **measured box size is not
+  verified** for touch targets - the 44px checks are declarations. The theme picker is the one control
+  whose floor lives in a stylesheet, and its test says so.
+- **Villager patrol continues under reduced motion, by decision** - it is world state, and freezing it
+  would strand learners out of range and delete the nearby-action rows.
+- **Three of the five assistance surfaces still have no browser evidence.** The flagged lane observes the
+  **fishing** surface rendering a real suggestion with its reason and dismiss control, and the default
+  lane observes its **absence**. `creator`, `scribe` and `archaeologist` sit behind their own
+  `productionDefault:false` workspace flags that `build:web:assistance` does not set, so reaching them
+  needs a composite-flag artifact or a product decision.
+- **`assistanceStore-*.js` is fetched on Welcome on every build**, including the production default,
+  because `runBootstrap` awaits `loadAssistanceStore()` unconditionally. Not counted by
+  `check:budget:welcome`, but a real per-launch fetch. Phase 22.
+- **The a11y runner needed a `spawnSync` fix** before a red gate could tell a reader *why* without
+  opening a JSON artifact.
+- **`COZY_LEGACY_VARIABLE_BRIDGE` still has no shared key table with the renderer's `normalizeKey`**,
+  so one test reads the renderers' source rather than importing them.
+- **Five pre-existing `text-overflow: ellipsis` sites** are enumerated with a per-site verdict and gated
+  against a sixth; four are on surfaces Phase 21 does not own.
+- **`ScribeEncounter` hand-rolls its own focus containment** - correct today, and the one surface whose
+  keyboard contract can drift from the other nineteen. Named and gated as follow-up.
+- **The two Pixi village walk tests still carry ~53s of intrinsic variance** against a 180s timeout.
+  Ruled: `playwright.config.ts` stays byte-identical to `HEAD`; Phase 22 owns it. They passed in the
+  final runs.
+- **Welcome is 267.86 KiB of 300.00** (32.14 KiB headroom), up 1.54 KiB for two axe fixes, six dialogs
+  given focus management, the zoom controls and read-out, three reduced-motion fixes and the focus
+  stack. Accepted as-is by maintainer ruling; lazy-loading `VillageScreen`/`GameScreen` was the recovery
+  route and was declined as a route-loading architecture decision.
+
+#### Follow-up work found and deliberately not done (working rule 13)
+
+- The **feature-lane census has now been generalised twice** (`auditFeatureLane`) and six CI-wiring
+  gates were hardened rather than bumped. The remaining hand-maintained lists - the lane path roles, the
+  manual `GATES` list, the a11y surface list - are the same class and worth a deliberate pass.
+- **`aria-modal="false"` on the village drawer and HUD** is deliberate (the world stays usable behind
+  them), but they are non-modal dialogs that now share the focus stack. Worth a second look when
+  Phase 22 touches the surface mode.
+- Carried from Phase 20: three colocated stylesheets sit outside the Phase 8 font scan; the
+  `Inter`-not-bundled finding is fixed for cards only.
+- Carried from Phase 19 and still open: `deps.setDualWriteSink` / `deps.setSessionSource` are declared,
+  defaulted and never called (ruled: not authorized). The 32-bit statistics digest is a one-way door;
+  `daysUntilReview` still disagrees with the dashboard; the subject-copy ID remapper does not rewrite
+  room ids inside the four ledgers.
 
 ### Exit criteria
 
@@ -8093,6 +8396,12 @@ Phase 23.
 Phase 22 accepted.
 
 All accessibility, performance, migration, backup, and CC0 gates pass.
+
+**Carried from Phase 21 and NOT discharged by its acceptance:** the five manual accessibility gates
+(physical Chromebook, physical tablet, ChromeVox, touch screen reader, real Safari/Edge) and the four
+macOS/Windows engine-family compatibility pairs. Phase 23 must not claim a release while they are open;
+`tests/e2e/PHASE21-MANUAL-VERIFICATION.md` is the procedure that closes them and
+`npm run check:manual-verification` reports them one line per gate.
 
 Phase 1A compatibility rails and the approved OS/browser matrix pass.
 

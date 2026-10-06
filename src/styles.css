@@ -54,6 +54,18 @@
   --control-selected-bg: linear-gradient(135deg, #4e4260, #d4a857);
   --control-selected-text: #fbfbff;
   --control-selected-border: #ead7a3;
+  /*
+   * Phase 21. Text that sits directly on `--accent`, which is a different obligation from
+   * `--control-selected-text` above. That token is chosen for the *selection plate*, a dark
+   * burnt-orange gradient stop; this one is chosen for the pale gold accent itself. The pair is
+   * 8.30:1 here where the selection token on the same background is 2.13:1.
+   *
+   * Every value below is its own theme's `--text-primary` or `--bg-deep` step, so a rule that puts
+   * text on the accent reads in the same ink as the text beside it. Phase 8's
+   * `COZY_LEGACY_VARIABLE_BRIDGE` maps this name to the Cozy token `textOnAccent`, which is
+   * declared against `accent` and `accentDeep` and measured above 4.5:1 on both.
+   */
+  --control-text-on-accent: #191410;
   --font-mono: ui-monospace, 'Cascadia Code', 'SFMono-Regular', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
   --text-title: #ead7a3;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -80,6 +92,8 @@
   --control-selected-bg: linear-gradient(135deg, #d6a45a, #9d6630);
   --control-selected-text: #2b2118;
   --control-selected-border: #8f5821;
+  /* Phase 21: text on the accent fill, not on the selection plate. 5.53:1. */
+  --control-text-on-accent: #fdf8ee;
 }
 
 .ui-skin[data-theme='colorful'] {
@@ -102,6 +116,8 @@
   --control-selected-bg: linear-gradient(135deg, #ffcf5f, #7be3ff);
   --control-selected-text: #151a28;
   --control-selected-border: #a2d9ff;
+  /* Phase 21: text on the accent fill, not on the selection plate. 12.47:1. */
+  --control-text-on-accent: #1c1310;
 }
 
 .ui-skin[data-theme='aurora'] {
@@ -124,6 +140,8 @@
   --control-selected-bg: linear-gradient(135deg, #9af7e5, #b48cff);
   --control-selected-text: #101725;
   --control-selected-border: #d2fff7;
+  /* Phase 21: text on the accent fill, not on the selection plate. 16.81:1. */
+  --control-text-on-accent: #101725;
 }
 
 * {
@@ -364,11 +382,19 @@ textarea {
   background: var(--control-hover-bg);
 }
 
+/*
+ * Phase 21: `.settings-theme-grid button[aria-pressed='true']` became
+ * `.settings-theme-grid button[aria-checked='true']`. The theme cards are radios, so the old
+ * selector matched nothing the moment the role was made honest, and this block is what gives the
+ * chosen card its selected face. The three theme members are inside `.modal`, so the two selectors
+ * have equal specificity and **source order** decides - this list comes first, and the dedicated
+ * `[aria-checked]` rule further down wins, which is what sets the 3px border.
+ */
 .ui-skin .hud-rail button[aria-pressed='true'],
 .ui-skin .room-panel button[aria-pressed='true'],
 .ui-skin .modal button[aria-pressed='true'],
 .ui-skin .help-overlay button[aria-pressed='true'],
-.ui-skin .settings-theme-grid button[aria-pressed='true'],
+.ui-skin .settings-theme-grid button[aria-checked='true'],
 .ui-skin .inventory-badges-tabs button[aria-selected='true'],
 .ui-skin .room-tabs button[aria-selected='true'],
 .ui-skin .note-section-chips button.is-active {
@@ -1169,9 +1195,14 @@ textarea {
   white-space: nowrap;
 }
 
+/*
+ * Phase 21. The same fix as `.village-theme-picker button.active`: `--control-selected-text` is
+ * the selection plate's ink and measures 2.13:1 on `--accent`. The `aria-selected` attribute is the
+ * non-colour half of the state, and it is already on the element.
+ */
 .inventory-badges-tabs button[aria-selected='true'] {
   background: var(--accent);
-  color: var(--control-selected-text);
+  color: var(--control-text-on-accent);
 }
 
 .inventory-badges-rank {
@@ -1826,9 +1857,18 @@ button.ghost {
   text-align: left;
 }
 
-.settings-theme-grid button[aria-pressed='true'] {
+/*
+ * Phase 21. The selected member was keyed on `[aria-pressed='true']`, which is the attribute the
+ * `role="radio"` members no longer carry - so the selected theme had no styling at all after the
+ * role was made honest. `[aria-checked='true']` is the real state. The border **width** change is
+ * the non-colour half: a learner who cannot tell the accent tint apart still sees which card is
+ * chosen, and the `✓` in the DOM is the third.
+ */
+.settings-theme-grid button[aria-checked='true'] {
   border-color: var(--accent);
+  border-width: 3px;
   background: color-mix(in srgb, var(--accent) 18%, transparent);
+  font-weight: 700;
 }
 
 .onboarding-modal {
@@ -3186,24 +3226,71 @@ button.danger:hover {
   gap: 1px;
   border: 1px solid var(--border-soft);
   border-radius: 5px;
-  overflow: hidden;
   flex-shrink: 0;
+  /*
+   * Phase 21. `overflow: hidden` clipped the strip: a long localized theme label ran past the rounded
+   * corner and was simply gone. Scrolling horizontally instead keeps the corner treatment - `overflow-y:
+   * hidden` is what preserves the inner-radius clip - while letting the strip scroll when three labels
+   * genuinely do not fit a 320 CSS-pixel viewport. That is the content-expansion case, and scrolling is
+   * honest where clipping is a lie.
+   *
+   * Written as two axes rather than a shorthand plus an override because `overflow: hidden` followed by
+   * `overflow-x: auto` reads as a contradiction and lints like one.
+   */
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
 }
 
+/*
+ * Phase 21: the ≥44 CSS-pixel floor, inline-adjacent and declared here.
+ *
+ * These were 9px type in `3px 6px` padding - a control about 30 CSS pixels tall, in a HUD a learner
+ * reaches with the same finger they use to walk. `padding: 12px 10px` on 10px type brings the box to
+ * 44px, and `font-size: 10px` rather than 9px because 9px body text is below the readable floor
+ * for a Chromebook screen at arm's length. The mark and the label are `nowrap` so a German or
+ * Finnish label does not force the strip wider than a 320px viewport; `overflow-x: auto` on the
+ * container is what lets the strip scroll instead of clipping when the labels do not fit.
+ */
 .village-theme-picker button {
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--text-muted);
-  padding: 3px 6px;
-  font-size: 9px;
+  padding: 12px 10px;
+  font-size: 10px;
   cursor: pointer;
-  line-height: 1;
+  line-height: 1.2;
+  white-space: nowrap;
+  min-height: 44px;
+  min-width: 44px;
 }
 
+/*
+ * Phase 21. The selected theme's text was `var(--control-selected-text)`, which is the ink for the
+ * dark selection plate; on `--accent`, a pale warm gold, that pair measured 2.13:1 and axe reported
+ * it as a serious `color-contrast` violation on all six runnable matrix cells. It is now the token
+ * whose obligation is the accent fill. See `--control-text-on-accent` above.
+ *
+ * The underline is the second, non-colour half of "which theme is on", so the state survives for a
+ * learner who cannot separate the gold from the panel behind it. `aria-pressed` carries it for a
+ * screen reader, and `ThemePicker` renders the mark in the DOM rather than in this rule.
+ */
 .village-theme-picker button.active {
   background: var(--accent);
-  color: var(--control-selected-text);
+  color: var(--control-text-on-accent);
+  border-bottom: 3px solid var(--control-selected-border);
+  font-weight: 700;
+}
+
+/*
+ * Phase 21: the check mark on the selected theme. `margin`, not a trailing space in the markup, so the
+ * button's `textContent` stays exactly the label - which is what a test can pin and what a
+ * `aria-labelledby` would resolve to. See `.settings-choice-mark` for the same reasoning.
+ */
+.village-theme-picker__mark {
+  font-weight: 700;
+  margin-right: 3px;
 }
 
 .village-hud-stats {
@@ -4918,10 +5005,30 @@ textarea.game-input:focus {
   border-color: var(--accent);
   background: var(--control-hover-bg);
 }
-.settings-language-grid button[aria-pressed="true"] {
+/*
+ * Phase 21. `[aria-pressed="true"]` → `[aria-checked="true"]`, for the same reason as the theme
+ * grid: the members are radios and `aria-pressed` is not a radio state. The 3px border is the
+ * non-colour half of "which language is on".
+ */
+.settings-language-grid button[aria-checked='true'] {
   border-color: var(--accent);
+  border-width: 3px;
   background: var(--control-selected-bg);
   color: var(--control-selected-text);
+}
+
+/*
+ * Phase 21: the check mark both radio groups render for the chosen member. It is `aria-hidden` at
+ * the call site because `aria-checked` already says it, and it is a *character* rather than a
+ * `::before` pseudo so it is in the DOM where a test and a screen reader can both find it.
+ *
+ * The gap is `margin`, not a trailing space in the markup: a space character in the JSX would become
+ * part of the radio's `textContent`, which is the value `tests/unit/audioSettingsTab.test.tsx` pins as
+ * the picker's content - so the glyph is exactly `✓` in the DOM and the visual gap is styling.
+ */
+.settings-choice-mark {
+  font-weight: 700;
+  margin-right: 4px;
 }
 
 /* ── Phase 5: Shortcut customization ────────────────────────────────── */

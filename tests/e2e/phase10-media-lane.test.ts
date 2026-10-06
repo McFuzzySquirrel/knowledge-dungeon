@@ -45,6 +45,13 @@
  *    is proven able to fail by a table of mutated workflows - see the block's own
  *    comments for the failure mode each property prevents.
  *
+ * One of the four is no longer a count. `job-artifact-transfers` replaces
+ * `downloads !== 3`, which had been amended in three phases for three legitimate
+ * additions; it delegates to `./artifact-transfer-wiring`, which holds the property
+ * that number stood in for and the mutations that prove it. The step parser, the job
+ * splitter and the `run:` reader moved into that module too - see the note where they
+ * used to be.
+ *
  * Privacy: this file contains no learner data, reads only the repository, and
  * spawns nothing.
  */
@@ -73,6 +80,17 @@ import {
   PIXI_MEMORY_TEST_FILE,
 } from './pixi-memory-lane';
 import { PIXI_POINTER_LANE, PIXI_POINTER_PREVIEW_PORT } from './pixi-memory-lane';
+import {
+  DOWNLOAD_DECLARATION,
+  TRANSFER_MUTATIONS,
+  auditArtifactTransfers,
+  parseWorkflowJobs,
+  rawTransferLineCount,
+  rewrite,
+  stepsOf,
+  transfersOf,
+  type WorkflowStep,
+} from './artifact-transfer-wiring';
 import {
   PHASE10_MEDIA_CI_JOB,
   PHASE10_MEDIA_CI_RUN_COMMAND,
@@ -503,8 +521,6 @@ const EXEMPTION_KEY = 'continue-on-error';
 const PRODUCTION_BUILD_STEP = /^\s*- run: (?:npm run build[^\n]*|(?:npx )?vite build[^\n]*|rollup -c[^\n]*)$/gm;
 /** A Playwright browser install. */
 const BROWSER_INSTALL_STEP = /^\s*- run: [^\n]*playwright install[^\n]*$/gm;
-/** An artifact download, whatever version the action is pinned at. */
-const ARTIFACT_DOWNLOAD_STEP = /^\s*uses: actions\/download-artifact[^\n]*$/gm;
 /** An `npm ci`, with or without flags. */
 const NPM_CI_STEP = /^\s*- run: npm ci[^\n]*$/gm;
 
@@ -514,93 +530,18 @@ const LANE_STEP_TEXT = `      - name: ${PHASE10_MEDIA_CI_STEP_NAME}\n        run
 /** The command line the lane's step runs, for a mutation that appends to it. */
 const LANE_RUN_LINE = `        run: ${PHASE10_MEDIA_CI_RUN_COMMAND}\n`;
 
-interface WorkflowStep {
-  /** The step's `name:`, or `''` for an unnamed step. */
-  readonly name: string;
-  /** The step's own lines, with every comment line removed. */
-  readonly ownText: string;
-  /** The command it runs, a `run: |` block folded in. `''` for a `uses:` step. */
-  readonly command: string;
-  /** Whether the step executes anything at all. */
-  readonly executes: boolean;
-}
-
-/** Splits a workflow into job blocks keyed by job id, as the sibling gates do. */
-function parseWorkflowJobs(text: string): ReadonlyMap<string, string> {
-  const lines = text.split('\n');
-  const jobsIndex = lines.indexOf('jobs:');
-  if (jobsIndex === -1) return new Map();
-  const jobs = new Map<string, string[]>();
-  let current: string | null = null;
-  for (const line of lines.slice(jobsIndex + 1)) {
-    const header = /^ {2}([a-z0-9_-]+):\s*$/.exec(line);
-    if (header) {
-      current = header[1];
-      jobs.set(current, []);
-      continue;
-    }
-    if (current !== null) jobs.get(current)?.push(line);
-  }
-  return new Map([...jobs].map(([name, body]) => [name, body.join('\n')]));
-}
-
-/**
- * The command a step runs, with a `run: |` block scalar folded in.
+/*
+ * The step parser, the job splitter, the `run:` reader and the text rewriter all come from
+ * `./artifact-transfer-wiring`, which this file used to carry its own copies of.
  *
- * Folding matters because a multi-line `run: |` is how this workflow records a shell
- * snippet, and a scan that read only the first line would miss every command under it.
- * A `uses:` step runs nothing here and yields `''`.
+ * There were four of them and they had begun to disagree, which is the only reason that ever
+ * matters to remove one. The copies here matched a `run:` key only in the eight-space form, so a
+ * step written `- run: …` on the list item read as running nothing; the shared reader matches both.
+ * More importantly, neither copy carried the step's `uses:` action, and the check this file needs
+ * below is about which steps use `actions/download-artifact` - so `job-artifact-transfers` would have
+ * had to re-scan the raw text for an action the parsed step already knew about, which is how two
+ * parsers of the same workflow start disagreeing about which job a step is in.
  */
-function runCommandOf(ownLines: readonly string[]): string {
-  const key = ownLines.findIndex((line) => /^ {6}(?:  )?run: /.test(line));
-  if (key === -1) return '';
-  const first = ownLines[key]?.trim().replace(/^run:\s*/, '') ?? '';
-  if (!/^[|>][-+]?$/.test(first)) return first;
-  const folded: string[] = [];
-  for (const line of ownLines.slice(key + 1)) {
-    if (line.trim() === '') {
-      folded.push('');
-      continue;
-    }
-    // The block ends at the first line that is not more indented than the `run:` key.
-    if (!/^ {8}/.test(line)) break;
-    folded.push(line.trim());
-  }
-  return folded.join('\n').trim();
-}
-
-/**
- * A job body split into the steps that run, in the order they run.
- *
- * Comments are removed per line rather than by block, and that is load-bearing rather
- * than tidy: this workflow's comment blocks sit at the step indentation and explain
- * the step that follows them, and the Phase 10 comment block states in so many words
- * that the step adds "no build, no download, no browser install, no second `npm ci`".
- * A scan that read a step's raw slice would report a violation of the very thing the
- * comment says, and the fix would be to delete the comment - which is how the prose
- * explaining a gate gets lost.
- */
-function stepsOf(jobBody: string): WorkflowStep[] {
-  const starts: number[] = [];
-  const pattern = /^ {6}- /gm;
-  for (let match = pattern.exec(jobBody); match !== null; match = pattern.exec(jobBody)) {
-    starts.push(match.index);
-  }
-  return starts.map((start, index) => {
-    const body = jobBody.slice(start, starts[index + 1] ?? jobBody.length);
-    const ownLines = body.split('\n').filter((line) => !/^\s*#/.test(line));
-    // The slice ends at the next step, so it ends with whatever separated the two:
-    // a blank line here, and nothing else a step owns.
-    while (ownLines.at(-1)?.trim() === '') ownLines.pop();
-    const ownText = ownLines.join('\n');
-    return {
-      name: /^ {6}- name: (.+)$/m.exec(body)?.[1] ?? '',
-      ownText,
-      command: runCommandOf(ownLines),
-      executes: /^\s*(?:run|uses)\s*:/m.test(ownText),
-    };
-  });
-}
 
 /** How many lines of a job body match a pattern, which is how the counts below are read. */
 function countMatching(jobText: string, pattern: RegExp): number {
@@ -627,7 +568,7 @@ type WiringCheck =
   | 'step-adds-nothing'
   | 'job-no-production-build'
   | 'job-one-browser-install'
-  | 'job-three-artifact-downloads'
+  | 'job-artifact-transfers'
   | 'job-one-npm-ci'
   | 'step-inside-the-production-window';
 
@@ -742,22 +683,47 @@ const WIRING_CHECKS: Record<WiringCheck, (wiring: Wiring) => string | null> = {
     return null;
   },
   /*
-   * The number of artifact downloads in this job, pinned **exactly**.
+   * The artifact downloads in this job, held as a **property** rather than as a count.
    *
-   * It was two — the production artifact and the Pixi-flagged one — and it is now three, because
-   * the Phase 17 fishing lane measures a *third* flagged artifact and `actions/download-artifact`
-   * extracts into the working directory rather than replacing it, so each needs its own named step
-   * and its own `rm -rf dist`. The property this check protects is that **this lane adds none of
-   * them**: a Phase 10 step that downloaded an artifact would be measuring a build it chose rather
-   * than the one its job certified. So the count stays exact, and a mutation that adds a download
-   * to *this lane's step* still moves it; the mutation below was retargeted to a fourth download so
-   * it keeps failing for the right reason now that the baseline is three.
+   * This check was `downloads !== 3` with a message naming three artifacts, and the number had
+   * already been amended once: it was two, and Phase 17's fishing lane made it three, which is
+   * why the mutation that used to prove this check could fail had to be retargeted from "a
+   * third download" to "a fourth". Phase 19 and Phase 21 then made it four and five. Three
+   * amendments, four phases, and the repository already records the same shape twice more for a
+   * different family of assertions.
+   *
+   * What the count was standing in for is stated once, in `./artifact-transfer-wiring`: **every
+   * artifact arriving in this job is a named step that declares which artifact it moves, it is
+   * one of the declared transfers, it runs in the declared order, and every download after the
+   * first is preceded by its own `rm -rf dist`.** Delegated to rather than restated, because the
+   * property is the same one three sibling files assert and four copies of it would be four
+   * chances to hold something subtly different under the same name.
+   *
+   * The property this lane itself depends on - *this lane adds none of the downloads*, because a
+   * Phase 10 step that downloaded an artifact would be measuring a build it chose rather than the
+   * one its job certified - is a direct consequence. A download added to the job is either
+   * undeclared or breaks the declared order, and both are findings.
+   *
+   * A count also could not see the mutation that matters most here: an anonymous
+   * `- uses: actions/download-artifact@v4` step with no `name:` at either level is perfectly
+   * satisfying at any count, and it is an artifact that arrives with no identity any gate in
+   * this repository can trace - several of which find a step *by name*.
    */
-  'job-three-artifact-downloads': (wiring) => {
+  'job-artifact-transfers': (wiring) => {
     if (wiring.jobText === '') return `ci.yml has no ${PHASE10_MEDIA_CI_JOB} job.`;
-    const downloads = countMatching(wiring.jobText, ARTIFACT_DOWNLOAD_STEP);
-    if (downloads !== 3) return `${PHASE10_MEDIA_CI_JOB} downloads an artifact ${downloads} times; it has the production one, the Pixi-flagged one and the Pixi-fishing-flagged one.`;
-    return null;
+    // Non-vacuity first, and it is a count on purpose - but a count of the *raw* text against the
+    // *declaration*, not against a fixed number. Everything below reads parsed steps, so a parser
+    // that stopped matching one YAML spelling would report a clean job for the wrong reason. This
+    // is the guard against that, and comparing against the declaration is what stops it from
+    // becoming the count it replaced: a legitimate sixth artifact grows the declaration and this
+    // follows, where a hard-coded number would need its fifth amendment.
+    const raw = rawTransferLineCount(wiring.jobText, 'download');
+    if (raw !== DOWNLOAD_DECLARATION.length) {
+      return `the job text holds ${raw} artifact-download lines and the declaration expects ${DOWNLOAD_DECLARATION.length}, so the parsed steps and the workflow disagree about how many downloads this job makes.`;
+    }
+    const findings = auditArtifactTransfers(transfersOf(wiring.steps, 'download'), DOWNLOAD_DECLARATION);
+    if (findings.length === 0) return null;
+    return findings.map((finding) => `${finding.check}: ${finding.detail}`).join(' | ');
   },
   'job-one-npm-ci': (wiring) => {
     if (wiring.jobText === '') return `ci.yml has no ${PHASE10_MEDIA_CI_JOB} job.`;
@@ -815,11 +781,6 @@ interface WiringMutation {
   /** The check that has to reject it. */
   readonly check: WiringCheck;
   readonly apply: (text: string) => string;
-}
-
-/** Replaces text through a function, so `$` in the replacement is never a pattern. */
-function rewrite(text: string, from: string, to: string): string {
-  return text.replace(from, () => to);
 }
 
 /** Moves the lane's step to just before the step named `anchor`. */
@@ -906,11 +867,6 @@ const WIRING_MUTATIONS: readonly WiringMutation[] = [
     apply: (text) => rewrite(text, LANE_STEP_TEXT, `${LANE_STEP_TEXT}      - run: npx playwright install --with-deps chromium\n`),
   },
   {
-    what: 'a fourth artifact download is added to the job',
-    check: 'job-three-artifact-downloads',
-    apply: (text) => rewrite(text, LANE_STEP_TEXT, `${LANE_STEP_TEXT}      - name: Download the production artifact again\n        uses: actions/download-artifact@v4\n`),
-  },
-  {
     what: 'a second npm ci is added to the job',
     check: 'job-one-npm-ci',
     apply: (text) => rewrite(text, LANE_STEP_TEXT, `${LANE_STEP_TEXT}      - run: npm ci --ignore-scripts\n`),
@@ -935,6 +891,30 @@ const WIRING_MUTATIONS: readonly WiringMutation[] = [
     check: 'step-inside-the-production-window',
     apply: (text) => rewrite(text, LANE_STEP_TEXT, `${LANE_STEP_TEXT}      - name: Download the Pixi-flagged artifact early\n        uses: actions/download-artifact@v4\n`),
   },
+  /*
+   * The four ways the artifact-download half of the transfer property has been got wrong,
+   * delegated to the shared mutation table rather than restated.
+   *
+   * This file's own completeness assertion below requires every check in `WIRING_CHECKS` to
+   * appear in this table, so `job-artifact-transfers` cannot ship without a mutation that this
+   * check rejects. The mutations are taken from `TRANSFER_MUTATIONS` - an undeclared sixth
+   * artifact, an unnamed one, a download without its own discard, and a transposition - for
+   * the same reason the check itself is delegated: the list of ways to get this wiring wrong is
+   * the same list whoever is asking about it, and a fourth copy would be a fourth chance to
+   * hold something subtly different under the same name.
+   *
+   * Only the **download** mutations are taken. This file's parsed wiring is one job's steps,
+   * `browser-smoke`, and the upload mutations land in `web-build` - a mutation this check
+   * cannot see would be recorded here as a proof and prove nothing, which is the one failure
+   * the completeness assertion exists to prevent. The upload side is not left unproved: the
+   * memory gate and the fishing gate assert it against the whole workflow, each with its own
+   * mutation loop over the full table.
+   */
+  ...TRANSFER_MUTATIONS.filter((mutation) => mutation.direction === 'download').map((mutation) => ({
+    what: mutation.what,
+    check: 'job-artifact-transfers' as const,
+    apply: mutation.apply,
+  })),
 ];
 
 /**
@@ -956,8 +936,9 @@ const WIRING_MUTATIONS: readonly WiringMutation[] = [
  *    four shipped defects were found by CI and by nothing else.
  * 3. **The step adds a step, not a cost.** `tests/phase9/memory-gate-wiring.test.ts`
  *    and `tests/phase9/pixi-pointer-lane-wiring.test.ts` pin this job to one `npm ci`,
- *    one browser install, two artifact downloads and no `build:web*` script. Those
- *    gates are working; a step that added a third download would breach one of them,
+ *    one browser install and no `build:web*` script, and its artifact downloads are
+ *    held here by the transfer property rather than by a count. Those
+ *    gates are working; a step that added a download would breach one of them,
  *    and the breach would be reported by another phase's file about another lane. The
  *    counts are restated here so this gate is the canary in front of them.
  * 4. **The step is inside the production window, and nothing runs after it before the
@@ -1022,16 +1003,15 @@ describe('phase 10 media CI wiring (ci.yml)', () => {
     expectWiringHolds('step-adds-nothing', wiring);
     expectWiringHolds('job-no-production-build', wiring);
     expectWiringHolds('job-one-browser-install', wiring);
-    expectWiringHolds('job-three-artifact-downloads', wiring);
+    expectWiringHolds('job-artifact-transfers', wiring);
     expectWiringHolds('job-one-npm-ci', wiring);
     // The numbers the Phase 9 gates pin in this job, restated so a red run says which
-    // count moved. One checkout, one install, and three artifact downloads — the production
-    // artifact, the Pixi-flagged one and the Pixi-fishing-flagged one, the last of them added by
-    // the Phase 17 lane and every one of them a named step with its own discard. No production
-    // build outside `web-build`.
+    // count moved. One checkout, one install, and no production build outside `web-build`.
+    // The artifact downloads are deliberately **not** restated as a count here: that number
+    // has been amended in three phases, and `job-artifact-transfers` above holds the property
+    // it was standing in for. A fifth amendment is the thing worth stopping.
     expect(countMatching(wiring.jobText, NPM_CI_STEP)).toBe(1);
     expect(countMatching(wiring.jobText, BROWSER_INSTALL_STEP)).toBe(1);
-    expect(countMatching(wiring.jobText, ARTIFACT_DOWNLOAD_STEP)).toBe(3);
     expect(countMatching(wiring.jobText, PRODUCTION_BUILD_STEP)).toBe(0);
   });
 

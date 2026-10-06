@@ -1728,11 +1728,21 @@ test('a real study session is recorded, ends on every signal, and its totals sur
 
   // The first-run onboarding modal intercepts pointer events until it is dismissed, so it is
   // dismissed the way a learner dismisses it.
-  const onboarding = page.getByRole('dialog', { name: 'Gameplay onboarding' });
-  if ((await onboarding.count()) > 0) {
-    await onboarding.getByRole('button').last().click();
-    await expect(onboarding).toHaveCount(0);
-  }
+  //
+  // It is located by a stable test hook rather than by its accessible name. The name comes from the
+  // dialog's own visible heading (`AccessibleDialog` labels by the `<h2>` the learner is reading),
+  // so onboarding copy is free to change without moving the locator the lanes dismiss by.
+  //
+  // The two assertions below are deliberate. `toHaveCount(1)` proves the hook resolves to this
+  // dialog rather than matching nothing and silently skipping the dismissal - a locator that can
+  // match zero and still pass is worse than the copy-coupled name it replaced. The accessible-name
+  // assertion is the one place the *naming* is still gated end to end; the Phase 21 `dialogAudit`
+  // unit gate covers this component's focus/Tab/Escape behaviour but not its name.
+  const onboarding = page.getByTestId('gameplay-onboarding');
+  await expect(onboarding).toHaveCount(1);
+  await expect(onboarding).toHaveAccessibleName('Welcome to your first run');
+  await onboarding.getByRole('button').last().click();
+  await expect(onboarding).toHaveCount(0);
 
   // The exit criterion itself: a real session exists, it is open, and the learner is already
   // inside a room. Three separate nonzero properties, each with its own precondition.
@@ -1949,7 +1959,7 @@ test('a real study session is recorded, ends on every signal, and its totals sur
       { timeout: 30_000 },
     )
     .toBeGreaterThan(0);
-  const onboardingAgain = page.getByRole('dialog', { name: 'Gameplay onboarding' });
+  const onboardingAgain = page.getByTestId('gameplay-onboarding');
   if ((await onboardingAgain.count()) > 0) {
     await onboardingAgain.getByRole('button').last().click();
     await expect(onboardingAgain).toHaveCount(0);

@@ -56,13 +56,14 @@ import {
   VILLAGE_PATH_JUNCTIONS,
   VILLAGE_PATH_SEGMENTS,
   VILLAGE_TILE_SIZE,
+  WHEEL_ZOOM_STEP,
   readVillageSpawn,
   resolveStructureDepth,
   writeVillageSpawn,
   type VillageNpc,
   type VillageStructure,
 } from '@/data/villageLayout';
-import { createCameraRig } from '@/renderers/pixi/camera/CameraRig';
+import { createCameraRig, type CameraState } from '@/renderers/pixi/camera/CameraRig';
 import { createWorldInputController } from '@/renderers/pixi/input/WorldInputController';
 import { cozyTextStyle } from '@/renderers/pixi/runtime/cozyWorldTheme';
 import type { CozyWorldTheme } from '@/renderers/pixi/runtime/cozyWorldTheme';
@@ -188,8 +189,44 @@ export interface CreateVillageSceneOptions {
   readonly npcRandomness?: NpcRandomness;
 }
 
-/** The scene contract this world exposes. */
-export type VillageScene = WorldScene<VillageNpcHost>;
+/**
+ * One zoom step for a DOM control, in the same units a wheel notch uses.
+ *
+ * `WHEEL_ZOOM_STEP` rather than a number of its own, so a button press and a wheel notch
+ * move the camera by the same amount and a learner who tries both finds them consistent.
+ */
+export const VILLAGE_ZOOM_STEP = WHEEL_ZOOM_STEP;
+
+/**
+ * The scene contract this world exposes.
+ *
+ * Two members beyond {@link WorldScene}, and both added in Phase 21 for the same reason the
+ * dungeon's `readArtifactSnapshot` exists: a DOM surface must be able to *ask* a question of
+ * the world without holding the world.
+ *
+ * - `readCameraState` answers "how far in is the view, and where is it centred", which is
+ *   what a zoom status sentence needs and what a reduced-motion gate needs in order to see
+ *   whether the camera is still easing.
+ * - `zoomBy` is the zoom verb for a DOM control. The village's zoom was, before this,
+ *   reachable only from a wheel notch or a pinch - two pointer-only gestures - and the
+ *   village's own action table holds exactly one action, `village-interact`, because
+ *   `VillageActionId` in the renderer-neutral contract is a closed union of one member and
+ *   `tests/phase12/village-npc-renderer.test.ts` pins that table to length 1. So the zoom
+ *   control could not be an action without breaking a contract another layer owns, and the
+ *   camera was left with no keyboard route at all.
+ *
+ * Deliberately *not* on `capabilities`: `VillageNpcHost` is a shared contract both the Pixi
+ * and the Phaser adapter answer to, and a member only one adapter can implement would be a
+ * `?` every consumer has to feature-detect. This is a member of the *Pixi scene*, beside
+ * the lifecycle, which is where the dungeon's teleport and artifact read already sit.
+ */
+export interface VillageScene extends WorldScene<VillageNpcHost> {
+  readonly capabilities: VillageNpcHost;
+  /** The camera as one frozen value: centre, zoom, and viewport, in that arithmetic. */
+  readCameraState(): CameraState;
+  /** Zoom the camera by a delta in zoom units. Clamped by the rig. Zero is a no-op. */
+  zoomBy(delta: number): void;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Procedural art                                                              */
@@ -967,8 +1004,7 @@ export function createVillageScene(
 
     const zoomDelta = input.consumeZoomDelta();
     if (zoomDelta !== 0) {
-      camera.addZoom(zoomDelta);
-      input.setZoom(camera.getState().zoom);
+      zoomBy(zoomDelta);
     }
 
     const interact = input.consumeInteract();
@@ -979,8 +1015,23 @@ export function createVillageScene(
       init.onAction(VILLAGE_INTERACT_ACTION_ID, interact.source);
     }
 
-    camera.follow(player.x, player.y);
-    camera.update(deltaMs);
+    // Camera follow. This lerp is the last thing in the village that eases, so it is the
+    // last thing `prefers-reduced-motion` has to stop. A camera that closes 8% of the
+    // remaining distance every frame keeps sliding the *whole world* across the screen
+    // for as long as the learner holds a direction key, and no travel token expresses
+    // that: `motion.scale` multiplies one object's offset, and this is a viewport-sized
+    // translation.
+    //
+    // `snapTo`, not `follow` plus a lerp of `1`. Both settle on the same frame, but
+    // `snapTo` also writes the follow target, so the next `follow` starts from where the
+    // camera actually is - a rig left holding a stale target would ease toward a point the
+    // player left frames ago, which is the lag this branch exists to remove.
+    if (motion.scale > 0) {
+      camera.follow(player.x, player.y);
+      camera.update(deltaMs);
+    } else {
+      camera.snapTo(player.x, player.y);
+    }
     applyCamera();
     updateStructureProximity();
     // NPC movement and proximity, after the camera has been applied and the player's
@@ -989,6 +1040,26 @@ export function createVillageScene(
     npcs.update(deltaMs, motion);
     updatePoi();
     animateBirds(deltaMs);
+  }
+
+  /**
+   * Zoom by a delta, from a gesture or from a DOM control.
+   *
+   * One function so the three routes into the village zoom - a wheel notch, a pinch, and
+   * the two buttons `VillageWorld` renders - are one zoom. It also tells the input
+   * controller what the camera actually applied: a pinch is an *additive* delta against
+   * the zoom the scene last reported, so a controller still holding its own idea of the
+   * zoom would compute the next pinch against a stale base and jump.
+   */
+  function zoomBy(delta: number): void {
+    if (!Number.isFinite(delta) || delta === 0) return;
+    camera.addZoom(delta);
+    input.setZoom(camera.getState().zoom);
+  }
+
+  /** The camera as one frozen value, for a DOM status sentence and for the motion gate. */
+  function readCameraState(): CameraState {
+    return Object.freeze({ ...camera.getState() });
   }
 
   function onResize(width: number, height: number): void {
@@ -1111,6 +1182,8 @@ export function createVillageScene(
     actions: VILLAGE_ACTIONS,
     activate: applyAction,
     readState,
+    readCameraState,
+    zoomBy,
     update,
     onResize,
     setMotionProfile,

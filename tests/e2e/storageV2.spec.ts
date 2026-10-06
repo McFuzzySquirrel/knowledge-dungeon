@@ -1691,7 +1691,7 @@ async function openNoteEditorImageLibrary(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
   await expect(page.locator('.game-canvas-host canvas')).toBeVisible({ timeout: 60_000 });
   await page.waitForLoadState('networkidle');
-  const onboarding = page.getByRole('dialog', { name: 'Gameplay onboarding' });
+  const onboarding = page.getByTestId('gameplay-onboarding');
   if (await onboarding.isVisible().catch(() => false)) {
     await onboarding.getByRole('button', { name: 'Start exploring' }).click();
     await expect(onboarding).toHaveCount(0, { timeout: 20_000 });

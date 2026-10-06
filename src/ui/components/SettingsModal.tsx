@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, type JSX } from 'react';
+import { Suspense, lazy, useId, useState, type JSX } from 'react';
 import type { ColorTheme } from '@/store/preferencesStore';
 import { useShortcutStore, type ShortcutBinding } from '@/store/shortcutStore';
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '@/i18n';
@@ -33,12 +33,23 @@ const AssistanceSettingsTab = lazy(
   async () => ({ default: (await import('@/ui/assistance/AssistanceSettings')).AssistanceSettings }),
 );
 import { MakeItYoursModal } from '@/ui/components/MakeItYoursModal';
+import { AccessibleRadioGroup } from '@/ui/components/AccessibleRadioGroup';
+import { AccessibleDialog } from '@/ui/components/AccessibleDialog';
 
 interface SettingsModalProps {
   currentTheme: ColorTheme;
   onThemeChange: (theme: ColorTheme) => void;
   onClose: () => void;
 }
+
+/**
+ * The language radio options, in the order the arrows traverse them.
+ *
+ * A projection of {@link SUPPORTED_LOCALES} rather than a second list, so the supported set stays
+ * single-sourced. The `locale` field is redundant with `id` and is here only so the option reads as
+ * a language rather than a bare string at the call site.
+ */
+const LOCALE_OPTIONS = SUPPORTED_LOCALES.map((locale) => ({ id: locale, locale }));
 
 const THEME_OPTIONS: { id: ColorTheme; title: string; description: string }[] = [
   {
@@ -168,17 +179,31 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
     );
   }
 
+  const title = t('settings.title', 'Settings');
+  const titleId = useId();
+
   return (
     <>
       <div className="modal-backdrop" onClick={onClose} role="presentation">
-        <div
+        {/*
+          Phase 21. This dialog declared `role="dialog" aria-modal="true"` and **no** focus
+          management: no `useModalFocus`, no `tabIndex={-1}`, no Escape, no restoration. A keyboard
+          user could Tab from the shortcut list straight into the page behind the backdrop and could
+          not leave with Escape. It is `AccessibleDialog` now, which is the component that owns the
+          markup the hook could not.
+
+          `onEscape: onClose` - Escape closes Settings. The axe suite asserts this, and it is the
+          behaviour the Phase 10.1 focus-restoration requirement is about: close on Escape and put
+          focus back on the control that opened it.
+        */}
+        <AccessibleDialog
           className="modal settings-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t('settings.title', 'Settings')}
-          onClick={(event) => event.stopPropagation()}
+          active
+          onEscape={onClose}
+          labelledBy={titleId}
+          extraProps={{ onClick: (event: { stopPropagation(): void }) => event.stopPropagation() }}
         >
-        <h2>{t('settings.title', 'Settings')}</h2>
+        <h2 id={titleId}>{title}</h2>
 
         {/* Phase 5: Tab navigation in settings */}
         <div className="settings-tabs" role="tablist" aria-label="Settings categories">
@@ -202,21 +227,38 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
             <p className="room-help-text">
               {t('settings.themeDescription', 'Choose the visual theme for menus and other UI panels.')}
             </p>
-            <div className="settings-theme-grid" role="radiogroup" aria-label="UI theme choices">
-              {THEME_OPTIONS.map((theme) => (
-                <button
-                  key={theme.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={currentTheme === theme.id}
-                  aria-pressed={currentTheme === theme.id}
-                  onClick={() => onThemeChange(theme.id)}
-                >
+            {/*
+              Phase 21. Was a hand-written `role="radiogroup"` whose members were
+              `button[role="radio"][aria-checked][aria-pressed]` - a radio that also claimed to be a
+              toggle button, which axe reports as `critical: aria-allowed-attr` and which a screen
+              reader has no single answer for. One role, one state attribute, and the keyboard
+              contract that role promises: roving tabindex, arrows that move and select, `Home`/`End`,
+              and wrap-around. See `AccessibleRadioGroup`.
+            */}
+            <AccessibleRadioGroup
+              className="settings-theme-grid"
+              label="UI theme choices"
+              options={THEME_OPTIONS}
+              value={currentTheme}
+              onChange={onThemeChange}
+              renderOption={(theme, checked) => (
+                <>
+                  {/*
+                    The check mark is `aria-hidden` because `aria-checked` already carries the state,
+                    and the stylesheet adds the border weight. Two non-colour signals, one for a
+                    learner looking and one for a screen reader, so "which theme" survives without
+                    relying on the accent fill.
+                  */}
+                  {checked ? (
+                    <span className="settings-choice-mark" aria-hidden="true">
+                      ✓
+                    </span>
+                  ) : null}
                   <strong>{theme.title}</strong>
                   <div className="room-help-text">{theme.description}</div>
-                </button>
-              ))}
-            </div>
+                </>
+              )}
+            />
           </div>
         )}
 
@@ -226,20 +268,24 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
             <p className="room-help-text">
               {t('settings.languageDescription', 'Choose your preferred language.')}
             </p>
-            <div className="settings-language-grid" role="radiogroup" aria-label="Language choices">
-              {SUPPORTED_LOCALES.map((locale) => (
-                <button
-                  key={locale}
-                  type="button"
-                  role="radio"
-                  aria-checked={currentLang === locale}
-                  aria-pressed={currentLang === locale}
-                  onClick={() => handleLanguageChange(locale)}
-                >
-                  <strong>{LOCALE_LABELS[locale]}</strong>
-                </button>
-              ))}
-            </div>
+            {/* Phase 21: the same `role="radio"` + `aria-pressed` defect as the theme grid. */}
+            <AccessibleRadioGroup
+              className="settings-language-grid"
+              label="Language choices"
+              options={LOCALE_OPTIONS}
+              value={currentLang}
+              onChange={handleLanguageChange}
+              renderOption={(locale, checked) => (
+                <>
+                  {checked ? (
+                    <span className="settings-choice-mark" aria-hidden="true">
+                      ✓
+                    </span>
+                  ) : null}
+                  <strong>{LOCALE_LABELS[locale.locale]}</strong>
+                </>
+              )}
+            />
           </div>
         )}
 
@@ -287,7 +333,7 @@ export function SettingsModal({ currentTheme, onThemeChange, onClose }: Settings
             {t('common.close', 'Close')}
           </button>
         </div>
-      </div>
+        </AccessibleDialog>
       </div>
       {makeItYoursOpen && (
         <MakeItYoursModal onClose={() => setMakeItYoursOpen(false)} />

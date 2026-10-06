@@ -26,6 +26,8 @@ import {
 import { keeperLineFor, useVillageSceneCallbacks } from '@/ui/village/villageSceneCallbacks';
 
 import { CompassOverlay } from '@/ui/village/CompassOverlay';
+import { VillageZoomReadOut } from '@/ui/village/VillageZoomReadOut';
+import { useVillageZoomReader } from '@/ui/village/useVillageZoomReader';
 import { CreateSubjectDialog } from '@/ui/village/CreateSubjectDialog';
 import { DataManagementDialog } from '@/ui/village/DataManagementDialog';
 import { NpcDialog } from '@/ui/village/NpcDialog';
@@ -141,47 +143,39 @@ function readVillageSpawnPoint(): { gridX: number | null; gridY: number | null }
  * Phase 12 split this screen, which was 1798 lines, into `src/ui/village/**`. What
  * is left here is the composition root and nothing else:
  *
- * | Concern                                        | Owner                                     |
- * |------------------------------------------------|-------------------------------------------|
- * | The build-time Phaser/Pixi switch                | here, deliberately                         |
- * | The imperative handles for whichever renderer     | here                                       |
- * | The study-flow controller and its store ports     | here (the flow is application logic)       |
- * | Subject loading and the portal-slot projection    | here (a renderer-neutral world model)      |
- * | HUD, structure panel, quest board, NPC dialogue   | `src/ui/village/**`                        |
- * | The compass, nearby actions, the surface shape    | `src/ui/village/**`                        |
- * | The four modal launchers and the two dialogs      | `src/ui/village/**`                        |
+ * | Concern                                        | Owner                                |
+ * |------------------------------------------------|---------------------------------------|
+ * | The build-time Phaser/Pixi switch                | here, deliberately                    |
+ * | The imperative handles for whichever renderer     | here                                  |
+ * | The study-flow controller and its store ports     | here (the flow is application logic)  |
+ * | Subject loading and the portal-slot projection    | here (a renderer-neutral world model) |
+ * | Everything else - HUD, panels, compass, nearby actions, zoom read-out | `src/ui/village/**` |
  *
- * The switch stays here for two reasons that are not about tidiness. It is the
- * module the bundler folds, and it must be a *literal* `=== 'true'` comparison in
- * one place (see the comment above). And the `VITE_PIXI_VILLAGE` switch decides
- * which of two renderer handles exists, which is a fact about the whole screen and
- * not about any one panel.
+ * The switch stays here for two reasons that are not about tidiness: it is the module the bundler folds and
+ * it must be a *literal* `=== 'true'` comparison in one place, and it decides which of two renderer handles
+ * exists, which is a fact about the whole screen rather than any one panel.
  *
- * ## The three renderer reads, and the one that is not polled any more
+ * ## The renderer reads, and the two models on top of them
  *
- * `readPoi`, `readNpcSnapshot`, and `invokeAction` are read through this screen so
- * no panel has to know which renderer is mounted. Two different models sit on top
- * of them:
+ * `readPoi`, `readNpcSnapshot`, `readCameraState` and `invokeAction` are read through this screen so no
+ * panel has to know which renderer is mounted. Two models sit on top of them:
  *
- * - **`readPoi` no longer reaches React.** `CompassOverlay` holds it in a ref and
- *   samples it on a throttled interval, writing the needle's transform and the
- *   label straight to the DOM. The component has no state at all, so a moving
- *   player cannot cause a render. That is the phase's "no animation-frame React
- *   updates caused by transient scene state" deliverable, and the reasoning is in
- *   `CompassOverlay.tsx`.
- * - **`readNpcSnapshot` is sampled, not polled, and only the selected rows reach
- *   React.** It returns a *value* - at most two derived rows - rather than a scene
- *   reference, and `useVillageNpcSurface` compares the rows before committing, so
- *   walking costs a comparison and crossing a proximity boundary costs one render.
- *   An NPC event is a nudge that samples immediately, never the source of truth.
+ * - **Sampled, never polled per frame.** `CompassOverlay` holds `readPoi` in a ref and samples it on a
+ *   throttled interval, writing the needle's transform straight to the DOM; it has no state at all, so a
+ *   moving player cannot cause a render. `VillageZoomReadOut` (Phase 21) is the same shape and reads only
+ *   `readCameraState().zoom` - the centre changes every frame and is read by nothing. See their files.
+ * - **Derived to a value, then compared.** `useVillageNpcSurface` turns `readNpcSnapshot` into at most two
+ *   derived rows rather than a scene reference, and compares them before committing, so walking costs a
+ *   comparison and crossing a proximity boundary costs one render. An NPC event is a nudge that samples
+ *   immediately, never the source of truth.
  *
  * ## Feature detection, and what happens when an adapter has not caught up
  *
- * `readNpcSnapshot` and `invokeAction` are optional on the capability port. This
- * screen passes them down **as functions or as `undefined`**, never as a stub that
- * does nothing, and the DOM decides what to say about it: no snapshot means an
- * empty list with a sentence, no dispatcher means the rows are present, disabled,
- * and described. There is no state in which a village button silently does nothing.
+ * `readNpcSnapshot`, `readCameraState` and `invokeAction` are optional on the capability port. This screen
+ * passes them down **as functions or as `undefined`**, never as a stub that does nothing, and the DOM
+ * decides what to say about it: no snapshot means an empty list with a sentence, no dispatcher means the rows
+ * are present, disabled, and described, no camera means the zoom read-out is hidden. There is no state in
+ * which a village button silently does nothing.
  */
 export function VillageScreen(): JSX.Element {
   const setPhase = useSessionStore((s) => s.setPhase);
@@ -203,8 +197,7 @@ export function VillageScreen(): JSX.Element {
   const sessionStats = useMemo(() => computeSessionStats(), []);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // The Phaser path's own handle. Null when the Pixi path is active, because
-  // `VillageWorld` owns its renderer behind `pixiVillageRef` below.
+  // The Phaser path's own handle; null on the Pixi path, which owns its renderer behind the ref below.
   const rendererRef = useRef<VillageRendererHandle | null>(null);
   const pixiVillageRef = useRef<VillageWorldHandle | null>(null);
 
@@ -336,6 +329,7 @@ export function VillageScreen(): JSX.Element {
     return rendererRef.current?.readPoi() ?? null;
   }, [pixiVillage]);
 
+
   /**
    * The mounted handle, or `null`.
    *
@@ -347,6 +341,9 @@ export function VillageScreen(): JSX.Element {
   const activeCapabilities = useCallback((): VillageRendererCapabilities | null => {
     return pixiVillage ? pixiVillageRef.current : rendererRef.current;
   }, [pixiVillage]);
+
+  // Phase 21: the village's zoom, read without naming a renderer - see `useVillageZoomReader`.
+  const readZoom = useVillageZoomReader(activeCapabilities);
 
   /**
    * The mounted handle's NPC snapshot read, or `undefined` if it has none.
@@ -435,27 +432,71 @@ export function VillageScreen(): JSX.Element {
   /**
    * The screen's fishing surface: the lane, the session, the catch transaction, and the controls.
    *
-   * A hook, and the reason is a gate as much as a size: `tests/phase12/village-shell-split.test.ts`
-   * holds this file under 900 lines on the reasoning that "the composition root is the *small*
-   * thing", and the catch flow - one session, four outcomes, six controls, and a redesigned
-   * collection view - is a unit, so it lives in one. The screen's contribution is the `flow`
-   * declaration below and four JSX lines.
+   * A hook, and the reason is a gate as much as a size: `tests/phase12/village-shell-split.test.ts` holds
+   * this file under 900 lines because "the composition root is the *small* thing". The screen's
+   * contribution is the `flow` declaration below and four JSX lines.
    */
-  const fishing = useVillageFishing((structureId) => flow.enterFishing(structureId), pixiFishing);
-  // The lane, under the name the flow's port and the flag gate both refer to it by.
-  const { lane: pixiFishingLane } = fishing;
-
   // Ref-based callbacks: the world captures the ref, always reads fresh values
   const subjectsRef = useRef(subjects);
   subjectsRef.current = subjects;
   const dynamicStructuresRef = useRef(dynamicStructures);
   dynamicStructuresRef.current = dynamicStructures;
 
-  // The shared renderer-neutral learning flow, created exactly once: a second
-  // controller would reset the interaction bookkeeping the tutorial depends on.
-  // Its thirty-odd ports live in `villageStudyFlow.ts`; this screen supplies the
-  // five setters and two live getters they need.
+  /*
+   * The shared renderer-neutral learning flow, created exactly once - a second controller would reset the
+   * interaction bookkeeping the tutorial depends on - and declared **above** the fishing hook because the two
+   * hold each other: the flow's ports come from the hook's lane, so neither can be initialised first and the
+   * hook's `enterFishing` reads this ref at call time. Its ports live in `villageStudyFlow.ts`; the Phase 21
+   * pond-identifier rationale lives at `VillageSceneCallbackOptions`.
+   */
   const flowRef = useRef<StudyFlowController | null>(null);
+
+  /*
+   * Phase 21: the pond identifier, recorded on **every** route into a pond.
+   *
+   * ## The defect this closes
+   *
+   * `studyFlow.enterFishing(structureId)` calls `villageUi.prepareFishingSession()` **before**
+   * `fishing.enter(...)`, and `prepareFishingSession` receives no arguments. So at the moment the
+   * fishing session has to be minted, the identifier the flow resolved is gone - and only the pond
+   * panel's `Cast Line` button had recorded it, via `fishing.castFrom`.
+   *
+   * Every other route therefore entered the pond with no context: a **nearby-action row**, or the `E`
+   * key, called `flow.structureInteract` → `enterFishing` → `prepareFishingSession` →
+   * `beginFishing(null)` → early return. No session, so `catchKeep` refused with `NO_OPEN_SESSION` and
+   * the learner was told *"This catch has no open pond session, so the question cannot be asked."*
+   *
+   * That is the **shipping** renderer, not a flagged lane: `pixiFishing`'s production default is
+   * `false`, so the default build uses the Phaser pond, whose adapter ignores `handlers.pondId` and
+   * reports no session of its own. The Pixi lane's `onSessionStarted` backstop that masks this there
+   * simply does not exist on the artifact a learner downloads.
+   *
+   * ## Why the callback bag, not a wrapper around `flow.enterFishing`
+   *
+   * That was the first attempt here and it does not work, which is worth recording because the reason
+   * is not obvious from the outside: `studyFlow.structureInteract` calls **its own** module-local
+   * `enterFishing`, not the one this screen passes to the hook. Wrapping the screen's binding therefore
+   * fixed only the route that already worked and left the defective route untouched - and the first
+   * version of this test caught exactly that.
+   *
+   * `useVillageSceneCallbacks`' `onStructureInteract` is the **single door** from any renderer into the
+   * flow: the Phaser scene, the Pixi scene, the nearby-action row, and the `E` key all arrive through
+   * it. Recording there covers every existing route and every future one, and needs no knowledge of
+   * which structures are ponds - see that module's note on why recording *every* identifier is correct
+   * rather than sloppy.
+   */
+  /*
+   * `enterFishing`, read through the ref so its **identity is stable** - `fishing.castFrom` and the
+   * `StructurePanel`'s `onCastLine` prop must not change on every render. It is *not* where the pond is
+   * recorded: `studyFlow.structureInteract` calls the flow's own module-local `enterFishing`.
+   */
+  const enterFishing = useCallback((structureId: string) => {
+    flowRef.current?.enterFishing(structureId);
+  }, []);
+  const fishing = useVillageFishing(enterFishing, pixiFishing);
+  // The lane, under the name the flow's port and the flag gate both refer to it by.
+  const { lane: pixiFishingLane } = fishing;
+
   if (flowRef.current === null) {
     flowRef.current = createVillageStudyFlow({
       readPhaserHandle: () => rendererRef.current,
@@ -473,6 +514,11 @@ export function VillageScreen(): JSX.Element {
         // The hook closes every catch surface, begins the session, and sets the one
         // DOM-observable consequence of starting a fishing session. The flow has already proved a
         // world host is mounted, so by here "fishing is starting" is true rather than attempted.
+        //
+        // Phase 21: the pond identifier is **not** passed here, because by this point it is out of
+        // scope - `studyFlow.enterFishing(structureId)` resolves it, calls this port, and the flow's own
+        // argument is gone. It is recorded one layer earlier instead, at the single door every world
+        // uses to reach the flow. See `useVillageSceneCallbacks`'s `onBeforeStructureInteract` note.
         fishing.prepareSession();
       },
       // The other half of the same pair, and the reason the rollback lane's Escape is honest:
@@ -485,13 +531,13 @@ export function VillageScreen(): JSX.Element {
   }
   const flow = flowRef.current;
 
-  const { callbacks: callbacksRef, resetConversation } = useVillageSceneCallbacks(flow, {
-    setActiveNpcId,
-    setActiveNpcLabel,
-    setKeeperDialogue,
-    setNpcDialogAnchor,
-    setVillageReady,
-  });
+  const { callbacks: callbacksRef, resetConversation } = useVillageSceneCallbacks(
+    flow,
+    { setActiveNpcId, setActiveNpcLabel, setKeeperDialogue, setNpcDialogAnchor, setVillageReady },
+    // Phase 21: the pond identifier, recorded at the one door every world uses to reach the flow. See
+    // {@link VillageSceneCallbackOptions} for why this door and not a wrapper around `flow.enterFishing`.
+    { onBeforeStructureInteract: fishing.recordPond },
+  );
 
   // Mount the Phaser village world once - it reads from callbacksRef. Only the
   // Phaser path mounts here; the Pixi component manages its own mount/unmount in
@@ -691,6 +737,8 @@ export function VillageScreen(): JSX.Element {
         />
 
         <CompassOverlay readPoi={readPoi} />
+        {/* Phase 21: the zoom read-out. See `VillageZoomReadOut` for the wording and the sampling. */}
+        <VillageZoomReadOut readZoom={readZoom} />
       </div>
 
       {infoPanel !== null ? (

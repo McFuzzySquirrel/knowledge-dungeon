@@ -150,6 +150,12 @@ export interface UseVillageFishing {
    *
    * Called by `studyFlow.enterFishing` **after** its own mount guard has passed, so a pond that
    * never mounts never mints a context and no command can commit against one.
+   *
+   * Takes no arguments because `studyFlow.enterFishing(structureId)` calls it with none - the
+   * identifier exists only as the flow's own argument. Phase 21's first attempt threaded it through as a
+   * parameter and that was wrong twice over: the screen's binding of `enterFishing` is not the function
+   * `structureInteract` calls, so the parameter was `undefined` on the very route that was broken. The
+   * identifier is now recorded at the one door every renderer uses to reach the flow, and read here.
    */
   readonly prepareSession: () => void;
   /**
@@ -168,6 +174,50 @@ export interface UseVillageFishing {
   readonly onFishCaught: (data: CaughtFish | null) => void;
   /** Record the structure the learner cast from, then enter. */
   readonly castFrom: (structureId: string) => void;
+  /**
+   * Phase 21: record a pond identifier **without** entering it.
+   *
+   * ## The reachability defect this exists to close
+   *
+   * Three routes enter a pond, and only one of them recorded which pond:
+   *
+   * | route | reaches | recorded the pond? |
+   * | --- | --- | --- |
+   * | the pond panel's `Cast Line` button | `castFrom` → `structureIdRef` → `enterFishing` | yes |
+   * | a nearby-action row, or `E`, on the shipping renderer | `flow.structureInteract` → `enterFishing` | **no** |
+   *
+   * `studyFlow.enterFishing(structureId)` calls `villageUi.prepareFishingSession()` **before**
+   * `fishing.enter(...)`, and `prepareFishingSession` receives no arguments. So at the moment the
+   * session has to be minted, `structureIdRef.current` is `null`, `beginFishing` returns early, and no
+   * context exists. Every later `catchKeep` then refuses with `NO_OPEN_SESSION`, and the learner is
+   * told *"This catch has no open pond session, so the question cannot be asked."*
+   *
+   * That is not a test artifact: it is the **shipping** renderer. `pixiFishing`'s production default is
+   * `false`, so the default build uses the Phaser pond, whose adapter ignores `handlers.pondId` and
+   * reports no session of its own - `PixiFishingLane`'s own header says so. The consequence: on the
+   * build a learner downloads, pressing a nearby-action row on a pond entered the pond with catches
+   * that could not be kept and a recall question that could never be asked.
+   *
+   * ## Why this is a separate entry point rather than a change to `castFrom`
+   *
+   * `castFrom` records **and** enters, which is right for a button whose whole purpose is to start
+   * fishing. The nearby-action row must not enter twice: the flow's own `structureInteract` is what
+   * performs the interaction, and the row's job is to make sure the screen knows *which* pond the
+   * flow is about to enter. Splitting record from enter keeps the one fact - "which pond am I at" -
+   * settable from a route that is not itself the cast control.
+   *
+   * ## Who calls it, and why not somewhere in this file
+   *
+   * `VillageScreen` hands this to `useVillageSceneCallbacks`' `onBeforeStructureInteract`, which is the
+   * single door from any renderer into the flow. That placement is the fix: Phase 21's first attempt
+   * wrapped `flow.enterFishing` in the screen instead, and `studyFlow.structureInteract` calls **its
+   * own** module-local `enterFishing`, so the wrapper never saw the broken route and the first version of
+   * `tests/phase21/pondReachability.test.tsx` failed against it.
+   *
+   * A door is also what makes this survive the next route: a shortcut, an NPC menu entry, a deep link -
+   * anything a renderer can report arrives through the same bag, so nothing has to remember to record.
+   */
+  readonly recordPond: (structureId: string) => void;
   readonly onKeep: () => void;
   readonly onRelease: () => void;
   readonly onDecide: (choice: FishingRecallChoice, roomId: string | null) => void;
@@ -417,6 +467,12 @@ export function useVillageFishing(
     setCatchContext(null);
     setStatus(null);
     setSessionOpen(true);
+    /*
+     * Phase 21. `structureIdRef` is the pond, and it is now recorded by **every** route rather than
+     * only the panel's `Cast Line` button - `useVillageSceneCallbacks`' `onBeforeStructureInteract`
+     * writes it at the single door every renderer uses to reach the flow. See that option's own note
+     * for why that door, and why recording every structure identifier is correct rather than sloppy.
+     */
     beginFishing(structureIdRef.current);
   }, [beginFishing]);
 
@@ -428,6 +484,23 @@ export function useVillageFishing(
     },
     [enterFishing],
   );
+
+  /**
+   * Phase 21: record a pond identifier for a route that enters it by some other door.
+   *
+   * See {@link UseVillageFishing.recordPond} for the reachability defect. The single fact is
+   * `structureIdRef`, and this is the one other way to set it - so the two entry points cannot
+   * disagree about which pond is meant, because there is only one place the answer is stored.
+   *
+   * An empty identifier is refused rather than stored: `structureIdRef` holds `null` for "no pond
+   * known", and storing `''` would turn "unknown" into a pond id that `beginFishing`'s own
+   * `pondId.length === 0` guard then rejects anyway - the same refusal three frames later, from a
+   * less obvious place.
+   */
+  const recordPond = useCallback((structureId: string) => {
+    if (structureId.length === 0) return;
+    structureIdRef.current = structureId;
+  }, []);
 
   /**
    * Open the recall question, or keep the fish without one.
@@ -556,6 +629,7 @@ export function useVillageFishing(
     endSession,
     onFishCaught,
     castFrom,
+    recordPond,
     onKeep,
     onRelease,
     onDecide,

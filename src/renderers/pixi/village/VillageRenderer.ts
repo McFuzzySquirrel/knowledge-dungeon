@@ -29,6 +29,7 @@
  * loading it issues no network request; `dispose` releases it on unmount.
  */
 import { createAssetLoader } from '@/renderers/pixi/assets/AssetLoader';
+import type { CameraState } from '@/renderers/pixi/camera/CameraRig';
 import {
   asPixiApplication,
   createPixiApplication,
@@ -112,6 +113,32 @@ export interface PixiVillageRenderer extends WorldRenderer, VillageNpcHost {
    * declaring one of them unable to answer.
    */
   readPlayerGridPosition(): WorldGridPosition | null;
+  /**
+   * Zoom the camera by one step, for a DOM control.
+   *
+   * ## Why this is here and not in `VillageNpcHost`
+   *
+   * The village's zoom was reachable only from a wheel notch and a pinch, so it had **no**
+   * keyboard route at all - and it could not be added as a `WorldAction` either, because
+   * `VILLAGE_ACTIONS` is pinned to length 1 by
+   * `tests/phase12/village-npc-renderer.test.ts` so that it matches the closed
+   * `VillageActionId` union in `src/application/contracts/villageNpc.ts`. Zoom is a camera
+   * verb rather than a village-world verb, which is the same distinction the dungeon draws
+   * when it keeps its own zoom actions out of the contract.
+   *
+   * So it rides on the adapter, beside `readPoi` and `readPlayerGridPosition`, and reaches
+   * the scene through the reference the `createScene` callback below already has to keep.
+   */
+  zoomBy(delta: number): void;
+  /**
+   * The camera as one value, or `null` before a mount.
+   *
+   * A read rather than a subscription on purpose: the camera changes every frame while the
+   * learner walks, and a per-frame publish would re-render every `aria-live` region in the
+   * mirror sixty times a second. A DOM surface that wants to state the zoom reads this on
+   * its own cadence, or from a control press.
+   */
+  readCameraState(): CameraState | null;
 }
 
 /** Everything the renderer needs to present one village world. */
@@ -152,15 +179,28 @@ export function createPixiVillageRenderer(
   let loader: ReturnType<typeof createAssetLoader> | null = null;
   let bundleHeld = false;
 
+  /**
+   * The scene the host built, held so the camera members can reach it.
+   *
+   * `null` before mount and after unmount, and reassigned by `restart`, because the host
+   * calls `createScene` exactly once per mount and once per restart - so this is always the
+   * scene currently on the stage. The camera is not on `VillageNpcHost`, so there is no
+   * capability port to reach it through; this is the same shape `DungeonRenderer` uses for
+   * `readArtifactSnapshot`.
+   */
+  let scene: VillageScene | null = null;
+
   const host = createPixiWorldHost<WorldApplication, VillageScene, VillageNpcHost>({
     host: options.host,
     createApplication: createPixiApplication,
-    createScene: (application, init) =>
-      createVillageScene(asPixiApplication(application), init, {
+    createScene: (application, init) => {
+      scene = createVillageScene(asPixiApplication(application), init, {
         world: options.world,
         callbacks: options.callbacks,
         spawn: options.spawn,
-      }),
+      });
+      return scene;
+    },
     theme,
     quality,
     reducedMotion: observed.reducedMotion,
@@ -189,6 +229,7 @@ export function createPixiVillageRenderer(
     },
     unmount(): void {
       host.unmount();
+      scene = null;
       bundleHeld = false;
       const current = loader;
       loader = null;
@@ -202,6 +243,12 @@ export function createPixiVillageRenderer(
     },
     onReady(listener: () => void): () => void {
       return host.onReady(listener);
+    },
+    zoomBy(delta: number): void {
+      scene?.zoomBy(delta);
+    },
+    readCameraState(): CameraState | null {
+      return scene?.readCameraState() ?? null;
     },
     setDynamicStructures(structures): void {
       host.capabilities?.setDynamicStructures(structures);

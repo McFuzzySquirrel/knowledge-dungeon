@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "phase": "Phase 21",
+  "claimBoundary": "This is a manual observation record from named hardware with named assistive technology. It is not a WCAG conformance claim, not an audit, and not a statement about any browser, device or operating-system version nobody tested. A discharged gate records what one operator saw on one device on one date against one recorded artifact.",
+  "entries": [
+    {
+      "gateId": "physical-chromebook-screen-reader",
+      "verdict": "unverified",
+      "evidenceClass": "physical-device-manual",
+      "evidence": null,
+      "notDerivedFrom": [],
+      "observations": [],
+      "note": ""
+    },
+    {
+      "gateId": "physical-macos-safari",
+      "verdict": "unverified",
+      "evidenceClass": "physical-device-manual",
+      "evidence": null,
+      "notDerivedFrom": [],
+      "observations": [],
+      "note": ""
+    },
+    {
+      "gateId": "physical-touch-platform-screen-reader",
+      "verdict": "unverified",
+      "evidenceClass": "physical-device-manual",
+      "evidence": null,
+      "notDerivedFrom": [],
+      "observations": [],
+      "note": ""
+    },
+    {
+      "gateId": "physical-windows-desktop-browser",
+      "verdict": "unverified",
+      "evidenceClass": "physical-device-manual",
+      "evidence": null,
+      "notDerivedFrom": [],
+      "observations": [],
+      "note": ""
+    },
+    {
+      "gateId": "physical-linux-desktop-browser",
+      "verdict": "unverified",
+      "evidenceClass": "physical-device-manual",
+      "evidence": null,
+      "notDerivedFrom": [],
+      "observations": [],
+      "note": ""
+    }
+  ]
+}

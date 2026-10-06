@@ -96,8 +96,28 @@ import './fishing.css';
 /** Which key values mean "left" and which mean "right", for the document-level walk keys. */
 const LEFT_KEYS: ReadonlySet<string> = new Set(['a', 'A', 'ArrowLeft']);
 const RIGHT_KEYS: ReadonlySet<string> = new Set(['d', 'D', 'ArrowRight']);
-/** The keys that press and release the charge control. */
-const CHARGE_KEYS: ReadonlySet<string> = new Set([' ', 'Spacebar', 'Enter']);
+/**
+ * The keys that press and release the charge control.
+ *
+ * ## Why `'Space'` is in this set, and why that is a bug this phase found
+ *
+ * `KeyboardEvent.key` for the space bar is **`' '`** in the current specification, `'Spacebar'` in
+ * old Edge and IE, and `'Space'` in several engines and configurations the renderer already accepts.
+ * The two renderer-side normalizers - `createFishingScene.ts` and `WorldInputController.ts` - each
+ * map all three spellings onto one value, so the canvas route worked on every platform.
+ *
+ * This set had only two of the three. On any platform where `key === 'Space'`, the DOM charge
+ * control's keyboard route was **dead**: `keydown` and `keyup` both fell through, the learner held
+ * the space bar and nothing happened, and the phase sentence was the only evidence they got. The
+ * canvas worked, so this was invisible to anyone testing with a mouse and fatal to anyone testing
+ * with a keyboard on that platform.
+ *
+ * The fix is to match the normalizers rather than to pick a winner: all three spellings, so this
+ * control accepts exactly what the renderer accepts. `tests/phase21/fishingChargeKeys.test.tsx`
+ * asserts the set against the two renderer normalizers' own spelling, so a fourth spelling added to
+ * the renderer without being added here is a red test rather than a platform-specific dead key.
+ */
+const CHARGE_KEYS: ReadonlySet<string> = new Set([' ', 'Spacebar', 'Space', 'Enter']);
 
 export interface FishingHudProps {
   /**

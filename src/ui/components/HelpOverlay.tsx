@@ -1,14 +1,41 @@
-import type { JSX } from 'react';
+/**
+ * The help overlay: the keyboard and touch reference, on the `?` key or the HUD's Help control.
+ *
+ * ## Phase 21: this was a dialog that trapped nothing
+ *
+ * It declared `role="dialog" aria-modal="true"` and had no focus management at all: no
+ * `useModalFocus`, no `tabIndex={-1}`, no Escape handler, no restoration. The `<kbd>?</kbd>` line in
+ * this very component's own copy claims "Press `?` to toggle this Help overlay" - and while the
+ * overlay was open, focus could be anywhere, so a learner pressing `?` again had no route back. They
+ * could Tab out of the overlay into the world behind it and would have had no way to tell they had
+ * left a dialog.
+ *
+ * That is the specific failure plan section 10.1 names: "a keyboard user who tabs past the last
+ * control lands in the page behind it and cannot tell they have left." This overlay was the easiest
+ * surface in the product to trigger it on, because it is opened by a keypress and has no visible
+ * close affordance in the header.
+ *
+ * It is `AccessibleDialog` now. `onEscape: onClose`, which also makes the copy's `?` claim true in
+ * the direction that matters - a learner who opened help can get out of it.
+ *
+ * The 44-pixel floor is inline on the Close button for the Phase 20 reason: jsdom computes no layout,
+ * so a stylesheet rule cannot be asserted by a component test and an inline declaration can.
+ */
+import { useId, type JSX } from 'react';
+
+import { AccessibleDialog } from '@/ui/components/AccessibleDialog';
 
 interface HelpOverlayProps {
   onClose: () => void;
 }
 
 export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
+  const titleId = useId();
+
   return (
-    <div className="help-overlay" role="dialog" aria-modal="true" aria-label="Help">
+    <AccessibleDialog className="help-overlay" active onEscape={onClose} labelledBy={titleId}>
       <div className="panel">
-        <h2>How to play</h2>
+        <h2 id={titleId}>How to play</h2>
         <ul>
           <li>
             Move with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> or the arrow keys, and
@@ -56,10 +83,10 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): JSX.Element {
             Press <kbd>?</kbd> to toggle this Help overlay.
           </li>
         </ul>
-        <button type="button" onClick={onClose}>
+        <button type="button" onClick={onClose} style={{ minWidth: '44px', minHeight: '44px' }}>
           Close
         </button>
       </div>
-    </div>
+    </AccessibleDialog>
   );
 }

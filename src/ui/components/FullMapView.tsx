@@ -21,6 +21,7 @@ import type { GamePhase } from '@/store/sessionStore';
 import type { ColorTheme } from '@/store/preferencesStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { parseTopicBatch } from '@/ui/utils/topicParsing';
+import { AccessibleDialog } from '@/ui/components/AccessibleDialog';
 /*
  * Phase 16's review stylesheet, imported here for the map's own review affordances.
  *
@@ -696,7 +697,24 @@ export function FullMapView({
   const teleportSeconds = Math.ceil(teleportRemainingMs / 1000);
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Full map view">
+    <div className="modal-backdrop">
+      {/*
+        Phase 21. `role="dialog" aria-modal="true"` was on the **backdrop** here, so the
+        accessibility tree's dialog was an unnamed scrim and the map itself - a surface with a
+        teleport filter, per-room key handling, and a close button - had no focus trap, no initial
+        focus, no Escape and no restoration. The map is opened with `M` and is one of the largest
+        dialogs in the product, which makes "Tab walks out of it into the dungeon behind" the most
+        visible instance of the defect.
+
+        Escape closes the map, which is what the `M` shortcut's own contract says: `M` toggles, so
+        Escape must toggle too, or a keyboard learner can open the map and have no key to close it.
+      */}
+      <AccessibleDialog
+        className="full-map-dialog"
+        active
+        onEscape={onClose}
+        label="Full map view"
+      >
       <div className="full-map">
         <div className="full-map-header">
           <div>
@@ -1168,6 +1186,7 @@ export function FullMapView({
           </section>
         ) : null}
       </div>
+      </AccessibleDialog>
     </div>
   );
 }

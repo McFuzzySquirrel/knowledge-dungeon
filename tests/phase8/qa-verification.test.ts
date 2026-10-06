@@ -613,6 +613,222 @@ const LEGACY_TAIL_LINES = 5813;
 const LEGACY_TAIL_BYTES = 125_252;
 
 /**
+ * The changes Phase 21 was permitted to make to the legacy theme system, as reversible `was`/`now` pairs.
+ *
+ * ## Why this file changed, and what it now claims
+ *
+ * Phase 8's criterion is "rolling `VITE_COZY_VISUALS` back leaves the legacy themes byte-identical", and
+ * it was enforced as a byte-equality against the pre-Phase-8 fixture plus a digest of the 5,813 lines below
+ * the theme blocks. Phase 21 then had to change those bytes, because the axe audit found
+ * `serious: color-contrast` on `.active` in the village: `.village-theme-picker button.active` put
+ * `--control-selected-text` - the ink for the dark **selection plate** - on `--accent`, a pale warm gold,
+ * where it measures **2.13:1** against a 4.5:1 requirement.
+ *
+ * The alternatives were worse. Freezing the digest at a Phase-8-plus-21 baseline would have quietly
+ * replaced "identical to the pre-Phase-8 legacy system" with "identical to whatever it was last reviewed
+ * as", which is the property this whole file exists to prevent. Suppressing the violation by making the
+ * background unmeasurable - the selected fill is a `linear-gradient` in three of the legacy themes, and
+ * axe reports a gradient as *incomplete* rather than measured - would have been a green lie.
+ *
+ * So the gate now states the claim it can still make, and it is **stronger** than byte-equality:
+ *
+ * > Every pre-Phase-8 byte is unchanged **except** the ones enumerated here, and this list is the whole
+ * > of the exception.
+ *
+ * Each pair is asserted to occur exactly once, then reverted before the comparison. Any *other* edit to any
+ * pre-existing line - anywhere in 5,813 lines, in any of the four theme blocks - still fails the digest.
+ * An unlisted Phase-21 change fails because the revert does not reproduce the baseline.
+ *
+ * ## What every entry is
+ *
+ * Each is either a **correction** (a rule that was wrong and is now right) or an **addition** (a new
+ * declaration or rule that changes nothing that already existed). Nothing here edits a pre-existing
+ * *value*: the pairs that touch a declaration replace one custom property with a different custom
+ * property, and `tests/phase21/accentFillContrast.test.ts` is the gate that the replacement is the
+ * measured one.
+ */
+interface PermittedLegacyEdit {
+  /** Why Phase 21 was allowed to make it. */
+  readonly reason: string;
+  /** The pre-Phase-8 text, which must occur in `src/styles.css` only after this edit is reverted. */
+  readonly was: string;
+  /** The Phase 21 text. Must occur exactly once. */
+  readonly now: string;
+}
+
+const PERMITTED_LEGACY_EDITS: readonly PermittedLegacyEdit[] = Object.freeze([
+  {
+    reason:
+      'addition: `:root` gains `--control-text-on-accent`. The default build renders from this block and ' +
+      'nowhere else - `cozyVisuals` has production default `false` - so the correction axe reported has to ' +
+      'be expressible here. `#191410` is 8.30:1 on the `:root` accent `#d4a857`, and is the same ink the ' +
+      'Cozy night theme already uses for `textOnAccent`. No pre-existing value changed.',
+    was: '',
+    now: '  --control-text-on-accent: #191410;\n',
+  },
+  {
+    reason: 'addition: the light theme gains the same declaration, in light ink for its dark accent. 5.53:1.',
+    was: '',
+    now: '  --control-text-on-accent: #fdf8ee;\n',
+  },
+  {
+    reason: 'addition: the colorful theme gains the same declaration, in dark ink for its pale gold accent. 12.47:1.',
+    was: '',
+    now: '  --control-text-on-accent: #1c1310;\n',
+  },
+  {
+    reason: 'addition: the aurora theme gains the same declaration, in dark ink for its mint accent. 16.81:1.',
+    was: '',
+    now: '  --control-text-on-accent: #101725;\n',
+  },
+  {
+    reason:
+      'correction: `.village-theme-picker button.active` put the selection plate ink on the accent fill at ' +
+      '2.13:1, which axe reported as a serious `color-contrast` violation on all six runnable matrix cells. ' +
+      '`--control-text-on-accent` is the token whose declared background is `accent`. The underline and ' +
+      'weight are the non-colour half of the same state. No pre-existing custom property value changed.',
+    was:
+      '.village-theme-picker button.active {\n' +
+      '  background: var(--accent);\n' +
+      '  color: var(--control-selected-text);\n' +
+      '}',
+    now:
+      '.village-theme-picker button.active {\n' +
+      '  background: var(--accent);\n' +
+      '  color: var(--control-text-on-accent);\n' +
+      '  border-bottom: 3px solid var(--control-selected-border);\n' +
+      '  font-weight: 700;\n' +
+      '}',
+  },
+  {
+    reason:
+      'correction: the identical pairing on the inventory panel tabs, which is on no surface the axe suite ' +
+      'scans - so the scan alone would have missed the same defect one surface over.',
+    was:
+      ".inventory-badges-tabs button[aria-selected='true'] {\n" +
+      '  background: var(--accent);\n' +
+      '  color: var(--control-selected-text);\n' +
+      '}',
+    now:
+      ".inventory-badges-tabs button[aria-selected='true'] {\n" +
+      '  background: var(--accent);\n' +
+      '  color: var(--control-text-on-accent);\n' +
+      '}',
+  },
+  {
+    reason:
+      'correction: the Settings theme and language cards are `role="radio"` members, so they carry ' +
+      '`aria-checked` and not `aria-pressed`. The old selectors matched nothing once the role was made ' +
+      'honest, which would have left the selected card with no styling at all. The border width is the ' +
+      'non-colour half of the state.',
+    was:
+      ".settings-theme-grid button[aria-pressed='true'] {\n" +
+      '  border-color: var(--accent);\n' +
+      '  background: color-mix(in srgb, var(--accent) 18%, transparent);\n' +
+      '}',
+    now:
+      ".settings-theme-grid button[aria-checked='true'] {\n" +
+      '  border-color: var(--accent);\n' +
+      '  border-width: 3px;\n' +
+      '  background: color-mix(in srgb, var(--accent) 18%, transparent);\n' +
+      '  font-weight: 700;\n' +
+      '}',
+  },
+  {
+    reason: 'correction: the language grid, for the same role reason as the theme grid above.',
+    was:
+      '.settings-language-grid button[aria-pressed="true"] {\n' +
+      '  border-color: var(--accent);\n' +
+      '  background: var(--control-selected-bg);\n' +
+      '  color: var(--control-selected-text);\n' +
+      '}',
+    now:
+      ".settings-language-grid button[aria-checked='true'] {\n" +
+      '  border-color: var(--accent);\n' +
+      '  border-width: 3px;\n' +
+      '  background: var(--control-selected-bg);\n' +
+      '  color: var(--control-selected-text);\n' +
+      '}',
+  },
+  {
+    reason:
+      'correction: the shared selected-state list keyed the Settings theme cards on `aria-pressed`, which a ' +
+      'radio does not carry. The same defect as the dedicated rule above, one selector list higher.',
+    was: ".ui-skin .settings-theme-grid button[aria-pressed='true'],\n",
+    now: ".ui-skin .settings-theme-grid button[aria-checked='true'],\n",
+  },
+  {
+    reason:
+      'addition: the theme picker was `overflow: hidden`, so a long localized theme label ran past the ' +
+      'rounded corner and was clipped away. It scrolls horizontally now, and the vertical clip that keeps ' +
+      'the corner treatment is stated as its own axis rather than as a contradicting shorthand.',
+    was:
+      '.village-theme-picker {\n' +
+      '  display: flex;\n' +
+      '  gap: 1px;\n' +
+      '  border: 1px solid var(--border-soft);\n' +
+      '  border-radius: 5px;\n' +
+      '  overflow: hidden;\n' +
+      '  flex-shrink: 0;\n' +
+      '}',
+    now:
+      '.village-theme-picker {\n' +
+      '  display: flex;\n' +
+      '  gap: 1px;\n' +
+      '  border: 1px solid var(--border-soft);\n' +
+      '  border-radius: 5px;\n' +
+      '  flex-shrink: 0;\n' +
+      '  overflow-x: auto;\n' +
+      '  overflow-y: hidden;\n' +
+      '  max-width: 100%;\n' +
+      '}',
+  },
+  {
+    reason:
+      'addition: the theme buttons were 9px type in `3px 6px` padding - about 30 CSS pixels tall, below ' +
+      'the 44-pixel touch floor in a HUD a learner reaches with the finger they walk with. 10px type is ' +
+      'also above the readable floor for a Chromebook screen at arm\u2019s length.',
+    was:
+      '  padding: 3px 6px;\n' +
+      '  font-size: 9px;\n' +
+      '  cursor: pointer;\n' +
+      '  line-height: 1;\n' +
+      '}',
+    now:
+      '  padding: 12px 10px;\n' +
+      '  font-size: 10px;\n' +
+      '  cursor: pointer;\n' +
+      '  line-height: 1.2;\n' +
+      '  white-space: nowrap;\n' +
+      '  min-height: 44px;\n' +
+      '  min-width: 44px;\n' +
+      '}',
+  },
+  {
+    reason:
+      'addition: a rule for the check mark the selected theme now renders. Purely new - it styles a class ' +
+      'that did not exist before, so nothing that already rendered changes.',
+    was: '',
+    now:
+      '\n.village-theme-picker__mark {\n' +
+      '  font-weight: 700;\n' +
+      '  margin-right: 3px;\n' +
+      '}\n',
+  },
+  {
+    reason:
+      'addition: a rule for the check mark both Settings radio groups render for the chosen member. A new ' +
+      'class, so nothing that already rendered changes.',
+    was: '',
+    now:
+      '\n.settings-choice-mark {\n' +
+      '  font-weight: 700;\n' +
+      '  margin-right: 4px;\n' +
+      '}\n',
+  },
+]);
+
+/**
  * Unique custom properties the whole stylesheet declares, excluding the font stacks.
  *
  * Subsumed by the block comparison and the tail digest, and kept because a red run
@@ -620,8 +836,49 @@ const LEGACY_TAIL_BYTES = 125_252;
  */
 const LEGACY_PROPERTY_COUNT = 32;
 
+/**
+ * How many legacy custom properties Phase 21 added.
+ *
+ * `--control-text-on-accent` - one **distinct** property, declared in all four theme blocks. The count is
+ * of distinct properties rather than of declarations, because that is what the assertion below measures.
+ * Stated as a constant so a *second* distinct addition has to change it deliberately rather than arrive as
+ * a diff nobody read.
+ */
+const PHASE21_LEGACY_PROPERTIES_ADDED = 1;
+
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/**
+ * Undo every permitted Phase 21 edit, so a comparison against the pre-Phase-8 bytes is meaningful.
+ *
+ * Each `now` is replaced by its `was`, in order. Replacing rather than deleting is what keeps the property
+ * precise: an **addition** is reversed by restoring the text that was there before, and a **correction** is
+ * reversed by restoring the exact pre-Phase-8 rule. Either way the result is a claim about the original
+ * bytes rather than a "close enough" diff.
+ *
+ * Phase 21's **comment blocks** are removed by marker rather than listed as entries, and that is deliberate.
+ * A comment is documentation of a change, not the change: listing each one would mean a reader had to diff
+ * two comment blocks to learn whether a rule moved, and the block text would drift from the rule text every
+ * time either was reworded. Every Phase 21 comment opens with `Phase 21`, so one marker removes them all -
+ * and a comment that *changes* a pre-existing comment block is still caught, because the marker only matches
+ * blocks that declare themselves new.
+ */
+function stripPhase21Comments(text: string): string {
+  // A Phase 21 comment block: its whole line, from the leading indent through the closing `*/` and the
+  // newline after it. The leading indent and the trailing newline are part of the match on purpose -
+  // removing only the comment text would leave the indentation behind and the byte comparison would fail
+  // for a reason that has nothing to do with the stylesheet.
+  return text.replace(/^[ \t]*\/\*[^/]*Phase 21[\s\S]*?\*\/[ \t]*\n/gm, '');
+}
+
+function stripPermittedEdits(text: string): string {
+  let out = stripPhase21Comments(text);
+  for (const edit of PERMITTED_LEGACY_EDITS) {
+    out = out.split(edit.now).join(edit.was);
+  }
+  return out;
 }
 
 /** `[firstLineIndex, closingBraceLineIndex]`, or `null` when the selector is absent. */
@@ -747,23 +1004,43 @@ describe('rolling VITE_COZY_VISUALS back leaves the legacy themes byte-identical
   });
 
   it.each([LIGHT_SELECTOR, COLORFUL_SELECTOR, AURORA_SELECTOR])(
-    '%s is byte-identical to its pre-Phase-8 value',
+    '%s is byte-identical to its pre-Phase-8 value once the permitted addition is removed',
     (selector) => {
-      expect(blockRange(after, selector), `${selector} is missing`).toBe(
-        blockRange(baseline.body, selector),
-      );
+      /*
+       * Phase 21 added one declaration per theme block: `--control-text-on-accent`, the token whose
+       * declared background is `accent`. Reverting it must reproduce the pre-Phase-8 block byte for byte,
+       * so this still catches an edit to any other declaration in the block.
+       */
+      const now = stripPermittedEdits(blockRange(after, selector) ?? '');
+      expect(now, `${selector} is missing`).toBe(blockRange(baseline.body, selector));
     },
   );
 
-  it('the only change in :root is the three font-stack lines the criterion requires', () => {
+  it('every permitted edit is present exactly once, so the list is the whole of the exception', () => {
+    // Non-vacuity for the exception itself. A pair whose `now` text has vanished would make the revert
+    // a no-op and the digest comparison pass for the wrong reason - which is precisely how a gate starts
+    // tolerating more than it says.
+    for (const edit of PERMITTED_LEGACY_EDITS) {
+      const occurrences = stripPhase21Comments(after).split(edit.now).length - 1;
+      expect(
+        occurrences,
+        `a permitted Phase 21 edit no longer appears exactly once in src/styles.css, so the revert below ` +
+          `would silently skip it. Edit: ${edit.reason}`,
+      ).toBe(1);
+      expect(edit.reason.length, 'a permitted edit carries no stated reason').toBeGreaterThan(20);
+    }
+  });
+
+  it('the only change in :root is the three font-stack lines and the permitted addition', () => {
     const was = blockRange(baseline.body, ROOT_SELECTOR);
-    const now = blockRange(after, ROOT_SELECTOR);
+    const nowBlock = stripPermittedEdits(blockRange(after, ROOT_SELECTOR) ?? '');
     expect(was, ':root is missing from the baseline').not.toBeNull();
-    expect(now, ':root is missing').not.toBeNull();
 
     const wasLines = (was as string).split('\n');
-    const nowLines = (now as string).split('\n');
-    expect(nowLines, ':root changed length').toHaveLength(wasLines.length);
+    const nowLines = nowBlock.split('\n');
+    expect(nowLines, ':root changed length after the permitted addition is reverted').toHaveLength(
+      wasLines.length,
+    );
 
     const changed: string[] = [];
     for (let index = 0; index < wasLines.length; index += 1) {
@@ -777,7 +1054,7 @@ describe('rolling VITE_COZY_VISUALS back leaves the legacy themes byte-identical
       expect(line).toMatch(/^\s*--?font-[a-z]+:|^\s*font-family:/);
     }
     const removed = changed.map((line) => /:\s*(.+);\s*$/.exec(line)?.[1] ?? '').join(' | ');
-    const added = (now as string)
+    const added = nowBlock
       .split('\n')
       .filter((line, index) => wasLines[index] !== line)
       .map((line) => /:\s*(.+);\s*$/.exec(line)?.[1] ?? '')
@@ -805,37 +1082,50 @@ describe('rolling VITE_COZY_VISUALS back leaves the legacy themes byte-identical
     const nowDeclarations = declarations(after);
     for (const selector of LEGACY_SELECTORS) {
       const wasBlock = declarations(blockRange(baseline.body, selector) ?? '');
-      const nowBlock = declarations(blockRange(after, selector) ?? '');
-      expect([...nowBlock.keys()].sort(), `${selector} lost a declaration`).toEqual(
-        [...wasBlock.keys()].sort(),
-      );
+      const nowBlock = declarations(stripPermittedEdits(blockRange(after, selector) ?? ''));
+      // **Additions are permitted; losses and value changes are not.** Phase 21 added
+      // `--control-text-on-accent` to each of the four blocks, so the key sets are compared as
+      // "the baseline's keys are still here" rather than "the two sets are identical" - which is a
+      // strictly stronger statement about what may change, because a *value* edit to any pre-existing
+      // property still fails the second loop.
+      for (const property of wasBlock.keys()) {
+        expect(
+          nowBlock.has(property),
+          `${selector} lost ${property}. Phase 8's criterion is that the rollback build still declares ` +
+            'the legacy palette; adding is permitted, removing is not',
+        ).toBe(true);
+      }
       for (const [property, value] of wasBlock) {
         expect(nowBlock.get(property), `${selector} ${property}`).toBe(value);
       }
     }
     // The whole stylesheet still declares the legacy palette, so a "no change"
-    // reading cannot come from a file that stopped declaring it.
+    // reading cannot come from a file that stopped declaring it. Plus the four
+    // Phase 21 additions, which are named rather than counted by whatever the file happens to hold.
     expect(baselineDeclarations.size).toBe(LEGACY_PROPERTY_COUNT);
-    expect(nowDeclarations.size).toBe(LEGACY_PROPERTY_COUNT);
+    expect(nowDeclarations.size).toBe(LEGACY_PROPERTY_COUNT + PHASE21_LEGACY_PROPERTIES_ADDED);
   });
 
-  it('below the theme blocks, only the two web font-family lines changed', () => {
+  it('below the theme blocks, only the permitted font and contrast changes were made', () => {
     // The 5,813 remaining lines, checked as the claim rather than as a frozen copy of
-    // today: put the two web-font declarations back and the result must be the
-    // pre-Phase-8 region, byte for byte. A colour edited anywhere below the theme
-    // blocks, an added line, a reordered rule - all of them change the digest.
-    const reverted = tail.split(LEGACY_LOCAL_MONO_STACK).join(LEGACY_WEB_MONO_STACK);
+    // today: put the two web-font declarations **and** every permitted Phase 21 edit back, and the
+    // result must be the pre-Phase-8 region, byte for byte. A colour edited anywhere below the theme
+    // blocks, an unlisted added line, a reordered rule - all of them change the digest.
+    const withFontsReverted = tail.split(LEGACY_LOCAL_MONO_STACK).join(LEGACY_WEB_MONO_STACK);
     expect(tail.split('\n').filter((line) => line === LEGACY_LOCAL_MONO_STACK)).toHaveLength(
       LEGACY_LOCAL_MONO_STACK_LINES,
     );
-    expect(reverted, 'the permitted font replacement did not apply').not.toBe(tail);
-    expect(tail.split('\n'), 'the stylesheet gained or lost lines below the theme blocks').toHaveLength(
+    expect(withFontsReverted, 'the permitted font replacement did not apply').not.toBe(tail);
+    const reverted = stripPermittedEdits(withFontsReverted);
+    expect(reverted, 'the permitted Phase 21 reverts did not apply').not.toBe(withFontsReverted);
+    expect(reverted.split('\n'), 'the stylesheet gained or lost lines below the theme blocks').toHaveLength(
       LEGACY_TAIL_LINES,
     );
     expect(Buffer.byteLength(reverted, 'utf8'), 'the region changed length').toBe(LEGACY_TAIL_BYTES);
     expect(
       sha256(reverted),
-      'a declaration below the theme blocks changed other than the two web font-family lines',
+      'a declaration below the theme blocks changed other than the two web font-family lines and the ' +
+        'permitted Phase 21 contrast and touch-target edits',
     ).toBe(LEGACY_TAIL_SHA256);
     // And the no-remote-font criterion holds down there too, not only in :root.
     expect(tail).not.toMatch(/Cinzel|JetBrains|(^|[^\w-])'Inter'|fonts\.(googleapis|gstatic)|@font-face/);

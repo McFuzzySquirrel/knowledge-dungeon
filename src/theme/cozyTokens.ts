@@ -232,7 +232,14 @@ export const COZY_SURFACE_TOKENS: readonly CozyColorToken[] = Object.freeze(
   COZY_COLOR_TOKENS.filter((token) => COZY_COLOR_TOKEN_KINDS[token] === 'surface'),
 );
 
-/** Text-on-fill tokens and the fills each one must be readable against. */
+/**
+ * Text-on-fill tokens and the fills each one must be readable against.
+ *
+ * The reason `COZY_LEGACY_VARIABLE_BRIDGE` carries two "text on a filled control" entries rather
+ * than one: the obligation follows the **fill**, and a stylesheet rule that puts text on the accent
+ * fill is asking a different question than one that puts it on the selection plate. See
+ * `--control-text-on-accent` for the violation that made the distinction observable.
+ */
 export const COZY_FILL_PARTNER_TOKENS = Object.freeze({
   textOnAccent: Object.freeze(['accent', 'accentDeep'] as const),
   textOnSelection: Object.freeze(['selectionBg'] as const),
@@ -780,5 +787,23 @@ export const COZY_LEGACY_VARIABLE_BRIDGE = Object.freeze({
   '--control-selected-bg': 'selectionBg',
   '--control-selected-text': 'textOnSelection',
   '--control-selected-border': 'selectionBorder',
+  /*
+   * Phase 21. Text that sits **directly on the accent fill**, which is a different obligation from
+   * `textOnSelection` and the reason this entry exists.
+   *
+   * `--control-selected-text` maps to `textOnSelection`, and `TEXT_ROLE_BACKGROUNDS` below declares
+   * that token's background to be `selectionBg` alone. So it is measured against a burnt-orange
+   * selection plate, and it is measured to pass there. Three rules in the legacy stylesheet put it
+   * on `--accent` instead - a pale warm gold - where the same near-white lands at 2.13:1 on the
+   * default night theme. axe reported one of them (`serious: color-contrast` on `.active` in the
+   * village); the other two are the same bug behind a different class name, and a third of the same
+   * shape is behind a `linear-gradient` axe cannot measure at all.
+   *
+   * `textOnAccent` is the token whose declared backgrounds are `accent` and `accentDeep`
+   * (`TEXT_ROLE_BACKGROUNDS` again), so bridging it is not a new colour and not a second token
+   * system: it is the token system being read by the token that answers the question the rule is
+   * actually asking. Every Cozy theme already measures it above 4.5:1 on both of its accent fills.
+   */
+  '--control-text-on-accent': 'textOnAccent',
   '--text-title': 'accent',
 } as const);
