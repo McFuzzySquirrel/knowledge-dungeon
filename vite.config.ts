@@ -310,7 +310,109 @@ export function rendererChunkFamily(fileName: string): RendererChunkFamily | und
 }
 
 /**
- * The assistance lane census.
+ * ── The share lane census ───────────────────────────────────────────────────
+ *
+ * Phase 20 adds a second feature lane behind a second `productionDefault: false` flag,
+ * and the census above already answers every question it needs answered - which modules a
+ * chunk carries, whether the entry reaches that chunk statically, and whether a browser can
+ * reach it at all. So this is a **declaration**, not a second implementation:
+ * {@link SHARE_LANE_PATHS} names the Phase 20 modules and {@link auditShareLane} calls the
+ * same {@link auditFeatureLane}. One census, two lanes. Duplicating it would give the two
+ * lanes two chances to disagree about what "statically reachable" means, which is exactly
+ * the class of drift a shared helper exists to prevent.
+ *
+ * Three named modules, and each is load-bearing:
+ *
+ * - `shareCardPolicy` - **the field-selection policy**. It decides which of a learner's own
+ *   data may appear. Plan section 9 and the phase exit criteria both reduce to "no notes, no
+ *   internal ids, no room lists, no assistance history by default", and this module is where
+ *   that is decided. A build that shipped the dialog and the renderer without it shipped an
+ *   unguarded card. It lives in `src/core/share/` rather than `src/ui/share/` because that is
+ *   where the renderer-neutral policy belongs, and this declaration follows the code rather
+ *   than a pre-phase guess about where it would land.
+ * - `renderShareCard` - **the card image**. It turns the card model into PNG bytes. A lane
+ *   that shipped the policy and the dialog and never shipped this shipped no card.
+ * - `ShareCardDialog` - **the preview and the explicit action**. Plan section 9 requires a
+ *   preview before delivery and Web Share only after an explicit user action, and both live
+ *   in the surface a learner opens on purpose.
+ *
+ * ### Two neighbouring modules deliberately not named
+ *
+ * `src/core/share/types.ts` is the **vocabulary**, and `src/core/share/shareCardModel.ts` is
+ * the **model** that `renderShareCard` must consume in order to draw anything at all. Both are
+ * therefore dragged into any chunk that carries the lane, for free, by an import the renderer
+ * needs regardless. Naming either would add no sensitivity: a chunk satisfying the declaration
+ * above already carries them. That is the exact shape of the trap `ASSISTANCE_LANE_PATHS`
+ * documents, where a **directory**-level requirement was met by a `types.ts` the store
+ * imported, so a build that never shipped the ranking passed. What makes this declaration
+ * sensitive is that the three named modules are the ones nothing else drags in.
+ *
+ * Each is named as a module **stem**, for the same reason the assistance lane names modules
+ * rather than directories: a directory-level requirement is satisfied by whatever a neighbour
+ * drags in, and a lane that ships the vocabulary without the thing that matters is the Phase
+ * 17 dead lane wearing a different hat.
+ *
+ * ## The structural demand this places on the Phase 20 code
+ *
+ * Stated here rather than left in a report, because it is load-bearing for the build:
+ * **every module in {@link SHARE_LANE_PATHS} must be reached through a dynamic import.**
+ *
+ * The measured reason is this repository's current shape: the whole application core - the
+ * router, `GameScreen`, `InventoryBadgesPanel` - is emitted into a **single** entry chunk,
+ * `index-DXLHFk3w.js`, at `23a0e0f`. There is no route-aware split behind it. So "somewhere
+ * statically reachable" and "in the entry chunk" are the same statement today, and a plain
+ * `import` from any of it makes the module eager. Check 2 below enforces this on the default
+ * build, which is the same trade the assistance lane made and the same fix: a lazily opened
+ * dialog is precisely what `React.lazy` is for, and everything under the lane becomes lazy
+ * with it.
+ *
+ * ## "Retain local PNG download" is compatible with this, and here is why
+ *
+ * The phase rollback is "set `VITE_WEB_SHARE=false` and retain local PNG download", and the
+ * download path genuinely needs {@link SHARE_LANE_PATHS}' policy to stay privacy-correct with
+ * the flag **off**. That is not a contradiction, because check 2 constrains **static**
+ * reachability only. A module reached by `await import('@/core/share/shareCardPolicy')` from
+ * the download handler is reachable with the flag off, is fetched the moment a learner clicks
+ * Share, and costs no Welcome visitor a byte. Both checks together therefore say: the lane
+ * must work with the flag off, and must not be *downloaded* with the flag off.
+ *
+ * ## What is deliberately *not* a lane module
+ *
+ * `src/ui/utils/progressionShareExport.ts` is the legacy exporter, and it is **already**
+ * eagerly reachable at `23a0e0f` - `GameScreen` imports `InventoryBadgesPanel`, which imports
+ * it, so it is inside the entry chunk today. Declaring it a lane path would make the default
+ * build red for a condition Phase 20 did not create and did not cause, and it is the wrong
+ * subject anyway: the phase's own rollback line is the thing that must keep working when this
+ * flag is off. Gating the thing rollback requires to survive would invert the rollback. It is
+ * reported as a measured observation in the Phase 20 record instead.
+ */
+export const SHARE_LANE_PATHS: readonly string[] = Object.freeze([
+  'src/core/share/shareCardPolicy',
+  'src/ui/share/renderShareCard',
+  'src/ui/share/ShareCardDialog',
+]);
+
+/**
+ * What each entry of {@link SHARE_LANE_PATHS} is, for the build error message.
+ *
+ * Same job as {@link ASSISTANCE_LANE_ROLE}: a build failing on a path nobody has heard of
+ * teaches nothing from the path alone.
+ */
+export const SHARE_LANE_ROLE: Readonly<Record<string, string>> = Object.freeze({
+  'src/core/share/shareCardPolicy': 'the field-selection policy',
+  'src/ui/share/renderShareCard': 'the card image',
+  'src/ui/share/ShareCardDialog': 'the preview and the explicit action',
+});
+
+/** The declared share lane path a module id belongs to, or `undefined` for a non-lane module. */
+export function shareLanePathFor(id: string): string | undefined {
+  const sourcePath = projectSourcePath(id);
+  if (sourcePath === undefined) return undefined;
+  return SHARE_LANE_PATHS.find((prefix) => sourcePath.startsWith(prefix));
+}
+
+/**
+ * The lane census, for one declared lane.
  *
  * Two facts per chunk that contains lane code, and both are read from the emitted bundle
  * rather than inferred from a chunk name:
@@ -321,13 +423,13 @@ export function rendererChunkFamily(fileName: string): RendererChunkFamily | und
  * - `fetchable` - in the entry's **fetchable** closure, which additionally follows dynamic
  *   imports. A chunk reachable only dynamically is a working lazy lane, not a dead one.
  *
- * `lanePaths` records which of {@link ASSISTANCE_LANE_PATHS} the chunk actually carries,
- * so a build that shipped the engine without the store is distinguishable from one that
- * shipped neither.
+ * `lanePaths` records which of the lane's declared paths the chunk actually carries, so a
+ * build that shipped the engine without the store is distinguishable from one that shipped
+ * neither.
  */
-export interface AssistanceLaneCensusEntry {
+export interface FeatureLaneCensusEntry {
   readonly fileName: string;
-  /** The declared {@link ASSISTANCE_LANE_PATHS} entries present in this chunk. */
+  /** The declared lane paths present in this chunk. */
   readonly lanePaths: readonly string[];
   /** In the module entry's static closure - Vite emits a `modulepreload` for these. */
   readonly staticReachable: boolean;
@@ -335,16 +437,16 @@ export interface AssistanceLaneCensusEntry {
   readonly fetchable: boolean;
 }
 
-export interface AssistanceLaneAudit {
+export interface FeatureLaneAudit {
   /** Entry chunks of the module bundle, the release path. */
   readonly moduleEntryChunks: readonly string[];
   /** Every chunk carrying at least one lane module, sorted. */
-  readonly laneChunks: readonly AssistanceLaneCensusEntry[];
+  readonly laneChunks: readonly FeatureLaneCensusEntry[];
   /**
    * Lane paths carried by at least one **fetchable** chunk, in declaration order.
    *
-   * A flagged build has to cover every entry in {@link ASSISTANCE_LANE_PATHS} here; that is
-   * the whole of the dead-lane criterion.
+   * A flagged build has to cover every declared lane path here; that is the whole of the
+   * dead-lane criterion.
    */
   readonly fetchableLanePaths: readonly string[];
   /**
@@ -354,15 +456,34 @@ export interface AssistanceLaneAudit {
   readonly eagerLanePaths: readonly string[];
 }
 
+/** The Phase 19 lane's audit shape. The same census, so the same type. */
+export type AssistanceLaneAudit = FeatureLaneAudit;
+
+/** The Phase 20 lane's audit shape. The same census, so the same type. */
+export type ShareLaneAudit = FeatureLaneAudit;
+
 /**
- * Audits an emitted bundle for the Phase 19 assistance lane.
+ * Audits an emitted bundle for one declared feature lane.
  *
  * Unlike the renderer census this does **not** need a `manualChunks` group to find its
  * chunks, and that is the point: a group would let the bundler decide what else ends up in
  * the same file, which is how 13 unrelated modules - including React itself - came to be
  * shipped as "assistance". Module membership cannot be influenced by the bundler.
+ *
+ * `lanePathFor` is the lane's own membership predicate, and `lanePaths` is its own
+ * declaration. Passing them in rather than reading a module-level constant is what lets one
+ * implementation serve both lanes without either of them being able to claim the other's
+ * modules.
+ *
+ * Deterministic in both senses that matter: `laneChunks` is sorted by file name and every
+ * derived list is returned in declaration order, so the line printed on every build is
+ * byte-stable and a diff of two runs is meaningful.
  */
-export function auditAssistanceLane(bundle: EmittedBundle): AssistanceLaneAudit {
+export function auditFeatureLane(
+  bundle: EmittedBundle,
+  lanePaths: readonly string[],
+  lanePathFor: (id: string) => string | undefined,
+): FeatureLaneAudit {
   const moduleEntryChunks = Object.values(bundle)
     .filter((chunk) => chunk.type !== 'asset' && chunk.isEntry === true)
     .map((chunk) => chunk.fileName)
@@ -372,28 +493,28 @@ export function auditAssistanceLane(bundle: EmittedBundle): AssistanceLaneAudit 
   const staticClosure = collectStaticClosure(bundle, moduleEntryChunks);
   const fetchableClosure = collectFetchableClosure(bundle, moduleEntryChunks);
 
-  const laneChunks: AssistanceLaneCensusEntry[] = [];
+  const laneChunks: FeatureLaneCensusEntry[] = [];
   for (const [fileName, chunk] of Object.entries(bundle)) {
     if (chunk.type === 'asset') continue;
-    const lanePaths = [
+    const carried = [
       ...new Set(
         Object.keys(chunk.modules ?? {})
-          .map((id) => assistanceLanePathFor(id))
+          .map((id) => lanePathFor(id))
           .filter((lanePath): lanePath is string => lanePath !== undefined),
       ),
     ].sort();
-    if (lanePaths.length === 0) continue;
+    if (carried.length === 0) continue;
     laneChunks.push({
       fileName,
-      lanePaths,
+      lanePaths: carried,
       staticReachable: staticClosure.has(fileName),
       fetchable: fetchableClosure.has(fileName),
     });
   }
   laneChunks.sort((a, b) => a.fileName.localeCompare(b.fileName));
 
-  const carriedBy = (predicate: (entry: AssistanceLaneCensusEntry) => boolean): string[] =>
-    ASSISTANCE_LANE_PATHS.filter((lanePath) =>
+  const carriedBy = (predicate: (entry: FeatureLaneCensusEntry) => boolean): string[] =>
+    lanePaths.filter((lanePath) =>
       laneChunks.some((entry) => predicate(entry) && entry.lanePaths.includes(lanePath)),
     );
 
@@ -403,6 +524,16 @@ export function auditAssistanceLane(bundle: EmittedBundle): AssistanceLaneAudit 
     fetchableLanePaths: carriedBy((entry) => entry.fetchable),
     eagerLanePaths: carriedBy((entry) => entry.staticReachable),
   };
+}
+
+/** Audits an emitted bundle for the Phase 19 assistance lane. See {@link auditFeatureLane}. */
+export function auditAssistanceLane(bundle: EmittedBundle): AssistanceLaneAudit {
+  return auditFeatureLane(bundle, ASSISTANCE_LANE_PATHS, assistanceLanePathFor);
+}
+
+/** Audits an emitted bundle for the Phase 20 share lane. See {@link auditFeatureLane}. */
+export function auditShareLane(bundle: EmittedBundle): ShareLaneAudit {
+  return auditFeatureLane(bundle, SHARE_LANE_PATHS, shareLanePathFor);
 }
 
 /**
@@ -672,6 +803,24 @@ export interface RendererChunkBoundaryOptions {
    *   visitor downloads regardless of what the flag says.
    */
   readonly adaptiveAssistance?: boolean;
+  /**
+   * Whether this build was asked for explicit-action Web Share, from `VITE_WEB_SHARE`.
+   *
+   * Optional and additive for the same reason as `adaptiveAssistance`, and `undefined` is
+   * treated exactly as `false` so every existing caller keeps compiling and keeps its current
+   * behaviour.
+   *
+   * The second of two feature-lane flags, and the second lane the census serves. It drives
+   * the same two mirror-image checks, stated over {@link SHARE_LANE_PATHS}:
+   *
+   * - **on** - every declared share lane path must be carried by a chunk the entry graph can
+   *   actually reach. A `build:web:share` that contains no share code is a red build, not a
+   *   green lane: this is the Phase 17 dead lane.
+   * - **off**, or unset, i.e. the production default - the entry must not *statically* reach
+   *   any lane module, because a static edge becomes a `modulepreload` in `dist/index.html`
+   *   and every Welcome visitor downloads those bytes whatever the flag says.
+   */
+  readonly webShare?: boolean;
 }
 
 /**
@@ -927,6 +1076,83 @@ export function rendererChunkBoundaryPlugin(options: RendererChunkBoundaryOption
           ].join('\n'),
         );
       }
+
+      // The Phase 20 share lane, enforced independently of the assistance lane and of all four
+      // renderer switches.
+      //
+      // `build:web:share` turns on exactly one flag and turns on no renderer, so there is no
+      // Pixi chunk to look for and no assistance module to find. The census below is the same
+      // census the assistance lane uses ({@link auditFeatureLane}) over a different
+      // declaration and a different membership predicate, so a chunk carrying assistance code
+      // can never satisfy the share lane and vice versa.
+      const shareLane = auditShareLane(bundle as EmittedBundle);
+      report(
+        `share lane: ${shareLane.laneChunks.length} chunk(s), ` +
+          `${shareLane.fetchableLanePaths.length}/${SHARE_LANE_PATHS.length} declared path(s) fetchable, ` +
+          `${shareLane.eagerLanePaths.length} statically reachable from the entry`,
+      );
+      for (const chunk of shareLane.laneChunks) {
+        report(
+          `  share ${chunk.fileName} [${chunk.lanePaths.join(', ')}] ` +
+            `${chunk.staticReachable ? 'EAGER' : 'lazy'}`,
+        );
+      }
+
+      // Check 1, flag on: every declared share lane path must be carried by a chunk a browser
+      // can actually reach. "Emitted" is not "fetched", and the failure mode is the Phase 17
+      // dead lane - `build:web:share` reported green while its host published nothing, which
+      // is a check reporting success because it measured nothing.
+      //
+      // Stated over three **named** modules rather than over a directory or a chunk name, for
+      // the reason `ASSISTANCE_LANE_PATHS` does: a build that shipped the dialog and the
+      // policy but never shipped the code that makes the image would satisfy a directory-level
+      // rule and satisfy a chunk-name rule, and neither of those is the thing the phase
+      // delivers. Naming the modules makes that build fail by name.
+      //
+      // Deliberately NOT guarded on `worldRenderer`, for the same reason the assistance block
+      // is not: a missing renderer chunk and a missing lane module are two independent facts,
+      // and on a build that set both flags both belong on the record.
+      if (options.webShare === true) {
+        const missing = SHARE_LANE_PATHS.filter(
+          (lanePath) => !shareLane.fetchableLanePaths.includes(lanePath),
+        );
+        if (missing.length > 0) {
+          this.error(
+            [
+              '[renderer-chunks] VITE_WEB_SHARE=true, but no chunk the browser can reach carries: ' +
+                `${missing.map((lanePath) => `${SHARE_LANE_ROLE[lanePath] ?? 'lane code'} (${lanePath})`).join(', ')}.`,
+              'Emitted is not fetched. Lane modules nothing reachable imports are a configured lane that verifies nothing, which is the failure mode this check exists for.',
+              'Reach the share lane through a dynamic import (React.lazy, or await import()) from a module the entry graph can reach, ' +
+                'or build without VITE_WEB_SHARE until the surface exists.',
+            ].join('\n'),
+          );
+        }
+      }
+
+      // Check 2, flag at its production default: the entry must not statically reach any share
+      // lane module, because a static edge becomes a <link rel="modulepreload"> in
+      // dist/index.html and every Welcome visitor downloads those bytes whatever the flag says.
+      //
+      // This is the mirror of check 1 and it is what makes `VITE_WEB_SHARE=false` a complete
+      // rollback rather than a claim. The measured reason it is necessary here and not merely
+      // tidy: at 23a0e0f the entire application core is emitted into one entry chunk, so
+      // "statically reachable" and "in the entry chunk" are the same statement and a plain
+      // `import` from any screen is eager.
+      //
+      // Stated for the flag-off build only. On a flagged build, eagerness is a measured
+      // Welcome-budget question owned by `npm run check:budget:welcome`, and the line above
+      // prints the verdict on every build so a flagged build that is eager is visible without
+      // this becoming a second rule to relax.
+      if (options.webShare !== true && shareLane.eagerLanePaths.length > 0) {
+        this.error(
+          [
+            '[renderer-chunks] VITE_WEB_SHARE is at its production default, but the entry document can statically reach: ' +
+              `${shareLane.eagerLanePaths.map((lanePath) => SHARE_LANE_ROLE[lanePath] ?? lanePath).join(', ')}.`,
+            'A static import edge makes Vite emit a <link rel="modulepreload"> for the lane chunk, so every Welcome visitor downloads those bytes on a build where the feature is switched off. That defeats the point of a productionDefault:false cutover flag and is the same violation plan section 10.2 states for the renderer.',
+            'Reach the share lane through a dynamic import (React.lazy, or await import()) so the router, not the entry, decides when it loads.',
+          ].join('\n'),
+        );
+      }
     },
   };
 }
@@ -960,6 +1186,7 @@ export default defineConfig(({ mode }) => {
         pixiDungeon: runtimeConfig.pixiDungeon,
         pixiFishing: runtimeConfig.pixiFishing,
         adaptiveAssistance: runtimeConfig.adaptiveAssistance,
+        webShare: runtimeConfig.webShare,
       }),
     ],
     resolve: {

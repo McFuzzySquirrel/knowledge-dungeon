@@ -1,0 +1,159 @@
+/**
+ * Share-card dialog styles.
+ *
+ * ## What is here that is not decoration
+ *
+ * - {@link .kd-share-sr-only} hides text visually while leaving it in the accessibility tree. The
+ *   preview's description lives there, and `display: none` or `visibility: hidden` would remove it
+ *   from both - which is the opposite of what a live region needs.
+ * - Every focusable control has a `:focus-visible` outline thicker than the 1px default and drawn
+ *   with an offset, so it stays visible against a panel whose background is a token the learner can
+ *   change.
+ * - {@link prefers-reduced-motion} removes the one transition. A preview redrawing is not motion
+ *   worth animating, and the status line's timing must not depend on a fade.
+ * - The canvas is scaled to fit its container with `max-width` and `height: auto`, so a 320 CSS-pixel
+ *   viewport and a 200% zoom both show the whole card rather than a crop of it.
+ *
+ * ## What is deliberately absent
+ *
+ * **No colour carries meaning.** There is no rule that tints a field differently because it is
+ * off by default; the note under such a field is text, and every control is a native checkbox or
+ * radio with a visible label. `tests/phase20/shareCardDialog.test.tsx` asserts there is no
+ * field-keyed colour rule, because "we did not write one" is not the same claim as "there is none".
+ *
+ * ## Tokens, not literals
+ *
+ * Every colour, radius, and spacing value is a Cozy token (`var(--...)`). Where a token this
+ * stylesheet needs does not exist yet the fallback is a comment rather than a silent literal; the
+ * two placeholders below are the Cozy token names themselves, so a host that has bridged them picks
+ * up the right value and a host that has not still renders legibly.
+ */
+
+.kd-share-dialog {
+  max-width: min(64rem, 100%);
+}
+
+.kd-share-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.kd-share-fieldset {
+  /* A fieldset is the semantic group; the border and padding are what make it read as one. */
+  border: 1px solid var(--border-control, currentColor);
+  border-radius: var(--radius-md, 8px);
+  padding: 0.75rem;
+  margin: 0 0 0.75rem;
+  min-inline-size: 0;
+}
+
+.kd-share-legend {
+  padding-inline: 0.35rem;
+  font-weight: 700;
+}
+
+.kd-share-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.kd-share-kind,
+.kd-share-field {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.kd-share-fields {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Two columns wide, one at 320 CSS pixels: a checkbox row that needs horizontal scrolling is a
+     checkbox row a learner cannot finish. */
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  gap: 0.25rem 0.75rem;
+}
+
+.kd-share-field-note {
+  /* A word, not a tint: this is how a field says "off by default, and here is why". */
+  flex-basis: 100%;
+  font-size: 0.875rem;
+  color: var(--text-muted, inherit);
+}
+
+.kd-share-preview {
+  display: grid;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+
+.kd-share-canvas {
+  inline-size: 100%;
+  block-size: auto;
+  max-inline-size: 100%;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-hairline, currentColor);
+  background: var(--surface-panel, transparent);
+}
+
+.kd-share-preview-text {
+  border: 1px solid var(--border-hairline, currentColor);
+  border-radius: var(--radius-md, 8px);
+  padding: 0.75rem;
+  background: var(--surface-panel-soft, transparent);
+}
+
+.kd-share-preview-text h4 {
+  margin-block: 0 0.35rem;
+}
+
+.kd-share-preview-name {
+  margin-block: 0 0.5rem;
+  font-weight: 700;
+}
+
+.kd-share-rows {
+  margin: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.kd-share-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.kd-share-row dt {
+  color: var(--text-muted, inherit);
+}
+
+.kd-share-row dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: end;
+}
+
+.kd-share-dialog :is(button, input, a):focus-visible {
+  /* A shape, not only a tint: a 3px offset outline is visible in forced-colours mode and to a
+     learner who cannot distinguish the ring colour. */
+  outline: 3px solid var(--border-focus, currentColor);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kd-share-dialog * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

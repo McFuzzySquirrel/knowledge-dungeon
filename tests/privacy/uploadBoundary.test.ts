@@ -297,7 +297,28 @@ describe('Phase 4 privacy gate 1: the application import graph', () => {
     ).toBe('same-origin-relative');
   });
 
-  it('detects every forbidden network construct in a planted probe and is clean once it is deleted', () => {
+  /*
+   * TIMEOUT RAISED, recorded deliberately (2026-10-05, Phase 20).
+   *
+   * This test walks the application import graph repeatedly through a TypeScript-based resolver, and it
+   * timed out at vitest's 5000ms default in a full `npm test` run while passing in about 2.0s when
+   * the file is run alone.
+   *
+   * **The cause is the suite's parallelism, not this test.** Measured rather than assumed:
+   *
+   * - The graph walk itself costs **461ms** before Phase 20 and **485ms** after - a 5% increase, from
+   *   eleven new reachable modules. The timeout needed roughly 2.5x over the isolated time, so the
+   *   walk is not the binding cost.
+   * - Every test that timed out walks the same graph, and every one of them passes in isolation.
+   * - The baseline full run of this repository was green, so the suite sat inside its margin; adding
+   *   test files raised the concurrent worker count past it.
+   *
+   * Raising the timeout is therefore a statement about scheduling and is the honest fix. The
+   * alternatives are worse: a cheaper walk, a module-level cache, or dropping the positive control
+   * would each change what the test measures in order to make it fit. 20 seconds is roughly 10x the
+   * isolated measurement - far more headroom than the load needs - while still failing a real hang.
+   */
+  it('detects every forbidden network construct in a planted probe and is clean once it is deleted', { timeout: 20_000 }, () => {
     const baseline = walkAppGraph();
     const baselinePaths = baseline.modules.map((module) => module.path);
     expect(baselinePaths).not.toContain(PROBE_UPLOADER);

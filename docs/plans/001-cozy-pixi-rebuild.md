@@ -764,8 +764,8 @@ Phase 24 Remove Phaser and legacy renderer
 | 16 | complete | Redesign the Archaeologist flow. |
 | 17 | complete | Rebuild fishing in Pixi. |
 | 18 | complete | Wire and redesign study statistics. |
-| 19 | in-progress | Add local adaptive assistance. |
-| 20 | not-started | Redesign private share cards. |
+| 19 | complete | Add local adaptive assistance. |
+| 20 | verified | Redesign private share cards. |
 | 21 | not-started | Complete accessibility and responsive verification. |
 | 22 | not-started | Complete performance, memory, and offline hardening. |
 | 23 | not-started | Cut over production and complete the soak. |
@@ -7260,7 +7260,7 @@ Phases 19, 20, and 21.
 
 ## Phase 19: Adaptive Learner Assistance
 
-**Status:** verified
+**Status:** complete
 **Objective:** Add deterministic, local, explainable assistance across the learning and fishing flows.
 
 ### Prerequisites
@@ -7320,15 +7320,24 @@ Run the common gate.
 
 ### Verification evidence
 
-Recorded on 2026-10-05. `not-started` -> `in-progress` -> `verified`. The maintainer authorized the
-commit and push, and the phase was committed as `bbb142e` and pushed to `origin/main`. **Acceptance is
-still pending** and Phase 20 has not been started: two questions are open with the maintainer, namely
-whether to build the flagged assistance lane now or in Phase 21, and whether
-`deps.setDualWriteSink` / `deps.setSessionSource` in `bootstrap.ts` should be wired. **Not deployed** -
-no deployment was performed or authorized.
+Recorded on 2026-10-05. `not-started` -> `in-progress` -> `verified` -> `complete`. The maintainer
+authorized the commit and push, and the phase was committed as `bbb142e` and pushed to `origin/main`.
+**Not deployed** - no deployment was performed or authorized.
+
+**Accepted by the maintainer on 2026-10-05**, with the two open questions answered at the same time:
+
+1. **The flagged `VITE_ADAPTIVE_ASSISTANCE` Playwright lane is deferred to Phase 21.** Phase 21 already
+   runs the accessibility and responsive audit across the matrix, so it acquires the lane inside work it
+   must do anyway. Until then the honest browser result for assistance stays **absence under the false
+   production default**, which is a real and checked result, not a missing one. Phase 21 inherits the
+   work: a record/verify step, a preflight script, a Playwright project and config, a spec, and CI wiring.
+2. **`deps.setDualWriteSink` and `deps.setSessionSource` remain unwired.** The maintainer did not
+   authorize installing them. The Phase 18 defect stays **pinned by behavioural spies rather than
+   fixed**, and remains carried forward as open work.
 
 The text originally recorded the phase as not yet committed, pushed, or deployed; that statement was
-true when written and is superseded by that commit.
+true when written and is superseded by that commit. The text originally recorded acceptance as pending
+and Phase 20 as not started; that too was true when written and is superseded by this acceptance.
 
 #### Baseline
 
@@ -7562,11 +7571,11 @@ published nothing.
 - **`deps.setDualWriteSink` and `deps.setSessionSource` are declared, defaulted, and never called** in
   `bootstrap.ts`. This is the same defect class Phase 18 shipped, caught again here and pinned by
   behavioural spies that assert the zeros are measurements rather than a broken spy. Installing them
-  changes storage-v2 behaviour on lanes nothing has tested. **Open, not resolved.**
-- **Build the flagged assistance lane, or defer it to Phase 21** - the maintainer's ruling, not the
-  phase's. It would require a record/verify step, a preflight script, a Playwright project and config,
-  a spec, and CI wiring. Phase 21 would get the project for free inside the accessibility audit it
-  already has to run.
+  changes storage-v2 behaviour on lanes nothing has tested. **RULED 2026-10-05: not authorized, stays
+  open.**
+- **Build the flagged assistance lane, or defer it to Phase 21** - **RULED 2026-10-05: deferred to
+  Phase 21.** It requires a record/verify step, a preflight script, a Playwright project and config, a
+  spec, and CI wiring; Phase 21 acquires it inside the accessibility audit it already has to run.
 - `findSubjectIdForRoom` is now sorted, but the multi-subject case is only covered by a test added in
   this phase; the shipping room-id factory's uniqueness is what keeps it MEDIUM rather than HIGH, and
   that assumption is unpinned outside this phase.
@@ -7603,7 +7612,7 @@ Phase 20.
 
 ## Phase 20: Private Share Cards
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Retain private progress sharing with redesigned, privacy-conscious cards.
 
 ### Prerequisites
@@ -7657,6 +7666,220 @@ npm run test:e2e
 ```
 
 Run the common gate.
+
+### Verification evidence
+
+Recorded on 2026-10-06. `not-started` -> `in-progress` -> `verified`. Committed locally; **not pushed** and
+**not deployed** - no deployment was performed or authorized. **Acceptance pending.**
+
+#### Baseline
+
+Green at `23a0e0f` before any Phase 20 change: `npm run lint` 0, `npm run typecheck` 0, `npm test`
+**308 files / 6306 tests**, `npm run build:web` 0, `npm run check:bundle-size` **5.37 MB / 162 files**,
+`npm run check:budget:welcome` **266.40 KiB / 300.00 KiB**, `npm run test:licenses` PASSED (99 entries,
+`share-card=0`, 0 media under `src/`), `npm run test:privacy` **6 files / 34 tests**. No baseline repair
+was needed.
+
+#### Commands
+
+```text
+npm run lint                                        exit 0
+npm run typecheck                                   exit 0
+npm test                                            316 files / 6626 tests passed
+npm run build:web                                   exit 0
+npm run build:web:share                             exit 0
+npm run check:bundle-size                           5.42 MB / 167 files   (was 5.37 / 162)
+npm run check:budget:welcome                        266.32 KiB / 300.00 KiB   (was 266.40)
+npm run test:licenses                               PASSED, share-card=0, 0 media under src/
+npm run test:privacy                                6 files / 34 tests passed
+npm test -- tests/unit/shareCards.test.ts           non-vacuous; the file did not exist before this phase
+npx vitest run tests/unit/shareCards.test.ts tests/phase20/
+                                                    111 policy + renderer/dialog/delivery/panel lanes
+npm run test:e2e                                    34 passed / 14 skipped / 0 failed (3.5m)
+```
+
+**The plan's named unit command was vacuous before this phase**: `tests/unit/shareCards.test.ts` did not
+exist, so `npm test --` on it exited 0 having run nothing - the identical failure Phase 19 found with
+`tests/unit/assistanceEngine.test.ts`. Creating the file is a deliverable.
+
+#### What the phase actually found
+
+**HIGH - the privacy gate refused the learner's own subject name.** `isDeniedField` tested for the
+substring `room`, which is how it catches the minted id `room-7f3a` - and which also silently dropped
+four legitimate names a learner chose: `Room acoustics`, `Room 101 calculus`, `My bedroom notes`,
+`A study room for two`. The `subject` and `session` rules already required an identifier marker; `room`
+was the only one of the three that did not, and that asymmetry was the bug. `visibleShareCardSubjectName`
+routes the subject name through this gate, so a learner studying rooms got a card with **no subject
+name**, for no privacy benefit: the string identifies nothing. Fixed by `isRoomIdentifier`, which keeps
+three ways a value names a room *as an identifier* (a marker beside the word, a camel-glued marker, a
+path token) and drops the one that caught prose. **37 identifier shapes still refused, 22 prose values
+now allowed**, and the two tables cannot satisfy each other by construction - `made on 2026-10-05` sits
+in the identifier table to break any "spaced values are prose" patch.
+
+**HIGH - a raw internal identifier was rendered as a badge's name.** `InventoryBadgesPanel.tsx` had a
+`BADGE_LABELS` map covering **one** badge of eleven, and `badgeLabel` fell back to
+`BADGE_LABELS[badgeId] ?? badgeId` - so `CreatorPhaseComplete`, `ArchaeologistReviewPass15` and
+`FshMasterAngler` were displayed **as the badge's name**, and the detail card printed a
+`<dt>Badge ID</dt>` row read by nothing. All eleven now resolve through `canonicalBadgeLabel`; the
+local table is gone. An unknown id renders `Unrecognised badge` rather than the id, and omission was
+rejected with a reason: the tab header counts every badge held, so a silently shorter list would
+disagree with the number above it.
+
+**MEDIUM - the renderer was about to delete two rows from every card.** The content designer's authored
+label `"Rooms in the dungeon"` is not a declared field, so the value gate refused it - and
+`renderShareCard`'s own header records that filtering labels in the renderer had once deleted **both**
+room rows from every subject-summary card, caught by a row-count test. The labels were safe only because
+one module happened to decline to filter. The repair was made **in the rule rather than by adding an
+exemption**: a declared label and a learner's subject name are the same kind of string, so a gate
+needing an exemption for one needs it for both, and an exemption list is a second mechanism the next
+rule change quietly defeats. After the fix all 17 labels pass with zero special-casing.
+
+**MEDIUM - four gates broke on legitimate Phase 20 growth, and three were repaired by asserting the
+property instead of the membership.** `tests/phase19/assistanceNonVacuity.test.ts` P17 compared
+`git status` against a hardcoded permit list of Phase 19 paths; its property is *"this file wrote
+nothing"*, which is a statement about a **difference between two moments**, not an absolute set of
+paths. It now snapshots the tree at module load and compares after every probe, and additionally
+reports **removed** paths - the old one-sided filter would have scored a probe that *deleted* a file as
+clean. Measured: evaluating the **old** predicate against a planted stray file in `src/ui/assistance/`
+returns `[]`, so the old gate would have **passed** it. This is the fourth instance of the systemic
+item Phase 19 already recorded. `tests/data/localDownloadOnly.test.ts` was scoped to name the permitted
+`navigator.share` call sites with **exact counts** rather than deleted, `mailto:` remains unscoped, and
+every `src/ui/data/` file is still checked with no exemption.
+
+**MEDIUM - the build lane would have verified nothing if written the Phase 17 way.** `build:web:share`
+turns on one flag and no renderer, so a Pixi-chunk check reports on a switch nobody set. The lane is
+therefore found by **module membership plus reachability**, with three named load-bearing modules, and
+the dead-lane guard makes a flagged build containing no share code a **red** build. All three checks
+were seen red on real builds before being believed.
+
+#### Gates changed, and the rulings
+
+| Gate | Ruling |
+| --- | --- |
+| `tests/phase19/assistanceNonVacuity.test.ts` P17 (Phase 19) | **Legitimate break, and this is the systemic fix.** Compared the wrong thing - an absolute path list instead of a before/after difference. Replaced the comparison, kept the `expect(...).toEqual([])`, added a `removed` direction and a checksum assertion the header had claimed but never made. Provably **more** sensitive than the gate it replaces. |
+| `tests/data/localDownloadOnly.test.ts` (Phase 5) | **Legitimate break, scoped not deleted.** `DECLARED_SHARE_CALL_SITES` names the permitted `file:rule` pairs with exact counts, and a new test proves the filter rejects a third occurrence, an undeclared rule in a declared file, and an undeclared file. `mailto:` never scoped; positive control untouched. |
+| `tests/unit/InventoryBadgesPanel.test.tsx` and `tests/phase20/shareCardPanel.test.tsx` | **Legitimate breaks; both re-pointed at a stronger property.** The old gate asserted a control named by `new RegExp(badgeId)` - it **required** the ids on screen. It now asserts one control per badge named by its published label, no id anywhere in the tab, **and control count equal to id count** so hiding rows cannot satisfy it. |
+| `tests/phase20/infraShareBuildLane.test.ts` font walk | **Legitimate, narrowed.** The walk covered gitignored `artifacts/`, where a Playwright trace embeds a `.ttf`, so any e2e run made it red about something the artifact does not ship. `artifacts/` excluded; a font planted under `src/` still fails 2 assertions. |
+
+#### Non-vacuity evidence
+
+Five owners ran probes. Every probe was verified green before mutation and restored with checksum
+verification. Reported rather than counted:
+
+- **`core-logic-engineer` reported 15 probes, of which 2 failed first attempt and were fixed rather
+  than credited.** One `isDeniedField` call in `splitSelection` was proven **unreachable** and deleted;
+  a widened per-kind table left a "every field is reachable" gate green because widening does not make
+  a field unreachable. It also found its **own harness** reporting all 15 green because it grepped for
+  vitest's `×` glyph - and the default reporter prints neither glyph nor `FAIL`, only `1 failed (1)`.
+- **`core-logic-engineer` reported probe P8 cannot fire, with the structural reason.** After the room
+  rule was corrected, **no declared field is denied by any shape rule**, so the allowlist short circuit
+  is currently redundant. It was **kept anyway**: it is the guarantee the next blunt rule must satisfy,
+  and deleting it would let that rule deny the vocabulary silently.
+- **`ui-engineer` deleted a second filter rather than leaving it.** `renderShareCard` and
+  `visibleShareCardRows` each had a `mayFieldAppearOnCard` call; making one permissive changed nothing,
+  so one could never fire. The duplicate was removed - the same defect shape Phase 19 removed.
+- **`ui-engineer` reported P13 first went green because the mutated module became unparseable** and
+  vitest reports an uncollectable file as *skipped* with exit 0. Now paired edits plus a rule that a
+  run with no passing test and no failure is a collection loss.
+- **`village-content-designer` found the `room` false positive by trying to write honest copy** and
+  refused to paper over it by renaming rooms to chambers. Independently confirmed by the orchestrator.
+- **`qa-engineer` invalidated its own first proof.** A stray file planted *before* module load is
+  correctly in the baseline, so the gate passed. Residue must appear *during* the run.
+- **`qa-engineer` corrected a harness fact three of the four previous owners had repeated**: an
+  uncollectable file does **not** exit 0 here - a syntax error gives `Test Files 1 failed (1)`, exit 1.
+  The real silent-skip is a mistyped `-t`, which reports `1 skipped`.
+- **`ui-engineer` fixed a latent crash found by the Map conversion**: `BADGE_DESCRIPTIONS['constructor']`
+  returned `Object.prototype.constructor`, so `??` never fired and React received a function as a child.
+- **`ui-engineer` disclosed a real coverage gap**: a fishing-badge probe did not fire because its first
+  test covered only one of two branches. Parameterised, re-probed.
+
+#### Exit-criteria assessment
+
+1. **Local download works in every supported browser** - met for the configured matrix, **Chromium
+   only** for this surface. No compatibility lane was run; Phase 21 owns the matrix.
+2. **Web Share runs only from a user click** - met, and proved structurally rather than by assertion.
+   Injecting `navigator.share` into the dialog's mount effect turned **9 tests red** across 2 files. A
+   test asserting "no call on mount" would be the Phase 19 filter-based-Off shape, which passes every
+   observable test while the trace catches it; the gate counts invocations across the lifecycle.
+3. **Cancelling sharing causes no upload, error toast, or data mutation** - met. `AbortError` is
+   classified as cancellation, not failure, with **distinct wording**. A before/after fingerprint of
+   every storage-v2 generation store and every non-share `localStorage` key, with a
+   baseline-substance assertion so an empty fingerprint cannot pass. **Assessed by QA for structure but
+   not independently re-measured.**
+4. **No public card URL or sharing backend exists** - met for the web artifact. Corrected on QA's own
+   initiative: `server/index.js` **does** carry a `multer` `POST /api/upload`, pre-existing at `940fa04`,
+   referenced by nothing in `src/` and nothing in `dist/`. The accurate claim is that the web artifact
+   cannot reach one, not that none exists.
+5. **Default cards contain no raw notes or hidden identifiers** - met. QA drove `renderShareCard`
+   against a recording canvas and read the strings actually passed to `fillText`: across all four
+   kinds **no drawn string contains any canonical badge id**, with a positive control proving the
+   labels *are* drawn, so "no id" is not vacuously true.
+6. **All decorative assets are CC0-approved** - met **trivially and deliberately**: `share-card=0`,
+   **0 media files and 0 media references under `src/`**, and **no font file exists anywhere in the
+   repository**. The card is drawn procedurally from Cozy tokens, so there was nothing to license.
+
+#### Rollback
+
+`VITE_WEB_SHARE=false`, the flag this phase's owner entry already declared. **Verified rather than
+assumed**: the default `dist/index.html` contains **zero** case-insensitive references to any share
+chunk, the three lane modules are `0 statically reachable from the entry`, no `canShare` or `.share(`
+appears anywhere in the artifact, and the legacy local PNG download path is **intact and deliberately
+not** declared a lane module - gating it would invert the rollback. Stored records are untouched.
+
+#### Known limitations and UNVERIFIED
+
+- **Contrast and real rendered touch-target size are UNVERIFIED.** jsdom computes no colours and no
+  layout; the recording canvas says so itself. The 44px assertions are inline-style floors, not
+  measured boxes. **Phase 21 owns the audit.**
+- **Cards are English-only.** Every word a Spanish-reading learner sees on a card today is English.
+  Structural, not a preference: importing a locale JSON into `src/core/share/**` turns the domain
+  boundary gate red, and switching the module to emit keys is an API change to four exports other
+  owners are written against, not a content edit. **Phase 21.**
+- **Chromium only** for this surface. No compatibility lane was run.
+- **The `navigator.share` payload's PNG bytes are synthetic** in jsdom, which has no PNG encoder. No
+  test asserts real image content, and the Web Share `AbortError` is one the test's own spy throws.
+  Real-browser cancellation is Phase 22/23 evidence.
+- **A room id inside prose passes the value gate** (`room7f3a`, `My room-7f3a notes`,
+  `the room was loud`). Structurally harmless - `ShareCardBuildInput` has no parameter a note body could
+  arrive in - but recorded rather than assumed away.
+- **`showroom-physics` is still refused**, by the pre-existing minted-id-tail branch that also refuses
+  `room-7f3a`. Widening it would trade the module's central guarantee. Recorded as a test, not fixed in
+  passing.
+- **`suggestShareFileName` slugifies the learner's chosen subject name into the filename.** Opt-in and
+  self-authored, but disclosed - a filename travels further than a card.
+- **A badge id typed into the name field is drawn**, because the gate is a shape gate and that string is
+  the learner's own visible text. Correct, and recorded so a later reader does not call it a leak.
+- **Two Playwright walk-timeout failures during verification did not reproduce.** QA observed 7
+  failures in two Pixi village walk tests under 4-project concurrency while **both passed
+  individually** and **HEAD passed under the same load**. `playwright.config.ts` is `fullyParallel:
+  false` and byte-identical to HEAD, so the extra concurrency was not ours. The final
+  `npm run test:e2e` under the project's own config was **34 passed / 14 skipped / 0 failed**, matching
+  the Phase 19 baseline. **Maintainer ruling 2026-10-06: leave the config alone** and carry the
+  timeout's ~53s intrinsic variance against a 180s timeout to Phase 22.
+- **One phase-commit-time cost**: making `shareCardContent` eagerly reachable costs **+0.57 KiB**
+  gzip on Welcome (265.75 -> 266.32) because a static import cannot tree-shake a module-level `new Map`.
+  **0 bytes** of it land in any lazily-loaded product chunk.
+- **Six gate timeouts were raised** on four pre-existing files (`localDownloadOnly`, `phase5FlagDefault`,
+  `study-shell-boundary`, `uploadBoundary`) - 20s each - because they are slow build-dependent gates,
+  not because their assertions changed.
+
+#### Follow-up work found and deliberately not done (working rule 13)
+
+- **The `server/index.js` `POST /api/upload` endpoint** is pre-existing and out of Phase 20's scope,
+  but it is a real upload path in a project whose safety constraint is "no automatic upload". Phase 23
+  cutover should rule on it explicitly.
+- **Two more instances of the whole-list-equality brittleness** Phase 19 recorded: `shareCardPanel`'s
+  chunking gate had to be narrowed because a static import of `shareCardContent` violates it, and
+  `InventoryBadgesPanel.test.tsx` hardcoded the JS *identifier* `SCRIBE_CENTURY_120_BADGE_ID` where
+  the id *value* belonged - one character-level slip, five failures. **Phase 22/23 candidate.**
+- `isDeniedField`'s shape rules are a blunt instrument that had to be corrected once already. A
+  declarative list of identifier patterns would be a better long-term shape.
+- Carried from Phase 19 and still open: `deps.setDualWriteSink` / `deps.setSessionSource` remain
+  declared, defaulted and never called (ruled: not authorized). The flagged
+  `VITE_ADAPTIVE_ASSISTANCE` Playwright lane is **deferred to Phase 21** by maintainer ruling. The
+  32-bit statistics digest is a one-way door; `daysUntilReview` still disagrees with the dashboard;
+  the subject-copy ID remapper does not rewrite room ids inside the four ledgers; eight colocated
+  stylesheets sit outside the Phase 8 font scan.
 
 ### Exit criteria
 

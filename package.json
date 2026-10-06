@@ -21,6 +21,7 @@
     "build:web:pixi-dungeon": "VITE_PIXI_DUNGEON=true npm run build:web",
     "build:web:pixi-fishing": "VITE_PIXI_FISHING=true npm run build:web",
     "build:web:assistance": "VITE_ADAPTIVE_ASSISTANCE=true npm run build:web",
+    "build:web:share": "VITE_WEB_SHARE=true npm run build:web",
     "build:electron:web": "tsc -b && vite build --mode electron",
     "build:electron:main": "tsc -p tsconfig.electron.json",
     "build:electron": "npm run build:electron:web && npm run build:electron:main",

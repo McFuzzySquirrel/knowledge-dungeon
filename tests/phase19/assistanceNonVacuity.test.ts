@@ -57,6 +57,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -89,6 +90,60 @@ function checksum(text: string): string {
 
 /** The original bytes of every mutable module, captured once at load. */
 const ORIGINALS = new Map<MutableModule, string>(MUTABLE.map((name) => [name, sourceOf(name)]));
+
+// ── The repository residue witness ───────────────────────────────────────────
+
+/**
+ * Every `git status --porcelain` line, sorted so the value is order-independent.
+ *
+ * Whole lines rather than paths, deliberately. A porcelain line is `<status><space><path>`, so
+ * comparing lines catches a path whose *status letter* changed - `?? scratch.txt` becoming
+ * ` M scratch.txt` is a tracked file being created and then overwritten, and comparing paths
+ * alone would score that as unchanged.
+ */
+function porcelainLines(): readonly string[] {
+  const status = execFileSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' });
+  return status
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .sort();
+}
+
+/**
+ * The working tree **as it stood before this file did anything at all**.
+ *
+ * Captured at module scope on purpose: module scope runs when the file is imported, which is
+ * strictly before `beforeAll`, before `writeScratch`, and before the first child process. That
+ * ordering is the whole mechanism - the snapshot has to predate every action it is used to judge.
+ *
+ * ## Why this replaces a permit list
+ *
+ * This used to be a hardcoded list of the thirty-odd paths Phase 19 was allowed to have changed,
+ * and `unexpected = lines.filter(not permitted)` had to equal `[]`. That compares the working tree
+ * against **a list of another phase's paths**, so the gate's result depends on every other phase in
+ * the repository. It went red for the second time in two phases on nothing but legitimate growth -
+ * Phase 19 itself recorded completing the list once because "it was incomplete, and the gate was
+ * red because of it" - and Phase 20's `src/core/share/`, `src/ui/share/`, `tests/phase20/` and
+ * four amended gates turned it red again without a single probe writing anything.
+ *
+ * A maintained list is the wrong shape for the property being claimed. The property is *"this file
+ * wrote nothing"*, which is a statement about a **difference between two moments in time**, not
+ * about an absolute set of paths. Comparing a snapshot taken before the run against the tree after
+ * it states the property directly, needs no list to keep current, and is strictly **more**
+ * sensitive than the list it replaces: the list permitted any prefix match under thirty-odd
+ * directories, while this permits nothing at all.
+ *
+ * ## What it gives up, stated rather than hidden
+ *
+ * One thing: if a path that was **already dirty before the run** has its *contents* changed during
+ * the run, `git status` cannot see it - the line reads ` M path` either way. Two doors close this
+ * gap, and both are asserted below: {@link ORIGINALS} is re-checked against the modules on disk
+ * after the run (P17restore), and P17writes pins every filesystem-mutating call site in this file to
+ * the scratch directory. So the residue this witness is hunting - a stray scratch file - is caught
+ * three independent ways, and the known blind spot is a *modification* of an already-modified file
+ * by some other writer, which is another actor's business rather than this probe's.
+ */
+const TREE_BEFORE_PROBES = porcelainLines();
 
 /**
  * A fresh, unmutated copy tree plus the alias config.
@@ -819,63 +874,154 @@ describe('control: every gate is green before a single mutation', () => {
   // ── Meta probes ───────────────────────────────────────────────────────────
 
   it('P17 the working tree holds nothing this file wrote', () => {
-    // The independent witness. The checksums prove the probe copies matched what was expected;
-    // `git status` proves no *tracked or untracked* file was created or changed by the run - the
-    // only thing that catches a scratch file accidentally written into the repository.
-    const status = execFileSync('git', ['status', '--porcelain'], { cwd: REPO_ROOT, encoding: 'utf8' });
-    const lines = status.split('\n').filter((line) => line.trim().length > 0);
-    // Every path this stage is allowed to have changed, named explicitly so anything else fails.
-    // Two of these are **existing** gates this stage had to amend rather than new files, and both
-    // are listed because amending a gate is a visible change rather than a silent one:
+    // The independent witness. Asserted as a **difference**, not as a membership test against a
+    // list of one phase's paths: the tree before the run, against the tree after it.
     //
-    // - `tests/phase4/uiSurfaceAudit.test.tsx` - its whole-list equality on the storage-v2 seam
-    //   registry was replaced by the two assertions the gate is actually named for, because a
-    //   fourth dual-writing store is a legitimate registry entry.
-    // - `tests/phase17/fishingPhaseInvariants.test.ts` - `dualWrite.ts` moved out of its absolute
-    //   byte-identity list and into a tighter assertion that permits exactly one added union
-    //   member and nothing else.
-    const permitted = [
-      'src/core/assistance/',
-      'src/store/assistanceStore.ts',
-      'src/services/persistence/v2/appRepository.ts',
-      'src/services/persistence/v2/dualWrite.ts',
-      'tests/phase19/',
-      'tests/migrations/qaHardening.test.ts',
-      'tests/phase4/uiSurfaceAudit.test.tsx',
-      'tests/phase17/fishingPhaseInvariants.test.ts',
-      // **This list was incomplete, and the gate was red because of it** - verified by reading the
-      // residue, not by guessing: it named only the domain half of Phase 19 while the working tree
-      // also held the UI, i18n, build-config and lane-script halves. A gate that is red for a
-      // reason that has nothing to do with what it measures trains its reader to ignore it, which
-      // is the whole failure mode this probe exists to catch, so it is completed rather than left.
-      //
-      // Named **exactly**, not as `src/ui/` or `vite.config.ts`-prefixes-by-luck: the property this
-      // probe protects is "the probe machinery wrote nothing", and a broad prefix would let a
-      // stray file under a permitted directory pass. Each entry below is another owner's Phase 19
-      // work, listed so that a change there is visible here rather than silently absorbed.
-      'package.json',
-      'vite.config.ts',
-      'src/application/bootstrap.ts',
-      'src/i18n/locales/en.json',
-      'src/i18n/locales/es.json',
-      'src/ui/assistance/',
-      'src/ui/components/SettingsModal.tsx',
-      'src/ui/screens/VillageScreen.tsx',
-      'src/ui/screens/useVillageFishing.tsx',
-      'src/ui/study/creator/CreatorWorkspace.tsx',
-      'src/ui/study/review/ArchaeologistWorkspace.tsx',
-      'src/ui/study/scribe/ScribeEncounter.tsx',
-      'tests/e2e/assistance-build-lane.test.ts',
-      'tests/unit/assistanceBootstrapWiring.test.ts',
-      'tests/unit/assistanceEngine.determinismDefects.test.ts',
-      'tests/unit/assistanceEngine.test.ts',
-    ];
-    const unexpected = lines.filter((line) => !permitted.some((prefix) => line.slice(3).trim().startsWith(prefix)));
-    expect(unexpected, `git status residue:\n${lines.join('\n')}`).toEqual([]);
+    // This assertion has not been weakened - the `expect` is still an equality against an empty
+    // collection, and it still fails the file - but what it is equal to changed. It used to ask
+    // "is every dirty path one Phase 19 was supposed to touch?", which is a question about the
+    // repository's history that only Phase 19 could answer and every later phase got wrong. It
+    // now asks "did this run change the working tree?", which is the question this probe exists
+    // to answer and which no phase's file list can answer.
+    //
+    // Reported both ways round on purpose. `added` is the residue being hunted - something appeared.
+    // `removed` is the other failure mode a one-sided filter would miss: a probe that *reverted* a
+    // file, or deleted one, would leave a repository cleaner than it found it and a `lines.filter(not
+    // permitted)` assertion would report that as clean.
+    const after = porcelainLines();
+    const before = TREE_BEFORE_PROBES;
+    const added = after.filter((line) => !before.includes(line));
+    const removed = before.filter((line) => !after.includes(line));
+    expect(
+      { added, removed },
+      [
+        `the working tree changed during the probe run (baseline captured before any probe ran).`,
+        `baseline had ${before.length} porcelain line(s), now ${after.length}.`,
+        `added:\n${added.join('\n') || '  (none)'}`,
+        `removed:\n${removed.join('\n') || '  (none)'}`,
+      ].join('\n'),
+    ).toEqual({ added: [], removed: [] });
+
+    // Non-vacuity of the comparison itself, required here because the snapshot is legitimately
+    // empty on a clean CI checkout - and an empty baseline is the *correct* answer there, not a
+    // failure. So a "the baseline is non-empty" assertion would be the bug rather than the guard;
+    // an earlier version of this line had exactly that and would have gone red in CI on a fresh
+    // clone while passing here on a dirty working tree.
+    //
+    // What is asserted instead is that the predicate notices an addition. A line is planted into a
+    // **copy** of the baseline - no file is written - and the same difference must report it. This
+    // holds on a clean tree and a dirty one alike, and it fails if the filter is ever loosened into
+    // something that cannot see residue.
+    const planted = [...TREE_BEFORE_PROBES, '?? qa-planted-residue-probe.txt'];
+    expect(planted.filter((line) => !TREE_BEFORE_PROBES.includes(line))).toEqual([
+      '?? qa-planted-residue-probe.txt',
+    ]);
+    // And the reverse direction, so a one-sided filter cannot pass either.
+    expect(TREE_BEFORE_PROBES.filter((line) => !planted.includes(line))).toEqual([]);
+
+    // The snapshot is a real read of a real repository: `porcelainLines` throws if `git` fails, so
+    // reaching here at all is the proof that it ran.
+    expect(Array.isArray(TREE_BEFORE_PROBES)).toBe(true);
+    expect(existsSync(REPO_ROOT)).toBe(true);
+    expect(existsSync(join(REPO_ROOT, '.git'))).toBe(true);
+
     // And the scratch directory is outside the repository.
     expect(SCRATCH.startsWith('/tmp/opencode/')).toBe(true);
     expect(SCRATCH.startsWith(REPO_ROOT)).toBe(false);
   });
+
+  it('P17restore both mutable modules are byte-identical to the bytes captured at load', () => {
+    // The second witness, and the one that closes the gap `TREE_BEFORE_PROBES` leaves open.
+    //
+    // `git status` cannot see a file that was already modified before the run being modified
+    // *again* during it, because the porcelain line reads ` M path` either way. The two modules
+    // every probe is allowed to touch are the exact files where that blindness would matter - a
+    // probe that wrote a mutation into `src/` and failed to restore it would leave a *tracked* file
+    // modified, and would be invisible to P17 above if the tree was already dirty when the run
+    // started. So the bytes are compared directly, against the copy taken at module load.
+    //
+    // The file header claims "The checksums prove the probe copies matched what was expected".
+    // It did not assert that; it asserted the residue. This is the missing half.
+    for (const name of MUTABLE) {
+      expect(
+        checksum(sourceOf(name)),
+        `${join('src', 'core', 'assistance', name)} was not restored to the bytes captured at load`,
+      ).toBe(checksum(ORIGINALS.get(name) as string));
+    }
+  });
+
+  it('P17writes the only filesystem-mutating call sites in this file are the scratch writer and its cleanup', () => {
+    // The third witness, and the one that makes the claim *scoped* rather than assumed.
+    //
+    // P17 above says "the tree did not change". It does not say *why* that is guaranteed, and a
+    // snapshot comparison is only as trustworthy as the assumption that the probe machinery cannot
+    // write outside `/tmp`. That assumption is the one the deleted permit list was pretending to
+    // check from the outside. It is cheaper and much harder to evade to check from the inside: this
+    // reads **this file's own source** and requires every filesystem-mutating primitive it calls to
+    // sit inside one of two named regions.
+    //
+    // It is self-maintaining. Adding a third write region means adding a region here, which is a
+    // deliberate edit with its name in it - whereas adding a file under one of thirty permitted
+    // prefixes was invisible. And it fails *closed*: an anchor that stops being findable is an
+    // error here, not an empty region that silently matches nothing.
+    const self = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+
+    /** The two places in this file allowed to touch the filesystem, as source ranges. */
+    const regions = [
+      {
+        name: 'writeScratch, which writes into SCRATCH and nowhere else',
+        start: self.indexOf('function writeScratch'),
+        end: self.indexOf('interface GateRun'),
+      },
+      {
+        name: 'the afterAll cleanup, which removes SCRATCH',
+        start: self.indexOf('afterAll(()'),
+        end: self.indexOf('const alreadyRed'),
+      },
+    ];
+
+    for (const region of regions) {
+      expect(region.start, `the "${region.name}" start anchor was not found in this file`).toBeGreaterThan(-1);
+      expect(region.end, `the "${region.name}" end anchor was not found in this file`).toBeGreaterThan(region.start);
+    }
+
+    // Bare calls and `fs.`-qualified calls both count, so an import renamed to `fs.writeFileSync`
+    // is not a way around this. The lookbehind only rejects identifier characters, which is why a
+    // `.` does not suppress the match.
+    const primitives = [
+      'writeFileSync',
+      'appendFileSync',
+      'mkdirSync',
+      'rmSync',
+      'rmdirSync',
+      'unlinkSync',
+      'copyFileSync',
+      'renameSync',
+      'cpSync',
+      'truncateSync',
+      'createWriteStream',
+    ];
+    const pattern = new RegExp(`(?<![\\w$])(${primitives.join('|')})\\s*\\(`, 'g');
+    const calls = [...self.matchAll(pattern)].map((match) => ({
+      primitive: match[1] as string,
+      offset: match.index,
+    }));
+
+    // Non-vacuity of the scan itself: a scan that found nothing would pass every check below by
+    // having nothing to check. This file really does mutate the filesystem - that is the premise of
+    // the whole design - so the count is a fact about the file, pinned so a refactor that quietly
+    // deletes every write cannot turn this gate into a tautology.
+    expect(calls.length).toBeGreaterThanOrEqual(4);
+
+    const stray = calls.filter(
+      (call) => !regions.some((region) => call.offset >= region.start && call.offset < region.end),
+    );
+    expect(
+      stray.map((call) => `${call.primitive} at byte ${call.offset} (line ${self.slice(0, call.offset).split('\n').length})`),
+      'a filesystem-mutating call in this file sits outside the scratch writer and its cleanup',
+    ).toEqual([]);
+  });
+
 
   it('P18 the three cutover-flag gates are byte-identical to HEAD', () => {
     // The orchestrator's standing constraint: `adaptiveAssistance` is registered, is a cutover

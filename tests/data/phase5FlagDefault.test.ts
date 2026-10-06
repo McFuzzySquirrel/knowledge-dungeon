@@ -256,7 +256,28 @@ describe('Phase 5 gate 8: the product exists, and the default build cannot reach
     expect(eagerImporters(paths, 'src/services/persistence/products/archiveValidation.ts')).toEqual([]);
   });
 
-  it('the ZIP codec is reached only through the Phase 5 product, never eagerly', () => {
+  /*
+   * TIMEOUT RAISED, recorded deliberately (2026-10-05, Phase 20).
+   *
+   * This test walks the application import graph repeatedly through a TypeScript-based resolver, and it
+   * timed out at vitest's 5000ms default in a full `npm test` run while passing in about 1.9s when
+   * the file is run alone.
+   *
+   * **The cause is the suite's parallelism, not this test.** Measured rather than assumed:
+   *
+   * - The graph walk itself costs **461ms** before Phase 20 and **485ms** after - a 5% increase, from
+   *   eleven new reachable modules. The timeout needed roughly 2.5x over the isolated time, so the
+   *   walk is not the binding cost.
+   * - Every test that timed out walks the same graph, and every one of them passes in isolation.
+   * - The baseline full run of this repository was green, so the suite sat inside its margin; adding
+   *   test files raised the concurrent worker count past it.
+   *
+   * Raising the timeout is therefore a statement about scheduling and is the honest fix. The
+   * alternatives are worse: a cheaper walk, a module-level cache, or dropping the positive control
+   * would each change what the test measures in order to make it fit. 20 seconds is roughly 10x the
+   * isolated measurement - far more headroom than the load needs - while still failing a real hang.
+   */
+  it('the ZIP codec is reached only through the Phase 5 product, never eagerly', { timeout: 20_000 }, () => {
     // Phase 3 built `archive.ts` as a codec for Phases 5 through 7 and left it out
     // of the application graph on purpose: with the flag off there is no ZIP writer
     // in the build at all, so there is nothing for a learner to trigger by
