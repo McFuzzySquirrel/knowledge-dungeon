@@ -505,9 +505,9 @@ useful without hiding release risk:
 
 - **Pull-request lanes:** the existing Linux/Chromium viewport matrix, plus
   representative Linux/Firefox, macOS/WebKit, and Windows/Edge smoke lanes.
-- **Release lanes:** Linux/Chromium and Firefox; macOS/Chromium, Firefox, and
-  WebKit; Windows/Chromium, Firefox, and Edge. The exact browser channels and
-  versions are recorded with each run.
+- **Release lanes:** Linux/Chromium and Firefox, plus branded Google Chrome on
+  Linux; macOS/Chromium, Firefox, and WebKit; Windows/Chromium, Firefox, and
+  Edge. The exact browser channels and versions are recorded with each run.
 - **Manual device evidence:** at least one physical Chromebook with ChromeVox,
   one physical macOS Safari check, one iPad or Android touch-platform
   screen-reader check, one Windows desktop browser check, and one Linux desktop
@@ -527,7 +527,10 @@ drives the Playwright projects in `playwright.config.ts`. The current-build and
 cross-engine suites stay separate: `npm run test:e2e` runs the Phase 1
 Phaser/axe/privacy suite in the four Chromium viewport projects, and
 `npm run test:e2e:compat` builds and records the artifact once before running
-`tests/e2e/compatibility.spec.ts` in the four named compatibility projects.
+`tests/e2e/compatibility.spec.ts` in the four named compatibility projects. A
+fifth, branded Google Chrome project (`compat-chrome`) runs in the scheduled
+release-candidate workflow and on demand via `--project=compat-chrome`; it is a
+branded-channel lane, not a bundled-Chromium lane.
 `scripts/web-artifact-manifest.mjs` records and verifies the shared artifact
 identity. `.github/workflows/ci.yml` owns the pull-request compatibility lanes
 alongside the Phase 1 viewport suite, and
@@ -535,8 +538,9 @@ alongside the Phase 1 viewport suite, and
 release-candidate lanes so a pull-request run never builds a second artifact.
 
 Viewport and touch emulation are form-factor evidence, not physical-device or
-operating-system certification. Playwright WebKit must be labeled WebKit, and
-Edge channel runs must be labeled Edge. Native Electron packaging and installer
+operating-system certification. Playwright WebKit must be labeled WebKit, Edge
+channel runs must be labeled Edge, and Chrome channel runs must be labeled
+Chrome. Native Electron packaging and installer
 workflows do not satisfy this web-compatibility gate.
 
 The staged lanes are a quality rail, not a promise that every browser/OS patch
@@ -8537,6 +8541,33 @@ flag additions, and the `bootstrap.ts` / `assistanceRecord.ts` / `assistanceStor
 `scripts/check-memory.mjs`, `scripts/check-bundle-size.mjs`, `tests/performance/`, and the lane
 specs/configs. Production default behaviour is recoverable with no code change:
 `VITE_OFFLINE_SHELL=false` (its confirmed default) and every other cutover flag stays off.
+
+### Follow-up: branded Google Chrome lane (2026-10-08)
+
+Added after the verified checkpoint, on maintainer request. Bundled Chromium and
+branded Chrome are different evidence classes, and Chrome is installable on the
+Linux host this repository runs on, so a real Chrome lane adds evidence the
+bundled lane cannot.
+
+- **`compat-chrome`** (`tests/e2e/support-matrix.ts`) — engine Chromium, channel
+  `google-chrome-stable` (Playwright `channel: 'chrome'`), **Linux host only**:
+  Chrome also ships on the macOS/Windows GitHub runners, but no macOS/Windows
+  Chrome cell has been run, so those hosts are left UNVERIFIED rather than
+  declared. Evidence class `branded-channel-automation`, bound to
+  `tests/e2e/compatibility.spec.ts`.
+- **Wired** as release-candidate cell `rc-linux-chrome` in
+  `.github/workflows/compatibility.yml`, consuming the single shared artifact. The
+  pull-request lane set stays at four cells because plan section 10.4 names exactly
+  four PR lanes; extending it would rewrite that documented contract.
+- **Non-vacuity:** the lane requires the branded `Google Chrome` UA-CH brand, so a
+  silent fallback to bundled Chromium fails it (`Expected: "Google Chrome" /
+  Received: null`). Local evidence: Chrome **153.0.8010.52** (bundled is
+  153.0.8010.12), artifact identity `match`, `networkViolations: 0`, 2 passed.
+- **Side effect:** the Phase 21 a11y matrix derives one cell per support-matrix
+  row, so `a11y-compat-chrome` becomes a ninth cell; the audit mirror and its
+  pinned count were updated as the reviewed change that requires.
+- **Gate:** `npm test` 337 files / 7069 tests; lint, typecheck, build,
+  bundle-size, and the Welcome budget unchanged. Not deployed.
 
 ### Unlocks
 

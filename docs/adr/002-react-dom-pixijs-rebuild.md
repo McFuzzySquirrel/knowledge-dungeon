@@ -256,9 +256,9 @@ The initial performance targets are:
 Primary release targets are the static web application on Linux, macOS, and
 Windows host environments, with Chromebook/ChromeOS, desktop browsers, and
 tablet portrait/landscape touch as separate form-factor targets. Automated
-browser-engine evidence covers Chromium, Firefox, and WebKit; Edge and Safari
-claims require branded-browser or manual evidence. Emulation is not physical
-device or operating-system certification.
+browser-engine evidence covers Chromium, Firefox, and WebKit; Edge, Chrome, and
+Safari claims require branded-browser or manual evidence. Emulation is not
+physical device or operating-system certification.
 
 The approved staged matrix is machine-readable in
 `tests/e2e/support-matrix.ts`, which keeps host operating system, browser
@@ -266,10 +266,12 @@ engine, branded-browser channel, form factor, input mode, evidence class, and
 allowed CI lane as separate dimensions. `playwright.config.ts` generates its
 projects from that matrix, so a project cannot drift from the support contract.
 Pull-request lanes cover Linux/Chromium and Firefox, macOS/WebKit, and
-Windows/Edge; scheduled release-candidate lanes cover Linux Chromium/Firefox,
-macOS Chromium/Firefox/WebKit, and Windows Chromium/Firefox/Edge. Playwright
-WebKit is WebKit engine evidence, not Safari certification, and the Edge channel
-is branded-browser evidence for the recorded Windows host only.
+Windows/Edge; scheduled release-candidate lanes cover Linux Chromium/Firefox
+and branded Google Chrome, macOS Chromium/Firefox/WebKit, and Windows
+Chromium/Firefox/Edge. Playwright WebKit is WebKit engine evidence, not Safari
+certification; the Edge channel is branded-browser evidence for the recorded
+Windows host only, and the Chrome channel is branded-browser evidence for the
+recorded Linux host only.
 
 Every automated lane tests the same production web artifact. Within each
 complete CI run, one job builds the artifact, records a deterministic SHA-256 tree

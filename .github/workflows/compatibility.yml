@@ -9,13 +9,15 @@ name: Web Compatibility Release Candidates
 # rebuilding. "One shared artifact" always means one artifact per complete CI run,
 # never one global artifact shared across unrelated workflow runs.
 #
-# Release lanes: Linux Chromium/Firefox, macOS Chromium/Firefox/WebKit, and
-# Windows Chromium/Firefox/Edge on current GitHub-hosted runners. Playwright
-# WebKit lanes are WebKit engine evidence, not Safari certification, and
-# viewport/touch emulation is form-factor evidence, not physical-device or
-# operating-system certification. No lane builds, signs, installs, or launches
-# Electron, and `npm ci --ignore-scripts` keeps the native Electron download out
-# of web compatibility work.
+# Release lanes: Linux Chromium/Firefox plus branded Google Chrome, macOS
+# Chromium/Firefox/WebKit, and Windows Chromium/Firefox/Edge on current
+# GitHub-hosted runners. Playwright WebKit lanes are WebKit engine evidence, not
+# Safari certification; Edge and Chrome channel lanes are branded-browser
+# evidence, not a claim about every Chromium build; and viewport/touch emulation
+# is form-factor evidence, not physical-device or operating-system certification.
+# No lane builds, signs, installs, or launches Electron, and
+# `npm ci --ignore-scripts` keeps the native Electron download out of web
+# compatibility work.
 
 on:
   schedule:
@@ -81,6 +83,21 @@ jobs:
             expect_host: linux
             install_args: --with-deps
             install: firefox
+          # Branded Google Chrome, a different evidence class from the
+          # Playwright-bundled Chromium above. Release-candidate only: plan
+          # section 10.4 names exactly four pull-request lanes, and adding a
+          # Chrome pull-request lane would rewrite that documented contract.
+          # `npx playwright install --with-deps chrome` installs the branded
+          # channel, and the lane asserts the `Google Chrome` User-Agent Client
+          # Hints brand so a silent fallback to bundled Chromium fails.
+          - id: rc-linux-chrome
+            lane: scheduled-release
+            os: linux
+            runs_on: ubuntu-latest
+            project: compat-chrome
+            expect_host: linux
+            install_args: --with-deps
+            install: chrome
           - id: rc-macos-chromium
             lane: scheduled-release
             os: macos

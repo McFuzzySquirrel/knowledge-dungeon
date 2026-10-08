@@ -133,7 +133,7 @@ const CHECKLIST_STEP_ID = /^[a-z]+-[0-9]{2}$/;
  *
  * Mirrored from `tests/e2e/support-matrix.ts`. It is a hard-coded list rather than a parsed import
  * for the same reason the other mirrors are: `node` cannot load the declaration. The cost is that a
- * ninth cell could be added to the matrix without appearing here - and the gate test asserts this list
+ * tenth cell could be added to the matrix without appearing here - and the gate test asserts this list
  * equals the matrix's, so that is a red `npm test` rather than a gap in the rule.
  */
 const MATRIX_CELLS = Object.freeze([
@@ -145,6 +145,7 @@ const MATRIX_CELLS = Object.freeze([
   { project: 'compat-firefox', evidenceClass: 'engine-automation' },
   { project: 'compat-webkit', evidenceClass: 'engine-automation' },
   { project: 'compat-edge', evidenceClass: 'branded-channel-automation' },
+  { project: 'compat-chrome', evidenceClass: 'branded-channel-automation' },
 ]);
 
 /* ── Validation ───────────────────────────────────────────────────────────────── */

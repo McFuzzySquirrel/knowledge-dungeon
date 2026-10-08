@@ -405,10 +405,10 @@ describe('no manual gate can be derived from an automated cell - the promotion r
     expect(run.output).toContain('A manual gate cannot be derived from an automated cell');
   });
 
-  it('all eight matrix projects are rejected as a source, each naming its own evidence class', () => {
-    // Every one, not just the emulated ones. `compat-webkit` is `engine-automation` and `compat-edge`
-    // is `branded-channel-automation`; neither is a Safari or an Edge release, and a record must not be
-    // able to say it is.
+  it('all nine matrix projects are rejected as a source, each naming its own evidence class', () => {
+    // Every one, not just the emulated ones. `compat-webkit` is `engine-automation`, and `compat-edge`
+    // and `compat-chrome` are `branded-channel-automation`; none is a Safari, Edge, or Chrome release,
+    // and a record must not be able to say it is.
     for (const entry of SUPPORT_MATRIX) {
       expect(entry.evidenceClass, entry.project).not.toBe(MANUAL_EVIDENCE_CLASS);
       const record = cloneShipped();

@@ -382,6 +382,36 @@ function buildArtifactEvidence(
   };
 }
 
+/**
+ * Branded-browser detection, keyed by the Playwright channel option the matrix
+ * declares.
+ *
+ * Two discriminators, and both are chosen because the Playwright-bundled engine
+ * cannot produce them:
+ *
+ * - Edge is identified by its `Edg/` user-agent token, which the bundled Chromium
+ *   build never emits.
+ * - Chrome is identified by the `Google Chrome` User-Agent Client Hints brand. The
+ *   bundled Chromium build reports `Chromium` (and `HeadlessChrome` in headless
+ *   mode) but never `Google Chrome`, so a run that silently fell back to the
+ *   bundled engine would fail the branded-Chrome assertion rather than pass it.
+ *
+ * The values are bounded tokens with no learner data.
+ */
+export const BRANDED_BROWSER_TOKENS = {
+  msedge: { brandToken: 'Edg/', brandedBrowserClaim: 'Microsoft Edge channel' },
+  chrome: { brandToken: 'Google Chrome', brandedBrowserClaim: 'Google Chrome channel' },
+} as const;
+
+function detectBrandedBrowser(
+  userAgent: string,
+  userAgentBrands: readonly string[],
+): { readonly brandToken: string | null; readonly brandedBrowserClaim: string | null } {
+  if (userAgent.includes('Edg/')) return BRANDED_BROWSER_TOKENS.msedge;
+  if (userAgentBrands.includes('Google Chrome')) return BRANDED_BROWSER_TOKENS.chrome;
+  return { brandToken: null, brandedBrowserClaim: null };
+}
+
 function browserTypeFor(matrixEntry: SupportMatrixEntry) {
   switch (matrixEntry.engine) {
     case 'chromium':
@@ -402,16 +432,24 @@ async function collectEnvironmentEvidence(input: {
   renderer: RendererEvidence;
   failure: Error | null;
 }): Promise<CompatibilityEvidence> {
-  const observed = await input.page.evaluate(() => ({
-    innerWidth: window.innerWidth,
-    innerHeight: window.innerHeight,
-    devicePixelRatio: window.devicePixelRatio,
-    maxTouchPoints: navigator.maxTouchPoints,
-    ontouchstartInWindow: 'ontouchstart' in window,
-    userAgent: navigator.userAgent,
-  }));
+  const observed = await input.page.evaluate(() => {
+    const userAgentData = (
+      navigator as Navigator & {
+        readonly userAgentData?: { readonly brands?: readonly { readonly brand: string }[] };
+      }
+    ).userAgentData;
+    return {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+      maxTouchPoints: navigator.maxTouchPoints,
+      ontouchstartInWindow: 'ontouchstart' in window,
+      userAgent: navigator.userAgent,
+      userAgentBrands: (userAgentData?.brands ?? []).map((brand) => brand.brand),
+    };
+  });
 
-  const brandToken = observed.userAgent.includes('Edg/') ? 'Edg/' : null;
+  const branded = detectBrandedBrowser(observed.userAgent, observed.userAgentBrands);
 
   return {
     schemaVersion: COMPAT_EVIDENCE_SCHEMA_VERSION,
@@ -477,8 +515,8 @@ async function collectEnvironmentEvidence(input: {
       bundled: entry.channel === 'playwright-bundled',
       version: input.browser.version(),
       userAgent: observed.userAgent,
-      brandToken,
-      brandedBrowserClaim: brandToken === 'Edg/' ? 'Microsoft Edge channel' : null,
+      brandToken: branded.brandToken,
+      brandedBrowserClaim: branded.brandedBrowserClaim,
     },
     renderer: input.renderer,
     artifact: input.artifact,
@@ -721,10 +759,14 @@ test('records the approved support-matrix lane and the recorded artifact identit
     expect(observed.host.hostMatchesApprovedLane).toBe(true);
     expect(observed.input.observedMaxTouchPoints > 0).toBe(entry.hasTouch);
     if (entry.channelOption) {
+      const expected = BRANDED_BROWSER_TOKENS[entry.channelOption];
+      // Non-vacuity: the assertion is on the branded token the bundled engine
+      // cannot produce, so a lane that silently fell back to Playwright-bundled
+      // Chromium fails here instead of passing as a false branded result.
       expect(
         observed.browser.brandToken,
-        `${entry.channelOption} channel runs must report the branded Edge token.`,
-      ).toBe('Edg/');
+        `${entry.channelOption} channel runs must report the branded ${expected.brandedBrowserClaim} token.`,
+      ).toBe(expected.brandToken);
     } else {
       expect(
         observed.browser.brandToken,

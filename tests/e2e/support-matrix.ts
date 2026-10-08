@@ -11,10 +11,12 @@
  * - `hostOperatingSystems`: hosts that have an approved automated lane.
  * - `engine`: the browser engine under test (Chromium, Firefox, WebKit).
  * - `channel`: how the browser binary is obtained. `playwright-bundled` is the
- *   engine build Playwright ships; `microsoft-edge-stable` is a branded browser
- *   channel. A bundled WebKit build is WebKit evidence, never a Safari release
- *   claim, and an Edge channel run is branded-browser evidence rather than a
- *   claim about every Chromium build.
+ *   engine build Playwright ships; `microsoft-edge-stable` and
+ *   `google-chrome-stable` are branded browser channels. A bundled WebKit build is
+ *   WebKit evidence, never a Safari release claim, and an Edge or Chrome channel
+ *   run is branded-browser evidence rather than a claim about every Chromium
+ *   build. A branded channel is a different evidence class from the bundled engine
+ *   even when the two share the Chromium engine.
  * - `formFactor`, `viewport`, `deviceScaleFactor`, `inputMode`: emulated
  *   form-factor evidence only. Viewport and touch emulation is never physical
  *   device or operating-system certification.
@@ -33,11 +35,38 @@ export type HostOperatingSystem = (typeof HOST_OPERATING_SYSTEMS)[number];
 export const BROWSER_ENGINES = ['chromium', 'firefox', 'webkit'] as const;
 export type BrowserEngine = (typeof BROWSER_ENGINES)[number];
 
-export const BROWSER_CHANNELS = ['playwright-bundled', 'microsoft-edge-stable'] as const;
+export const BROWSER_CHANNELS = [
+  'playwright-bundled',
+  'microsoft-edge-stable',
+  'google-chrome-stable',
+] as const;
 export type BrowserChannel = (typeof BROWSER_CHANNELS)[number];
 
-export const BROWSER_INSTALL_TARGETS = ['chromium', 'firefox', 'webkit', 'msedge'] as const;
+export const BROWSER_INSTALL_TARGETS = ['chromium', 'firefox', 'webkit', 'msedge', 'chrome'] as const;
 export type BrowserInstallTarget = (typeof BROWSER_INSTALL_TARGETS)[number];
+
+/** A branded channel: not the Playwright-bundled engine build. */
+export type BrandedBrowserChannel = Exclude<BrowserChannel, 'playwright-bundled'>;
+
+/**
+ * The Playwright `channel` option each branded channel sets, the install target
+ * that obtains its binary, and the human label evidence must use.
+ *
+ * A single table so a new branded channel is one declaration rather than a new
+ * branch in `validateSupportMatrix`. `playwright-bundled` is deliberately absent:
+ * it is not a branded channel and must set no `channel` option at all.
+ */
+const BRANDED_CHANNEL_DEFINITIONS: Record<
+  BrandedBrowserChannel,
+  {
+    readonly channelOption: 'msedge' | 'chrome';
+    readonly installTarget: BrowserInstallTarget;
+    readonly label: string;
+  }
+> = {
+  'microsoft-edge-stable': { channelOption: 'msedge', installTarget: 'msedge', label: 'Microsoft Edge' },
+  'google-chrome-stable': { channelOption: 'chrome', installTarget: 'chrome', label: 'Google Chrome' },
+};
 
 export const FORM_FACTORS = ['desktop', 'chromebook', 'tablet-portrait', 'tablet-landscape'] as const;
 export type FormFactor = (typeof FORM_FACTORS)[number];
@@ -73,7 +102,7 @@ export interface SupportMatrixEntry {
   readonly engine: BrowserEngine;
   readonly channel: BrowserChannel;
   /** Playwright `channel` option; only branded channels set this. */
-  readonly channelOption?: 'msedge';
+  readonly channelOption?: 'msedge' | 'chrome';
   readonly formFactor: FormFactor;
   readonly viewport: { readonly width: number; readonly height: number };
   readonly deviceScaleFactor: number;
@@ -305,6 +334,42 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
       'Not evidence for other Edge channels, Edge on other hosts, or every Chromium-based browser.',
     ],
   },
+  {
+    project: 'compat-chrome',
+    suite: 'cross-engine-compatibility',
+    // Linux-only, and honestly so: the branded Chrome lane is evidenced on the
+    // Linux host this repository can actually run it on. Chrome also ships on the
+    // macOS and Windows GitHub-hosted runners, but no macOS/Windows Chrome cell has
+    // been executed here, so those hosts are UNVERIFIED and left out rather than
+    // declared on the strength of the runner image alone. Extending the host list
+    // is a follow-up that requires its own runs.
+    hostOperatingSystems: ['linux'],
+    engine: 'chromium',
+    channel: 'google-chrome-stable',
+    channelOption: 'chrome',
+    formFactor: 'desktop',
+    viewport: { width: 1280, height: 800 },
+    deviceScaleFactor: 1,
+    inputMode: 'pointer-keyboard',
+    hasTouch: false,
+    isMobileEmulation: false,
+    evidenceClass: 'branded-channel-automation',
+    // Scheduled-release only. Plan section 10.4 names exactly four pull-request
+    // lanes (Linux/Chromium, Linux/Firefox, macOS/WebKit, Windows/Edge); adding a
+    // Chrome pull-request lane would rewrite that documented contract, so this lane
+    // is a release-candidate cell instead.
+    ciLanes: ['scheduled-release'],
+    runnerLabels: ['ubuntu-latest'],
+    installTargets: ['chrome'],
+    expectedRendererMode: PHASER_DEFAULT,
+    claim:
+      'The single recorded production web artifact loads and runs the synthetic core flow in the installed Google Chrome stable channel on a Linux runner, and the browser reports the Google Chrome brand rather than the Playwright-bundled Chromium build.',
+    doesNotProve: [
+      ...EMULATION_LIMITATIONS,
+      'Not evidence for Chrome on macOS or Windows, other Chrome channels, ChromeOS, or every Chrome release.',
+      'Not a substitute for the Playwright-bundled Chromium lane: a branded channel and the bundled engine are different evidence classes even though both are Chromium.',
+    ],
+  },
 ] satisfies readonly SupportMatrixEntry[]);
 
 /** Project names that must keep running the Phase 1 current-build suite. */
@@ -323,6 +388,7 @@ export const COMPATIBILITY_PROJECTS = Object.freeze([
   'compat-firefox',
   'compat-webkit',
   'compat-edge',
+  'compat-chrome',
 ] as const);
 
 export type CompatibilityProject = (typeof COMPATIBILITY_PROJECTS)[number];
@@ -396,6 +462,7 @@ export const SUPPORT_CLAIM_BOUNDARY: readonly string[] = Object.freeze([
   'Viewport and touch emulation is form-factor evidence, not physical-device, ChromeOS, or operating-system certification.',
   'Playwright WebKit lanes are WebKit engine evidence, not Safari release or iOS certification.',
   'Edge channel lanes are branded-browser evidence for the installed Edge channel on the recorded Windows host only.',
+  'Google Chrome channel lanes are branded-browser evidence for the installed Chrome channel on the recorded Linux host only; they are not Chrome on other hosts, other Chrome channels, or ChromeOS.',
   'A passing compatibility lane is not an accessibility, performance, offline, or data-product certification.',
   'Electron installers, signing, and desktop packaging remain deferred and are not part of this web evidence.',
 ]);
@@ -455,20 +522,7 @@ export function validateSupportMatrix(
       }
     }
 
-    if (entry.channel === 'microsoft-edge-stable') {
-      if (entry.engine !== 'chromium') {
-        problems.push(`${label}: the Microsoft Edge channel must be recorded as the chromium engine.`);
-      }
-      if (entry.channelOption !== 'msedge') {
-        problems.push(`${label}: the Microsoft Edge channel must set the msedge Playwright channel.`);
-      }
-      if (!entry.installTargets.includes('msedge')) {
-        problems.push(`${label}: the Microsoft Edge channel must install the msedge browser.`);
-      }
-      if (entry.evidenceClass !== 'branded-channel-automation') {
-        problems.push(`${label}: the Microsoft Edge channel must be branded-channel evidence.`);
-      }
-    } else {
+    if (entry.channel === 'playwright-bundled') {
       if (entry.channelOption !== undefined) {
         problems.push(`${label}: a Playwright-bundled engine must not set a branded channel option.`);
       }
@@ -482,6 +536,24 @@ export function validateSupportMatrix(
       }
       if (!entry.installTargets.includes(entry.engine)) {
         problems.push(`${label}: install targets must include the "${entry.engine}" engine build.`);
+      }
+    } else {
+      const definition = BRANDED_CHANNEL_DEFINITIONS[entry.channel];
+      if (entry.engine !== 'chromium') {
+        problems.push(`${label}: the ${definition.label} channel must be recorded as the chromium engine.`);
+      }
+      if (entry.channelOption !== definition.channelOption) {
+        problems.push(
+          `${label}: the ${definition.label} channel must set the ${definition.channelOption} Playwright channel.`,
+        );
+      }
+      if (!entry.installTargets.includes(definition.installTarget)) {
+        problems.push(
+          `${label}: the ${definition.label} channel must install the ${definition.installTarget} browser.`,
+        );
+      }
+      if (entry.evidenceClass !== 'branded-channel-automation') {
+        problems.push(`${label}: the ${definition.label} channel must be branded-channel evidence.`);
       }
     }
 

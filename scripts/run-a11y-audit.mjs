@@ -13,7 +13,7 @@
  *
  * So this runner:
  *
- * 1. **Plans the cells** from the support matrix - all eight, mirrored here and held equal to
+ * 1. **Plans the cells** from the support matrix - all nine, mirrored here and held equal to
  *    `tests/e2e/a11y-matrix.ts` by `tests/phase21/infraA11ySuite.test.ts`.
  * 2. **Probes runnability by launching the browser**, not by reading a flag. A cell the matrix
  *    approves for another host is absent with that reason; a cell whose browser cannot launch on
@@ -64,7 +64,7 @@
  *   runs.** "Nothing on this host was skipped."
  * - `host` (`npm run test:a11y`) - every cell approved for this host's OS family. Answers the plan's
  *   requirement scoped to one host, which is as far as one host can go.
- * - `matrix` (`npm run test:a11y:complete`) - all eight cells plus the five manual gates. This is
+ * - `matrix` (`npm run test:a11y:complete`) - all nine cells plus the five manual gates. This is
  *   the phase exit criterion, and it **cannot** pass from a Linux container. It is a checklist
  *   command, deliberately not wired into CI, and the wiring gate asserts it stays that way.
  *
@@ -118,6 +118,7 @@ const CELLS = Object.freeze([
   { project: 'compat-firefox', engine: 'firefox', channelOption: undefined, evidenceClass: 'engine-automation', formFactor: 'desktop', hasTouch: false, hostOperatingSystems: ['linux', 'macos', 'windows'] },
   { project: 'compat-webkit', engine: 'webkit', channelOption: undefined, evidenceClass: 'engine-automation', formFactor: 'desktop', hasTouch: false, hostOperatingSystems: ['macos'] },
   { project: 'compat-edge', engine: 'chromium', channelOption: 'msedge', evidenceClass: 'branded-channel-automation', formFactor: 'desktop', hasTouch: false, hostOperatingSystems: ['windows'] },
+  { project: 'compat-chrome', engine: 'chromium', channelOption: 'chrome', evidenceClass: 'branded-channel-automation', formFactor: 'desktop', hasTouch: false, hostOperatingSystems: ['linux'] },
 ]);
 
 /** The two engine families the plan's requirement is stated over. */

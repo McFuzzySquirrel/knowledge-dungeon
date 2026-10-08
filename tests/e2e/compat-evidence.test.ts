@@ -395,4 +395,25 @@ describe('lane policy', () => {
     expect(normalizeHost('win32')).toBe('windows');
     expect(normalizeHost('aix')).toBeNull();
   });
+
+  it('names the branded Chrome channel and its own install target when it is unavailable', () => {
+    // The branded-Chrome lane must not be confused with the bundled Chromium lane:
+    // an unavailable Chrome on a Linux host fails as a chrome-channel browser, and
+    // the reason names the chrome install target rather than chromium.
+    const decision = decideLaneOutcome({
+      ...base,
+      project: 'compat-chrome',
+      approvedHosts: ['linux'],
+      engine: 'chromium',
+      channelOption: 'chrome',
+      installTargets: ['chrome'],
+      hostApproved: true,
+      isCi: true,
+      browserAvailable: false,
+    });
+    expect(decision.outcome).toBe('fail-browser');
+    expect(decision.reason).toContain('chromium (chrome channel)');
+    expect(decision.reason).toContain('npx playwright install chrome');
+    expect(decision.reason).not.toContain('npx playwright install chromium');
+  });
 });

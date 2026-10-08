@@ -177,7 +177,10 @@ describe('the accessibility cell plan is internally consistent and cannot over-c
   it('declares exactly one cell per support-matrix entry, in matrix order', () => {
     expect(A11Y_PROJECTS).toEqual(SUPPORT_MATRIX.map((entry) => entry.project));
     expect(A11Y_CELLS.map((cell) => cell.project)).toEqual(A11Y_PROJECTS);
-    expect(A11Y_CELLS).toHaveLength(8);
+    // Nine, because the branded Chrome lane added a ninth matrix entry and the
+    // cell plan covers every entry. This is a deliberate reviewed change, not a
+    // relaxation: the assertion still pins the exact count.
+    expect(A11Y_CELLS).toHaveLength(9);
   });
 
   it('NO cell claims physical-device-manual, in words rather than by absence', () => {

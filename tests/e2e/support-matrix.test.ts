@@ -144,6 +144,7 @@ const REQUIRED_PULL_REQUEST_LANES: readonly (readonly [HostOperatingSystem, stri
 const REQUIRED_RELEASE_LANES: readonly (readonly [HostOperatingSystem, string])[] = [
   ['linux', 'compat-chromium'],
   ['linux', 'compat-firefox'],
+  ['linux', 'compat-chrome'],
   ['macos', 'compat-chromium'],
   ['macos', 'compat-firefox'],
   ['macos', 'compat-webkit'],
@@ -234,6 +235,20 @@ describe('Phase 1A web support matrix', () => {
     expect(edge.channelOption).toBe('msedge');
     expect(edge.evidenceClass).toBe('branded-channel-automation');
     expect(edge.hostOperatingSystems).toEqual(['windows']);
+
+    // Branded Chrome is a different channel from Edge and a different evidence
+    // class from the Playwright-bundled Chromium lane, even though all three are
+    // the Chromium engine. Collapsing them is how "Chrome ran" becomes a claim
+    // about Chromium generally.
+    const chrome = supportEntryForProject('compat-chrome');
+    expect(chrome.engine).toBe('chromium');
+    expect(chrome.channel).toBe('google-chrome-stable');
+    expect(chrome.channelOption).toBe('chrome');
+    expect(chrome.evidenceClass).toBe('branded-channel-automation');
+    expect(chrome.hostOperatingSystems).toEqual(['linux']);
+    expect(chrome.ciLanes).toEqual(['scheduled-release']);
+    expect(chrome.installTargets).toEqual(['chrome']);
+    expect(chrome.doesNotProve.join(' ')).toMatch(/not evidence for chrome on macos or windows/i);
   });
 
   it('keeps physical-device gates manual and bounded', () => {
