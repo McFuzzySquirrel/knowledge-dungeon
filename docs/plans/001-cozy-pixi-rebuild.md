@@ -771,7 +771,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 19 | complete | Add local adaptive assistance. |
 | 20 | complete | Redesign private share cards. |
 | 21 | complete | Complete accessibility and responsive verification. |
-| 22 | verified | Complete performance, memory, and offline hardening. |
+| 22 | complete | Complete performance, memory, and offline hardening. |
 | 23 | not-started | Cut over production and complete the soak. |
 | 24 | not-started | Remove Phaser and temporary migration infrastructure. |
 
@@ -8301,7 +8301,7 @@ Phase 22.
 
 ## Phase 22: Performance, Memory, and Offline Hardening
 
-**Status:** verified
+**Status:** complete
 **Objective:** Meet the performance budgets while preserving local-first offline behavior across the approved web OS/browser matrix.
 
 **Scope locked 2026-10-06.** Definitions and rulings recorded before implementation, so the
@@ -8458,7 +8458,14 @@ lane declarations and specs (`tests/e2e/assistance-lane.ts`, `assistance.spec.ts
 
 Recorded 2026-10-07. `in-progress` -> `verified`. Independently re-run by `qa-engineer` against the
 actual tree and commands, not the implementer reports; the orchestrator re-ran the load-bearing
-properties and the full suite separately. Committed as `f7e34e2`; **not deployed**.
+properties and the full suite separately. Committed as `f7e34e2` (implementation), `c60a646` (this
+record), and `a8eca07` (the branded Google Chrome lane follow-up); pushed to `origin/main`;
+**not deployed**.
+
+**Accepted by the maintainer on 2026-10-08** on the phase's automated criteria. The frame-time
+target, the macOS/Windows/WebKit/Edge cells, and the physical-device/assistive-technology gates are
+carried to Phase 23 rather than discharged. The status advanced from `verified` to `complete`, and
+Phase 23 became the next authorized phase.
 
 **Baseline.** Green at `ce242cb` (the accepted Phase 21 checkpoint) before any Phase 22 change:
 `npm test` 316 files / 6626 tests, lint/typecheck/build/bundle-size/welcome/memory/licenses/privacy
@@ -8582,7 +8589,7 @@ Phase 23.
 
 ### Prerequisites
 
-Phase 22 accepted.
+Phase 22 accepted on 2026-10-08.
 
 All accessibility, performance, migration, backup, and CC0 gates pass.
 
