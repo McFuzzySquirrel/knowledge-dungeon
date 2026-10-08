@@ -8454,7 +8454,7 @@ lane declarations and specs (`tests/e2e/assistance-lane.ts`, `assistance.spec.ts
 
 Recorded 2026-10-07. `in-progress` -> `verified`. Independently re-run by `qa-engineer` against the
 actual tree and commands, not the implementer reports; the orchestrator re-ran the load-bearing
-properties and the full suite separately. **Not committed and not deployed.**
+properties and the full suite separately. Committed as `f7e34e2`; **not deployed**.
 
 **Baseline.** Green at `ce242cb` (the accepted Phase 21 checkpoint) before any Phase 22 change:
 `npm test` 316 files / 6626 tests, lint/typecheck/build/bundle-size/welcome/memory/licenses/privacy
