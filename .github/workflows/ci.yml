@@ -132,6 +132,21 @@ jobs:
       # same gate matches the key as a YAML key at the start of a line.
       - name: Enforce the Welcome initial payload budget
         run: npm run check:budget:welcome
+      # Phase 22 route-aware budgets: each declared lazy boundary (the renderer
+      # families and the assistance/share/offline feature lanes) at or under 800 KiB
+      # gzip, and the raw `dist` at or under 12 MB. It is a step in this job for the
+      # same reason as the two above - `dist` and its `bundle-census.json` exist here
+      # and nowhere else, and both are read from the one build that is about to be
+      # uploaded. The 300 KiB Welcome budget is not re-checked here; the step above
+      # owns it and remains its only declaration.
+      #
+      # The step is not exempt from failing.
+      # `tests/performance/performance-wiring.test.ts` asserts that, so a regression
+      # to a warning cannot land quietly. The wording above avoids naming that key on
+      # purpose, because that same gate matches the key as a YAML key at the start of
+      # a line.
+      - name: Enforce the route-aware performance budgets on the built artifact
+        run: npm run check:perf
       - run: npm run record:build-metadata
       # The manifest carries two identities: the `dist` tree hash, and a hash of
       # the git-tracked source the artifact was recorded against. The tree hash
@@ -195,6 +210,12 @@ jobs:
       - run: npm run check:bundle-size
       - name: Enforce the renderer memory preflight on the Pixi-flagged artifact
         run: npm run check:memory
+      # Phase 22 route-aware budgets on the Pixi-flagged artifact. The `vendor-pixi-*`
+      # boundary is absent from the default build, so this is the only step that
+      # measures it; the `renderer:pixi` boundary line in the default run reads
+      # "NOT PRESENT in this build (not measured)" by design.
+      - name: Enforce the route-aware performance budgets on the Pixi-flagged artifact
+        run: npm run check:perf
       # The browser-backed half of the same criterion, and the only thing this job
       # uploads besides the release artifact.
       #
@@ -328,6 +349,147 @@ jobs:
           path: |
             dist
             artifacts/web-artifact-manifest-assistance.json
+          if-no-files-found: error
+          retention-days: 14
+      # Phase 22 offline-shell-flagged artifact, and the fifth flagged artifact this
+      # run produces.
+      #
+      # `VITE_OFFLINE_SHELL` is a build-time flag like the four above, and the worker,
+      # the shell manifest, and the web app manifest only exist in a build made with
+      # it on. Two browser lanes measure that build - the offline reload lane and the
+      # service-worker-enabled compatibility lane - and neither can build it for
+      # itself, because eleven existing gates assert that no job other than
+      # `web-build` runs any `build:web*` script.
+      #
+      # Every property here is the one the four blocks above already have:
+      #
+      # - It runs strictly AFTER the production artifact has been recorded, verified
+      #   and uploaded. Nothing downstream reads this runner's `dist` - the browser
+      #   jobs download the uploaded artifacts - so this rebuild cannot be mistaken
+      #   for the artifact that shipped.
+      # - It records and uploads no second **production** artifact. The production
+      #   default stays `VITE_OFFLINE_SHELL` absent, so `check:budget:welcome` above
+      #   still measures the default. This is a flagged build that exists to be
+      #   measured and then discarded, and its identity goes to its OWN manifest.
+      # - It installs no browser, exactly like the build job's other four flagged
+      #   builds. The browser-backed half runs in `browser-smoke`.
+      #
+      # `scripts/require-offline-lane-artifact.mjs` reads the emitted `sw.js` and
+      # `offline-shell-manifest.js` out of `dist/` before either browser lane starts,
+      # which is the check that would catch a lane pointed at the wrong `dist` or a
+      # build that silently dropped the flag.
+      - name: Build the Phase 22 offline-shell-flagged artifact
+        run: npm run build:web:offline
+      - run: npm run check:bundle-size
+      # Phase 22 route-aware budgets on the offline-shell-flagged artifact. The
+      # `lane:offline` boundary (the service worker and its precache manifest) is
+      # absent from the default build, so this step is where it is measured.
+      - name: Enforce the route-aware performance budgets on the offline-shell artifact
+        run: npm run check:perf
+      - name: Record the offline-shell-flagged artifact identity
+        run: npm run record:web-artifact:offline
+      - name: Verify the offline-shell-flagged artifact identity
+        run: npm run verify:web-artifact:offline
+      - name: Upload the offline-shell-flagged web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-shell-web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest-offline.json
+          if-no-files-found: error
+          retention-days: 14
+      # Phase 22 Pixi-dungeon performance fixture artifact, and the sixth flagged
+      # artifact this run produces.
+      #
+      # `VITE_PIXI_DUNGEON` is a build-time flag like the five above, and the PixiJS
+      # dungeon world only exists in a build made with it on. The frame-time lane
+      # measures that world in a browser, so it needs an artifact that a browser job can
+      # download; the Phase 9 `pixi-web-artifact` cannot serve, because
+      # `VITE_WORLD_RENDERER=pixi` routes the world screen to the Phase 9 test host
+      # rather than to `GameScreen`.
+      #
+      # Every property here is the one the five blocks above already have:
+      #
+      # - It runs strictly AFTER the production artifact has been recorded, verified
+      #   and uploaded. Nothing downstream reads this runner's `dist` - the browser jobs
+      #   download the uploaded artifacts - so this rebuild cannot be mistaken for the
+      #   artifact that shipped.
+      # - It records and uploads no second **production** artifact. The production
+      #   default stays `VITE_PIXI_DUNGEON` absent, so `check:budget:welcome` above still
+      #   measures the default. This is a flagged build that exists to be measured and
+      #   then discarded, and its identity goes to its OWN manifest.
+      # - It installs no browser, exactly like the build job's other five flagged
+      #   builds. The browser-backed half runs in `browser-smoke`.
+      #
+      # `vite.config.ts` already refuses to emit a build that asked for the dungeon and
+      # carries no Pixi chunk, so a dropped flag fails this step rather than producing a
+      # lane that verifies nothing - and `scripts/require-pixi-perf-lane-artifact.mjs`
+      # reads the emitted bundle census before Playwright starts, which is the check that
+      # would catch a lane pointed at the wrong `dist`.
+      - name: Build the Phase 22 Pixi-dungeon performance fixture artifact
+        run: npm run build:web:pixi-dungeon
+      - run: npm run check:bundle-size
+      - name: Record the Pixi-dungeon-flagged artifact identity
+        run: npm run record:web-artifact:pixi-dungeon
+      - name: Verify the Pixi-dungeon-flagged artifact identity
+        run: npm run verify:web-artifact:pixi-dungeon
+      - name: Upload the Pixi-dungeon-flagged web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixi-dungeon-web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest-pixi-dungeon.json
+          if-no-files-found: error
+          retention-days: 14
+      # Phase 22 route-change teardown artifact, and the seventh flagged artifact this
+      # run produces.
+      #
+      # The Phase 22 route lane drives a real route change from the PixiJS dungeon to
+      # the village and the PixiJS fishing pond, so it needs ONE artifact that carries
+      # both Pixi worlds at once. No existing artifact does: `build:web:pixi-dungeon`
+      # sets only `VITE_PIXI_DUNGEON` - which `tests/phase13/dungeon-flag-boundary.test.ts`
+      # asserts as "the dungeon flag and nothing else" - so it carries no pond, and no
+      # single-flag build has both. Fetching two artifacts and merging them would make a
+      # tree that is neither build, which is the exact defect the discards below exist to
+      # prevent. `VITE_PIXI_VILLAGE` is deliberately left off: the lane's route walks
+      # THROUGH the Phaser village, and that is what makes the dungeon a screen-route
+      # teardown rather than a village-internal one, so an all-worlds build would change
+      # what the lane measures rather than broaden it.
+      #
+      # Every property here is the one the six blocks above already have:
+      #
+      # - It runs strictly AFTER the production artifact has been recorded, verified and
+      #   uploaded. Nothing downstream reads this runner's `dist` - the browser jobs
+      #   download the uploaded artifacts - so this rebuild cannot be mistaken for the
+      #   artifact that shipped.
+      # - It records and uploads no second **production** artifact. The production
+      #   default stays `VITE_PIXI_DUNGEON` and `VITE_PIXI_FISHING` absent, so
+      #   `check:budget:welcome` above still measures the default. This is a flagged
+      #   build that exists to be measured and then discarded, and its identity goes to
+      #   its OWN manifest.
+      # - It installs no browser, exactly like the build job's other six flagged builds.
+      #   The browser-backed half runs in `browser-smoke`.
+      #
+      # `vite.config.ts` refuses to emit a build that asked for a world and carries no
+      # Pixi chunk for it, so a dropped flag fails this step rather than producing a lane
+      # that verifies nothing - and `check:bundle-size` runs here so an oversized route
+      # chunk fails in the job that produced it rather than in the lane.
+      - name: Build the Phase 22 Pixi-route-flagged artifact
+        run: npm run build:web:pixi-route
+      - run: npm run check:bundle-size
+      - name: Record the Pixi-route-flagged artifact identity
+        run: npm run record:web-artifact:pixi-route
+      - name: Verify the Pixi-route-flagged artifact identity
+        run: npm run verify:web-artifact:pixi-route
+      - name: Upload the Pixi-route-flagged web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pixi-route-web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest-pixi-route.json
           if-no-files-found: error
           retention-days: 14
 
@@ -607,6 +769,111 @@ jobs:
       # assert on the raw text of this job whose comments are part of what they check.
       - name: Run the Phase 21 automated accessibility audit
         run: npm run test:a11y:runnable
+      # Phase 22 offline-shell-flagged artifact, downloaded here and measured by two
+      # lanes in this job.
+      #
+      # `web-build` builds, records, verifies and uploads it once; this job downloads
+      # it once and both the service-worker compatibility lane and the offline reload
+      # lane run against that one download. The download is preceded by its own
+      # discard for the same reason the four above are: `actions/download-artifact`
+      # extracts **into** the working directory, so a sixth download merged into the
+      # tree the absence lane's production re-download left behind would be a union of
+      # two builds that is neither of them.
+      #
+      # The two lanes run in the order below on purpose. The compatibility lane is
+      # read-only; the offline lane's version-bump step rewrites
+      # `dist/offline-shell-manifest.js` and its `afterAll` regenerates the default
+      # token, but the compatibility lane must never measure a tree the offline lane
+      # has just touched, so the pure lane runs first.
+      #
+      # Both steps gate. Neither is exempt from failing, and no step in this job is;
+      # the wording here avoids naming the exemption key, because several wiring gates
+      # assert on the raw text of a job whose comments are part of what they check.
+      #
+      # Evidence is the same sanitized JSON the allowlisted upload below already
+      # takes: the compatibility lane writes under
+      # `artifacts/compatibility-evidence/`, and both lanes record no trace,
+      # screenshot, or video.
+      - name: Discard the production dist before the offline-shell download
+        run: rm -rf dist
+      - name: Download the offline-shell-flagged artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: offline-shell-web-artifact
+          path: .
+      - name: Verify the offline-shell-flagged artifact identity
+        run: npm run verify:web-artifact:offline
+      - name: Run the Phase 22 service-worker compatibility lane
+        run: npm run test:e2e:sw-shell:recorded
+      - name: Run the Phase 22 offline-shell lane
+        run: npm run test:e2e:offline:recorded
+      # Phase 22 Pixi-dungeon frame-time lane, on the sixth flagged artifact, in this
+      # same job.
+      #
+      # The artifact is built, recorded, verified and uploaded once by `web-build` and
+      # fetched here, for the same reason the four flagged lanes above are: the browser
+      # and the single Chromium install already exist in this job, and eleven wiring
+      # gates assert that no job other than `web-build` runs a `build:web*` script. The
+      # fetch is preceded by its own discard because the fetch action extracts **into**
+      # the working directory, so a seventh fetch merged into the tree the offline lane
+      # left behind would be a union of two builds that is neither of them.
+      #
+      # It gates, and the reason is the phase's runtime criterion: plan section 10.2's
+      # frame-time target and the 100 ms interaction target had no browser evidence at
+      # all before this step - `scripts/check-performance.mjs` states in its own output
+      # that it reads a build rather than a browser. The step is not exempt from
+      # failing, and no step in this job is; the wording here avoids naming the
+      # exemption key, because several wiring gates assert on the raw text of a job
+      # whose comments are part of what they check.
+      #
+      # Evidence is the same sanitized JSON the allowlisted upload below already takes:
+      # the lane writes under `artifacts/compatibility-evidence/`, and it records no
+      # trace, screenshot, or video.
+      - name: Discard the offline-shell dist before the Pixi-dungeon download
+        run: rm -rf dist
+      - name: Download the Pixi-dungeon-flagged artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pixi-dungeon-web-artifact
+          path: .
+      - name: Verify the Pixi-dungeon-flagged artifact identity
+        run: npm run verify:web-artifact:pixi-dungeon
+      - name: Run the Phase 22 Pixi dungeon frame-time lane
+        run: npm run test:e2e:pixi-perf:recorded
+      # Phase 22 route-change teardown lane, on the seventh flagged artifact, in this
+      # same job.
+      #
+      # The artifact is built, recorded, verified and uploaded once by `web-build` and
+      # fetched here, for the same reason the five flagged lanes above are: the browser
+      # and the single Chromium install already exist in this job, and eleven wiring
+      # gates assert that no job other than `web-build` runs any `build:web*` script. The
+      # fetch is preceded by its own discard because the fetch action extracts **into**
+      # the working directory, so an eighth fetch merged into the tree the frame-time
+      # lane left behind would be a union of two builds that is neither of them.
+      #
+      # It gates, and the reason is the phase's central teardown criterion: plan section
+      # 10.2's "correct Pixi Application and asset-bundle teardown" had no route-change
+      # evidence at all before this step - the Phase 9 twenty-cycle lane remounts one
+      # screen and cannot see a canvas or a WebGL context outlive a route, and
+      # `scripts/check-memory.mjs` states in its own output that it reads a build rather
+      # than a browser. The step is not exempt from failing, and no step in this job is;
+      # the wording here avoids naming the exemption key, because several wiring gates
+      # assert on the raw text of a job whose comments are part of what they check.
+      #
+      # Evidence is the same sanitized JSON the allowlisted upload below already takes:
+      # the lane writes under `artifacts/compatibility-evidence/`, and it records no
+      # trace, screenshot, or video.
+      - name: Discard the Pixi-dungeon dist before the Pixi-route download
+        run: rm -rf dist
+      - name: Download the Pixi-route-flagged artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pixi-route-web-artifact
+          path: .
+      - name: Verify the Pixi-route-flagged artifact identity
+        run: npm run verify:web-artifact:pixi-route
+      - name: Run the Phase 22 Pixi route-teardown lane
+        run: npm run test:e2e:pixi-route:recorded
       - name: Upload sanitized browser-smoke evidence
         # Allowlist: sanitized per-run JSON evidence only, on the same terms as the
         # storage-v2 and compatibility lanes. Nothing else leaves the runner, and

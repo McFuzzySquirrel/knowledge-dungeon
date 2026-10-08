@@ -1,0 +1,10 @@
+{
+  "name": "Knowledge Dungeon",
+  "short_name": "Knowledge Dungeon",
+  "description": "A local-first, mindmap-driven dungeon crawler for studying.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#1b1526",
+  "theme_color": "#1b1526"
+}

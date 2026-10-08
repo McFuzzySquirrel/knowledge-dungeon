@@ -18,7 +18,8 @@ export type FeatureFlagOwnerPhase =
   | 16
   | 17
   | 19
-  | 20;
+  | 20
+  | 22;
 export type FeatureFlagValueKind = 'boolean' | 'enum';
 
 export interface FeatureFlagDefinition {
@@ -180,6 +181,16 @@ export const FEATURE_FLAG_MATRIX = {
       'Gates the redesigned Archaeologist review workspace behind the existing room-panel review view, so review scheduling, SM-2 values, and progression are unchanged until the cutover. It selects which view a learner sees, not what counts as a review pass.',
     rollback:
       'Set VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=false to retain the existing RoomPanel review view and its close-the-panel-to-count-the-pass flow.',
+  },
+  offlineShell: {
+    environmentVariable: RUNTIME_FLAG_ENV_KEYS.offlineShell,
+    valueKind: 'boolean',
+    productionDefault: false,
+    ownerPhase: 22,
+    purpose:
+      'Gates the offline static-shell service worker: a versioned same-origin shell cache that lets a previously loaded app reload without a network, while never caching learner data and never reading or writing IndexedDB. It only ever caches build-time shell assets named by the emitted manifest.',
+    rollback:
+      'Set VITE_OFFLINE_SHELL=false to remove the service worker, the shell manifest, and the registration script from the build; the default artifact is unchanged.',
   },
 } as const satisfies FeatureFlagMatrix;
 

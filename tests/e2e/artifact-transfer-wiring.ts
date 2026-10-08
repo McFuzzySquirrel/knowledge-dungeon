@@ -4,8 +4,8 @@
  * ## Why this file exists
  *
  * `.github/workflows/ci.yml` moves artifacts in **both** directions. `web-build` uploads
- * five of them - the release artifact, one per flagged build, and the build census - and
- * `browser-smoke` downloads five - the release artifact twice, and each flagged artifact
+ * eight of them - the build census, the release artifact, and one per flagged build - and
+ * `browser-smoke` downloads eight - the release artifact twice, and each flagged artifact
  * once, with a production re-download at the end for the Phase 21 absence lane.
  *
  * Six gates across three phases pinned those movements by **count**, and their histories
@@ -366,6 +366,24 @@ export const DOWNLOAD_DECLARATION: readonly DeclaredTransfer[] = Object.freeze([
     stepName: 'Download the shared production artifact for the absence lane',
     why: 'The release artifact downloaded back, and its identity re-verified, so the Phase 19 absence lane can claim the card is absent from a production build rather than from a flagged one. It replaces the assistance tree, so it needs its own discard.',
   },
+  {
+    action: 'download',
+    artifact: 'offline-shell-web-artifact',
+    stepName: 'Download the offline-shell-flagged artifact',
+    why: 'The Phase 22 flagged build, the only artifact in which VITE_OFFLINE_SHELL is on and therefore the only one that carries the service worker, the shell manifest, and the web app manifest. Two lanes measure it from this one download: the offline reload lane and the service-worker-enabled compatibility lane. It replaces the production tree the absence lane re-downloaded, so it needs its own discard.',
+  },
+  {
+    action: 'download',
+    artifact: 'pixi-dungeon-web-artifact',
+    stepName: 'Download the Pixi-dungeon-flagged artifact',
+    why: 'The Phase 22 flagged build whose VITE_PIXI_DUNGEON is on, and the only artifact that contains the PixiJS dungeon world the frame-time lane measures. The Phase 9 Pixi artifact cannot serve it, because VITE_WORLD_RENDERER=pixi routes the world screen to the Phase 9 test host rather than to GameScreen. It replaces the offline-shell tree, so it needs its own discard.',
+  },
+  {
+    action: 'download',
+    artifact: 'pixi-route-web-artifact',
+    stepName: 'Download the Pixi-route-flagged artifact',
+    why: 'The Phase 22 route-teardown build, with VITE_PIXI_DUNGEON and VITE_PIXI_FISHING both on, and the only artifact that carries the dungeon and the fishing pond at once. No single-flag build has both, and the route lane cannot use the Phase 9 Pixi artifact or the dungeon artifact. It replaces the Pixi-dungeon tree, so it needs its own discard.',
+  },
 ]);
 
 export const UPLOAD_DECLARATION: readonly DeclaredTransfer[] = Object.freeze([
@@ -398,6 +416,24 @@ export const UPLOAD_DECLARATION: readonly DeclaredTransfer[] = Object.freeze([
     artifact: 'assistance-web-artifact',
     stepName: 'Upload the assistance-flagged web artifact',
     why: 'The Phase 19 flagged build, with its own manifest, on the same terms. Phase 19 deferred this lane to Phase 21 and authorised it there, on the grounds that this phase runs the accessibility audit anyway.',
+  },
+  {
+    action: 'upload',
+    artifact: 'offline-shell-web-artifact',
+    stepName: 'Upload the offline-shell-flagged web artifact',
+    why: 'The Phase 22 flagged build, with its own manifest. The only build that carries the service worker, so the only one the offline reload lane and the service-worker-enabled compatibility lane can measure; both download this one artifact rather than building it again.',
+  },
+  {
+    action: 'upload',
+    artifact: 'pixi-dungeon-web-artifact',
+    stepName: 'Upload the Pixi-dungeon-flagged web artifact',
+    why: 'The Phase 22 flagged build with VITE_PIXI_DUNGEON=true, with its own manifest. The only build that carries the PixiJS dungeon world, so it is the only artifact the frame-time lane can measure.',
+  },
+  {
+    action: 'upload',
+    artifact: 'pixi-route-web-artifact',
+    stepName: 'Upload the Pixi-route-flagged web artifact',
+    why: 'The Phase 22 flagged build with VITE_PIXI_DUNGEON=true and VITE_PIXI_FISHING=true, with its own manifest. The only build that carries both Pixi worlds the route-teardown lane changes between, so it is the only artifact that lane can measure.',
   },
 ]);
 

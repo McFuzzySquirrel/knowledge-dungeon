@@ -109,6 +109,19 @@ export default [
     },
   },
   {
+    // The hand-written service worker (Phase 22) runs in a service-worker global
+    // scope, not in Node and not in a page: `self`, `caches`, `importScripts`,
+    // `clients`, and `skipWaiting` are its real environment. It is copied from
+    // `public/` into `dist/` and never bundled, so it is the one source file that
+    // needs these globals rather than the app's DOM/Node union.
+    files: ['public/sw.js'],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+      },
+    },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       parser: tsParser,

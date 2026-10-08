@@ -1373,6 +1373,232 @@ test('every world action is reachable from a 44 CSS-pixel labelled control, by k
   if (failure) throw failure;
 });
 
+/**
+ * Whether the document is hidden, as the product's own visibility policy reads it.
+ *
+ * This is not a visibility *simulation* bolted beside the product. `document.hidden`
+ * and `document.visibilityState` are the two properties the host's
+ * `observeVisibility` listener reads, and this writes them and dispatches the real
+ * `visibilitychange` event the browser dispatches. What is stubbed is only the fact
+ * of which tab is in front; the event, the listener, the `stopTicker`/`startTicker`
+ * call, and the ticker itself are all the product's.
+ */
+async function setDocumentHidden(page: Page, hidden: boolean): Promise<void> {
+  await page.evaluate((value) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => value });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => (value ? 'hidden' : 'visible'),
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+}
+
+interface LiveRendererQuality {
+  readonly resolution: number | null;
+  /** The real WebGL context's own `antialias` creation attribute. `null` with no context. */
+  readonly contextAntialias: boolean | null;
+  readonly hasRenderer: boolean;
+}
+
+/**
+ * The quality knobs the *live* renderer is actually running with.
+ *
+ * `resolution` is read from PixiJS's own `renderer.resolution`, and `contextAntialias`
+ * from the real WebGL context's `getContextAttributes()`. Both are the renderer's own
+ * values rather than the profile a test hoped was handed over: a profile that was
+ * computed but never reached `app.init` reads as `2`/`true` here rather than as the
+ * number `resolveWorldQuality` would have returned.
+ */
+async function readLiveRendererQuality(page: Page): Promise<LiveRendererQuality> {
+  return page.evaluate(() => {
+    const probe = (globalThis as unknown as Record<string, unknown>)['__KD_PIXI_MEMORY_PROBE__'] as
+      | { applications: Array<{ renderer?: { resolution?: unknown } | null }> }
+      | undefined;
+    const applications = probe?.applications ?? [];
+    const renderer = applications[applications.length - 1]?.renderer ?? null;
+    const canvas = document.querySelector<HTMLCanvasElement>('[data-pixi-surface] canvas');
+    const gl = canvas === null ? null : (canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
+    const attributes = gl?.getContextAttributes() ?? null;
+    return {
+      resolution: typeof renderer?.resolution === 'number' ? renderer.resolution : null,
+      contextAntialias: attributes === null ? null : (attributes.antialias ?? null),
+      hasRenderer: renderer !== null,
+    };
+  });
+}
+
+test('the ticker pauses while the document is hidden, and resumes when it is shown', async ({
+  page,
+  browser,
+}, testInfo) => {
+  // Plan section 10.2: "Ticker pause while the document is hidden." Two unit-level
+  // tests already assert the host's visibility policy against a fake environment;
+  // this is the browser-level half, and it is a different claim: that the real
+  // PixiJS ticker on the real `Application` stops advancing and then advances again.
+  // A policy that stopped calling `stopTicker` would leave both unit tests green and
+  // this one red, which is the whole reason it exists.
+  const verification = verifyRecordedArtifact();
+  const measurements: LaneMeasurement[] = [];
+  let failure: Error | null = null;
+  let advanceWhileVisible = -1;
+  let advanceWhileHidden = -1;
+  let advanceAfterShown = -1;
+  let clockAfterShown: number | null = null;
+
+  try {
+    await enterWorld(page);
+
+    const visibleStart = (await readPage(page, null)).reading.liveTickerClock;
+    await settleFrames(page, IDLE_DWELL_FRAMES);
+    const visibleEnd = (await readPage(page, null)).reading.liveTickerClock;
+    advanceWhileVisible =
+      visibleStart === null || visibleEnd === null ? -1 : Math.round(visibleEnd - visibleStart);
+
+    await setDocumentHidden(page, true);
+    // Two frames, so the stop has certainly been applied by the product's own listener
+    // before the hidden reading is taken and no in-flight update can be read as a tick.
+    await settleFrames(page, 2);
+    const hiddenStart = (await readPage(page, null)).reading.liveTickerClock;
+    await settleFrames(page, IDLE_DWELL_FRAMES);
+    const hiddenEnd = (await readPage(page, null)).reading.liveTickerClock;
+    advanceWhileHidden =
+      hiddenStart === null || hiddenEnd === null ? -1 : Math.round(hiddenEnd - hiddenStart);
+
+    await setDocumentHidden(page, false);
+    await settleFrames(page, 2);
+    const shownStart = (await readPage(page, null)).reading.liveTickerClock;
+    await settleFrames(page, IDLE_DWELL_FRAMES);
+    const shownEnd = (await readPage(page, null)).reading.liveTickerClock;
+    advanceAfterShown =
+      shownStart === null || shownEnd === null ? -1 : Math.round(shownEnd - shownStart);
+    clockAfterShown = shownEnd;
+
+    measurements.push({
+      ...unmeasuredMeasurement(0),
+      liveCanvasCount: (await readPage(page, null)).reading.liveCanvasCount,
+      liveTickerClock: clockAfterShown,
+      surfaceSettledAtSample: true,
+    });
+
+    expect(
+      advanceWhileVisible,
+      'The mounted world did not advance its ticker while the document was visible, so this run ' +
+        'could not have observed a pause in the first place.',
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      advanceWhileHidden,
+      'The ticker kept advancing while the document was hidden: the host did not pause it, so a ' +
+        'backgrounded tab keeps presenting frames.',
+    ).toBe(0);
+    expect(
+      advanceAfterShown,
+      'The ticker did not resume after the document was shown again, so the pause was a stop.',
+    ).toBeGreaterThanOrEqual(1);
+  } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error));
+  }
+
+  writeEvidenceFile(
+    testInfo,
+    baseEvidence(testInfo, browser.version(), verification, UNMEASURED_RENDERER, measurements, [], failure),
+  );
+  if (failure) throw failure;
+});
+
+test('a constrained device gets the constrained profile on the live renderer, and a capable one gets balanced', async ({
+  page,
+  browser,
+}, testInfo) => {
+  // Plan section 10.2: "Lower resolution and antialiasing profiles for constrained
+  // devices." The unit suite proves `resolveWorldQuality` *computes* `constrained` from
+  // two cores; this proves the computed profile reaches the real `Application`: the
+  // live renderer's own resolution is `1` and the real WebGL context was created with
+  // `antialias: false`. It then raises the core count and proves the live renderer
+  // rebuilds into `balanced` (`2`/`true`), so neither half can pass on a build that
+  // ignored the profile.
+  const verification = verifyRecordedArtifact();
+  const measurements: LaneMeasurement[] = [];
+  let failure: Error | null = null;
+  let constrained: LiveRendererQuality | null = null;
+  let balanced: LiveRendererQuality | null = null;
+
+  try {
+    // Two logical cores, set on the real navigator before any application code runs.
+    // That is the exact signal `readWorldQualitySignals` reads; the store, the hook,
+    // and the `pixiInitOptions` binding are all untouched.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => 2 });
+    });
+    await enterWorld(page);
+    constrained = await readLiveRendererQuality(page);
+
+    // A live observation, not only a mount-time one: raise the core count and fire the
+    // resize event `useWorldQuality` listens on, and the world must rebuild.
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => 8 });
+      window.dispatchEvent(new Event('resize'));
+    });
+    const rebuilt = await page
+      .waitForFunction(
+        () => {
+          const probe = (globalThis as unknown as Record<string, unknown>)['__KD_PIXI_MEMORY_PROBE__'] as
+            | { applications: unknown[] }
+            | undefined;
+          return (probe?.applications.length ?? 0) >= 2;
+        },
+        undefined,
+        { timeout: APPLICATION_WAIT_MS },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    await settleFrames(page, SETTLE_FRAMES);
+    balanced = await readLiveRendererQuality(page);
+
+    measurements.push({
+      ...unmeasuredMeasurement(0),
+      liveCanvasCount: (await readPage(page, null)).reading.liveCanvasCount,
+      surfaceSettledAtSample: true,
+    });
+
+    expect(
+      constrained.hasRenderer,
+      'No live renderer existed under the constrained profile, so nothing was measured.',
+    ).toBe(true);
+    expect(
+      constrained.resolution,
+      'The constrained profile did not reach the live renderer: expected resolution 1.',
+    ).toBe(1);
+    expect(
+      constrained.contextAntialias,
+      'The constrained profile did not reach the live WebGL context: expected antialias false.',
+    ).toBe(false);
+    expect(
+      rebuilt,
+      'Raising the core count did not rebuild the world, so this run measured only one profile.',
+    ).toBe(true);
+    expect(balanced?.hasRenderer, 'No live renderer existed under the balanced profile.').toBe(true);
+    expect(
+      balanced?.resolution,
+      'The balanced profile did not reach the live renderer: expected resolution 2.',
+    ).toBe(2);
+    expect(
+      balanced?.contextAntialias,
+      'The balanced profile did not reach the live WebGL context: expected antialias true.',
+    ).toBe(true);
+  } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error));
+  }
+
+  writeEvidenceFile(
+    testInfo,
+    baseEvidence(testInfo, browser.version(), verification, UNMEASURED_RENDERER, measurements, [], failure),
+  );
+  if (failure) throw failure;
+});
+
 test('reduced motion removes the movement and keeps the state change, in a real engine', async ({
   page,
   browser,

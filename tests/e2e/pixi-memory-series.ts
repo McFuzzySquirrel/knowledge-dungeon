@@ -474,3 +474,195 @@ export function evaluateIdleGrowth(input: IdleGrowthInput): PixiMemoryFinding[] 
 
   return findings;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Route-transition memory                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What one mount/unmount cycle *within the same component* cannot see.
+ *
+ * The twenty-cycle verdict above turns a `prefers-reduced-motion` flip into twenty
+ * host rebuilds. That is a real teardown, but it is a teardown *and immediately a
+ * mount of the same world in the same route*: every sample sees exactly one live
+ * canvas and exactly one retained application, and the document never holds a
+ * different world's renderer. A learner navigating from the village into the
+ * dungeon, or from the village into the fishing pond, exercises a different edge -
+ * React unmounts one screen's host, the next screen mounts its own - and the defect
+ * that edge admits is a canvas, a WebGL context, or an `Application` that outlives
+ * the route it belonged to. Nothing in the twenty-cycle verdict can fail on it.
+ *
+ * So this is a second verdict, over a second sample shape, for a second question.
+ * It is deliberately *not* a generalisation of {@link evaluatePixiMemoryRun}: that
+ * function's `applicationsCreated === cycle + 1` invariant is true of a series where
+ * every sample mounts exactly one renderer, and a route walk includes samples where
+ * no renderer is created at all.
+ */
+
+/** The world a route left, as it looks after the route changed. */
+export interface RouteWorldRelease {
+  /** A short identifier for the world that was left, for the finding message. */
+  readonly world: string;
+  /** Its `<canvas>` is still attached to the document. Must be `false`. */
+  readonly canvasConnected: boolean;
+  /** The context kind its renderer had obtained. */
+  readonly contextKind: RendererContextKind;
+  /** `isContextLost()` for its context, or `null` when there was none to ask. */
+  readonly contextLost: boolean | null;
+}
+
+/**
+ * One sample: a world that is mounted right now, and the world the route replaced.
+ *
+ * `expectedLiveCanvasCount` is the number of canvases the document is allowed to
+ * hold at this instant - the non-world canvases plus, for each Pixi world mounted in
+ * the route, exactly one. It is a parameter rather than a constant because the Phaser
+ * village draws a canvas of its own and the Pixi fishing pond is an *overlay* over
+ * the village rather than a replacement for it, so "return to baseline" is 1 after
+ * the dungeon and 1 again after the pond, but 2 while the pond is open.
+ */
+export interface RouteMemorySample {
+  readonly step: number;
+  /** The world mounted at this sample. */
+  readonly world: string;
+  readonly worldPresented: boolean;
+  readonly liveCanvasCount: number;
+  readonly expectedLiveCanvasCount: number;
+  readonly applicationsCreated: number;
+  readonly applicationsReleased: number;
+  readonly applicationsRetained: number;
+  /**
+   * Whether a PixiJS world is mounted at this sample.
+   *
+   * `false` for the village sample that follows the dungeon on this lane's artifact,
+   * where the village is the Phaser one and holds no PixiJS application. The
+   * "one application retained" assertion only applies to a sample that claims a Pixi
+   * world; a route that legitimately holds none must not be failed for holding none.
+   */
+  readonly expectsPixiApplication: boolean;
+  /** Whether the mounted canvas is a different element from the previous sample's. */
+  readonly liveCanvasIsNew: boolean | null;
+  /** The world the route replaced, or `null` for the first sample. */
+  readonly previous: RouteWorldRelease | null;
+}
+
+/**
+ * Everything wrong with a route walk, as a list. Empty means the walk passed.
+ *
+ * The assertions are per transition and independent: a world that was left with its
+ * canvas still attached and a world that was left with its context still live are
+ * two findings, because they are two different owners (the DOM and the GPU) and a
+ * fix for one need not touch the other.
+ */
+export function evaluateRouteMemoryRun(samples: readonly RouteMemorySample[]): PixiMemoryFinding[] {
+  const findings: PixiMemoryFinding[] = [];
+  if (samples.length === 0) {
+    findings.push(
+      finding(
+        'unmeasured-route-run',
+        null,
+        'The route walk produced no samples, so no transition was measured and this criterion is ' +
+          'unmeasured rather than met.',
+      ),
+    );
+    return findings;
+  }
+
+  for (const sample of samples) {
+    const where = `step ${sample.step} (${sample.world})`;
+
+    if (sample.liveCanvasIsNew === false) {
+      findings.push(
+        finding(
+          'route-did-not-remount',
+          sample.step,
+          `${where}: the route did not create a new canvas, so this sample is the previous world ` +
+            'measured again and proves nothing about a route change.',
+        ),
+      );
+    }
+    if (!sample.worldPresented) {
+      findings.push(
+        finding(
+          'world-not-presented',
+          sample.step,
+          `${where}: the world the route reached never presented, so this transition was not observed ` +
+            'from a live world.',
+        ),
+      );
+    }
+    if (sample.liveCanvasCount !== sample.expectedLiveCanvasCount) {
+      findings.push(
+        finding(
+          'canvas-count-mismatch',
+          sample.step,
+          `${where}: the document holds ${sample.liveCanvasCount} canvas(es); the route expects ` +
+            `${sample.expectedLiveCanvasCount}. A quantity retained by a world the route left is the ` +
+            'usual cause.',
+        ),
+      );
+    }
+    if (sample.expectsPixiApplication && sample.applicationsRetained < 1) {
+      findings.push(
+        finding(
+          'no-application-retained',
+          sample.step,
+          `${where}: no PixiJS application is alive while a Pixi world is mounted, so the renderer this ` +
+            'sample is about was never measured.',
+        ),
+      );
+    }
+    if (sample.applicationsReleased > sample.applicationsCreated) {
+      findings.push(
+        finding(
+          'release-count-exceeds-creation',
+          sample.step,
+          `${where}: ${sample.applicationsReleased} application(s) were released of ` +
+            `${sample.applicationsCreated} created, which cannot both be true.`,
+        ),
+      );
+    }
+
+    const previous = sample.previous;
+    // `null` is a normal value: a route can arrive at a Pixi world from a screen that
+    // held no Pixi world at all (the Phaser village, on this lane's artifact), and
+    // that transition has no Pixi release to assert.
+    if (previous === null) continue;
+
+    if (previous.canvasConnected) {
+      findings.push(
+        finding(
+          'retained-canvas',
+          sample.step,
+          `${where}: the world the route left (${previous.world}) still has its canvas attached to the ` +
+            'document.',
+        ),
+      );
+    }
+    if (previous.contextLost === false) {
+      findings.push(
+        finding(
+          'retained-webgl-context',
+          sample.step,
+          `${where}: the world the route left (${previous.world}) still has a live WebGL context after ` +
+            'its renderer was destroyed.',
+        ),
+      );
+    }
+    if (
+      previous.contextLost === null &&
+      (previous.contextKind === 'webgl2' || previous.contextKind === 'webgl')
+    ) {
+      findings.push(
+        finding(
+          'unmeasurable-webgl-context',
+          sample.step,
+          `${where}: the context of the world the route left (${previous.world}) could not be read after ` +
+            'teardown, so its release is unmeasured rather than observed.',
+        ),
+      );
+    }
+  }
+
+  return findings;
+}

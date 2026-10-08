@@ -767,7 +767,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 19 | complete | Add local adaptive assistance. |
 | 20 | complete | Redesign private share cards. |
 | 21 | complete | Complete accessibility and responsive verification. |
-| 22 | not-started | Complete performance, memory, and offline hardening. |
+| 22 | verified | Complete performance, memory, and offline hardening. |
 | 23 | not-started | Cut over production and complete the soak. |
 | 24 | not-started | Remove Phaser and temporary migration infrastructure. |
 
@@ -8297,8 +8297,33 @@ Phase 22.
 
 ## Phase 22: Performance, Memory, and Offline Hardening
 
-**Status:** not-started
+**Status:** verified
 **Objective:** Meet the performance budgets while preserving local-first offline behavior across the approved web OS/browser matrix.
+
+**Scope locked 2026-10-06.** Definitions and rulings recorded before implementation, so the
+entry gate is explicit rather than inferred:
+
+- **Offline shell:** one hand-written versioned service worker (`public/sw.js`) plus a
+  build-time shell precache manifest, `src/services/offlineShell.ts`, and a minimal
+  `public/manifest.webmanifest`. **No Workbox or `vite-plugin-pwa` dependency.** The fetch
+  handler is a strict same-origin `GET` allowlist over shell assets and never reads or writes
+  IndexedDB. Gated by a new `VITE_OFFLINE_SHELL` cutover flag whose production default is
+  `false`.
+- **Minimum offline scope:** a previously loaded app reloads offline with local data intact;
+  static caches update without mixed-version assets; cache inspection proves no learner data
+  is cached. Explicitly out of scope: offline write queue, background sync, runtime caching,
+  push, install prompt, and offline editing beyond the reload guarantee.
+- **Frame-time evidence:** measured on declared reference environments and reported as a
+  **measurement, not a certification**. Software-WebGL Chromium in CI is a floor; the 60 FPS
+  / p95 below 20 ms target is not certified until a real-GPU reference environment runs it,
+  and that check is carried to Phase 23.
+- **Route-aware budgets:** Welcome 300 KiB gzip; each lazy route no more than 800 KiB
+  cumulative gzip of its own chunk set; raw `dist` no more than 12 MB; interaction
+  acknowledgement under 100 ms.
+- **Carried from Phase 21 and owned here:** the unconditional `assistanceStore` fetch on
+  Welcome, and the two Pixi village walk tests' intrinsic variance against their timeout.
+- **Engines and devices this container cannot reach are recorded UNVERIFIED and carried to
+  Phase 23,** not softened into a pass.
 
 ### Prerequisites
 
@@ -8379,6 +8404,139 @@ Run the common gate.
 ### Rollback
 
 Revert the implementation while retaining performance tests and budgets.
+
+### Record: the carried `assistanceStore` boot fetch (discharged)
+
+**Carried from Phase 21:** `runBootstrap` awaited `loadAssistanceStore()` unconditionally, so the
+production default build (`VITE_ADAPTIVE_ASSISTANCE=false`) fetched `assistanceStore-*.js` on every
+launch. `check:budget:welcome` could not see it because the entry document does not name the chunk,
+but it was a real per-launch request for a feature the build renders nothing of.
+
+**Mechanism.** The record's persistence primitives - the storage key, the untrusted-input parser,
+the legacy mirror, the selected-repository seam, and the composite read - moved to
+`src/services/assistance/assistanceRecord.ts`, which carries no `zustand` and which the bootstrap
+imports directly. `assistanceStore.ts` imports and re-exports that surface, so every caller and
+test is unchanged; it now also reads a **pending record** into its initial state, and the record
+module's bridge holds the bootstrap's read for a store that loads later. `runBootstrap` preloads
+the store **only when the flag is on**. On the default build the store chunk is not requested at
+boot; it is fetched the first time a write needs it (`useVillageFishing.onDecide`'s missed-recall
+`bumpSignals`), and that store starts from the learner's stored mode rather than the pre-hydration
+`standard`, so the mode is not overwritten. The store's `assistanceStore()` getter still throws
+rather than returning nothing, and every dep fallback still does real work - no branch is a no-op.
+The composite read is now a single implementation, which also discharges the Phase 19 follow-up
+that recorded the bootstrap's `readAssistanceRecord` as a restatement of the store's private read.
+
+**Files.** `src/services/assistance/assistanceRecord.ts` (new), `src/store/assistanceStore.ts`,
+`src/application/bootstrap.ts`, `tests/migrations/qaHardening.test.ts` (one declared storage-v2
+seam, type-only), `tests/unit/assistanceLateLoadPersistence.test.ts` (new), plus the two Phase 21
+lane declarations and specs (`tests/e2e/assistance-lane.ts`, `assistance.spec.ts`,
+`assistanceDefault.spec.ts`, `assistance-lane.test.ts`).
+
+**Evidence.**
+
+- **Default artifact, boot:** the default lane's Welcome observation asserts
+  `assistanceStore-*.js` is **absent from the request log**, with a positive control that the spy
+  saw other scripts. Passed; `npm run test:e2e:assistance:default:full` 4/4.
+- **Flagged artifact, lane still works:** `npm run test:e2e:assistance:full` 4/4, including the
+  existing Welcome positive control that the flagged build *does* preload the store chunk.
+- **Reload/persistence guard:** `tests/unit/assistanceLateLoadPersistence.test.ts` loads the store
+  **after** a default-deps boot and asserts a stored `off` survives a later `bumpSignals` write and
+  a reload. Red proof: making the store's initial state ignore the pending record turns the guard
+  red on the first post-load assertion (`standard` instead of `off`), so a lost hydration cannot
+  pass. A browser instance of the same guard is the default lane's fourth test.
+- **Gates:** `npm test` 337 files / 7068 tests; `npm run lint`, `npm run typecheck`,
+  `npm run build:web`, `npm run check:budget:welcome` (268.72 KiB of 300.00), `npm run check:perf`
+  (assistance lane 10.15 KiB gzip), `npm run check:memory` - all pass. The renderer census reports
+  the assistance lane `eagerChunks: []`; `assistanceStore-*.js` is absent from the entry closure
+  and present in the fetchable closure, so the eager-Pixi/eager-lane gates are unmoved.
+
+### Verification evidence
+
+Recorded 2026-10-07. `in-progress` -> `verified`. Independently re-run by `qa-engineer` against the
+actual tree and commands, not the implementer reports; the orchestrator re-ran the load-bearing
+properties and the full suite separately. **Not committed and not deployed.**
+
+**Baseline.** Green at `ce242cb` (the accepted Phase 21 checkpoint) before any Phase 22 change:
+`npm test` 316 files / 6626 tests, lint/typecheck/build/bundle-size/welcome/memory/licenses/privacy
+all passing.
+
+**Common gate.** `npm run lint` 0, `npm run typecheck` 0, `npm test` **337 files / 7068 tests**,
+`npm run build:web` 0, `npm run check:bundle-size` **5.43 MB / 170 files** (12 MB ceiling).
+
+**Phase gates.** `npm run check:perf` passes: 3 lazy boundaries measured (default) and 3 on the
+all-worlds Pixi build, each within 800 KiB gzip; raw `dist` 5.43 MB within the 12 MB ceiling;
+`renderer:pixi` 160.32 KiB gzip on the multi-world build. `npm run check:memory` passes: no eager
+Pixi chunk; every renderer chunk within 800 KiB gzip. `npm run check:budget:welcome`
+**268.72 KiB of 300.00**.
+
+**Browser lanes.** `test:e2e` 34 passed / 14 skipped (artifact-gated); `test:e2e:compat` 4 passed /
+4 skipped (`compat-webkit` needs macOS and `compat-edge` needs Windows — `host-not-approved` on
+Linux, recorded not skipped silently); `test:e2e:offline:full` 1 passed; `test:e2e:sw-shell:recorded`
+1 passed (21 requests, all `local-static`, 0 violations); `test:e2e:pixi-perf:full` 4 passed;
+`test:e2e:pixi-route:full` 2 passed; `test:e2e:pixi-memory:full` 10 passed;
+`test:e2e:assistance:full` and `:default:full` 4 passed each. `test:licenses` passed;
+`test:privacy` 6 files / 34 tests.
+
+**Device / environment record.** Ubuntu 24.04.5 LTS, x86_64, Intel Core i7-7820HQ (8 logical),
+Chromium 153.0.8010.12 and Firefox 155.0 (Playwright-bundled), viewports 1440x900 / 1280x800 /
+1366x768 / 834x1112 / 1112x834, Node v24.15.0, Playwright 1.63.0, `local-host`. Rasterizer:
+ANGLE (Google, Vulkan 1.3.0, SwiftShader Device (Subzero)), `softwareRasterization: true`.
+
+**Exit-criteria assessment.**
+
+| # | Criterion | Verdict |
+| --- | --- | --- |
+| 1 | Welcome and each lazy route meet transfer budgets | **met** |
+| 2 | The 100-room dungeon meets the frame-time target | **measured, NOT certified** — 100-room p95 33.2 ms / 56.8 FPS / 180 frames on SwiftShader; carried to Phase 23 for a real-GPU reference |
+| 3 | Repeated mount and unmount shows no material canvas or GPU growth | **met** — 20 cycles, canvas backing bytes constant, no retained application/context; non-vacuity control passes |
+| 4 | A previously loaded app reloads offline with local data intact | **met** |
+| 5 | Static caches update without serving mixed-version assets | **met** — atomic install + `activate` purge; version-bump test leaves exactly one cache |
+| 6 | Service-worker inspection confirms no learner data is cached | **met** — `learnerDataPaths: []`; `sw.js` has no IndexedDB reference and a same-origin shell allowlist |
+| 7 | The approved OS/browser matrix passes route-load and offline-shell checks | **partial** — Linux/Chromium + Linux/Firefox pass; macOS/Windows/WebKit/Edge UNVERIFIED (host-not-approved); offline shell is Chromium-only by declaration |
+| 8 | Reference performance measurements record browser/OS/hardware/GPU | **met** |
+| 9 | Browser/OS differences reported as measurements, not one desktop benchmark | **partial** — the mechanism records per-environment host/browser/GPU and bounded does-not-prove lists; only one environment is measurable on this host |
+
+**Independent non-vacuity.** `qa-engineer` constructed two red proofs the implementers had not:
+an injected eager `vendor-pixi` modulepreload makes `check:memory` fail with `[eager-pixi]`, and an
+oversized boundary makes `check:perf` fail with `[oversized-boundary]`. The new lanes carry their
+own in-run controls (pixi-perf "no world → unmeasured", pixi-route "left mounted → retained",
+pixi-memory "never remounts → retained", the assistance default lane's boot-absence + later-write
+positive control).
+
+**Known limitations and UNVERIFIED.**
+
+- **Frame-time target not certified** — p95 33.2 ms on software WebGL; real-GPU reference check is a
+  Phase 23 item. The 1-room sample is rAF-throttled at sampling start (p95 33.4 ms / 39.5 FPS) and is
+  not a clean baseline.
+- **`compat-webkit` / `compat-edge` never ran** — `host-not-approved` on Linux; `support-matrix.ts`
+  was not edited to force them. macOS/Windows/WebKit/Edge route-load and offline claims are UNVERIFIED.
+- **Offline-shell evidence is Chromium-only**, like every service-worker behaviour.
+- **GPU memory growth is measured indirectly** (canvas backing bytes, context loss, application
+  retention); no headless browser API reports live GPU textures/buffers.
+- **`worldRenderer` reads `phaser` on the Pixi-dungeon perf artifact** (the build sets only
+  `VITE_PIXI_DUNGEON=true`); the evidence also carries `pixiDungeon: true` and a real WebGL2 context,
+  so it is honest but a reader should not be misled by that single field.
+- Node here is v24 while CI lanes run Node 20; the test-count delta against the earlier record was a
+  stale number, corrected above.
+
+**Discovered and fixed during the phase.** The multi-world lazy-boundary defect
+(`VITE_PIXI_VILLAGE` + `VITE_PIXI_DUNGEON` failed the boundary gate because Vite's preload helper
+landed in `vendor-pixi`) is fixed by claiming the `\0vite/*` helpers into `vendor-vite-helpers`
+via rolldown `codeSplitting.groups`; the boundary gate is unweakened and a static-Pixi red proof
+still fails. A preview-port collision between the new route lane and the Phase 10 media lane
+(43191) was also fixed (now 43195).
+
+**Rollback (enumerated).** Revert the implementation while retaining the performance tests and
+budgets. Because the tests and budgets are themselves in the uncommitted set, this is a selective,
+file-by-file revert, not a blanket `git` operation: revert `public/sw.js`,
+`src/services/offlineShell.ts`, `scripts/generate-offline-shell.mjs`,
+`scripts/build-offline-shell.mjs`, `public/manifest.webmanifest`, the `vite.config.ts` offline-shell
+and `codeSplitting` changes, `src/config/featureFlags.ts` / `runtimeConfig.ts` / `.env.example`
+flag additions, and the `bootstrap.ts` / `assistanceRecord.ts` / `assistanceStore.ts` change; retain
+`scripts/check-performance.mjs`, `scripts/performance-budgets.mjs` (+ `.d.mts`),
+`scripts/check-memory.mjs`, `scripts/check-bundle-size.mjs`, `tests/performance/`, and the lane
+specs/configs. Production default behaviour is recoverable with no code change:
+`VITE_OFFLINE_SHELL=false` (its confirmed default) and every other cutover flag stays off.
 
 ### Unlocks
 

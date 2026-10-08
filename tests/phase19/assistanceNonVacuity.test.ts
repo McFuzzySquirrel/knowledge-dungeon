@@ -43,9 +43,9 @@
  * ## Every probe restores and verifies
  *
  * A probe that leaves the world changed is worse than a probe that fails. Each one verifies
- * the child process left no residue, the git working tree is unchanged, and the three cutover
- * flag gates are byte-identical to `HEAD`. P13 and P14 are those checks, and they are probes in
- * their own right.
+ * the child process left no residue, the git working tree is unchanged, and the
+ * `NON_CUTOVER_FLAG_KEYS` contract the three cutover-flag gates read still holds. P13 and
+ * P14 are those checks, and they are probes in their own right.
  *
  * ## A probe that cannot fail is reported, not hidden
  *
@@ -1023,29 +1023,56 @@ describe('control: every gate is green before a single mutation', () => {
   });
 
 
-  it('P18 the three cutover-flag gates are byte-identical to HEAD', () => {
-    // The orchestrator's standing constraint: `adaptiveAssistance` is registered, is a cutover
-    // flag, and `NON_CUTOVER_FLAG_KEYS` must remain exactly `['audioEnabled']`. Asserted against
-    // `HEAD` rather than against a literal, so an edit to either file fails here whether it was
-    // this stage's doing or not.
-    for (const path of ['src/config/featureFlags.ts', 'src/config/runtimeConfig.ts']) {
-      const onDisk = checksum(readFileSync(join(REPO_ROOT, path), 'utf8'));
-      const atHead = checksum(
-        execFileSync('git', ['show', `HEAD:${path}`], { cwd: REPO_ROOT, encoding: 'utf8' }),
+  it('P18 no cutover flag defaults on, and the three cutover-flag gates still assert the reviewed contract', async () => {
+    // PRESERVED INTENT, RE-EXPRESSED - Phase 22, reviewed.
+    //
+    // This check used to byte-compare `src/config/featureFlags.ts` and
+    // `src/config/runtimeConfig.ts` against `HEAD`, so that *any* unreviewed edit to the
+    // flag matrix failed here. Its subject was never really the bytes: it was the contract
+    // the three cutover-flag gates read - `tests/phase5/seam.test.ts`,
+    // `tests/phase6/lazyBoundary.test.ts`, and `tests/data/phase5FlagDefault.test.ts` all
+    // assert "the set of flags whose `productionDefault` is `true` equals
+    // `NON_CUTOVER_FLAG_KEYS`". Phase 22 added the reviewed `offlineShell` flag, which
+    // changes those two files by design, and re-pointing a byte comparison at a moved
+    // `HEAD` would only re-freeze whatever is on disk without proving anything. So the
+    // contract is now asserted directly, from the module the gates read. It fails if a
+    // cutover flag is made to default on, if the `NON_CUTOVER_FLAG_KEYS` distinction is
+    // removed or widened, or if one of the three gates stops comparing against it.
+    const { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } = await import('@/config/featureFlags');
+
+    const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
+      .filter(([, definition]) => (definition.productionDefault as boolean) === true)
+      .map(([key]) => key)
+      .sort();
+    // The property the three gates state, recomputed here from the real matrix, so a
+    // cutover flag defaulting on is caught even if a gate were edited around it.
+    expect(onByDefault, 'a cutover flag is on by default').toEqual(['audioEnabled']);
+    // The reviewed exemption list itself, asserted as one value rather than compared
+    // against whatever it currently holds: the three gates compare against the list, so a
+    // widened list would otherwise agree with itself. `audioEnabled` is the only name
+    // allowed on it.
+    expect([...NON_CUTOVER_FLAG_KEYS], 'the non-cutover exemption list was widened').toEqual([
+      'audioEnabled',
+    ]);
+    // The two halves agree, which *is* the `NON_CUTOVER_FLAG_KEYS` distinction.
+    expect(onByDefault).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
+
+    // And the three gates that read this contract must still be present and must still
+    // compare the on-by-default set to it, so removing the distinction from a gate fails
+    // here as well as on the config.
+    for (const gatePath of [
+      'tests/phase5/seam.test.ts',
+      'tests/phase6/lazyBoundary.test.ts',
+      'tests/data/phase5FlagDefault.test.ts',
+    ]) {
+      const gateSource = readFileSync(join(REPO_ROOT, gatePath), 'utf8');
+      expect(gateSource, `${gatePath} no longer compares against NON_CUTOVER_FLAG_KEYS`).toContain(
+        'toEqual([...NON_CUTOVER_FLAG_KEYS].sort())',
       );
-      expect(onDisk, `${path} was modified`).toBe(atHead);
+      expect(gateSource, `${gatePath} no longer inspects productionDefault`).toContain(
+        'productionDefault',
+      );
     }
-    // And the list itself, read from the module, is exactly the one value.
-    const source = readFileSync(join(REPO_ROOT, 'src/config/featureFlags.ts'), 'utf8');
-    // Sliced to the `Object.freeze([` **call**, not to the first `]` - which lands inside the
-    // `readonly RuntimeConfigKey[]` annotation and yields a slice that never reaches the value.
-    const start = source.indexOf('export const NON_CUTOVER_FLAG_KEYS');
-    const valueStart = source.indexOf('[', source.indexOf('Object.freeze', start));
-    const valueEnd = source.indexOf(']', valueStart);
-    expect(valueStart, 'NON_CUTOVER_FLAG_KEYS has no Object.freeze array').toBeGreaterThan(start);
-    const declaration = source.slice(valueStart, valueEnd + 1);
-    expect(declaration).toContain("'audioEnabled'");
-    expect(declaration).not.toContain('adaptiveAssistance');
   });
 });
 

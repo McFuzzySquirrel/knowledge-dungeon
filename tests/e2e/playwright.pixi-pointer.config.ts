@@ -90,6 +90,10 @@ export default defineConfig({
     trace: 'off',
     screenshot: 'off',
     video: 'off',
+    // Explicit rather than left to the runner's default, which is 'allow'. Every
+    // lane blocks service workers except the two Phase 22 offline lanes, which allow
+    // it only for their own projects.
+    serviceWorkers: 'block',
   },
   webServer: {
     command: PIXI_POINTER_PREVIEW_SCRIPT,

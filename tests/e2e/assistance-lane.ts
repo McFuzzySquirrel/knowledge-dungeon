@@ -138,28 +138,32 @@ export const ASSISTANCE_FLAG_ENV_KEY = 'VITE_ADAPTIVE_ASSISTANCE';
  *
  * ## Why one stem and not two
  *
- * The lane's two declared modules are emitted into two chunks, and they are fetched at two
- * completely different moments, and that difference is the whole reason the network observation
- * works:
+ * The lane's two declared modules are emitted into two chunks, and they are fetched at different
+ * moments, and that difference is why the network observation works:
  *
- * - **`assistanceStore-*` is fetched by every build, on every route, at bootstrap.**
- *   `runBootstrap` awaits `loadAssistanceStore()` before Phase A and hydration is deliberately
- *   unconditional, because a learner who set `off` on the flagged build must still have that mode
- *   on the next launch, on the rollback build, and after a roll-forward. So its presence in the
- *   request log says only that the application started.
  * - **`AssistanceRegion-*` is fetched only when the card mounts**, which cannot happen while the
  *   flag is off. Its presence says the lane was reached; its absence after a journey that reached
  *   the mounting state says the gate held.
+ * - **`assistanceStore-*` is a weaker signal, and its meaning changed in Phase 22.** Before then
+ *   `runBootstrap` awaited `loadAssistanceStore()` on every build, so the store chunk was fetched
+ *   at startup on every route and its presence said only that the application started. Phase 22
+ *   removed that fetch from the default build: the bootstrap now reads the record through
+ *   `@/services/assistance/assistanceRecord` and preloads the store **only when
+ *   `VITE_ADAPTIVE_ASSISTANCE` is on**. On the default build the store chunk is instead fetched
+ *   the first time a write needs it - `useVillageFishing.onDecide`'s missed-recall `bumpSignals` -
+ *   which is after the journey, not at boot.
  *
- * Matching on both would make the second claim unsayable, because the first is always true. This
- * was measured, not assumed: on the flagged artifact the Welcome route requests
- * `assistanceStore-*.js` and nothing else of the lane.
+ * So the default lane's boot observation is stated over the **store** stem (it is absent from the
+ * request log on Welcome), and its journey observation is stated over the **card** stem (the card
+ * is never fetched even though the journey reached the state that mounts it). Matching a single
+ * combined pattern could not express either claim.
  */
 export const ASSISTANCE_CARD_CHUNK_STEM = 'AssistanceRegion';
 
 /**
  * The store chunk's stem, declared so a lane can name it and assert on it rather than have it
- * matched by accident. See {@link ASSISTANCE_CARD_CHUNK_STEM}.
+ * matched by accident. See {@link ASSISTANCE_CARD_CHUNK_STEM} for what its presence does and does
+ * not mean after Phase 22.
  */
 export const ASSISTANCE_STORE_CHUNK_STEM = 'assistanceStore';
 
@@ -446,13 +450,16 @@ export const ASSISTANCE_DEFAULT_LANE: AssistanceLaneDeclaration = Object.freeze(
     'Against the default production artifact, the identical journey - the same seeded subject, the same walk to the ' +
     'pond, the same cast, hook, and a recall question answered wrong for the room it came from - renders no ' +
     'assistance element of any kind: the card region, a suggestion, a reason sentence and a Dismiss control are all ' +
-    'absent from the document, and the lazy assistance chunk is never requested even though the journey reached the ' +
-    'DOM state that mounts it. This is the Phase 19 production-default line observed rather than asserted, and it is ' +
-    'the half of the evidence that a card which is always on screen cannot produce.',
+    'absent from the document, and the lazy card chunk is never requested even though the journey reached the ' +
+    'DOM state that mounts it. The Welcome route also makes no request for the assistance store chunk: Phase 22 ' +
+    'removed the unconditional boot fetch, so on the production default a launch no longer pulls the store for a ' +
+    'feature it renders nothing of. This is the Phase 19 production-default line observed rather than asserted, and ' +
+    'it is the half of the evidence that a card which is always on screen cannot produce.',
   doesNotProve: [
     ...EMULATION_LIMITATIONS,
     ...SHARED_LIMITATIONS,
     'Not a claim that the card is absent because the code is absent. The default build emits the same lazy lane chunks as the flagged one; what differs is the compiled flag constant, and the preflight reads it out of the emitted bytes rather than out of the environment.',
+    'Not a claim that the assistance store chunk is never requested at all on the default build. It is absent at boot, which is what Phase 22 removed, but a missed recall later in the journey dynamically imports the store to record a signal - a write-time fetch, not a boot one.',
   ],
 });
 

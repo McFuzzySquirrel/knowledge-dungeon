@@ -46,11 +46,16 @@ import { getStorageThreshold } from '@/services/errorRecovery';
 import { setSessionSource, type SessionSource } from '@/services/sessionTracker';
 import type { AssistanceRecordValue } from '@/services/persistence/v2/schema';
 import { installSessionLifecycleBinding } from '@/store/sessionLifecycleBinding';
-// Type-only, so it costs no bytes. The **values** are reached through `loadAssistanceStore()`
-// below, because an eager import here would put a 666-line feature store - and the persistence
-// modules behind it - into the Welcome closure of a build where `VITE_ADAPTIVE_ASSISTANCE=false`
-// renders no card at all.
+// Type-only, so it costs no bytes. The **persistence primitives** come from the record module
+// (Phase 22), which carries no `zustand`: that is what lets a default build read a learner's
+// stored assistance record without fetching the store chunk. The store module itself is still
+// reached through `loadAssistanceStore()` below, and only the flagged build preloads it.
 import type { AssistanceSource } from '@/store/assistanceStore';
+import {
+  applyAssistanceRecord,
+  readAssistanceWithSource,
+  setAssistanceSource as applyAssistanceSource,
+} from '@/services/assistance/assistanceRecord';
 import { useStatisticsStore } from '@/store/statisticsStore';
 import { usePreferencesStore } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
@@ -207,7 +212,9 @@ export interface BootstrapDeps {
    * race a repository selection that has not happened yet.
    *
    * The same seam shape as `setDualWriteSink` and `setSessionSource`, and installed for the same
-   * reason: it keeps `src/store/` free of a hard dependency on the storage-v2 repository.
+   * reason: it keeps `src/store/` free of a hard dependency on the storage-v2 repository. Phase 22
+   * moved it from the store to `@/services/assistance/assistanceRecord`, so installing it does not
+   * load the store - see {@link BootstrapDeps.readAssistance}.
    *
    * **Optional, and that is a deliberate exception to the rule above.** A required member would
    * break every `BootstrapDeps` literal in the tree, including
@@ -216,7 +223,7 @@ export interface BootstrapDeps {
    * accommodate a Phase 19 seam is how two gates end up measuring different things.
    *
    * Optional here does **not** mean optional in effect. Every one of the three Phase 19 members
-   * falls back to the real store operation at the call site, so there is no value of any of them
+   * falls back to the real operation at the call site, so there is no value of any of them
    * under which the wiring does nothing: an absent dep gets the production behaviour, and a
    * supplied dep is a test observing or substituting the real thing. The Phase 18 failure was a
    * dep that was present, defaulted to a **no-op**, and was never called; this is the opposite
@@ -238,6 +245,13 @@ export interface BootstrapDeps {
    * `'standard'` and `off` is the mode a learner is most likely to have chosen, the flash would
    * show exactly the suggestions someone had asked not to see.
    *
+   * Phase 22: the default implementation is `readAssistanceWithSource` from
+   * `@/services/assistance/assistanceRecord`, which does **not** load the assistance store. It
+   * used to `await loadAssistanceStore()` first, which is what made the production default build
+   * fetch `assistanceStore-*.js` on every launch. The record is held by the record module until a
+   * store consumes it, so the before-the-first-render guarantee is unchanged where a card can
+   * render (the flagged build preloads the store) and the mode survives where it cannot.
+   *
    * Returns `null` for "nothing usable is stored", which the store documents as its documented
    * defaults rather than as an error.
    */
@@ -248,6 +262,10 @@ export interface BootstrapDeps {
    *
    * Synchronous and taking the value, like every other commit in {@link commitPlan}. Taking
    * nothing would mean reading and committing in one step, which is the flash above.
+   *
+   * Phase 22: the default implementation is `applyAssistanceRecord`, which hydrates the store when
+   * one is loaded and holds the value for the store to read at its own load otherwise. Neither
+   * branch is a no-op.
    */
   readonly hydrateAssistance?: (record: AssistanceRecordValue | null) => void;
 
@@ -299,17 +317,20 @@ export function createDefaultBootstrapDeps(
       useStatisticsStore.getState().hydrateSessions(sessions);
     },
     setAssistanceSource: (source) => {
-      assistanceStore().setAssistanceSource(source);
+      // Phase 22: the persistence seam lives in the record module, so a default build can
+      // install a source (and read the record) without fetching the store chunk.
+      applyAssistanceSource(source);
     },
     readAssistance: async () => {
-      // `await loadAssistanceStore()` rather than assuming Phase A ran: this dep is also reachable
-      // through `createDefaultBootstrapDeps()` on its own, and a dep that throws when used outside
-      // `runBootstrap` would be a worse contract than one that resolves what it needs.
-      await loadAssistanceStore();
-      return readAssistanceRecord();
+      // Phase 22: the composite read is the record module's, so this dep no longer loads the
+      // store. `readAssistanceWithSource` is the same function the store's own
+      // `hydrateAssistanceFromRepository` calls - one composite read, not two.
+      return readAssistanceWithSource();
     },
     hydrateAssistance: (record) => {
-      assistanceStore().useAssistanceStore.getState().hydrateAssistance(record);
+      // Hands the record to the store when one is loaded, and holds it for the store to read at
+      // its own load otherwise. See `applyAssistanceRecord`.
+      applyAssistanceRecord(record);
     },
     hydratePreferences: (persisted) =>
       usePreferencesStore.getState().hydratePreferences(persisted),
@@ -336,12 +357,23 @@ interface BootstrapPlan {
 }
 
 /**
- * The assistance store module, loaded once, on demand.
+ * The assistance store module, loaded only when a build preloads it.
  *
- * `null` until {@link loadAssistanceStore} has resolved it. Every Phase 19 dep in this module
- * reads it through this holder, and every one of them **throws** rather than skipping when it is
- * absent - because the alternative, a silent no-op, is precisely the Phase 18 defect that shipped
- * two unwired deps into a bootstrap that 5,900 tests could not see.
+ * `null` until {@link loadAssistanceStore} has resolved it. Phase 22 changed the reason this
+ * holder exists and who touches it:
+ *
+ * - The **persistence** deps (`readAssistance`, `hydrateAssistance`, `setAssistanceSource`) no
+ *   longer need this module at all - they use `@/services/assistance/assistanceRecord`, which
+ *   carries no `zustand` - so a default build never fetches the store chunk at boot. That is the
+ *   per-launch request Phase 21 carried forward.
+ * - The module is preloaded **only on the flagged build**, where the store will be needed the
+ *   moment a card can render and where `applyAssistanceRecord` reaches a live store
+ *   synchronously.
+ *
+ * {@link assistanceStore} still **throws** rather than returning nothing when the holder is
+ * empty. It has no caller in the default path now, and it is kept because a future consumer that
+ * genuinely needs the store must not get a silent `undefined`: the Phase 18 defect this area was
+ * written against was a dep that was present, defaulted to a no-op, and was never reached.
  */
 let assistanceStoreModule: typeof import('@/store/assistanceStore') | null = null;
 
@@ -352,14 +384,16 @@ let assistanceStoreModule: typeof import('@/store/assistanceStore') | null = nul
  * `dist/index.html` does not name, so `check:budget:welcome` does not count it. The same mechanism
  * `openRepository` already uses for the storage-v2 repository, and for the same reason.
  *
- * Awaited in `runBootstrap` before Phase A, so every consumer below finds it present. Hydration is
- * unconditional - a learner who set `off` on the flagged build must still have that mode on the
- * next launch, on the rollback build, and after a roll-forward - so this cannot be gated on the
- * feature flag.
+ * Called by `runBootstrap` **only when `VITE_ADAPTIVE_ASSISTANCE` is on**. It used to be awaited
+ * unconditionally, on the argument that hydration could not be gated because a learner who set
+ * `off` must keep that mode. That argument is still honoured - the record module's bridge persists
+ * the mode across a build that never loads the store - and the unconditional fetch was a real
+ * per-launch request the Welcome budget could not see. See the record module's header for the
+ * full reasoning.
  */
 async function loadAssistanceStore(): Promise<typeof import('@/store/assistanceStore')> {
   assistanceStoreModule ??= await import('@/store/assistanceStore');
-  return assistanceStoreModule;
+  return assistanceStore();
 }
 
 /** The loaded store module, or a thrown error naming what went wrong. */
@@ -367,14 +401,14 @@ function assistanceStore(): typeof import('@/store/assistanceStore') {
   if (assistanceStoreModule === null) {
     throw new Error(
       'bootstrap: the assistance store module was used before loadAssistanceStore() resolved. ' +
-        'Every Phase 19 dependency must be reached through runBootstrap, which awaits it first.',
+        'On the flagged build, runBootstrap preloads it; no default-build path may reach it.',
     );
   }
   return assistanceStoreModule;
 }
 
 /**
- * Phase 19: the storage-v2 assistance read path, in the store's own {@link AssistanceSource} shape.
+ * Phase 19: the storage-v2 assistance read path, in the record module's {@link AssistanceSource} shape.
  *
  * The repository has no `listAssistance`; assistance records are one store among the ten
  * `readRecords` returns, so this adapter resolves the **active** generation itself and returns
@@ -382,7 +416,7 @@ function assistanceStore(): typeof import('@/store/assistanceStore') {
  *
  * - `readActiveGenerationId()` returning `null` means the device has no generation, so there is
  *   nothing to read and the legacy key stands. It is not an error.
- * - A repository whose `readRecords` rejects is handled one layer up: `readAssistanceRecord`
+ * - A repository whose `readRecords` rejects is handled one layer up: `readAssistanceWithSource`
  *   catches, and falls back to the legacy read. Losing the storage-v2 record must not cost the
  *   learner their stored mode.
  */
@@ -397,56 +431,6 @@ function assistanceSourceFor(handle: StorageV2Repository): AssistanceSource {
       );
     },
   };
-}
-
-/**
- * Phase 19: read the persisted assistance record, following the selected repository.
- *
- * ## The rule this reproduces, and why it is reproduced rather than exported
- *
- * `src/store/assistanceStore.ts` owns a private `readAssistanceWithSource` whose documented
- * rule is: **the legacy key is read first and on its own, the injected source's records are
- * layered on top, a source that rejects falls back to the legacy read, and the highest
- * `assistanceId` in code-unit order wins.** The store also exposes both of its two primitives -
- * `readPersistedAssistance()` and `currentAssistanceSource()` - so this function is the
- * composition of two published halves rather than a second reader.
- *
- * It is nevertheless a restatement, and that is a real cost: two places now describe the
- * de-duplication rule. The alternative - making this dep call the store's composite read - would
- * move the store's own write into the bootstrap's **read** phase, which is the flash described on
- * {@link BootstrapDeps.readAssistance}. Between a duplication in the read half and a visible
- * flash of suggestions a learner had turned off, the duplication is the cheaper defect, and it
- * is the one that cannot be seen from the outside.
- *
- * **Reported to `core-logic-engineer`** as a follow-up: exporting `readAssistanceWithSource`
- * collapses this function to a one-line re-export and removes the duplication entirely. Until
- * then this is the only restatement, and it is here rather than in a component for that reason.
- */
-async function readAssistanceRecord(): Promise<AssistanceRecordValue | null> {
-  const store = assistanceStore();
-  const legacy = store.readPersistedAssistance();
-  const source = store.currentAssistanceSource();
-  if (source === null) return legacy;
-  let fromSource: AssistanceRecordValue | null = null;
-  try {
-    const listed = await source.list();
-    // Highest id in code-unit order, so the choice is a property of the data rather than of the
-    // order the repository happened to return records in.
-    const parsed = listed
-      .map(store.parseAssistanceRecord)
-      .filter((record): record is AssistanceRecordValue => record !== null);
-    fromSource =
-      parsed.length === 0
-        ? null
-        : parsed.reduce((best, record) =>
-            record.assistanceId > best.assistanceId ? record : best,
-          );
-  } catch {
-    // A source that rejects must not cost the learner their stored mode.
-    return legacy;
-  }
-  // Storage-v2 is authoritative on the flagged build, so its record wins.
-  return fromSource ?? legacy;
 }
 
 /**
@@ -499,9 +483,13 @@ function degradedResult(
 }
 
 async function runBootstrap(deps: BootstrapDeps): Promise<BootstrapResult> {
-  // Phase 19: load the store module before anything can reach it. Deliberately **not** gated on
-  // the feature flag - see `loadAssistanceStore`.
-  await loadAssistanceStore();
+  // Phase 22: preload the store **only on the flagged build**. The default build reads and holds
+  // the persisted record through `@/services/assistance/assistanceRecord` instead, so no launch
+  // fetches the store chunk for a feature that renders nothing. Hydration is not lost: see the
+  // record module's bridge for how a store that loads later still starts from the stored mode.
+  if (runtimeConfig.adaptiveAssistance) {
+    await loadAssistanceStore();
+  }
 
   const failures: BootstrapFailureCode[] = [];
   let migration: MigrationState | null = null;
@@ -552,7 +540,10 @@ async function runBootstrap(deps: BootstrapDeps): Promise<BootstrapResult> {
   const installAssistanceSource =
     deps.setAssistanceSource ??
     ((source: AssistanceSource | null) => {
-      assistanceStore().setAssistanceSource(source);
+      // Phase 22: the seam is installed on the record module, which needs no store. On the
+      // flagged build the store is preloaded and reads the record through this same source; on
+      // the default build `setAssistanceSource(null)` clears the seam exactly as before.
+      applyAssistanceSource(source);
     });
   installAssistanceSource(
     repository === 'v2' && handle !== null ? assistanceSourceFor(handle) : null,
@@ -725,7 +716,7 @@ async function readPlan(
   // `off` must have it applied before the first render, not after it. A read that rejects or
   // resolves to nothing is not a failure: it becomes `null`, which the store documents as its
   // defaults, exactly as an absent preferences key does.
-  const readAssistance = deps.readAssistance ?? readAssistanceRecord;
+  const readAssistance = deps.readAssistance ?? readAssistanceWithSource;
   let assistance: AssistanceRecordValue | null = null;
   try {
     assistance = await readAssistance();
@@ -764,7 +755,10 @@ function commitPlan(deps: BootstrapDeps, plan: BootstrapPlan): void {
   const hydrateAssistance =
     deps.hydrateAssistance ??
     ((record: AssistanceRecordValue | null) => {
-      assistanceStore().useAssistanceStore.getState().hydrateAssistance(record);
+      // Phase 22: reaches the store when it is loaded (the flagged build, and every unit test
+      // that imports it) and holds the record for it to read at its own load otherwise. Every
+      // value of this dep is honoured; none is a no-op.
+      applyAssistanceRecord(record);
     });
   hydrateAssistance(plan.assistance);
 

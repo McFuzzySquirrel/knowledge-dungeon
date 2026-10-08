@@ -22,6 +22,7 @@ describe('runtime feature configuration', () => {
       creatorWorkspace: false,
       scribeEncounterWorkspace: false,
       archaeologistReviewWorkspace: false,
+      offlineShell: false,
     });
   });
 
@@ -41,6 +42,7 @@ describe('runtime feature configuration', () => {
         VITE_CREATOR_WORKSPACE: 'true',
         VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'true',
         VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'true',
+        VITE_OFFLINE_SHELL: 'true',
       }),
     ).toEqual({
       worldRenderer: 'pixi',
@@ -56,6 +58,7 @@ describe('runtime feature configuration', () => {
       creatorWorkspace: true,
       scribeEncounterWorkspace: true,
       archaeologistReviewWorkspace: true,
+      offlineShell: true,
     });
   });
 

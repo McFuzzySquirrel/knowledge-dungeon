@@ -28,6 +28,15 @@ export interface RuntimeConfig {
   readonly creatorWorkspace: boolean;
   readonly scribeEncounterWorkspace: boolean;
   readonly archaeologistReviewWorkspace: boolean;
+  /**
+   * Whether the offline static-shell service worker may be registered.
+   *
+   * A cutover gate for Phase 22: the pre-Phase-22 build has no service worker, so
+   * the production default is `false` and the rollback is a build with it off. When
+   * off, the build emits no `sw.js`, no shell manifest, and no registration script,
+   * so the default artifact is unchanged.
+   */
+  readonly offlineShell: boolean;
 }
 
 export type RuntimeConfigKey = keyof RuntimeConfig;
@@ -47,6 +56,7 @@ export const RUNTIME_FLAG_ENV_KEYS = {
   creatorWorkspace: 'VITE_CREATOR_WORKSPACE',
   scribeEncounterWorkspace: 'VITE_SCRIBE_ENCOUNTER_WORKSPACE',
   archaeologistReviewWorkspace: 'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE',
+  offlineShell: 'VITE_OFFLINE_SHELL',
 } as const satisfies Readonly<Record<RuntimeConfigKey, string>>;
 
 /**
@@ -67,6 +77,7 @@ export const DEFAULT_RUNTIME_CONFIG: Readonly<RuntimeConfig> = Object.freeze({
   creatorWorkspace: false,
   scribeEncounterWorkspace: false,
   archaeologistReviewWorkspace: false,
+  offlineShell: false,
 });
 
 function normalizedRawValue(
@@ -145,6 +156,7 @@ export function parseRuntimeConfig(
       'archaeologistReviewWorkspace',
       DEFAULT_RUNTIME_CONFIG.archaeologistReviewWorkspace,
     ),
+    offlineShell: parseBoolean('offlineShell', DEFAULT_RUNTIME_CONFIG.offlineShell),
   };
 
   if (errors.length > 0) {

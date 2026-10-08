@@ -1,10 +1,10 @@
 /**
- * The renderer chunk boundary: `manualChunks` assignment and the emitted-graph audit.
+ * The renderer chunk boundary: code-splitting group assignment and the emitted-graph audit.
  *
  * ## Why this file exists
  *
  * Plan section 10.2 requires "no eager Phaser or Pixi load on Welcome", and Phase 9's
- * scope says "keep Pixi in a lazy bundle". A `manualChunks` group on its own does not
+ * scope says "keep Pixi in a lazy bundle". A code-splitting group on its own does not
  * deliver that, and the gap is not theoretical: Vite emits a
  * `<link rel=modulepreload>` for every chunk statically reachable from the entry, so
  * a Pixi host reached with a plain `import` sits in its own correctly named chunk and
@@ -36,14 +36,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   auditRendererChunkBoundary,
+  BUNDLE_CHUNK_GROUPS,
   collectStaticClosure,
   isLegacyEmission,
+  isViteHelperModuleId,
   manualChunkFor,
   packageNameFromModuleId,
   PIXI_VENDOR_PACKAGES,
   rendererChunkBoundaryPlugin,
   RENDERER_CHUNK_PREFIX,
   rendererChunkFamily,
+  VITE_HELPER_CHUNK,
   type EmittedBundle,
 } from '../../vite.config';
 
@@ -162,7 +165,7 @@ describe('module ids resolve to an npm package, not to a substring', () => {
   });
 });
 
-describe('manualChunks claims each renderer into its own group', () => {
+describe('the code-splitting groups claim each renderer into its own chunk', () => {
   it('claims Phaser first, exactly as the pre-existing predicate did', () => {
     // Order matters and is not incidental: the Phaser predicate is a substring test
     // that predates Phase 9, so its precedence over the new package-based Pixi test
@@ -193,6 +196,29 @@ describe('manualChunks claims each renderer into its own group', () => {
     expect(manualChunkFor('/repo/node_modules/scheduler/index.js')).toBe('vendor-react');
     expect(manualChunkFor('/repo/node_modules/zustand/esm/index.mjs')).toBeUndefined();
     expect(manualChunkFor('/repo/src/main.tsx')).toBeUndefined();
+  });
+
+  it('claims Vite\'s own virtual helpers into their own non-renderer group', () => {
+    // Measured defect this group exists for: at `VITE_PIXI_VILLAGE=true
+    // VITE_PIXI_DUNGEON=true` rolldown placed `\0vite/preload-helper.js` into
+    // `vendor-pixi-<hash>.js`, and the entry statically imported `{c as p}` from it -
+    // so `dist/index.html` carried a `vendor-pixi` modulepreload and the real Pixi
+    // runtime was eagerly reachable. The helper must never be claimed into a renderer
+    // group, and the virtual-namespace predicate is what guarantees that structurally.
+    expect(isViteHelperModuleId('\0vite/preload-helper.js')).toBe(true);
+    expect(isViteHelperModuleId('\0vite/modulepreload-polyfill.js')).toBe(true);
+    // A future Vite helper is claimed by the same rule rather than landing in a renderer
+    // chunk again.
+    expect(isViteHelperModuleId('\0vite/some-future-helper.js')).toBe(true);
+    // Real packages whose path merely contains `vite/` are dependencies, not helpers.
+    expect(isViteHelperModuleId('/repo/node_modules/vite/dist/node/index.js')).toBe(false);
+    expect(isViteHelperModuleId('/repo/node_modules/pixi.js/lib/index.mjs')).toBe(false);
+
+    expect(manualChunkFor('\0vite/preload-helper.js')).toBe(VITE_HELPER_CHUNK);
+    expect(manualChunkFor('\0vite/modulepreload-polyfill.js')).toBe(VITE_HELPER_CHUNK);
+    // The helper group is not a renderer family: `rendererChunkFamily` must not see it,
+    // or the boundary gate would fail the very build this group makes possible.
+    expect(rendererChunkFamily(`assets/${VITE_HELPER_CHUNK}-abc123.js`)).toBeUndefined();
   });
 
   it('does not claim a project file that happens to be named after Pixi', () => {
@@ -406,14 +432,47 @@ describe('the ES5 nomodule bundle is reported, never failed, and never mistaken 
 });
 
 describe('the boundary is wired into the build, not only into this file', () => {
-  it('the manualChunks the build uses is the function this file tested', () => {
+  it('the build wires BUNDLE_CHUNK_GROUPS into codeSplitting, not a name-function manualChunks', () => {
     const viteConfig = sourceOf('vite.config.ts');
-    // A renamed or wrapped predicate would leave this file testing something the
-    // build no longer does, which is the shape of a gate that reports on the test
-    // rather than on the product.
-    expect(viteConfig).toContain('manualChunks: manualChunkFor');
+    // The build's grouping must be the table this file exercises, or this file is
+    // testing something the build no longer does - the shape of a gate that reports on
+    // the test rather than on the product.
+    expect(viteConfig).toContain('codeSplitting:');
+    expect(viteConfig).toContain('groups: BUNDLE_CHUNK_GROUPS.map');
+    // `manualChunks: manualChunkFor` is deliberately forbidden, and the reason is
+    // measured rather than stylistic. Rolldown translates a name-returning
+    // `manualChunks` into a SINGLE `codeSplitting` group with no `test`, and in that
+    // shape its per-group dependency recursion put `\0vite/preload-helper.js` into the
+    // `vendor-pixi` chunk even though `manualChunkFor` returned `vendor-vite-helpers`
+    // for it - which made the Pixi runtime statically reachable from the entry as soon
+    // as a second lazy boundary existed.
+    expect(viteConfig).not.toContain('manualChunks:');
     expect(viteConfig).not.toMatch(/manualChunks\s*:\s*\{/);
     expect(viteConfig).not.toMatch(/manualChunks\s*:\s*function/);
+  });
+
+  it('the group table and the resolver are one partition and cannot drift apart', () => {
+    const names = BUNDLE_CHUNK_GROUPS.map((group) => group.name);
+    expect(names).toContain(RENDERER_CHUNK_PREFIX.phaser);
+    expect(names).toContain(RENDERER_CHUNK_PREFIX.pixi);
+    expect(names).toContain(VITE_HELPER_CHUNK);
+    // Phaser stays first: its substring predicate predates Phase 9 and its precedence
+    // over the package-based Pixi test is what keeps the production artifact unchanged.
+    expect(names[0]).toBe(RENDERER_CHUNK_PREFIX.phaser);
+
+    // A representative id per group resolves through the table to the name
+    // `manualChunkFor` returns, which is the invariant that keeps the resolver the
+    // other tests exercise equal to the groups the build uses.
+    const samples: ReadonlyArray<readonly [string, string]> = [
+      ['/repo/node_modules/phaser/dist/phaser.js', RENDERER_CHUNK_PREFIX.phaser],
+      ['\0vite/preload-helper.js', VITE_HELPER_CHUNK],
+      ['/repo/node_modules/pixi.js/lib/index.mjs', RENDERER_CHUNK_PREFIX.pixi],
+      ['/repo/node_modules/react/index.js', 'vendor-react'],
+    ];
+    for (const [id, expected] of samples) {
+      expect(BUNDLE_CHUNK_GROUPS.find((group) => group.test(id))?.name, id).toBe(expected);
+      expect(manualChunkFor(id), id).toBe(expected);
+    }
   });
 
   it('the plugin is registered in the plugin list the build uses', () => {

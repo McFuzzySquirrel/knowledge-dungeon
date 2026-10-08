@@ -6,6 +6,11 @@ import legacy from '@vitejs/plugin-legacy';
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import { parseRuntimeConfig, type WorldRenderer } from './src/config/runtimeConfig';
+import {
+  BUNDLE_CENSUS_FILENAME,
+  BUNDLE_CENSUS_SCHEMA_VERSION,
+  GZIP_LEVEL,
+} from './scripts/performance-budgets.mjs';
 
 function spriteManifestPlugin(): Plugin {
   const ASSETS_DIR = path.resolve(__dirname, 'public', 'assets');
@@ -41,6 +46,83 @@ function spriteManifestPlugin(): Plugin {
     buildStart() {
       if (!fs.existsSync(MANIFEST_PATH)) {
         generateManifest();
+      }
+    },
+  };
+}
+
+/**
+ * ── Offline static shell (Phase 22) ─────────────────────────────────────────
+ *
+ * `VITE_OFFLINE_SHELL` is a cutover flag whose production default is `false`, and
+ * the least-churn way to keep it that way is for a build with it off to emit no
+ * offline files **and** no offline code. The hand-written worker and the web app
+ * manifest live in `public/`, which Vite copies unconditionally, and the
+ * registration wrapper would otherwise have to be imported by the application
+ * entry. Both would change the default artifact's `sha256-tree-v1` identity for
+ * every existing lane and for the recorded production artifact, with no runtime
+ * change to show for it.
+ *
+ * So this plugin does two flag-dependent things and nothing on the default build:
+ *
+ * - **Flag on** - injects the web app manifest link and the registration script
+ *   into `index.html`, then runs `scripts/generate-offline-shell.mjs` after the
+ *   bundle is written to emit `dist/offline-shell-manifest.js` from the final
+ *   document. The registration module is the only offline code in the bundle, and
+ *   it is a separate entry the router never needs.
+ * - **Flag off** - injects nothing and, in `closeBundle`, deletes the `public/`
+ *   copies of `sw.js` and `manifest.webmanifest` from `dist/`. The result is the
+ *   pre-Phase-22 tree, byte for byte.
+ *
+ * `closeBundle` runs after every bundle is written, including
+ * `@vitejs/plugin-legacy`'s re-emission, so the generator reads the final
+ * `index.html`. It reads the emitted document rather than the in-memory bundle and
+ * never mutates the bundle, so the renderer chunk audit in
+ * `rendererChunkBoundaryPlugin` is untouched.
+ */
+function offlineShellPlugin(enabled: boolean, basePath: string): Plugin {
+  const DIST_DIR = path.resolve(__dirname, 'dist');
+  const PUBLIC_OFFLINE_FILES = ['sw.js', 'manifest.webmanifest', 'offline-shell-manifest.js'];
+
+  return {
+    name: 'knowledge-dungeon:offline-shell',
+    // `order: 'pre'` is load-bearing. Vite's own `vite:build-html` plugin scans the
+    // document for `<script src>` entries during its `transformIndexHtml` pass, and
+    // a tag injected by a later hook is appended to the output verbatim - a raw
+    // `/src/services/offlineShell.ts` that the preview server would 404. Running
+    // before that pass is what makes the injected registration an actual bundle
+    // entry with a content-hashed URL.
+    transformIndexHtml: {
+      order: 'pre',
+      handler() {
+        if (!enabled) return [];
+        return [
+          {
+            tag: 'link',
+            attrs: { rel: 'manifest', href: `${basePath}manifest.webmanifest` },
+            injectTo: 'head',
+          },
+          {
+            tag: 'script',
+            attrs: { type: 'module', src: '/src/services/offlineShell.ts' },
+            injectTo: 'body',
+          },
+        ];
+      },
+    },
+    closeBundle() {
+      if (enabled) {
+        execSync('node scripts/generate-offline-shell.mjs', {
+          cwd: __dirname,
+          stdio: 'inherit',
+          env: { ...process.env, KD_OFFLINE_SHELL_BASE: basePath },
+        });
+        return;
+      }
+      // Flag off: remove the `public/` copies so the default artifact is unchanged.
+      for (const fileName of PUBLIC_OFFLINE_FILES) {
+        const target = path.join(DIST_DIR, fileName);
+        if (fs.existsSync(target)) fs.rmSync(target);
       }
     },
   };
@@ -103,6 +185,64 @@ export const PIXI_VENDOR_PACKAGES: readonly string[] = Object.freeze([
   'parse-svg-path',
   'tiny-lru',
 ]);
+
+/**
+ * The code-splitting group that claims Vite's own virtual helper modules.
+ *
+ * ── The defect this group exists for ────────────────────────────────────────
+ *
+ * Vite rewrites every dynamic `import()` into a call to a small runtime helper,
+ * `__vitePreload` (virtual id `\0vite/preload-helper.js`), and injects a
+ * `modulepreload` polyfill (`\0vite/modulepreload-polyfill.js`). Both are emitted as
+ * **unclaimed** modules: they belong to no npm package, so
+ * {@link packageNameFromModuleId} returns `undefined` for them and the grouping
+ * predicate left them to rolldown's default chunking.
+ *
+ * With a single `React.lazy` renderer boundary that was harmless. With **two**
+ * independent lazy boundaries - the village plus the dungeon, or any other pair
+ * among the three worlds - the helper becomes a module shared between the entry
+ * chunk and the lazy chunks, and rolldown's default placement puts it **into the
+ * `vendor-pixi` chunk**. Measured at
+ * `VITE_PIXI_VILLAGE=true VITE_PIXI_DUNGEON=true`: the emitted
+ * `vendor-pixi-<hash>.js` began `var r='modulepreload'...` (the preload helper)
+ * and ended with the Pixi runtime, the entry chunk statically imported
+ * `{c as p}` from it, and `dist/index.html` carried
+ * `<link rel="modulepreload" href="/assets/vendor-pixi-<hash>.js">`.
+ *
+ * The renderer boundary gate (`rendererChunkBoundaryPlugin`) was therefore
+ * **correct** - the entry document really could statically reach the whole Pixi
+ * runtime - and the defect was the chunking, not the gate. The fix is to claim
+ * the helper into a group of its own rather than to relax the gate.
+ *
+ * `vendor-vite-helpers` is deliberately **not** a renderer group:
+ * {@link rendererChunkFamily} does not match it (the base name is neither
+ * `vendor-phaser` nor `vendor-pixi`), and `scripts/check-memory.mjs`'s family
+ * registry does not declare it. It may therefore be statically reachable from the
+ * entry - as it must be, since the entry is what calls `__vitePreload` - without
+ * the entry ever making the Pixi runtime reachable.
+ *
+ * The predicate is Vite's reserved virtual namespace rather than the two ids that
+ * happened to appear in one build, so a future Vite helper is claimed by the same
+ * rule instead of silently landing in a renderer chunk again.
+ */
+export const VITE_HELPER_CHUNK = 'vendor-vite-helpers';
+
+/**
+ * The chunk-name group that React and its scheduler live in. The historical
+ * `manualChunks` string literal, named so the group table and the tests agree.
+ */
+export const REACT_VENDOR_CHUNK = 'vendor-react';
+
+/**
+ * Whether `id` is a module in Vite's own virtual helper namespace (`\0vite/...`).
+ *
+ * The leading `\0` is Vite's reserved prefix for a module it generates rather than
+ * reads from disk; stripping it separates that namespace from a real dependency
+ * whose path merely contains `vite/` (for example `node_modules/vite/...`).
+ */
+export function isViteHelperModuleId(id: string): boolean {
+  return id.replace(/^\u0000+/, '').startsWith('vite/');
+}
 
 /** Splits on either separator, so a Windows checkout resolves the same package. */
 const NODE_MODULES_SPLIT = /[\\/]node_modules[\\/]/;
@@ -238,35 +378,91 @@ export function assistanceLanePathFor(id: string): string | undefined {
   return ASSISTANCE_LANE_PATHS.find((prefix) => sourcePath.startsWith(prefix));
 }
 
+/** Whether `id` is the Phaser runtime or one of its modules - the pre-existing substring test. */
+export function isPhaserModuleId(id: string): boolean {
+  return id.includes('phaser');
+}
+
 /**
- * The `manualChunks` group for a module id, or `undefined` to leave it alone.
+ * Whether `id` is a Pixi-runtime npm package ({@link PIXI_VENDOR_PACKAGES}).
  *
- * The order is the order the groups are tested, and Phaser is tested first
- * because its predicate is the pre-existing substring test and changing its
- * precedence would change the current production artifact.
+ * Written against the `node_modules/` boundary via {@link packageNameFromModuleId}
+ * rather than a prefix match, so a project file called `pixi-helpers.ts` cannot be
+ * claimed into the renderer group by accident.
+ */
+export function isPixiVendorModuleId(id: string): boolean {
+  const packageName = packageNameFromModuleId(id);
+  return packageName !== undefined && PIXI_VENDOR_PACKAGES.includes(packageName);
+}
+
+/** Whether `id` is React, React DOM, or the scheduler they share. */
+export function isReactVendorModuleId(id: string): boolean {
+  return (
+    id.includes('/node_modules/react/') ||
+    id.includes('/node_modules/react-dom/') ||
+    id.includes('/node_modules/scheduler/')
+  );
+}
+
+/** One code-splitting group: a chunk name and the modules it captures. */
+export interface BundleChunkGroup {
+  readonly name: string;
+  /** The modules this group captures. The predicates are disjoint, so order is precedence. */
+  readonly test: (id: string) => boolean;
+}
+
+/**
+ * The code-splitting groups, in precedence order.
+ *
+ * ── Why this is a group table, not the name-function `manualChunks` form ────
+ *
+ * The build used to pass the name-returning resolver directly as
+ * `output.manualChunks`. Rolldown translates that into a **single**
+ * `codeSplitting` group whose `name` function partitions the graph, with no
+ * `test` of its own. In that shape rolldown's per-group
+ * `includeDependenciesRecursively` (default `true`) put Vite's preload helper into
+ * the `vendor-pixi` name-group instead of `vendor-vite-helpers`, even though the
+ * name function returned `vendor-vite-helpers` for it - verified against rolldown
+ * 1.0.2: the module id `\0vite/preload-helper.js` was assigned through
+ * {@link manualChunkFor} and still emitted inside `vendor-pixi-<hash>.js`.
+ *
+ * Giving each family its **own** group with its own `test` predicate fixes that:
+ * a group's dependency recursion then applies per family, the helper group exists
+ * on its own, and `vendor-pixi` carries Pixi and nothing else. This is the
+ * structural form of the fix the task asks for - "claim the Vite helper into its
+ * own small, non-renderer group" - expressed in rolldown's supported
+ * `codeSplitting.groups` API, because the `manualChunks` name-function wrapper
+ * cannot express a second group.
+ *
+ * The predicates are shared with {@link manualChunkFor}, so the resolver the tests
+ * exercise and the groups the build uses cannot drift apart.
+ */
+export const BUNDLE_CHUNK_GROUPS: readonly BundleChunkGroup[] = Object.freeze([
+  { name: RENDERER_CHUNK_PREFIX.phaser, test: isPhaserModuleId },
+  { name: VITE_HELPER_CHUNK, test: isViteHelperModuleId },
+  { name: RENDERER_CHUNK_PREFIX.pixi, test: isPixiVendorModuleId },
+  { name: REACT_VENDOR_CHUNK, test: isReactVendorModuleId },
+]);
+
+/**
+ * The chunk a module id belongs to, or `undefined` to leave it alone.
+ *
+ * A pure first-match reading of {@link BUNDLE_CHUNK_GROUPS}, kept because it is the
+ * readable statement of the same partition the build wires into
+ * `codeSplitting.groups` and because the phase tests exercise it directly. The names
+ * it returns - `vendor-phaser`, `vendor-pixi`, `vendor-react`, `vendor-vite-helpers`
+ * - are chunk-file prefixes and are matched by name in `scripts/check-memory.mjs`,
+ * `scripts/check-welcome-budget.mjs` and the browser lanes, so renaming one here
+ * breaks several gates loudly.
  *
  * Every group here is a **vendor** group, and that is the rule this file learned the
- * expensive way: a `manualChunks` group takes its shared dependencies with it. See the
+ * expensive way: a code-splitting group takes its shared dependencies with it. See the
  * header of the assistance lane census for the measured 10.28 KiB. A future phase that
  * needs a project-source feature group must identify it by module membership in the
  * emitted bundle, not by claiming it into a chunk here.
  */
 export function manualChunkFor(id: string): string | undefined {
-  if (id.includes('phaser')) {
-    return RENDERER_CHUNK_PREFIX.phaser;
-  }
-  const packageName = packageNameFromModuleId(id);
-  if (packageName !== undefined && PIXI_VENDOR_PACKAGES.includes(packageName)) {
-    return RENDERER_CHUNK_PREFIX.pixi;
-  }
-  if (
-    id.includes('/node_modules/react/') ||
-    id.includes('/node_modules/react-dom/') ||
-    id.includes('/node_modules/scheduler/')
-  ) {
-    return 'vendor-react';
-  }
-  return undefined;
+  return BUNDLE_CHUNK_GROUPS.find((group) => group.test(id))?.name;
 }
 
 /* ── Emitted-bundle audit ─────────────────────────────────────────────────── */
@@ -288,6 +484,20 @@ export interface EmittedChunk {
    * a lane cannot be proved by a chunk whose contents are unknown.
    */
   readonly modules?: Readonly<Record<string, unknown>>;
+  /**
+   * Vite's per-chunk metadata, present on a real emitted chunk and absent from a
+   * fixture.
+   *
+   * `importedCss` is the CSS a chunk pulls in, which Vite emits as a separate asset
+   * file. The census needs it so a route's budget counts the stylesheet a browser
+   * downloads to open that route, not only its JavaScript. Declared structurally for
+   * the same reason as the rest of this interface: a fixture can omit it and the
+   * reader treats "no metadata" as "no imported CSS" rather than crashing.
+   */
+  readonly viteMetadata?: {
+    readonly importedCss?: ReadonlySet<string>;
+    readonly importedAssets?: ReadonlySet<string>;
+  };
 }
 
 export type EmittedBundle = Readonly<Record<string, EmittedChunk>>;
@@ -730,6 +940,183 @@ export function auditRendererChunkBoundary(bundle: EmittedBundle): RendererChunk
   };
 }
 
+/* ── Bundle census (Phase 22 route-aware budgets) ─────────────────────────── */
+
+/**
+ * The human label for each renderer family, for the census report.
+ *
+ * Kept here beside {@link RENDERER_CHUNK_PREFIX} rather than in the gate: the census
+ * is the build's statement about what it emitted, and the gate should not have to
+ * know how to name a renderer it read from a file.
+ */
+const RENDERER_CHUNK_LABEL: Record<RendererChunkFamily, string> = {
+  phaser: 'Phaser',
+  pixi: 'PixiJS',
+};
+
+/**
+ * One named lazy boundary and the modern JS/CSS files a browser downloads for it.
+ *
+ * This is the unit `scripts/check-performance.mjs` budgets. The build computes the
+ * boundary from the emitted module graph - the same census that fails the build on an
+ * eager Pixi chunk - so the gate never re-walks an import graph that could disagree
+ * with the one the build enforced.
+ */
+export interface BundleCensusBoundary {
+  readonly id: string;
+  readonly kind: 'renderer' | 'lane';
+  readonly label: string;
+  /**
+   * Whether this build emitted the boundary at all. An absent boundary is reported
+   * as "not measured" rather than passed over, so a reader can tell "measured and
+   * within budget" from "absent, so not looked at".
+   */
+  readonly present: boolean;
+  /**
+   * The boundary's own lazy set: the chunks a browser fetches to enter it, excluding
+   * chunks the module entry already downloads (those are Welcome's bytes, counted by
+   * `check:budget:welcome`). Includes the CSS the set imports.
+   */
+  readonly chunks: readonly string[];
+  /** Boundary chunks the module entry statically reaches - the eager, pre-existing set. */
+  readonly eagerChunks: readonly string[];
+  readonly note: string;
+}
+
+/**
+ * The build's census of what it emitted, written beside the bundle as JSON.
+ *
+ * See `docs/plans/001-cozy-pixi-rebuild.md` Phase 22's "route-aware budgets" ruling.
+ * `scripts/check-performance.mjs` reads this file and measures the chunk files it
+ * names, so the two never disagree about which chunks form a boundary.
+ */
+export interface BundleCensus {
+  readonly schemaVersion: number;
+  readonly gzipLevel: number;
+  readonly moduleEntryChunks: readonly string[];
+  readonly legacyEntryChunks: readonly string[];
+  /** The module entry's static closure, sorted. */
+  readonly entryClosure: readonly string[];
+  /** The module entry's closure following static and dynamic imports, sorted. */
+  readonly fetchableClosure: readonly string[];
+  /** Every declared boundary, present or absent, in report order. */
+  readonly boundaries: readonly BundleCensusBoundary[];
+  /**
+   * Every non-legacy JS/CSS file the module bundle emitted, sorted.
+   *
+   * The gate checks each still exists in `dist`; a census whose files are gone
+   * describes a different build and is reported rather than measured.
+   */
+  readonly accountedChunkFiles: readonly string[];
+}
+
+/** The CSS a chunk imports, or an empty list for a fixture or an asset-less chunk. */
+function importedCssOf(bundle: EmittedBundle, fileName: string): string[] {
+  const importedCss = bundle[fileName]?.viteMetadata?.importedCss;
+  return importedCss ? [...importedCss] : [];
+}
+
+/**
+ * One feature lane's boundary: the lane's own lazy chunk set.
+ *
+ * The lane is present when the emitted bundle carries a chunk with its modules. Its
+ * lazy roots are the lane chunks a browser can reach but the entry does not statically
+ * reach, which is the whole point of a `productionDefault:false` cutover flag. The
+ * budget set is the static closure of those roots minus the entry closure, plus any
+ * CSS they import, so a route's stylesheet is counted with its script.
+ */
+function laneBoundary(
+  id: string,
+  label: string,
+  audit: FeatureLaneAudit,
+  bundle: EmittedBundle,
+  entryClosure: ReadonlySet<string>,
+): BundleCensusBoundary {
+  const lazyRoots = audit.laneChunks
+    .filter((entry) => entry.fetchable && !entry.staticReachable)
+    .map((entry) => entry.fileName);
+  const eagerChunks = audit.laneChunks
+    .filter((entry) => entry.staticReachable)
+    .map((entry) => entry.fileName)
+    .sort();
+
+  const closure = collectStaticClosure(bundle, lazyRoots);
+  const chunks = new Set<string>();
+  for (const fileName of closure) {
+    if (!entryClosure.has(fileName)) chunks.add(fileName);
+  }
+  for (const fileName of [...chunks]) {
+    for (const css of importedCssOf(bundle, fileName)) chunks.add(css);
+  }
+
+  return {
+    id: `lane:${id}`,
+    kind: 'lane',
+    label,
+    present: audit.laneChunks.length > 0,
+    chunks: [...chunks].sort(),
+    eagerChunks,
+    note:
+      audit.laneChunks.length > 0
+        ? `${label} lane's own lazy chunk set, excluding chunks the entry already downloads.`
+        : `${label} lane is absent from this build, so it was not measured.`,
+  };
+}
+
+/**
+ * Builds the census of the emitted module bundle.
+ *
+ * Pure over the bundle, so `tests/performance/` can exercise it against synthetic
+ * fixtures with no build, and so the plugin that writes it and the test that pins its
+ * contract read the same function.
+ */
+export function buildBundleCensus(bundle: EmittedBundle): BundleCensus {
+  const audit = auditRendererChunkBoundary(bundle);
+  const entryClosure = new Set(audit.entryClosure);
+
+  const rendererBoundaries = (Object.keys(RENDERER_CHUNK_PREFIX) as RendererChunkFamily[]).map(
+    (family): BundleCensusBoundary => {
+      const chunks = audit.rendererChunks
+        .filter((entry) => entry.family === family)
+        .map((entry) => entry.fileName)
+        .sort();
+      return {
+        id: `renderer:${family}`,
+        kind: 'renderer',
+        label: RENDERER_CHUNK_LABEL[family],
+        present: chunks.length > 0,
+        chunks,
+        eagerChunks: chunks.filter((fileName) => entryClosure.has(fileName)),
+        note:
+          chunks.length > 0
+            ? `Every ${RENDERER_CHUNK_PREFIX[family]}-* chunk this build emitted.`
+            : `${RENDERER_CHUNK_PREFIX[family]}-* is absent from this build, so it was not measured.`,
+      };
+    },
+  );
+
+  const laneBoundaries = [
+    laneBoundary('assistance', 'Assistance', auditAssistanceLane(bundle), bundle, entryClosure),
+    laneBoundary('share', 'Share', auditShareLane(bundle), bundle, entryClosure),
+  ];
+
+  const accountedChunkFiles = Object.values(bundle)
+    .map((chunk) => chunk.fileName)
+    .filter((fileName) => /\.(js|css)$/i.test(fileName) && !isLegacyEmission(fileName))
+    .sort();
+
+  return {
+    schemaVersion: BUNDLE_CENSUS_SCHEMA_VERSION,
+    gzipLevel: GZIP_LEVEL,
+    moduleEntryChunks: audit.moduleEntryChunks,
+    legacyEntryChunks: audit.legacyEntryChunks,
+    entryClosure: audit.entryClosure,
+    fetchableClosure: [...collectFetchableClosure(bundle, audit.moduleEntryChunks)].sort(),
+    boundaries: [...rendererBoundaries, ...laneBoundaries],
+    accountedChunkFiles,
+  };
+}
+
 export interface RendererChunkBoundaryOptions {
   /**
    * The renderer this build was asked for, from `VITE_WORLD_RENDERER`.
@@ -869,7 +1256,7 @@ export function rendererChunkBoundaryPlugin(options: RendererChunkBoundaryOption
     // this audits the module bundle, and the legacy bundle when the plugin runs its
     // own pass - which is a second, independent check of the same application graph
     // rather than an exemption from the first.
-    writeBundle(_outputOptions, bundle) {
+    writeBundle(outputOptions, bundle) {
       const audit = auditRendererChunkBoundary(bundle as EmittedBundle);
       const report = (line: string): void => {
         // One prefix so the block is greppable out of a long Vite log.
@@ -881,6 +1268,34 @@ export function rendererChunkBoundaryPlugin(options: RendererChunkBoundaryOption
       // mistaken for one that emitted only legacy entries.
       const isLegacyBundle =
         audit.legacyEntryChunks.length > 0 && audit.moduleEntryChunks.length === 0;
+
+      // Phase 22 route-aware budgets: write the census of the module bundle beside the
+      // bundle itself, so `scripts/check-performance.mjs` budgets the same boundaries
+      // the build enforced rather than re-walking an import graph that could disagree.
+      //
+      // Guarded on `outputOptions.dir` for two reasons. A real `vite build` always
+      // passes the resolved output directory, and a unit test that hands the hook a
+      // synthetic bundle passes `{}` - so the guard keeps a pure-audit test from
+      // writing into the repository. And the ES5 re-emission is skipped, because the
+      // release path is the module bundle and the legacy chunks are not budgeted.
+      const outputDir = (outputOptions as { dir?: unknown } | undefined)?.dir;
+      if (!isLegacyBundle && typeof outputDir === 'string' && outputDir.length > 0) {
+        try {
+          const census = buildBundleCensus(bundle as EmittedBundle);
+          fs.writeFileSync(
+            path.join(path.resolve(outputDir), BUNDLE_CENSUS_FILENAME),
+            `${JSON.stringify(census, null, 2)}\n`,
+            'utf8',
+          );
+          report(`bundle census written: ${BUNDLE_CENSUS_FILENAME} (${census.boundaries.length} boundary/boundaries)`);
+        } catch (error) {
+          // A build that cannot state what it emitted cannot be budgeted by the gate
+          // that reads that statement, so this is a build failure and not a warning.
+          this.error(
+            `[renderer-chunks] could not write ${BUNDLE_CENSUS_FILENAME}: ${(error as Error).message}`,
+          );
+        }
+      }
 
       report(
         `${isLegacyBundle ? 'ES5 nomodule bundle' : 'module bundle'}; entry chunks: ` +
@@ -1170,9 +1585,10 @@ export default defineConfig(({ mode }) => {
 
   const isProfileMode = mode === 'profile';
   const isElectronMode = mode === 'electron';
+  const basePath = process.env.VITE_BASE_PATH ?? (isElectronMode ? './' : '/');
 
   return {
-    base: process.env.VITE_BASE_PATH ?? (isElectronMode ? './' : '/'),
+    base: basePath,
     plugins: [
       react(),
       legacy({
@@ -1188,6 +1604,7 @@ export default defineConfig(({ mode }) => {
         adaptiveAssistance: runtimeConfig.adaptiveAssistance,
         webShare: runtimeConfig.webShare,
       }),
+      offlineShellPlugin(runtimeConfig.offlineShell, basePath),
     ],
     resolve: {
       alias: {
@@ -1205,7 +1622,12 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1200,
       rollupOptions: {
         output: {
-          manualChunks: manualChunkFor,
+          // Rolldown's supported code-splitting API. See BUNDLE_CHUNK_GROUPS for why
+          // this is a group table, not the name-function `manualChunks` form: only explicit
+          // per-family groups keep Vite's preload helper out of the `vendor-pixi` chunk.
+          codeSplitting: {
+            groups: BUNDLE_CHUNK_GROUPS.map(({ name, test }) => ({ name, test })),
+          },
         },
       },
     },

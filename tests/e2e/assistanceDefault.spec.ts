@@ -4,6 +4,7 @@ import {
   ASSISTANCE_ANY_SELECTOR,
   ASSISTANCE_DEFAULT_LANE,
   ASSISTANCE_CARD_CHUNK_REQUEST_MATCH,
+  ASSISTANCE_STORE_CHUNK_REQUEST_MATCH,
   ASSISTANCE_PROBES,
 } from './assistance-lane';
 import {
@@ -152,6 +153,108 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
     );
     expect(await page.locator(ASSISTANCE_ANY_SELECTOR).count()).toBe(0);
     expect(spy.scriptPathsMatching(ASSISTANCE_CARD_CHUNK_REQUEST_MATCH)).toEqual([]);
+
+    /*
+     * Phase 22: the boot fetch is gone.
+     *
+     * Before this phase `runBootstrap` awaited `loadAssistanceStore()` on every build, so the
+     * Welcome route requested `assistanceStore-*.js` on the production default - a real per-launch
+     * request for a feature the build renders nothing of, and one `check:budget:welcome` could not
+     * see because the entry document does not name the chunk. This is the observation that the
+     * removal happened: the store chunk is **absent from the request log at boot**.
+     *
+     * The request log really is live, so "no store request" is not "no requests": the same spy
+     * saw the entry, vendor and route chunks the Welcome screen needs.
+     */
+    expect(
+      spy.scriptPathsMatching(ASSISTANCE_STORE_CHUNK_REQUEST_MATCH),
+      'the production default build fetched the assistance store chunk at boot, so the Phase 22 ' +
+        'removal regressed',
+    ).toEqual([]);
+    expect(
+      spy.observations().filter(({ resourceType }) => resourceType === 'script').length,
+      'the spy observed no scripts at all, so the absence above is unmeasured',
+    ).toBeGreaterThan(0);
     expect(spy.offOriginPaths(LOCAL_ORIGIN)).toEqual([]);
+  });
+
+  test('a stored assistance mode survives a missed recall and a reload on the default build', async ({
+    page,
+  }) => {
+    /*
+     * The regression guard for the Phase 22 removal, at the browser level.
+     *
+     * The default build no longer loads the store at boot, so the **first** time the store exists
+     * on this device is when a missed recall dynamically imports it to call `bumpSignals`.
+     * `bumpSignals` rebuilds the whole record from the store's in-memory state, so if the store
+     * started from the pre-hydration `standard` rather than the learner's stored `off`, this
+     * seeded record would be overwritten with `standard`. The assertion is therefore not "the
+     * record is unchanged" - it is "the write that the journey performed did not change it".
+     *
+     * `addInitScript` seeds only when the key is absent, so the seed does not re-run on the
+     * reload and mask a clobber: after the journey the key exists, so the guard leaves whatever
+     * the application wrote, which is exactly what is read back.
+     *
+     * The seeded value is app-owned vocabulary (`off`) and an invented timestamp. No learner data
+     * is involved - the same rule the recall fixture follows.
+     */
+    const ASSISTANCE_RECORD_KEY = 'knowledge-dungeon:session:assistance';
+    const SEEDED_RECORD = JSON.stringify({
+      assistanceId: 'default',
+      mode: 'off',
+      signals: {},
+      dismissalCount: 0,
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    });
+    await page.addInitScript(
+      ({ key, record }) => {
+        try {
+          if (window.localStorage.getItem(key) === null) {
+            window.localStorage.setItem(key, record);
+          }
+        } catch {
+          // A storage-disabled host makes this guard a no-op; the assertions below then run
+          // against no record and fail loudly rather than pass silently.
+        }
+      },
+      { key: ASSISTANCE_RECORD_KEY, record: SEEDED_RECORD },
+    );
+
+    const spy = await installAssistanceNetworkSpy(page);
+    const outcome = await driveMissedRecallJourney(page, spy);
+    expect(outcome.premiseFailures, outcome.premiseFailures.join('\n')).toEqual([]);
+    expect(outcome.reading.recallMissed, 'the journey never missed a recall, so no write happened').toBe(
+      true,
+    );
+
+    // The positive control: the missed recall really did load the store to record a signal. If
+    // this is empty the write assertion below is measuring a page that never wrote.
+    expect(
+      spy.scriptPathsMatching(ASSISTANCE_STORE_CHUNK_REQUEST_MATCH),
+      'the missed recall did not load the store, so the persistence guard observed no write',
+    ).not.toEqual([]);
+
+    async function storedMode(): Promise<unknown> {
+      const raw = await page.evaluate(
+        (key) => window.localStorage.getItem(key),
+        ASSISTANCE_RECORD_KEY,
+      );
+      return raw === null ? null : (JSON.parse(raw) as { mode?: unknown }).mode;
+    }
+
+    expect(
+      await storedMode(),
+      'a missed recall on the default build overwrote the learner’s stored assistance mode',
+    ).toBe('off');
+
+    await page.reload();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Knowledge Dungeon' }),
+    ).toBeVisible({ timeout: 30_000 });
+    expect(
+      await storedMode(),
+      'the stored assistance mode did not survive a reload on the default build',
+    ).toBe('off');
+    expect(spy.pageErrors(), `page errors during the reload: ${spy.pageErrors().join(' | ')}`).toEqual([]);
   });
 });

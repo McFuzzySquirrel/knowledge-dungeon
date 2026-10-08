@@ -139,6 +139,19 @@ const STORAGE_V2_SEAMS: ReadonlyMap<string, string> = new Map([
     extensionless(join(SRC, 'store', 'assistanceStore.ts')),
     'dual-writes the legacy mirror; lazily imports the record adapter',
   ],
+  // Phase 22. The assistance **record** module holds the store-free persistence primitives -
+  // the legacy mirror, the untrusted-input parser, and the selected-repository seam - so the
+  // application bootstrap can read a learner's stored assistance record **without fetching the
+  // store chunk**. This is the finding Phase 21 carried forward: `runBootstrap` awaited
+  // `loadAssistanceStore()` on every build, so the production default build made a real
+  // per-launch request for a feature it renders nothing of. It reaches storage-v2 only for the
+  // `AssistanceRecordValue` type (erased at build), exactly like its store sibling above, and
+  // it has no repository handle and no `zustand` - which is what makes the bootstrap able to use
+  // it on a build that never selects storage-v2.
+  [
+    extensionless(join(SRC, 'services', 'assistance', 'assistanceRecord.ts')),
+    'the store-free assistance record: legacy mirror, parser, and read seam',
+  ],
   // Phase 5. The full-device backup product reads a generation through the
   // repository and verifies archive members through the audited ZIP codec; it is
   // the product's own tree and is not in the application graph, which

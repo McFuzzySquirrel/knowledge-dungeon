@@ -1136,46 +1136,31 @@ function oppositeArrowKeys(keys: string): readonly string[] {
 }
 
 /**
- * How long one movement burst may hold its keys, in milliseconds.
+ * A baseline round-trip estimate, in milliseconds.
  *
- * The floor exists because a step is not only the burst - it is the burst plus
- * however long the harness takes to answer the next question, and the villager
- * keeps walking through all of it. A step gains ground only while
- * `PLAYER_SPEED * burst > NPC_SPEED * (burst + roundTrips)`, so under a loaded
- * machine the floor has to rise with the round-trip cost, not sit at a constant
- * measured on an idle one.
- *
- * ## Why this is measured rather than assumed
- *
- * The constant version of this number - sixty milliseconds, derived from a
- * tenth-of-a-second round trip on an idle host - was the third defect in this
- * section, and the most consequential, because it fails *silently*: the burst is
- * simply too short to make progress, so the player keeps walking toward a villager
- * that walks away at the same rate, and the approach never closes. Measured on a
- * host running four Playwright workers with a load average above twelve, a
- * `chromebook` project reached a best approach of 42.5 world pixels against a
- * `INTERACT_RADIUS` of 32, and gave up - not because the villager was hard to
- * reach but because the controller could not win the race under contention.
- *
- * So the round-trip cost is *measured on the page that is failing*, and the floor
- * is derived from it. {@link measureHarnessRoundTripMs} runs once per approach
- * loop; its result is what turns a load-dependent constant into a load-aware one.
+ * The default-village walk seeds its load-aware re-aim interval from this before it
+ * has measured the page (`let roundTripMs = NPC_BURST_FLOOR_MS`), and the NPC
+ * approach's own measurement is clamped at the same floor. The NPC approach no
+ * longer needs a *burst floor*: it keeps its keys down across re-aims, so a burst
+ * that outruns the villager is the normal case rather than something a minimum has
+ * to protect, and the break-even inequality the floor used to enforce cannot be lost
+ * by a player who never stops. See {@link approachNpcUntilInRange}.
  */
 const NPC_BURST_FLOOR_MS = 60;
 
 /**
  * Times one evaluate round trip against the page under test.
  *
- * Deliberately the *same* kind of work the approach loop does - a
+ * Deliberately the *same* kind of work the approach loops do - a
  * `page.evaluate` that returns a small object - because the number that matters
  * is what a `readVillageWorld` costs on this page right now, not what a bare
  * timer costs. Median of several samples rather than the first: the first
  * evaluate after a navigation is unrepresentatively slow and would inflate the
- * floor for the whole approach.
+ * interval for the whole walk.
  *
  * Clamped at both ends. The upper bound stops a pathological stall from producing
- * a burst so long it overshoots the entire village; the lower bound keeps the
- * measurement meaningful if the page is somehow fast enough for the floor never
+ * a poll so long it overshoots the entire village; the lower bound keeps the
+ * measurement meaningful if the page is somehow fast enough for the interval never
  * to matter.
  */
 async function measureHarnessRoundTripMs(page: Page): Promise<number> {
@@ -1191,39 +1176,100 @@ async function measureHarnessRoundTripMs(page: Page): Promise<number> {
 }
 
 /**
- * The burst floor for a page whose round trips cost `roundTripMs`.
+ * The distance, in world pixels, at which pure pursuit gives way to a braked
+ * final approach.
  *
- * Solves `PLAYER_SPEED * burst = NPC_SPEED * (burst + roundTrip)` for `burst`,
- * which is the smallest burst that breaks even rather than losing ground. The
- * constant floor is kept as the floor of this floor, so a fast page behaves
- * exactly as it did before.
+ * Six times the interact radius. Above it the player runs with its keys held, so
+ * the host's evaluate latency costs nothing; below it the player is close enough
+ * that a poll-length sample - player travel *plus* villager travel across a round
+ * trip - can straddle the radius, and the right move is to stop, measure from rest,
+ * and close the remaining gap deliberately.
+ *
+ * Six rather than a tighter multiple is deliberate: the sample length is the round
+ * trip *plus* the poll, and under four-way contention that is ~720 ms, which at the
+ * four-to-one closing speed is ~119 world pixels. A brake line any closer than that
+ * could be crossed in a single sample, so the walk would enter the radius still
+ * holding its keys and overshoot before the `finally` could release them - the exact
+ * oscillation the braked branch exists to prevent. At six radii the worst jump from
+ * outside the line lands at ~73 px, comfortably inside it and still outside the
+ * radius, so the radius is always entered from a stopped braked read.
  */
-function burstFloorMs(roundTripMs: number): number {
-  const breakEven =
-    (NPC_SPEED * roundTripMs) / Math.max(1, PLAYER_SPEED - NPC_SPEED);
-  return Math.max(NPC_BURST_FLOOR_MS, breakEven);
-}
+const NPC_BRAKE_DISTANCE_PX = INTERACT_RADIUS * 6;
+
+/** Longest braked final-approach burst, in milliseconds. */
+const NPC_BRAKE_HOLD_MAX_MS = 500;
 
 /**
- * Approaches an NPC until its row is present, re-aiming inside the step.
+ * The fastest the gap can close, in world pixels per second.
  *
- * ## Why the step is a loop and not a burst
+ * The player walks toward the villager while the villager may walk toward the
+ * player, so this is the worst-case closing speed a transit sample has to stay
+ * inside. Used only to size a sample so it cannot cross the brake line; being
+ * conservative costs nothing, because an undersized sample just re-aims sooner.
+ */
+const NPC_CLOSING_SPEED = PLAYER_SPEED + NPC_SPEED;
+
+/**
+ * Longest continuous-transit poll, in milliseconds.
+ *
+ * The poll is the interval the player keeps moving through while the harness is
+ * *not* talking to the browser, so it is re-aim granularity rather than speed: the
+ * keys stay down either way. It is bounded so a whole sample - the measured round
+ * trip plus the poll - cannot carry the player across the gap from the brake line
+ * to the radius, which is what lets the walk keep its keys down. See
+ * {@link NPC_TRANSIT_MAX_STRIDE_PX}.
+ */
+const NPC_TRANSIT_POLL_MAX_MS = 900;
+
+/**
+ * The most ground one transit sample will try to cover, in world pixels.
+ *
+ * A third of the brake line. Each read is a Playwright `evaluate`, and the real lane
+ * records a trace (`retain-on-failure`), so reads are the expensive unit here: the
+ * previous version polled once per measured round trip, which on a fast host is one
+ * read every ~120 ms, or ~90 reads to cross the map. Combined with the
+ * half-the-remaining-gap rule in the loop, this limit approaches a distant target in
+ * a few long strides while still re-aiming finely near it, and it keeps a sample
+ * from crossing the brake line with its keys down.
+ */
+const NPC_TRANSIT_MAX_STRIDE_PX = NPC_BRAKE_DISTANCE_PX / 3;
+
+/**
+ * Approaches an NPC until it is inside `INTERACT_RADIUS`, re-aiming as it walks.
+ *
+ * ## Why the walk keeps its keys down
  *
  * The original step was open-loop: measure, compute a burst sized to close the
- * whole gap, deliver it. That is correct only while the harness round trips are
- * fast and stable, and this suite's own four parallel workers make that a
+ * whole gap, deliver it, release. That is correct only while the harness round trips
+ * are fast and stable, and this suite's own four parallel workers make that a
  * condition rather than a given. Under contention the pre-burst measurement is
  * stale by the time the keys go down, and the burst is sized for a gap that no
  * longer exists - so it undershoots, and the next step repeats the error from a
- * new stale reading. The failure mode is a controller that converges on the
- * villager's *speed* rather than its position, and it looks exactly like "the
- * target is hard to reach".
+ * new stale reading. It then released the keys and spent the whole next round trip
+ * standing still, so the approach time was really `travel + (roundTrips * rounds)`
+ * and grew with the host's latency rather than with the distance. Measured on this
+ * host: ~185 ms per evaluate, ~1.9 s per round against a 900 ms burst, so more than
+ * half of every round was spent not moving.
  *
- * This version re-measures between bursts inside a single step and stops as soon
- * as the target is inside `INTERACT_RADIUS`. Re-aiming is what matters, not the
- * burst length: a burst that is too short is harmless here because the next one
- * is aimed from a fresh reading, whereas a burst that is too long overshoots into
- * the same failure the cap exists to prevent.
+ * This version re-aims *while moving*: it holds the keys the current heading wants
+ * and changes only the difference, so the player covers ground through the round
+ * trip instead of waiting for it. The approach time is then the distance over the
+ * closing speed, which is what makes it insensitive to host load.
+ *
+ * ## Why it brakes at the end
+ *
+ * Continuous pursuit reads while the player is still moving, so every transit
+ * measurement is already stale by however far the player and the villager moved
+ * across the round trip. That is harmless for a long stride and wrong for the last
+ * few pixels, where it would sail past a villager that had turned and spend several
+ * rounds recovering. Inside {@link NPC_BRAKE_DISTANCE_PX} the walk therefore stops,
+ * reads from rest, and closes the remaining gap in a burst sized to finish short of
+ * the target, so the landing is accurate without ever being aimed from a moving
+ * player's stale position.
+ *
+ * Every branch still terminates on the *observable* fact - the villager's live
+ * scene-graph distance being inside `INTERACT_RADIUS` - and the budget is only the
+ * ceiling that keeps a genuinely stuck approach from hanging.
  *
  * Returns the closest distance reached, which is the number every failure message
  * above reports.
@@ -1234,39 +1280,94 @@ async function approachNpcUntilInRange(
   budgetMs: number,
 ): Promise<number> {
   const deadline = Date.now() + budgetMs;
-  let roundTripMs = NPC_BURST_FLOOR_MS;
   let closest = Number.POSITIVE_INFINITY;
-  let floor = burstFloorMs(roundTripMs);
-  let rounds = 0;
-  while (Date.now() < deadline) {
-    rounds += 1;
-    const world = await readVillageWorld(page);
-    const npc = world.npcs[npcId];
-    if (world.player === null || npc === undefined) {
-      await page.waitForTimeout(60);
-      continue;
-    }
-    const dx = npc.x - world.player.x;
-    const dy = npc.y - world.player.y;
-    const distance = Math.hypot(dx, dy);
-    closest = Math.min(closest, distance);
-    if (distance <= INTERACT_RADIUS) return closest;
-    // Re-measure the harness's own cost every few rounds, so a machine that
-    // becomes loaded mid-approach is noticed rather than waited out.
-    if (rounds % 4 === 1) {
-      roundTripMs = await measureHarnessRoundTripMs(page);
-      floor = burstFloorMs(roundTripMs);
-    }
-    const keys = arrowKeysToward(dx, dy, 3);
-    // Sized to close the gap, but never below the break-even floor: a burst
-    // shorter than that does not gain ground, so a loop of them is a loop that
-    // never arrives.
-    const holdMs = Math.max(floor, Math.min(900, (distance / PLAYER_SPEED) * 1000));
-    for (const key of keys) await page.keyboard.down(key);
-    await page.waitForTimeout(holdMs);
+  let held: readonly string[] = [];
+  /**
+   * Release every held key, exactly once.
+   *
+   * The transit now keeps its keys down across re-aims, so there is no longer a
+   * natural release point at the end of a round; without this the arrow keys would
+   * still be down when the approach returned and the player would keep walking out
+   * of range before the caller could assert anything. One helper, called from the
+   * `finally`, so a throw, a `continue`, and a normal return all release the same way.
+   */
+  const releaseHeld = async (): Promise<void> => {
+    const keys = held;
+    held = [];
     for (const key of keys) await page.keyboard.up(key);
+  };
+  try {
+    // Measured once, *before* the player is moving: the number that matters is the
+    // cost of one re-aim round trip, and measuring it mid-walk would spend the walk
+    // budget on evaluates while the keys were still down. Each unkeyed re-aim's poll
+    // is then the remainder of a distance-sized stride budget, so a slow host
+    // shortens the poll rather than lengthening the stride. The break-even floor the
+    // old burst loop needed is gone: a player who never releases a key cannot lose
+    // ground, so there is no minimum burst left to protect. See
+    // {@link NPC_TRANSIT_MAX_STRIDE_PX}.
+    const roundTripMs = await measureHarnessRoundTripMs(page);
+    while (Date.now() < deadline) {
+      const world = await readVillageWorld(page);
+      const npc = world.npcs[npcId];
+      if (world.player === null || npc === undefined) {
+        await releaseHeld();
+        await page.waitForTimeout(60);
+        continue;
+      }
+      const dx = npc.x - world.player.x;
+      const dy = npc.y - world.player.y;
+      const distance = Math.hypot(dx, dy);
+      closest = Math.min(closest, distance);
+      if (distance <= INTERACT_RADIUS) return closest;
+      const keys = arrowKeysToward(dx, dy, 3);
+      if (distance > NPC_BRAKE_DISTANCE_PX) {
+        // Transit: re-aim in place. Drop only the keys the new heading does not want
+        // and add only the ones it does, so the player moves continuously through the
+        // round trip instead of standing still for it - which is what removes the
+        // host's evaluate latency from the walk.
+        for (const key of held) {
+          if (!keys.includes(key)) await page.keyboard.up(key);
+        }
+        for (const key of keys) {
+          if (!held.includes(key)) await page.keyboard.down(key);
+        }
+        held = keys;
+        // Size the stride from how much ground is left *above the brake line*, so a
+        // distant target is approached in a few long strides and a near one is still
+        // re-aimed finely - and so no single sample can carry the player across the
+        // brake line into the radius with its keys still down.
+        const gapToBrake = Math.max(0, distance - NPC_BRAKE_DISTANCE_PX);
+        const stridePx = Math.max(40, Math.min(gapToBrake * 0.5, NPC_TRANSIT_MAX_STRIDE_PX));
+        const pollMs = Math.max(
+          60,
+          Math.min(NPC_TRANSIT_POLL_MAX_MS, (stridePx / NPC_CLOSING_SPEED) * 1000 - roundTripMs),
+        );
+        await page.waitForTimeout(pollMs);
+      } else {
+        // Brake: the read above happened with the last transit keys still down, so its
+        // distance is stale by however far the player moved across the round trip.
+        // Release, then re-read from rest on the next iteration, so the burst below is
+        // sized against a settled position rather than one the player has left.
+        if (held.length > 0) {
+          await releaseHeld();
+          continue;
+        }
+        // Close the remaining gap in a burst sized to stop short of the target, so the
+        // last approach cannot sail past a wandering villager and spend the next
+        // rounds turning around. The burst is sized against the player's own speed with
+        // a half-radius margin, so an NPC moving toward the player only ever makes the
+        // landing closer, and one moving away undershoots and is corrected next round.
+        const travelPx = Math.max(0, distance - INTERACT_RADIUS * 0.5);
+        const holdMs = Math.max(20, Math.min(NPC_BRAKE_HOLD_MAX_MS, (travelPx / PLAYER_SPEED) * 1000));
+        for (const key of keys) await page.keyboard.down(key);
+        await page.waitForTimeout(holdMs);
+        for (const key of keys) await page.keyboard.up(key);
+      }
+    }
+    return closest;
+  } finally {
+    await releaseHeld();
   }
-  return closest;
 }
 
 /**

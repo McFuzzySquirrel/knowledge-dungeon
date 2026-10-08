@@ -407,9 +407,10 @@ describe('Phase 6 gate 8: nothing outside the product tree reaches it eagerly, a
     // service flag, not a product flag, and naming it here keeps the list closed rather
     // than opening it. Phase 14 added `creatorWorkspace` for the redesigned Creator
     // workspace, Phase 15 added `scribeEncounterWorkspace` for the redesigned Scribe
-    // encounter workspace, and Phase 16 added `archaeologistReviewWorkspace` for the
-    // redesigned Archaeologist review workspace; none is a product flag either. A
-    // fourteenth flag still fails this assertion.
+    // encounter workspace, Phase 16 added `archaeologistReviewWorkspace` for the
+    // redesigned Archaeologist review workspace, and Phase 22 added `offlineShell` for the
+    // offline static-shell service worker; none is a product flag either. A fifteenth flag
+    // still fails this assertion.
     expect(Object.keys(FEATURE_FLAG_MATRIX).sort()).toEqual([
       'adaptiveAssistance',
       'archaeologistReviewWorkspace',
@@ -417,6 +418,7 @@ describe('Phase 6 gate 8: nothing outside the product tree reaches it eagerly, a
       'cozyVisuals',
       'creatorWorkspace',
       'dataProductsV2',
+      'offlineShell',
       'pixiDungeon',
       'pixiFishing',
       'pixiVillage',

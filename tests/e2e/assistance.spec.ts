@@ -231,10 +231,9 @@ test.describe('the flagged assistance lane', () => {
      * default-artifact lane asserts the mirror of exactly this, which is why the pair is evidence
      * and one of them alone is not.
      *
-     * `AssistanceRegion-*` specifically, and not "a lane chunk". The store chunk is fetched by
-     * every build at bootstrap - `runBootstrap` awaits `loadAssistanceStore()` and hydration is
-     * unconditional - so matching it would make this assertion true before the card had rendered
-     * anything at all. See `ASSISTANCE_CARD_CHUNK_STEM`.
+     * `AssistanceRegion-*` specifically, and not "a lane chunk". The store chunk is fetched at
+     * bootstrap on the **flagged** build (which preloads it), so matching it would make this
+     * assertion true before the card had rendered anything at all. See `ASSISTANCE_CARD_CHUNK_STEM`.
      */
     const laneRequests = spy.scriptPathsMatching(ASSISTANCE_CARD_CHUNK_REQUEST_MATCH);
     expect(
@@ -323,13 +322,14 @@ test.describe('the flagged assistance lane', () => {
      * The store chunk, asserted **present**.
      *
      * A lane that only asserted the card chunk's absence would pass on a page that loaded nothing
-     * at all, and a reader checking the pair would find no evidence the page really ran. The store
-     * chunk is fetched by every build at bootstrap - `runBootstrap` awaits
-     * `loadAssistanceStore()`, and the hydration is unconditional on purpose so a learner who set
-     * `off` on the flagged build keeps that mode on the rollback build - so its presence here is
-     * the positive control that the observation below was made on a live application.
+     * at all, and a reader checking the pair would find no evidence the page really ran. On the
+     * flagged build `runBootstrap` preloads the store at boot, so the Welcome route requests the
+     * store chunk and its presence here is the positive control that the observation below was
+     * made on a live application.
      *
-     * Measured, not assumed: it is exactly what the flagged Welcome route requests of the lane.
+     * Phase 22 note: this presence is a property of the **flagged** build. The default build no
+     * longer requests the store chunk at boot, and the default lane asserts that absence; this
+     * lane asserts the flagged build still loads its lane.
      */
     expect(
       spy.scriptPathsMatching(ASSISTANCE_STORE_CHUNK_REQUEST_MATCH),

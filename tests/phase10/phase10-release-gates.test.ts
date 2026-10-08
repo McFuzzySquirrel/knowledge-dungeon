@@ -49,7 +49,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -419,27 +419,141 @@ describe('the audio and asset paths make no network request and cache nothing', 
     expect(isSameOriginRelativeAudioUrl('//cdn.example.invalid/a.wav')).toBe(false);
     expect(isSameOriginRelativeAudioUrl('assets/audio/theme.ogg')).toBe(false);
   });
+});
 
-  it('nothing in the application registers a service worker, so nothing caches learner data', () => {
-    // The offline rule is that a static shell may be cached and learner data may not.
-    // The strictest way to satisfy that today is that there is no worker at all, and the
-    // cheapest way to lose it is a well-meaning `navigator.serviceWorker.register` in one
-    // place - so the absence is a gate rather than a fact someone remembers.
-    const offenders: string[] = [];
-    const walk = (directory: string): void => {
-      for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
-        const full = path.join(directory, entry.name);
-        if (entry.isDirectory()) {
-          walk(full);
-          continue;
-        }
-        if (!/\.(?:ts|tsx|js|mjs|cjs|html)$/.test(entry.name)) continue;
-        const code = stripComments(readFileSync(full, 'utf8'));
-        if (/serviceWorker|workbox|caches\./.test(code)) offenders.push(path.relative(REPO_ROOT, full));
-      }
-    };
-    walk(path.join(REPO_ROOT, 'src'));
-    walk(path.join(REPO_ROOT, 'public'));
-    expect(offenders).toEqual([]);
+/**
+ * Phase 22's offline static shell is the one new place in the application that can write a
+ * cache.
+ *
+ * This file used to hold a single test asserting that nothing in `src/` or `public/`
+ * mentioned `serviceWorker`, `workbox`, or `caches.` - the strictest true statement before
+ * Phase 22, and false by design now. Deleting it would leave the worker ungated; allowing
+ * the two new files by name would assert nothing about what the worker caches. The
+ * replacement states the property the absence was a proxy for, structurally and against
+ * the implementation: the shell precaches only the build-time manifest derived from
+ * `dist/index.html`, and neither the worker nor its registration wrapper reaches IndexedDB
+ * or a learner-data path.
+ *
+ * Non-vacuity: each test asserts the file it reads is a real implementation before it
+ * asserts anything about it, so an empty or renamed file fails rather than passing silently.
+ * A planted IndexedDB reference or a new hard-coded cache path is proven to fail this gate
+ * in the Phase 22 gate-sensitivity record.
+ */
+describe('the Phase 22 offline shell caches only shell bytes and has no learner-data path', () => {
+  const WORKER_PATH = 'public/sw.js';
+  const REGISTRATION_PATH = 'src/services/offlineShell.ts';
+  const GENERATOR_PATH = 'scripts/generate-offline-shell.mjs';
+
+  it('the worker precaches only the manifest-named shell assets, and never touches IndexedDB', () => {
+    for (const file of [WORKER_PATH, REGISTRATION_PATH, GENERATOR_PATH]) {
+      expect(existsSync(path.join(REPO_ROOT, file)), file).toBe(true);
+    }
+
+    const workerSource = readFileSync(path.join(REPO_ROOT, WORKER_PATH), 'utf8');
+    // Comments are blanked first: the worker's header *describes* IndexedDB and the
+    // learner-data rule at length, and a scan that fired on its own documentation would be
+    // the wrong gate. The raw text is separately required to name IndexedDB, so the rule is
+    // documented *and* the code is checked.
+    const workerCode = stripComments(workerSource);
+    expect(workerSource).toContain('indexedDB');
+    for (const forbidden of [
+      'indexedDB',
+      'localStorage',
+      'sessionStorage',
+      'openDatabase',
+      'IDBKeyRange',
+    ]) {
+      expect(workerCode, `${WORKER_PATH} must not use ${forbidden}`).not.toContain(forbidden);
+    }
+
+    // Non-vacuity: a real worker, and its cache allowlist is the generated manifest rather
+    // than a literal list written into the worker.
+    expect(workerCode.length, `${WORKER_PATH} is empty`).toBeGreaterThan(1000);
+    expect(workerCode).toContain("importScripts('offline-shell-manifest.js')");
+    expect(workerCode).toContain('MANIFEST.assets');
+    expect(workerCode).toContain('SHELL_ASSET_PATHS.has(');
+
+    // Every absolute-path string literal in the worker is one of the two reviewed deny-list
+    // entries. A learner-data cache path - `cache.put('/subjects/...')`,
+    // `cache.addAll(['/notes/...'])`, or a new server route - appears here as a new literal
+    // and fails by name. The document and the asset allowlist come from the manifest, not
+    // from a literal, so this list is expected to stay at exactly these two.
+    const absolutePathLiterals = [...workerCode.matchAll(/['"`](\/[^'"`\n]*)['"`]/g)]
+      .map((match) => match[1] as string)
+      .sort();
+    expect(absolutePathLiterals, 'a hard-coded cache path was added to the worker').toEqual([
+      '/api/',
+      '/uploads/',
+    ]);
+  });
+
+  it('the registration wrapper is flag-gated and reaches no learner storage', () => {
+    const registrationSource = readFileSync(path.join(REPO_ROOT, REGISTRATION_PATH), 'utf8');
+    const registrationCode = stripComments(registrationSource);
+    // Non-vacuity: the module really registers a worker.
+    expect(registrationCode).toContain('navigator.serviceWorker.register');
+    // ...and it is inert unless the build set the flag: it self-registers only on the
+    // flagged build, and the guard is the flag value, not an ambient condition.
+    expect(registrationCode).toContain("import.meta.env.VITE_OFFLINE_SHELL === 'true'");
+    for (const forbidden of [
+      'indexedDB',
+      'localStorage',
+      'sessionStorage',
+      'caches.',
+      'openDatabase',
+      'IDBKeyRange',
+    ]) {
+      expect(registrationCode, `${REGISTRATION_PATH} must not use ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('the shell manifest is generated from dist/index.html, never from a glob of dist', () => {
+    // The property that keeps learner data out of the cache *by construction*: the
+    // allowlist is the set of assets the emitted document references, so an
+    // emitted-but-unreferenced file can never be named. A generator that globbed `dist/`
+    // would replace that derivation with "whatever is on disk", which is exactly how a
+    // learner-data path could enter the cache, so the glob surfaces are asserted absent.
+    const generatorSource = readFileSync(path.join(REPO_ROOT, GENERATOR_PATH), 'utf8');
+    const generatorCode = stripComments(generatorSource);
+    // Non-vacuity: a real generator that reads a real document and writes a real manifest.
+    expect(generatorCode).toContain('readFileSync');
+    expect(generatorCode).toContain('writeFileSync');
+    expect(generatorCode).toMatch(/index\.html/);
+    for (const globPrimitive of [
+      'readdirSync',
+      'readdir(',
+      'globSync',
+      'glob(',
+      'fast-glob',
+      'createReadStream',
+    ]) {
+      expect(generatorCode, `the generator must not glob the dist tree: ${globPrimitive}`).not.toContain(
+        globPrimitive,
+      );
+    }
+  });
+
+  it('the web app manifest carries app metadata only, not a learner-data key', () => {
+    const manifestPath = path.join(REPO_ROOT, 'public', 'manifest.webmanifest');
+    expect(existsSync(manifestPath)).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+    const allowedKeys = [
+      'name',
+      'short_name',
+      'description',
+      'start_url',
+      'scope',
+      'display',
+      'background_color',
+      'theme_color',
+      'icons',
+    ] as const;
+    for (const key of Object.keys(manifest)) {
+      expect(allowedKeys, `unexpected web app manifest key: ${key}`).toContain(key);
+    }
+    // The values are app metadata; none may be a learner-shaped value or a server data route.
+    const serialised = JSON.stringify(manifest);
+    expect(serialised).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+    expect(serialised).not.toMatch(/\/(?:api|uploads)\//);
   });
 });

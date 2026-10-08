@@ -87,6 +87,22 @@
  *   `preferencesStore.ts` uses, and it is one of the two reasons this store is safe against
  *   the Welcome initial-payload budget.
  *
+ * ## Phase 22 moved the record half out, and the store now starts from it
+ *
+ * The primitives above - the key, the parser, the legacy mirror, and the read seam - now live in
+ * `@/services/assistance/assistanceRecord`, and this module re-exports them unchanged. The reason
+ * is a Phase 21 finding: `runBootstrap` awaited `loadAssistanceStore()` on **every** build, so
+ * the production default build fetched `assistanceStore-*.js` on every launch for a feature it
+ * renders nothing of. The bootstrap now reads the record through the record module - which has no
+ * `zustand` - and this store is fetched only when a build actually uses it: the flagged build
+ * preloads it, and a default build loads it on the first write (`bumpSignals`).
+ *
+ * Because that first write rebuilds the whole record from in-memory state, this store reads the
+ * record module's pending record **into its initial state**. Without it, a store created by that
+ * first write would start from the pre-hydration `standard` and overwrite a learner's stored
+ * `off`. See `tests/unit/assistanceLateLoadPersistence.test.ts` for the guard, and the record
+ * module's header for the bridge.
+ *
  * ## Nothing here reads a clock to decide anything
  *
  * `updatedAt` is the one timestamp this module writes, it comes from an injected `now()`
@@ -110,209 +126,49 @@ import {
   currentStorageV2Repository,
   isStorageV2Selected,
 } from '@/services/persistence/v2/repositorySelection';
+import type { AssistanceRecordValue } from '@/services/persistence/v2/schema';
+import {
+  ASSISTANCE_STORAGE_KEY,
+  DEFAULT_ASSISTANCE_DISMISSAL_COUNT,
+  DEFAULT_ASSISTANCE_ID,
+  DEFAULT_ASSISTANCE_MODE,
+  __resetAssistanceRecordForTests,
+  bindAssistanceStoreHydration,
+  currentAssistanceSource,
+  parseAssistanceRecord,
+  pendingAssistanceRecord,
+  readAssistanceWithSource,
+  readPersistedAssistance,
+  setAssistanceSource,
+  writePersistedAssistance,
+} from '@/services/assistance/assistanceRecord';
 import type {
-  AssistanceMode as PersistedAssistanceMode,
-  AssistanceRecordValue,
-} from '@/services/persistence/v2/schema';
+  AssistanceSource,
+  PersistedAssistancePayload,
+} from '@/services/assistance/assistanceRecord';
 
 /**
- * The engine's mode vocabulary and the persistence contract's must be the **same set**.
+ * The public persistence surface, re-exported for the callers and tests that have always
+ * imported it from here.
  *
- * `src/core/assistance/types.ts` declares its own `AssistanceMode` rather than importing the
- * persisted one, because a `src/core/` module must not reach into `src/services/` even for a
- * type - that edge is what eventually becomes a runtime import. The cost of the duplication is
- * a drift risk, so this is where it is paid off: a `src/store/` module *may* import the
- * persistence schema, and this bidirectional assignability check is a **typecheck failure** if
- * either declaration adds, removes, or renames a mode.
- *
- * So "do not add a fourth mode" is enforced by the compiler rather than by review, and it
- * stays enforced without anyone having to remember this file exists.
- *
- * Written with `extends` on both sides rather than an equality helper so the failure mode is
- * a type error at the assignment below, pointing at this line, rather than a runtime check
- * somebody could delete.
+ * Phase 22 moved the implementations to `@/services/assistance/assistanceRecord` so the
+ * application bootstrap can read a record **without fetching this module** (the fetch was the
+ * per-launch request on the production default build). The names are unchanged, so every
+ * existing import keeps working; this module is now the store half of the contract, and the
+ * record module is the persistence half. See that module's header for the bridge that keeps a
+ * stored mode from being overwritten when the store loads after the bootstrap.
  */
-type _EngineModeMatchesPersistence = AssistanceMode extends PersistedAssistanceMode
-  ? PersistedAssistanceMode extends AssistanceMode
-    ? true
-    : never
-  : never;
-const _engineModeMatchesPersistence: _EngineModeMatchesPersistence = true;
-void _engineModeMatchesPersistence;
-
-/**
- * The legacy mirror key.
- *
- * A `knowledge-dungeon:session:` key, matching the preferences and shortcuts families, and
- * distinct from every key the Phase 3 migration reads - so adding it cannot change what a
- * migration sees on a device that has never used assistance.
- */
-export const ASSISTANCE_STORAGE_KEY = 'knowledge-dungeon:session:assistance';
-
-/** The record id this build writes. Stable, so a rewrite supersedes rather than duplicates. */
-export const DEFAULT_ASSISTANCE_ID = 'default';
-
-/** The documented pre-hydration mode. */
-export const DEFAULT_ASSISTANCE_MODE: AssistanceMode = 'standard';
-
-/** The documented pre-hydration dismissal count. */
-export const DEFAULT_ASSISTANCE_DISMISSAL_COUNT = 0;
-
-// ── Untrusted input ──────────────────────────────────────────────────────────
-
-/**
- * The legacy mirror's payload, as read from `localStorage`.
- *
- * `unknown`-shaped on purpose, exactly like `PersistedPreferencesValue`: this is read from
- * `localStorage` and from a storage-v2 generation, so a stored value can have any type, and
- * the store coerces rather than trusting. Typing it precisely here would assert a guarantee
- * this layer cannot make and would make the coercion look redundant.
- */
-export interface PersistedAssistancePayload {
-  readonly mode?: unknown;
-  readonly signals?: unknown;
-  readonly dismissalCount?: unknown;
-}
-
-/**
- * Read and normalize one assistance record from untrusted input.
- *
- * Total, and never throws: this value arrives from `localStorage`, a restored `.kdbak`, a
- * `.kdsubject`, or a hand-edited generation, and those are exactly the places where a
- * throwing parse turns a corrupt preference into a blank application.
- *
- * Every field is coerced rather than rejected, and the coercion is a *narrowing* one:
- *
- * - `mode` - an unrecognised value becomes {@link DEFAULT_ASSISTANCE_MODE}, not `'off'`.
- *   That direction matters: a corrupted mode must never be the reason a learner silently
- *   loses every suggestion they had configured, and `'off'` is the one value whose
- *   accidental arrival would be invisible.
- * - `signals` - a non-object becomes `{}`; each kept number is coerced by
- *   {@link mergeAssistanceSignals}, which turns `NaN`, `Infinity`, and negatives into `0` and
- *   preserves keys this build does not know.
- * - `dismissalCount` - `NaN` and negatives become `0`.
- *
- * `null` means "this payload holds nothing usable", and callers treat it as the documented
- * defaults rather than as an error.
- */
-export function parseAssistanceRecord(value: unknown): AssistanceRecordValue | null {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-
-  const mode = isAssistanceMode(record.mode) ? record.mode : DEFAULT_ASSISTANCE_MODE;
-  const rawSignals =
-    typeof record.signals === 'object' && record.signals !== null && !Array.isArray(record.signals)
-      ? (record.signals as AssistanceSignals)
-      : {};
-  const dismissalCount =
-    typeof record.dismissalCount === 'number' && Number.isFinite(record.dismissalCount)
-      ? Math.max(0, Math.trunc(record.dismissalCount))
-      : DEFAULT_ASSISTANCE_DISMISSAL_COUNT;
-
-  return {
-    assistanceId: typeof record.assistanceId === 'string' && record.assistanceId.length > 0
-      ? record.assistanceId
-      : DEFAULT_ASSISTANCE_ID,
-    mode,
-    signals: mergeAssistanceSignals(rawSignals, null),
-    dismissalCount,
-    updatedAt:
-      typeof record.updatedAt === 'string' && record.updatedAt.length > 0
-        ? record.updatedAt
-        : '',
-  };
-}
-
-function hasWindow(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
-}
-
-/** The legacy repository's read. Synchronous, and `null` when nothing usable is stored. */
-export function readPersistedAssistance(): AssistanceRecordValue | null {
-  if (!hasWindow()) return null;
-  try {
-    const raw = window.localStorage.getItem(ASSISTANCE_STORAGE_KEY);
-    if (!raw) return null;
-    return parseAssistanceRecord(JSON.parse(raw) as unknown);
-  } catch {
-    return null;
-  }
-}
-
-/** The legacy mirror's write. Returns `false` rather than throwing, as every mirror here does. */
-function writePersistedAssistance(record: AssistanceRecordValue): boolean {
-  if (!hasWindow()) return false;
-  try {
-    window.localStorage.setItem(ASSISTANCE_STORAGE_KEY, JSON.stringify(record));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ── The storage-v2 lane ──────────────────────────────────────────────────────
-
-/**
- * An alternative read path for assistance records, injected by the bootstrap.
- *
- * The same shape as `SessionSource` in `src/services/sessionTracker.ts`, and for the same
- * reason: it keeps `src/store/` free of a hard dependency on the storage-v2 repository, so
- * a test can install a fake without touching module state, and so the default build carries
- * no storage-v2 bytes on this path.
- */
-export interface AssistanceSource {
-  list(): Promise<AssistanceRecordValue[]>;
-}
-
-let assistanceSource: AssistanceSource | null = null;
-
-/**
- * Install the storage-v2 read path. Called once by the application bootstrap.
- *
- * Passing `null` restores legacy-only behaviour, which is what the default build uses and what
- * a rollback build needs.
- */
-export function setAssistanceSource(source: AssistanceSource | null): void {
-  assistanceSource = source;
-}
-
-/** The installed source, or `null` on the legacy path. Test support and diagnostics. */
-export function currentAssistanceSource(): AssistanceSource | null {
-  return assistanceSource;
-}
-
-/**
- * Read the record from the selected repository, or `null`.
- *
- * Mirrors `loadSessionsWithSource`: the legacy key is read first and on its own so the default
- * build is untouched, the injected source's records are layered on top, and a source that
- * rejects falls back to the legacy read rather than losing the learner's mode. De-duplicated
- * by `assistanceId`, with the source winning, because storage-v2 is authoritative on the
- * flagged build.
- */
-async function readAssistanceWithSource(): Promise<AssistanceRecordValue | null> {
-  const legacy = readPersistedAssistance();
-  if (assistanceSource === null) return legacy;
-  let fromSource: AssistanceRecordValue | null = null;
-  try {
-    const listed = await assistanceSource.list();
-    // Highest id in code-unit order, so the choice is a property of the data rather than of
-    // the order the repository happened to return records in.
-    const parsed = listed
-      .map(parseAssistanceRecord)
-      .filter((record): record is AssistanceRecordValue => record !== null);
-    fromSource =
-      parsed.length === 0
-        ? null
-        : parsed.reduce((best, record) =>
-            record.assistanceId > best.assistanceId ? record : best,
-          );
-  } catch {
-    return legacy;
-  }
-  if (fromSource === null) return legacy;
-  return fromSource;
-}
+export {
+  ASSISTANCE_STORAGE_KEY,
+  DEFAULT_ASSISTANCE_DISMISSAL_COUNT,
+  DEFAULT_ASSISTANCE_ID,
+  DEFAULT_ASSISTANCE_MODE,
+  currentAssistanceSource,
+  parseAssistanceRecord,
+  readPersistedAssistance,
+  setAssistanceSource,
+};
+export type { AssistanceSource, PersistedAssistancePayload };
 
 /**
  * Publish the record to the storage-v2 generation, keyed by its own `assistanceId`.
@@ -501,12 +357,38 @@ function buildRecord(state: Pick<AssistanceState, 'mode' | 'signals' | 'dismissa
   };
 }
 
+/**
+ * The state a store created after the bootstrap starts from.
+ *
+ * On the flagged build the store is loaded before the bootstrap reads anything, so the pending
+ * record is `null` and this is the documented pre-hydration default; the bootstrap then
+ * hydrates it. On the default build the store is **not** fetched at boot, so when a consumer
+ * finally loads it - a missed-recall `bumpSignals`, for instance - the record the bootstrap
+ * read is waiting here. Reading it at creation is what makes the first later *write* rebuild
+ * the record from the learner's stored mode rather than from the pre-hydration default, which
+ * is the persistence regression the record module's bridge exists to prevent.
+ */
+function initialStateFromPending(): Pick<AssistanceState, 'mode' | 'signals' | 'dismissalCount'> {
+  const pending = pendingAssistanceRecord();
+  const normalized = pending === null ? null : parseAssistanceRecord(pending);
+  return normalized === null
+    ? {
+        mode: DEFAULT_ASSISTANCE_MODE,
+        signals: {},
+        dismissalCount: DEFAULT_ASSISTANCE_DISMISSAL_COUNT,
+      }
+    : {
+        mode: normalized.mode,
+        signals: normalized.signals,
+        dismissalCount: normalized.dismissalCount,
+      };
+}
+
 export const useAssistanceStore = create<AssistanceState>((set, get) => ({
-  // The documented pre-hydration state. A device with no stored record hydrates to exactly
-  // these values, so nothing renders differently before and after hydration.
-  mode: DEFAULT_ASSISTANCE_MODE,
-  signals: {},
-  dismissalCount: DEFAULT_ASSISTANCE_DISMISSAL_COUNT,
+  // The documented pre-hydration state, or the bootstrap's pending record when this store is
+  // loading after the bootstrap. A device with no stored record gets exactly these defaults, so
+  // nothing renders differently before and after hydration.
+  ...initialStateFromPending(),
 
   hydrateAssistance(record) {
     if (record === null) {
@@ -602,6 +484,20 @@ export const useAssistanceStore = create<AssistanceState>((set, get) => ({
 }));
 
 /**
+ * Bind this store into the record module's bridge.
+ *
+ * The bootstrap runs `readAssistance` and then `applyAssistanceRecord`; when this store has
+ * already loaded (the flagged build preloads it, and every unit test imports it statically),
+ * the bridge reaches this binding and hydrates synchronously - byte-identical to the
+ * pre-Phase-22 `assistanceStore()...hydrateAssistance` default. When the store loads *after*
+ * the bootstrap, {@link initialStateFromPending} has already consumed the pending record, so
+ * the binding is what keeps every later `applyAssistanceRecord` from being a no-op.
+ */
+bindAssistanceStoreHydration((record) => {
+  useAssistanceStore.getState().hydrateAssistance(record);
+});
+
+/**
  * The live record for a write, for a caller that wants to inspect rather than set it.
  *
  * The store's in-memory state is the authority for the current session; this projects it into
@@ -646,7 +542,7 @@ export function selectAssistanceDismissalSummary(
 
 /** Reset module-level state. Test teardown only. */
 export function __resetAssistanceStoreForTests(): void {
-  assistanceSource = null;
+  __resetAssistanceRecordForTests();
   writeQueue = Promise.resolve();
   useAssistanceStore.setState({
     mode: DEFAULT_ASSISTANCE_MODE,
