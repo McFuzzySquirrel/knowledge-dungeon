@@ -96,10 +96,35 @@ const FORBIDDEN_APP_PATH_PATTERNS: readonly RegExp[] = [
   /(?:analytics|telemetry|remote[-_]?config)/i,
 ];
 
+/**
+ * Exact same-origin paths of the offline static-shell build.
+ *
+ * Phase 23 made the offline shell a production default (`VITE_OFFLINE_SHELL` is now
+ * `true`), so the emitted artifact references `manifest.webmanifest` through a
+ * `<link rel="manifest">` and carries `sw.js` and `offline-shell-manifest.js` at the
+ * dist root. WebKit fetches the manifest as a network request (resource type `other`)
+ * while Chromium does not surface it the same way, which is why only the WebKit
+ * compatibility cell saw it. They are same-origin, build-time, static files - not
+ * learner data, not app endpoints, not external origins - so the static-only policy
+ * permits them. The paths are matched exactly (anchored), never as a prefix, so an
+ * arbitrary root-level path such as `/sw.js.bak` is still a violation.
+ */
+export const OFFLINE_SHELL_STATIC_PATHS: readonly string[] = Object.freeze([
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/offline-shell-manifest.js',
+]);
+
+/** Anchors a literal pathname so one shell file cannot admit a sibling path. */
+function exactPathPattern(pathname: string): RegExp {
+  return new RegExp('^' + pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$');
+}
+
 const ALLOWED_LOCAL_STATIC_PATHS: readonly RegExp[] = [
   /^\/$/,
   /^\/favicon\.ico$/,
   /^\/assets\//,
+  ...OFFLINE_SHELL_STATIC_PATHS.map(exactPathPattern),
 ];
 
 const PHASER_VENDOR_CHUNK_PATTERN = /^\/assets\/vendor-phaser-[^/]+\.js$/;

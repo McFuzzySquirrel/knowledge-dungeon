@@ -42,6 +42,11 @@ import { supportEntryForProject } from './support-matrix';
 // on without an environment variable, so `process.env` would describe a different
 // artifact than the one this spec runs against.
 import { defaultDistDir, readCompiledBooleanFlag } from './baked-flag';
+// The offline static shell's exact same-origin paths, shared with the Phase 1A
+// classifier rather than restated here: after the Phase 23 cutover the production
+// artifact links `manifest.webmanifest` and carries `sw.js` /
+// `offline-shell-manifest.js`, and they are legitimate static files of the shell.
+import { OFFLINE_SHELL_STATIC_PATHS } from './compat-evidence';
 // The authored village content and the two shared numbers the NPC behaviour below
 // is measured against, imported rather than restated.
 //
@@ -158,7 +163,8 @@ function inspectPrivacyNetwork(
     const isStaticPath =
       url.pathname === '/' ||
       url.pathname === '/favicon.ico' ||
-      url.pathname.startsWith('/assets/');
+      url.pathname.startsWith('/assets/') ||
+      OFFLINE_SHELL_STATIC_PATHS.includes(url.pathname);
     if (!isStaticPath) {
       violations.push(`unexpected non-static local destination: ${method} ${url.pathname}`);
     }

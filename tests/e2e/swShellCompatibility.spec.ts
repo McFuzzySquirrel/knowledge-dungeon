@@ -35,6 +35,7 @@ import path from 'node:path';
 import { expect, test, type Request, type TestInfo } from '@playwright/test';
 
 import {
+  OFFLINE_SHELL_STATIC_PATHS,
   buildLocalRunId,
   buildNetworkPolicyReport,
   classifyRequestLike,
@@ -244,14 +245,18 @@ test('the shell stays a same-origin static client with the service worker enable
   expect(report.requestsByDestination['local-non-static'] ?? 0, 'a non-static local request appeared').toBe(0);
   expect(report.webSockets.total).toBe(0);
 
-  // Every same-origin path the journey touched is the document, the favicon, or a
-  // build asset under `/assets/`. This is the concrete form of "no non-static
-  // request": the application may lazily fetch additional same-origin asset chunks
-  // (they are static and the privacy policy permits them), but it may not reach a
-  // document, an API route, an upload path, or any other non-asset path.
+  // Every same-origin path the journey touched is the document, the favicon, a build
+  // asset under `/assets/`, or one of the offline static shell's own files. This is the
+  // concrete form of "no non-static request": the application may lazily fetch additional
+  // same-origin asset chunks (they are static and the privacy policy permits them), and
+  // the shell-enabled artifact legitimately carries `manifest.webmanifest`, `sw.js`, and
+  // `offline-shell-manifest.js`, but it may not reach a document, an API route, an upload
+  // path, or any other non-asset path. The shell paths are the shared, exact list from
+  // `compat-evidence.ts`, so this duplicate allowlist cannot drift from the classifier's.
   const unexpectedPaths = observedPaths.filter((pathname) => {
     if (pathname === '/' || pathname === '/favicon.ico') return false;
-    return !pathname.startsWith('/assets/');
+    if (pathname.startsWith('/assets/')) return false;
+    return !OFFLINE_SHELL_STATIC_PATHS.includes(pathname);
   });
   expect(
     unexpectedPaths,

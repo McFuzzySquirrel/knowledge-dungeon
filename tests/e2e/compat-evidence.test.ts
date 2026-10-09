@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   COMPAT_EVIDENCE_SCHEMA_VERSION,
+  OFFLINE_SHELL_STATIC_PATHS,
   buildLocalRunId,
   buildNetworkPolicyReport,
   classifyRequestLike,
@@ -186,6 +187,64 @@ describe('failure-path privacy: request capture boundary', () => {
     expect(sanitized).toContain('dist-does-not-match-recorded-artifact');
     expect(sanitized).toContain('<redacted>');
     expect(sanitized).not.toContain('d73bc03b73951ac1a4db0a4a50f6b2c6592de2928135683b1ffb4016ee03d1cc');
+  });
+});
+
+describe('static-only policy: the offline shell files, and the paths that must stay out', () => {
+  function destinationOf(pathname: string, resourceType = 'other'): string {
+    return classifyRequestLike(
+      requestLike({ url: `${LOCAL_ORIGIN}${pathname}`, resourceType }),
+      LOCAL_ORIGIN,
+    ).destination;
+  }
+
+  it('permits the offline static-shell files, which the Phase 23 cutover made production defaults', () => {
+    // The WebKit observation that failed the compat cell: `manifest.webmanifest` is
+    // fetched as a network request and surfaces with resource type `other`.
+    for (const shellPath of OFFLINE_SHELL_STATIC_PATHS) {
+      expect(destinationOf(shellPath), shellPath).toBe('local-static');
+    }
+    expect(destinationOf('/manifest.webmanifest', 'other')).toBe('local-static');
+    expect(destinationOf('/sw.js', 'other')).toBe('local-static');
+    expect(destinationOf('/offline-shell-manifest.js', 'script')).toBe('local-static');
+  });
+
+  it('anchors each shell path, so a near miss is still a violation', () => {
+    // The red proof that the allowlist did not become a prefix wildcard.
+    const nearMisses = [
+      '/manifest.webmanifest.bak',
+      '/manifestXwebmanifest',
+      '/sw.js.map',
+      '/sub/sw.js',
+      '/offline-shell-manifest.js.tmp',
+      '/sw.js/',
+    ];
+    for (const nearMiss of nearMisses) {
+      expect(destinationOf(nearMiss), nearMiss).toBe('local-non-static');
+    }
+    const report = buildNetworkPolicyReport([
+      classifyRequestLike(requestLike({ url: `${LOCAL_ORIGIN}${nearMisses[0]}` }), LOCAL_ORIGIN),
+    ]);
+    expect(report.violations.map((violation) => violation.category)).toContain(
+      'non-static-local-path',
+    );
+  });
+
+  it('still rejects a forbidden app endpoint and an arbitrary non-static path', () => {
+    const upload = classifyRequestLike(
+      requestLike({ url: `${LOCAL_ORIGIN}/api/upload`, method: 'POST', resourceType: 'fetch' }),
+      LOCAL_ORIGIN,
+    );
+    expect(upload.destination).toBe('local-app-endpoint');
+    expect(
+      buildNetworkPolicyReport([upload], []).violations.map((violation) => violation.category),
+    ).toContain('forbidden-app-destination');
+
+    const arbitrary = classifyRequestLike(
+      requestLike({ url: `${LOCAL_ORIGIN}/learner/state`, resourceType: 'document' }),
+      LOCAL_ORIGIN,
+    );
+    expect(arbitrary.destination).toBe('local-non-static');
   });
 });
 
