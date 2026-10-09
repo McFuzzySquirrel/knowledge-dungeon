@@ -167,7 +167,15 @@ describe('the Audio tab', () => {
     render(<SettingsModal currentTheme="dark" onThemeChange={() => {}} onClose={() => {}} />);
 
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Theme', 'Language', 'Shortcuts', 'Audio']);
+    // Phase 23 turns on Gentle assistance by default, so the Assistance settings tab is
+    // present in the default build alongside the audio tab.
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Theme',
+      'Language',
+      'Shortcuts',
+      'Audio',
+      'Assistance',
+    ]);
     expect(screen.getByRole('tab', { name: 'Audio' })).toHaveAttribute('aria-selected', 'false');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Audio' }));

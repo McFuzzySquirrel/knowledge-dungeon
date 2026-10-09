@@ -83,9 +83,11 @@ afterEach(() => {
 });
 
 describe('the flag contract', () => {
-  it('defaults the Scribe workspace off in production and keeps it out of the non-cutover set', () => {
-    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.productionDefault).toBe(false);
-    expect(DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace).toBe(false);
+  it('defaults the Scribe workspace on in production and keeps it out of the non-cutover set', () => {
+    // Phase 23 makes the redesigned workspace the production default; `false` is the
+    // one-release rollback, and the workspace is a cutover flag rather than a kill switch.
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.productionDefault).toBe(true);
+    expect(DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace).toBe(true);
     expect(NON_CUTOVER_FLAG_KEYS).not.toContain('scribeEncounterWorkspace');
     expect(RUNTIME_FLAG_ENV_KEYS.scribeEncounterWorkspace).toBe('VITE_SCRIBE_ENCOUNTER_WORKSPACE');
     // The rollback sentence has to name the same variable a learner would set.

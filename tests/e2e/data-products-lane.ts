@@ -9,11 +9,10 @@
  * ## Why a separate config rather than a second spec in the existing lane
  *
  * The lane needs the **flagged** artifact: Phase 5's exit criterion 1 is a
- * round trip of a *populated storage-v2 state*, and the default build never opens
- * storage-v2 at all (the production default stays `VITE_STORAGE_REPOSITORY=legacy`
- * until a later reviewed cutover). So this lane previews exactly the same `dist`
- * the Phase 4 `storage-v2-browser` job built, and it must not build a second
- * artifact.
+ * round trip of a *populated storage-v2 state*. After the Phase 23 cutover the
+ * production default is `VITE_STORAGE_REPOSITORY=v2` too, so this lane previews
+ * exactly the same `dist` the Phase 4 `storage-v2-browser` job built - one build,
+ * one recorded identity - and it must not build a second artifact.
  *
  * It is a separate *config* rather than a second spec inside
  * `playwright.storage-v2.config.ts` because that config binds one project to one
@@ -101,16 +100,17 @@ export const DATA_PRODUCTS_BUILD_SCRIPT = 'build:storage-v2-flagged';
  * The build script CI uses, and the one `test:e2e:data-products:full` uses locally.
  *
  * A strict **superset** of {@link DATA_PRODUCTS_BUILD_SCRIPT}: the same
- * `--mode storage-v2` build off the same `.env.storage-v2`, with one extra flag
- * value in the environment. That is what keeps the single-build property true -
- * one artifact, built once, serves both the Phase 4 lane and this one - while the
- * Phase 4 lane's own product-free build script stays available for
- * `npm run test:e2e:storage`, so the two phases remain independently verifiable.
+ * `--mode storage-v2` build off the same `.env.storage-v2`, with `VITE_DATA_PRODUCTS_V2`
+ * pinned true in the process environment. That is what keeps the single-build property
+ * true - one artifact, built once, serves both the Phase 4 lane and this one - while
+ * the base build script stays available for `npm run test:e2e:storage`, so the two
+ * phases remain independently scriptable.
  *
- * The owner flag is set in the environment rather than in `.env.storage-v2`
- * because that file is a Phase 4 committed artifact whose contents are asserted by
- * `storage-v2-lane.test.ts`. `scripts/build-flagged-data-products.mjs` explains the
- * mechanism and why it is a script rather than a shell assignment.
+ * Since the Phase 23 cutover the owner flag defaults on, so the base and superset
+ * builds carry the product either way; the two scripts stay distinct so a future change
+ * to the production default cannot silently move one lane and not the other. The owner
+ * flag is set in the environment rather than in `.env.storage-v2` because that file is a
+ * Phase 4 committed artifact whose contents are asserted by `storage-v2-lane.test.ts`.
  */
 export const DATA_PRODUCTS_SUPERSET_BUILD_SCRIPT = 'build:storage-v2-data-products';
 
@@ -152,7 +152,7 @@ export interface DataProductsLaneDeclaration {
   readonly testFile: string;
   readonly configFile: string;
   readonly buildMode: string;
-  /** The product-free flagged build script, still used by `test:e2e:storage`. */
+  /** The base flagged build script, still used by `test:e2e:storage`. */
   readonly buildScript: string;
   /** The superset build script CI and `test:e2e:data-products:full` use. */
   readonly supersetBuildScript: string;
@@ -192,8 +192,8 @@ export interface DataProductsLaneDeclaration {
 const EMULATION_LIMITATIONS = [
   'Not a physical device, ChromeOS, or operating-system version certification.',
   'Not a cross-engine result; Firefox, WebKit, and Edge lanes do not run this spec.',
-  'Not the production artifact: this lane previews a build with VITE_STORAGE_REPOSITORY=v2, which is not the default.',
-  'Not evidence that the default build uses storage-v2; the production default stays legacy until a later reviewed cutover.',
+  'Not a comparison against the legacy repository: this flagged artifact and the Phase 23 production default both use storage-v2.',
+  'Not evidence that the legacy rollback still restores; the Phase 23 rollback artifact is the evidence for that.',
 ] as const;
 
 export const DATA_PRODUCTS_LANE: DataProductsLaneDeclaration = Object.freeze({
@@ -272,7 +272,7 @@ export function validateDataProductsLane(
   }
   if (lane.storageRepository !== 'v2') problems.push('the lane must record storageRepository v2.');
   if (lane.worldRenderer !== 'phaser') {
-    problems.push('Phase 5 does not change the renderer, so the lane must still expect Phaser.');
+    problems.push('the flagged artifact is a post-cutover build, whose host is still the application host (phaser); the PixiJS worlds are per-world flags.');
   }
   if (lane.viewport.width !== 1440 || lane.viewport.height !== 900) {
     problems.push('the lane must use the desktop-chromium-equivalent viewport.');

@@ -18,12 +18,13 @@
  *
  * ## Why a *flagged* build, and why it is the Pixi-dungeon one
  *
- * The PixiJS dungeon world is only in the artifact when `VITE_PIXI_DUNGEON=true`
- * (`GameScreen`'s build-time switch), and `build:web:pixi-dungeon` is that build. The
- * Phase 9 `pixi-web-artifact` cannot serve: it sets `VITE_WORLD_RENDERER=pixi`, which
- * routes the world screen to the Phase 9 test host rather than to `GameScreen`, so it
- * contains no dungeon to measure. So this lane needs a flagged artifact of its own,
- * with its own recorded identity.
+ * The PixiJS dungeon world is only reachable in the artifact when `VITE_PIXI_DUNGEON=true`
+ * (`GameScreen`'s build-time switch) **and** the world host is on Phaser, because
+ * `VITE_WORLD_RENDERER=pixi` routes the world screen to the Phase 9 test host rather than to
+ * `GameScreen`. `build:web:pixi-dungeon` pins both: the dungeon switch on, the host phaser,
+ * and the other two Pixi world switches off. The Phase 9 `pixi-web-artifact` therefore cannot
+ * serve - it contains no dungeon to measure. So this lane needs an isolated flagged artifact of
+ * its own, with its own recorded identity.
  *
  * ## What it does and does not prove
  *
@@ -115,7 +116,7 @@ export interface PixiPerfLaneDeclaration {
   readonly manifestPath: string;
   readonly worldRenderer: 'phaser';
   readonly pixiDungeon: true;
-  readonly storageRepository: 'legacy';
+  readonly storageRepository: 'v2';
   readonly roomCounts: readonly number[];
   readonly viewport: { readonly width: number; readonly height: number };
   readonly deviceScaleFactor: number;
@@ -132,7 +133,7 @@ export interface PixiPerfLaneDeclaration {
 const EMULATION_LIMITATIONS = [
   'Not a physical-device or ChromeOS certification; the viewport is emulated.',
   'Not a cross-engine result: Chromium only, and no Firefox, WebKit, or Edge lane runs this spec.',
-  'Not the production default: the production default stays VITE_PIXI_DUNGEON absent, and this lane previews a build that asked for the PixiJS dungeon.',
+  'Not a comparison against the pre-cutover stack: `build:web:pixi-dungeon` pins the Phaser host so the dungeon stays reachable, and its storage and data-product flags are the Phase 23 defaults.',
   'Not a hardware-GPU result, and not a certification of the plan\'s 60 FPS / p95 < 20 ms target; CI software WebGL is a floor, and the real-GPU check is carried to Phase 23.',
   'Not Electron; native packaging does not satisfy this gate and this lane does not run in it.',
 ] as const;
@@ -157,7 +158,7 @@ export const PIXI_PERF_LANE: PixiPerfLaneDeclaration = Object.freeze({
   manifestPath: PIXI_PERF_MANIFEST_PATH,
   worldRenderer: 'phaser',
   pixiDungeon: true,
-  storageRepository: 'legacy',
+  storageRepository: 'v2',
   roomCounts: Object.freeze([1, 10, 100] as const),
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Request, type TestInfo } from '@playwright/test';
 
 import {
   buildLocalRunId,
@@ -1687,9 +1687,15 @@ async function readDeviceLocalStore(page: Page): Promise<
 }
 
 /** Drive the application's own UI to the note editor's file control. */
-async function openNoteEditorImageLibrary(page: Page): Promise<void> {
+async function openNoteEditorImageLibrary(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
-  await expect(page.locator('.game-canvas-host canvas')).toBeVisible({ timeout: 60_000 });
+  // The game screen mounts the dungeon in either renderer; the production default is the
+  // PixiJS dungeon after the Phase 23 cutover, and the Phaser host remains for a rollback
+  // build, so the readiness wait matches both rather than a `.game-canvas-host` that the
+  // cutover artifact no longer renders.
+  await expect(
+    page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').first(),
+  ).toBeVisible({ timeout: 60_000 });
   await page.waitForLoadState('networkidle');
   const onboarding = page.getByTestId('gameplay-onboarding');
   if (await onboarding.isVisible().catch(() => false)) {
@@ -1698,10 +1704,19 @@ async function openNoteEditorImageLibrary(page: Page): Promise<void> {
   }
   await page.getByRole('button', { name: 'Open room info panel' }).click();
   await page.locator('.room-primary-action').click();
-  const editor = page.getByRole('dialog', { name: 'Note editor' });
-  await expect(editor).toBeVisible({ timeout: 30_000 });
-  await editor.getByRole('button', { name: 'Images' }).click();
-  await expect(editor.getByRole('button', { name: '+ Add image' })).toBeVisible({ timeout: 20_000 });
+  // The Phase 23 production default opens the Phase 15 redesigned Scribe encounter
+  // workspace; the legacy NoteEditorModal is the rollback view. Both expose the image
+  // library, so the helper resolves whichever dialog actually opened rather than pinning
+  // the lane to one of them.
+  const legacyEditor = page.getByRole('dialog', { name: 'Note editor' });
+  const scribeWorkspace = page.getByRole('dialog', { name: 'Scribe encounter' });
+  await expect(legacyEditor.or(scribeWorkspace)).toBeVisible({ timeout: 30_000 });
+  const surface = (await scribeWorkspace.isVisible().catch(() => false))
+    ? scribeWorkspace
+    : legacyEditor;
+  await surface.getByRole('button', { name: /^Images/ }).click();
+  await expect(surface.locator('input[type="file"]')).toHaveCount(1, { timeout: 20_000 });
+  return surface;
 }
 
 test('the application stores a picked image on this device and requests nothing', async ({
@@ -1724,8 +1739,7 @@ test('the application stores a picked image on this device and requests nothing'
     await expect(page.getByRole('button', { name: new RegExp(SUBJECT_NAME) })).toBeVisible();
     await page.waitForLoadState('networkidle');
 
-    await openNoteEditorImageLibrary(page);
-    const editor = page.getByRole('dialog', { name: 'Note editor' });
+    const editor = await openNoteEditorImageLibrary(page);
     // The control is a real file input, reached through the real button.
     const fileInput = editor.locator('input[type="file"]');
     await expect(fileInput).toHaveCount(1);
@@ -1736,8 +1750,10 @@ test('the application stores a picked image on this device and requests nothing'
       buffer: Buffer.from(SYNTHETIC_PNG_BYTES),
     });
 
-    // The application said, in its own words, that it stored the image locally.
-    const toast = editor.getByText('Image saved on this device and attached to room.');
+    // The application said, in its own words, that it stored the image locally. The Scribe
+    // encounter workspace and the legacy NoteEditorModal word the sentence slightly
+    // differently, so both spellings are accepted rather than pinning the lane to one view.
+    const toast = editor.getByText(/Image saved on this device and attached to (?:the )?room\./);
     await expect(toast).toBeVisible({ timeout: 30_000 });
     const toastSaidStoredLocally = true;
 

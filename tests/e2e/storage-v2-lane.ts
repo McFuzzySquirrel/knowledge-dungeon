@@ -9,10 +9,11 @@
  * Why the lane exists: every storage-v2 result so far is `fake-indexeddb` under
  * jsdom. The recorded Phase 3 limitations are real-browser IndexedDB transaction
  * semantics, a real legacy migration, a real device-local attachment write, and
- * cross-reload durability. None of those can be observed on the default build,
- * because the default build never opens storage-v2 at all - the production
- * default stays `VITE_STORAGE_REPOSITORY=legacy` and Phaser (plan section 11).
- * So this lane builds a SECOND, explicitly flagged artifact, records its
+ * cross-reload durability. After the Phase 23 cutover the production default is
+ * `VITE_STORAGE_REPOSITORY=v2`, so this lane builds the same flagged artifact it
+ * always has and records its own identity: the artifact is the cutover's storage
+ * behaviour built once with a separate recorded identity rather than the shared
+ * production manifest. So this lane builds a flagged artifact, records its
  * identity with the existing `scripts/web-artifact-manifest.mjs`, and runs one
  * spec against it.
  *
@@ -122,7 +123,10 @@ export interface StorageV2LaneDeclaration {
   readonly manifestPath: string;
   /** Recorded in the evidence record for every test in the lane. */
   readonly storageRepository: 'v2';
-  /** Phase 4 does not change the renderer; Phaser remains the expected host. */
+  /**
+   * The host the flagged artifact uses. Phase 23 keeps the application host (`phaser`);
+   * the real PixiJS dungeon/village/fishing worlds come from the per-world flags.
+   */
   readonly worldRenderer: 'phaser';
   readonly viewport: { readonly width: number; readonly height: number };
   readonly deviceScaleFactor: number;
@@ -139,8 +143,8 @@ export interface StorageV2LaneDeclaration {
 const EMULATION_LIMITATIONS = [
   'Not a physical device, ChromeOS, or operating-system version certification.',
   'Not a cross-engine result; Firefox, WebKit, and Edge lanes do not run this spec.',
-  'Not the production artifact: this lane exercises a build with VITE_STORAGE_REPOSITORY=v2, which is not the default.',
-  'Not evidence that the default build uses storage-v2; the production default stays legacy until a later reviewed cutover.',
+  'Not a comparison against the legacy repository: this flagged artifact and the Phase 23 production default both use storage-v2, and the legacy rollback is exercised by the rollback lanes.',
+  'Not evidence that the cutover is reversible by rebuild alone; the Phase 23 rollback artifact is the evidence for that.',
 ] as const;
 
 export const STORAGE_V2_LANE: StorageV2LaneDeclaration = Object.freeze({
@@ -195,7 +199,9 @@ export function validateStorageV2Lane(
   if (!lane.testFile.endsWith('.spec.ts')) problems.push('the lane must bind a .spec.ts file.');
   if (lane.storageRepository !== 'v2') problems.push('the lane must record storageRepository v2.');
   if (lane.worldRenderer !== 'phaser') {
-    problems.push('Phase 4 does not change the renderer, so the lane must still expect Phaser.');
+    problems.push(
+      'the flagged artifact is a post-cutover build, whose host is still the application host (phaser); the PixiJS worlds come from the per-world flags.',
+    );
   }
   if (lane.viewport.width <= 0 || lane.viewport.height <= 0) {
     problems.push('the lane viewport must be positive.');

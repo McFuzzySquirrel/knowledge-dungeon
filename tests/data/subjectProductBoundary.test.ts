@@ -388,19 +388,20 @@ describe('Phase 6 gate 8: nothing outside the product tree reaches it eagerly, a
     ).toEqual([]);
   });
 
-  it('the owner flag is still VITE_DATA_PRODUCTS_V2 and still defaults to false', async () => {
-    // The product is a new data product, and plan section 11 keeps new data products
-    // opt-in until their cutover, so the flag that owns it must not have moved. The
-    // Phase 5 gate holds the same flag from the runtime's side; this is the Phase 6
-    // statement that adding a product did not add or change a flag.
+  it('the owner flag is still VITE_DATA_PRODUCTS_V2, now on by default, with false still disabling it', async () => {
+    // The product is a data product, and the Phase 23 cutover makes it the production
+    // default; the flag that owns it did not change name or owner. The Phase 5 gate holds
+    // the same flag from the runtime's side; this is the Phase 6 statement that adding a
+    // product did not add or change a flag, and that `false` is still the rollback.
     const { DEFAULT_RUNTIME_CONFIG, parseRuntimeConfig } = await import(
       '@/config/runtimeConfig'
     );
     const { FEATURE_FLAG_MATRIX } = await import('@/config/featureFlags');
-    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(false);
-    expect(parseRuntimeConfig({}).dataProductsV2).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(true);
+    expect(parseRuntimeConfig({}).dataProductsV2).toBe(true);
     expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'true' }).dataProductsV2).toBe(true);
-    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
+    expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'false' }).dataProductsV2).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(true);
     // The flag set still holds no per-product flag, so a data product cannot quietly
     // acquire one - plan section 11's list is closed and Phase 1 owns it. Phase 10
     // added one flag to that closed set, `audioEnabled`, for the audio service; it is a

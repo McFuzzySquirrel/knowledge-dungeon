@@ -102,10 +102,12 @@ const SETTINGS_TABS: TabDef[] = [
   // `src/ui/assistance/settingsTabGate.ts` for why the decision is a pure function of the flag
   // rather than a constant read here.
   //
-  // `productionDefault: false` is a **cutover** flag, so on the default build this build cannot
-  // produce a single suggestion. A visible, labelled, interactive tab for a feature that can never
-  // speak is worse than no tab at all: a learner sets Gentle, sees nothing anywhere, and concludes
-  // the product is broken. Silence is the honest default, and the flag is how a build opts in.
+  // After the Phase 23 cutover `adaptiveAssistance` defaults on, so the production build shows this
+  // tab and can produce suggestions. The tab is hidden only on the one-release rollback build
+  // (`VITE_ADAPTIVE_ASSISTANCE=false`). A visible, labelled, interactive tab for a feature that can
+  // never speak is worse than no tab at all: a learner sets Gentle, sees nothing anywhere, and
+  // concludes the product is broken - so the rollback build omits the tab rather than showing one
+  // that can do nothing.
   { id: ASSISTANCE_TAB_ID as SettingsTab, label: 'Assistance', labelKey: 'settings.tabs.assistance' },
 ];
 

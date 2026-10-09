@@ -32,7 +32,15 @@ import { dirname, extname, join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
+import {
+  CUTOVER_BOOLEAN_FLAG_KEYS,
+  CUTOVER_FLAG_KEYS,
+  CUTOVER_FLAG_ROLLBACKS,
+  FEATURE_FLAG_MATRIX,
+  NON_CUTOVER_FLAG_KEYS,
+  RETAINED_HOST_FLAG_KEYS,
+  REVIEWED_FLAG_KEYS,
+} from '@/config/featureFlags';
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
 
 const ROOT = process.cwd();
@@ -140,19 +148,53 @@ function resolveSpecifier(fromFile: string, specifier: string): string | null {
 }
 
 describe('Phase 6 verifier V9: the lazy boundary (B1)', () => {
-  it('the owner flag is off by default and Phase 5 still owns it', () => {
+  it('the owner flag defaults on after the cutover, and Phase 5 still owns it', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.dataProductsV2).toBe('VITE_DATA_PRODUCTS_V2');
-    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(false);
-    expect(parseRuntimeConfig({}).dataProductsV2).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
-    // Phase 10's `audioEnabled` defaults on, because it is a kill switch for a service
-    // that phase delivers rather than a gate on an existing behaviour, and it declares
-    // itself in `NON_CUTOVER_FLAG_KEYS`. The property under test is unchanged for
-    // every cutover flag.
+    // Phase 23 makes the product the production default; the `false` rollback is the
+    // opt-out and must still produce the pre-cutover behaviour.
+    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(true);
+    expect(parseRuntimeConfig({}).dataProductsV2).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(true);
+    expect(CUTOVER_FLAG_ROLLBACKS.dataProductsV2).toBe(false);
+    expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'false' }).dataProductsV2).toBe(false);
+  });
+
+  it('the flag matrix is partitioned into reviewed cutover, kill-switch, and retained-host flags', () => {
+    // Phase 23 re-foundation. Before the cutover this gate asserted "no cutover flag
+    // defaults on". The cutover inverts that for the cutover flags by design, so the
+    // durable invariant is the partition, and each part can still fail:
+    //   1. every key of the matrix belongs to exactly one of the three reviewed sets, so
+    //      no flag is silently unclassified;
+    //   2. the matrix key set is the pinned reviewed set, so no flag was removed;
+    //   3. the flags that default on are exactly the cutover booleans plus the kill
+    //      switches, so a cutover flag left off fails; and
+    //   4. every cutover flag's declared rollback still parses to the pre-cutover value
+    //      and is documented as an env var/value, so the rollback cannot rot.
+    const matrixKeys = Object.keys(FEATURE_FLAG_MATRIX).sort();
+    const classified = [
+      ...CUTOVER_FLAG_KEYS,
+      ...NON_CUTOVER_FLAG_KEYS,
+      ...RETAINED_HOST_FLAG_KEYS,
+    ].sort();
+    expect(classified).toEqual(matrixKeys);
+    expect(new Set(classified).size).toBe(classified.length);
+    expect(matrixKeys).toEqual([...REVIEWED_FLAG_KEYS].sort());
+
     const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
-      .map(([key]) => key);
-    expect(onByDefault.sort()).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
+      .map(([key]) => key)
+      .sort();
+    expect(onByDefault).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort());
+
+    for (const key of CUTOVER_FLAG_KEYS) {
+      const rollback = CUTOVER_FLAG_ROLLBACKS[key];
+      const environment = { [RUNTIME_FLAG_ENV_KEYS[key]]: String(rollback) };
+      expect(parseRuntimeConfig(environment)[key]).toBe(rollback);
+      expect(FEATURE_FLAG_MATRIX[key].rollback).toContain(
+        `${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`,
+      );
+      expect(FEATURE_FLAG_MATRIX[key].productionDefault).not.toBe(rollback);
+    }
   });
 
   it('NON-VACUITY: the walk finds the two sanctioned dynamic callers, so "no eager edge" is not "no edge"', () => {

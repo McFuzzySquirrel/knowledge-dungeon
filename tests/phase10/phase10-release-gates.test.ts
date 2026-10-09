@@ -56,7 +56,12 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig, WORLD_RENDERERS, STORAGE_REPOSITORIES } from '@/config/runtimeConfig';
-import { FEATURE_FLAGS, FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
+import {
+  CUTOVER_BOOLEAN_FLAG_KEYS,
+  FEATURE_FLAGS,
+  FEATURE_FLAG_MATRIX,
+  NON_CUTOVER_FLAG_KEYS,
+} from '@/config/featureFlags';
 import { ASSET_BUNDLE_IDS } from '@/renderers/pixi/assets/assetManifest';
 import { isSameOriginRelativeAudioUrl } from '@/services/audio/fileAudioProvider';
 import { scanModuleForNetworkRules, stripComments, walkAppGraph } from '../privacy/support/appGraph';
@@ -291,15 +296,16 @@ describe('the audio flag is a real flag with a real default', () => {
     expect(message).not.toContain(secret);
   });
 
-  it('the one flag that defaults on declares itself, and no other flag may', () => {
-    // The contract the three earlier-phase gates now read. Asserted here from the config
-    // module's side too, so the list cannot rot into a general exemption: a flag that is
-    // not on it and defaults on fails.
+  it('the kill switch declares itself, and the only other flags that default on are the reviewed cutover booleans', () => {
+    // Post-Phase-23 the matrix partitions into cutover flags (which now default on and
+    // roll back to their pre-cutover value) and the non-cutover kill switches. `audioEnabled`
+    // is the only kill switch; the flags that default on are exactly those plus the
+    // reviewed cutover booleans, so a flag that defaults on outside that set fails.
     const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
       .map(([key]) => key)
       .sort();
-    expect(onByDefault).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
+    expect(onByDefault).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort());
     for (const key of NON_CUTOVER_FLAG_KEYS) {
       const definition = FEATURE_FLAG_MATRIX[key];
       expect(definition.valueKind, key).toBe('boolean');

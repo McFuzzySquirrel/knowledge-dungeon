@@ -184,13 +184,13 @@ const lanes = {
   },
   default: {
     label: 'The assistance rollback lane',
-    buildScript: 'build:web',
-    recordScript: 'record:web-artifact',
-    verifyScript: 'verify:web-artifact',
-    manifest: 'artifacts/web-artifact-manifest.json',
+    buildScript: 'build:web:rollback',
+    recordScript: 'record:web-artifact:rollback',
+    verifyScript: 'verify:web-artifact:rollback',
+    manifest: 'artifacts/web-artifact-manifest-rollback.json',
     config: 'tests/e2e/playwright.assistance-default.config.ts',
     runScript: 'test:e2e:assistance:default:recorded',
-    /** The production default, stated out loud rather than left as "absent". */
+    /** The pre-cutover value, stated out loud rather than left as "absent". */
     expectsFlag: 'false',
   },
 };

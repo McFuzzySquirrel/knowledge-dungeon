@@ -1587,8 +1587,30 @@ export default defineConfig(({ mode }) => {
   const isElectronMode = mode === 'electron';
   const basePath = process.env.VITE_BASE_PATH ?? (isElectronMode ? './' : '/');
 
+  // Phase 23 cutover: bake the *effective* value of each bundler-visible flag into
+  // `import.meta.env.*`. The routing modules compare against literals so the bundler can
+  // eliminate the unused arm (and its chunk); when the environment does not set a flag,
+  // the value the bundler sees must be the post-cutover default, or the default build
+  // would ask for Pixi, emit no Pixi chunk, and fail the chunk audit. The parsed values
+  // are used (not the raw environment) so a spelled override normalises the same way at
+  // build time as it does at run time, and the rollback value still selects the old arm.
+  //
+  // Deliberately applied to the real bundler only. Vitest shares this config, and
+  // replacing the raw `import.meta.env.VITE_*` accesses inside a test module would change
+  // what that test observes; the unit suite asserts the parser and the runtime config, not
+  // the build-time substitution.
+  const isTestRun = mode === 'test' || process.env.VITEST === 'true' || process.env.VITEST === '1';
+  const bundlerFlagDefines: Record<string, string> = {
+    'import.meta.env.VITE_WORLD_RENDERER': JSON.stringify(runtimeConfig.worldRenderer),
+    'import.meta.env.VITE_PIXI_VILLAGE': JSON.stringify(String(runtimeConfig.pixiVillage)),
+    'import.meta.env.VITE_PIXI_DUNGEON': JSON.stringify(String(runtimeConfig.pixiDungeon)),
+    'import.meta.env.VITE_PIXI_FISHING': JSON.stringify(String(runtimeConfig.pixiFishing)),
+    'import.meta.env.VITE_OFFLINE_SHELL': JSON.stringify(String(runtimeConfig.offlineShell)),
+  };
+
   return {
     base: basePath,
+    ...(isTestRun ? {} : { define: bundlerFlagDefines }),
     plugins: [
       react(),
       legacy({

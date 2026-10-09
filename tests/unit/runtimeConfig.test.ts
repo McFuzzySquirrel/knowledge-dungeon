@@ -7,22 +7,27 @@ import {
 } from '@/config/runtimeConfig';
 
 describe('runtime feature configuration', () => {
-  it('uses the complete safe production default matrix', () => {
+  it('uses the complete post-cutover production default matrix', () => {
+    // Phase 23 made the rebuilt stack the production default. Each cutover flag is
+    // retained as a documented one-release rollback; `audioEnabled` remains the single
+    // kill switch. `worldRenderer` is a retained host switch and does not move: it stays
+    // `phaser` (the application host), and the real PixiJS worlds come from the per-world
+    // flags below.
     expect(parseRuntimeConfig({})).toEqual({
       worldRenderer: 'phaser',
-      storageRepository: 'legacy',
-      pixiVillage: false,
-      pixiDungeon: false,
-      pixiFishing: false,
-      cozyVisuals: false,
-      adaptiveAssistance: false,
-      dataProductsV2: false,
-      webShare: false,
+      storageRepository: 'v2',
+      pixiVillage: true,
+      pixiDungeon: true,
+      pixiFishing: true,
+      cozyVisuals: true,
+      adaptiveAssistance: true,
+      dataProductsV2: true,
+      webShare: true,
       audioEnabled: true,
-      creatorWorkspace: false,
-      scribeEncounterWorkspace: false,
-      archaeologistReviewWorkspace: false,
-      offlineShell: false,
+      creatorWorkspace: true,
+      scribeEncounterWorkspace: true,
+      archaeologistReviewWorkspace: true,
+      offlineShell: true,
     });
   });
 
@@ -123,21 +128,21 @@ describe('runtime feature configuration', () => {
 });
 
 describe('the Phase 14 Creator workspace flag', () => {
-  it('exists, has an environment key, and defaults off three ways', () => {
-    // The same three-way agreement every cutover gate states for its own flag: the safe
-    // production default, the parsed default with no environment, and the declared
-    // matrix default. Phase 14's rollback line is "retain the existing RoomPanel Creator
-    // view behind the phase flag", which only means something if the default is already
-    // the RoomPanel view.
+  it('exists, has an environment key, and defaults on, with false still selecting the RoomPanel view', () => {
+    // After the Phase 23 cutover the redesigned Creator workspace is the production
+    // default; the reviewed pre-cutover value (`false`) is the one-release rollback and
+    // still parses to the RoomPanel Creator view.
     expect(RUNTIME_FLAG_ENV_KEYS.creatorWorkspace).toBe('VITE_CREATOR_WORKSPACE');
-    expect(DEFAULT_RUNTIME_CONFIG.creatorWorkspace).toBe(false);
-    expect(parseRuntimeConfig({}).creatorWorkspace).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.productionDefault).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.creatorWorkspace).toBe(true);
+    expect(parseRuntimeConfig({}).creatorWorkspace).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.creatorWorkspace.productionDefault).toBe(true);
     expect(FEATURE_FLAG_MATRIX.creatorWorkspace.environmentVariable).toBe('VITE_CREATOR_WORKSPACE');
     expect(FEATURE_FLAG_MATRIX.creatorWorkspace.valueKind).toBe('boolean');
     expect(FEATURE_FLAG_MATRIX.creatorWorkspace.ownerPhase).toBe(14);
     expect(FEATURE_FLAG_MATRIX.creatorWorkspace.rollback).toContain('VITE_CREATOR_WORKSPACE=false');
     expect(FEATURE_FLAG_MATRIX.creatorWorkspace.rollback).toContain('RoomPanel Creator view');
+    // The rollback control: `false` is a real option, not the default.
+    expect(parseRuntimeConfig({ VITE_CREATOR_WORKSPACE: 'false' }).creatorWorkspace).toBe(false);
   });
 
   it('parses exactly as the other cutover booleans parse, in all three spellings', () => {
@@ -153,25 +158,24 @@ describe('the Phase 14 Creator workspace flag', () => {
 
   it('is a cutover gate, so it is not on the non-cutover list', () => {
     // It switches an existing behaviour (the RoomPanel Creator view) to a new one, so
-    // its production default is the pre-phase behaviour. `audioEnabled` is the only
-    // flag allowed to default on, and it says so by name; adding this one there would be
-    // a claim that Phase 14 builds the Creator view rather than replaces it.
+    // after the cutover it defaults on and its pre-cutover value is the rollback.
+    // `audioEnabled` is the only kill switch allowed on that list; adding this one
+    // there would be a claim that Phase 14 builds the Creator view rather than replaces
+    // it.
     expect(NON_CUTOVER_FLAG_KEYS).not.toContain('creatorWorkspace');
     expect(NON_CUTOVER_FLAG_KEYS).toEqual(['audioEnabled']);
   });
 });
 
 describe('the Phase 15 Scribe encounter workspace flag', () => {
-  it('exists, has an environment key, and defaults off three ways', () => {
-    // The same three-way agreement every cutover gate states for its own flag: the safe
-    // production default, the parsed default with no environment, and the declared
-    // matrix default. Phase 15's rollback line is "restore the existing modal as the
-    // Scribe view", which only means something if the default already *is* the
-    // NoteEditorModal.
+  it('exists, has an environment key, and defaults on, with false still selecting the NoteEditorModal', () => {
+    // After the Phase 23 cutover the redesigned Scribe workspace is the production
+    // default; the reviewed pre-cutover value (`false`) is the one-release rollback and
+    // still parses to the NoteEditorModal.
     expect(RUNTIME_FLAG_ENV_KEYS.scribeEncounterWorkspace).toBe('VITE_SCRIBE_ENCOUNTER_WORKSPACE');
-    expect(DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace).toBe(false);
-    expect(parseRuntimeConfig({}).scribeEncounterWorkspace).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.productionDefault).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace).toBe(true);
+    expect(parseRuntimeConfig({}).scribeEncounterWorkspace).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.productionDefault).toBe(true);
     expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.environmentVariable).toBe(
       'VITE_SCRIBE_ENCOUNTER_WORKSPACE',
     );
@@ -185,6 +189,10 @@ describe('the Phase 15 Scribe encounter workspace flag', () => {
     // that changes what counts as a valid note. The flag selects a view; the validation
     // and progression rules are identical in both lanes.
     expect(FEATURE_FLAG_MATRIX.scribeEncounterWorkspace.purpose).toContain('NoteEditorModal');
+    // The rollback control: `false` is a real option, not the default.
+    expect(parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'false' }).scribeEncounterWorkspace).toBe(
+      false,
+    );
   });
 
   it('parses exactly as the other cutover booleans parse, in all three spellings', () => {
@@ -196,16 +204,16 @@ describe('the Phase 15 Scribe encounter workspace flag', () => {
     expect(() => parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'maybe' })).toThrow(
       'VITE_SCRIBE_ENCOUNTER_WORKSPACE must be one of: true, false',
     );
-    // The default build reaches no renderer, storage generation, or product flag through
-    // it: it is an independent cutover switch, so turning the Scribe workspace on does
-    // not silently move any other flag with it.
-    expect(parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'true' })).toMatchObject({
-      worldRenderer: 'phaser',
-      storageRepository: 'legacy',
-      dataProductsV2: false,
-      adaptiveAssistance: false,
-      creatorWorkspace: false,
-    });
+    // The cutover switches are independent: setting only the Scribe workspace flag
+    // leaves every other flag at its default value (whatever that default now is), so
+    // turning the Scribe workspace on does not silently move any other flag with it.
+    const withScribe = parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'true' });
+    const defaults = parseRuntimeConfig({});
+    for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) {
+      if (key === 'scribeEncounterWorkspace') continue;
+      expect(withScribe[key], key).toBe(defaults[key]);
+    }
+    expect(withScribe.scribeEncounterWorkspace).toBe(true);
   });
 
   it('is a cutover gate, so it is not on the non-cutover list', () => {
@@ -219,17 +227,16 @@ describe('the Phase 15 Scribe encounter workspace flag', () => {
 });
 
 describe('the Phase 16 Archaeologist review workspace flag', () => {
-  it('exists, has an environment key, and defaults off three ways', () => {
-    // The same three-way agreement every cutover gate states for its own flag: the safe
-    // production default, the parsed default with no environment, and the declared matrix
-    // default. Phase 16's rollback line is "use the previous Archaeologist panel", which
-    // only means something if the default already *is* the RoomPanel review view.
+  it('exists, has an environment key, and defaults on, with false still selecting the RoomPanel view', () => {
+    // After the Phase 23 cutover the redesigned review workspace is the production
+    // default; the reviewed pre-cutover value (`false`) is the one-release rollback and
+    // still parses to the RoomPanel review view.
     expect(RUNTIME_FLAG_ENV_KEYS.archaeologistReviewWorkspace).toBe(
       'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE',
     );
-    expect(DEFAULT_RUNTIME_CONFIG.archaeologistReviewWorkspace).toBe(false);
-    expect(parseRuntimeConfig({}).archaeologistReviewWorkspace).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.productionDefault).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.archaeologistReviewWorkspace).toBe(true);
+    expect(parseRuntimeConfig({}).archaeologistReviewWorkspace).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.productionDefault).toBe(true);
     expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.environmentVariable).toBe(
       'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE',
     );
@@ -247,6 +254,11 @@ describe('the Phase 16 Archaeologist review workspace flag', () => {
     // both lanes.
     expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.purpose).toContain('room-panel review view');
     expect(FEATURE_FLAG_MATRIX.archaeologistReviewWorkspace.purpose).toContain('SM-2');
+    // The rollback control: `false` is a real option, not the default.
+    expect(
+      parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'false' })
+        .archaeologistReviewWorkspace,
+    ).toBe(false);
   });
 
   it('parses exactly as the other cutover booleans parse, in all three spellings', () => {
@@ -258,24 +270,24 @@ describe('the Phase 16 Archaeologist review workspace flag', () => {
     expect(() => parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'maybe' })).toThrow(
       'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE must be one of: true, false',
     );
-    // The default build reaches no renderer, storage generation, product flag, or earlier
-    // workspace through it: it is an independent cutover switch, so turning the
-    // Archaeologist workspace on does not silently move any other flag with it.
-    expect(parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'true' })).toMatchObject({
-      worldRenderer: 'phaser',
-      storageRepository: 'legacy',
-      dataProductsV2: false,
-      adaptiveAssistance: false,
-      creatorWorkspace: false,
-      scribeEncounterWorkspace: false,
-    });
+    // The cutover switches are independent: setting only the Archaeologist workspace flag
+    // leaves every other flag at its default value (whatever that default now is), so
+    // turning the Archaeologist workspace on does not silently move any other flag with it.
+    const withReview = parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'true' });
+    const defaults = parseRuntimeConfig({});
+    for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) {
+      if (key === 'archaeologistReviewWorkspace') continue;
+      expect(withReview[key], key).toBe(defaults[key]);
+    }
+    expect(withReview.archaeologistReviewWorkspace).toBe(true);
   });
 
   it('is a cutover gate, so it is not on the non-cutover list', () => {
-    // It switches an existing behaviour (the RoomPanel review view) to a new one, so its
-    // production default is the pre-phase behaviour. `audioEnabled` is the only flag
-    // allowed to default on, and it says so by name; adding this one there would be a
-    // claim that Phase 16 builds the Archaeologist review view rather than replaces it.
+    // It switches an existing behaviour (the RoomPanel review view) to a new one, so
+    // after the cutover it defaults on and its pre-cutover value is the rollback.
+    // `audioEnabled` is the only kill switch allowed on that list; adding this one
+    // there would be a claim that Phase 16 builds the Archaeologist review view rather
+    // than replaces it.
     expect(NON_CUTOVER_FLAG_KEYS).not.toContain('archaeologistReviewWorkspace');
     expect(NON_CUTOVER_FLAG_KEYS).toEqual(['audioEnabled']);
   });

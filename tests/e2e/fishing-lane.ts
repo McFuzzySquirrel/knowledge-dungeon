@@ -20,21 +20,22 @@
  * ## Which build, and why a *flagged* one is the only possible subject
  *
  * The pond is only in the artifact when `VITE_PIXI_FISHING=true`, exactly as the Pixi
- * memory lane is only about a `VITE_WORLD_RENDERER=pixi` artifact. The village that owns
- * the entry point stays on Phaser: `build:web:pixi-fishing` sets **only** this flag, which
- * is the same deliberate shape as `build:web:pixi-village` and `build:web:pixi-dungeon` and
- * the reason `vite.config.ts`'s renderer chunk boundary has a `pixiFishing` check of its
- * own. So this lane previews a Pixi pond on a Phaser village, which is the configuration
- * the cutover decision actually has to be made about.
+ * memory lane is only about a `VITE_WORLD_RENDERER=pixi` artifact. After the Phase 23
+ * cutover the per-world switches default on, so `build:web:pixi-fishing` now pins its
+ * isolation explicitly: `VITE_WORLD_RENDERER=phaser`, `VITE_PIXI_FISHING=true`, and the
+ * two other Pixi world switches off. The village that owns the entry point stays on
+ * Phaser, which is the configuration this lane is defined against and the reason
+ * `vite.config.ts`'s renderer chunk boundary has a `pixiFishing` check of its own.
  *
  * ## Why there are two lanes in one module
  *
  * Phase 17's rollback line is `VITE_PIXI_FISHING=false`, and the rollback half of a cutover
  * is evidence like any other half: "the same entry point reaches the Phaser `FishingScene`"
- * is a claim about the **default production artifact**, not about the flagged one. Asserting
- * it against the flagged artifact would be vacuous — today the flagged artifact reaches the
- * Phaser scene too, which is a defect rather than a pass (see `tests/e2e/fishing.spec.ts`'s
- * header for the finding and the lane's own `knownDefects` list).
+ * is a claim about the **Phase 23 full-rollback artifact** (`build:web:rollback`), not about
+ * the isolated Pixi-pond one. Asserting it against the isolated artifact would be vacuous —
+ * today the isolated artifact reaches the Phaser scene too, which is a defect rather than a
+ * pass (see `tests/e2e/fishing.spec.ts`'s header for the finding and the lane's own
+ * `knownDefects` list).
  *
  * So the module declares two lanes over two recorded identities, and `package.json` exposes
  * each under its own `test:e2e:fishing:*` / `test:e2e:fishing:rollback:*` scripts. They share
@@ -115,10 +116,10 @@ export const FISHING_ROLLBACK_TEST_PATH = `tests/e2e/${FISHING_ROLLBACK_TEST_FIL
 export const FISHING_ROLLBACK_CONFIG_FILE = 'tests/e2e/playwright.fishing-rollback.config.ts';
 export const FISHING_ROLLBACK_CONFIG_BASENAME = 'playwright.fishing-rollback.config.ts';
 
-/** The build script that produces the flagged artifact this lane previews. */
+/** The build script that produces the isolated flagged artifact this lane previews. */
 export const FISHING_BUILD_SCRIPT = 'build:web:pixi-fishing';
-/** The production default build, which the rollback lane previews. */
-export const FISHING_ROLLBACK_BUILD_SCRIPT = 'build:web';
+/** The Phase 23 full-rollback artifact, which the rollback lane previews. */
+export const FISHING_ROLLBACK_BUILD_SCRIPT = 'build:web:rollback';
 
 /** The build-time flag, and the value the plan's matrix requires for it. */
 export const FISHING_FLAG = 'VITE_PIXI_FISHING';
@@ -131,13 +132,13 @@ export const FISHING_FLAG_VALUE = 'true';
  * single manifest path would let the rollback claim be verified against the pond.
  */
 export const FISHING_MANIFEST_PATH = 'artifacts/web-artifact-manifest-pixi-fishing.json';
-export const FISHING_ROLLBACK_MANIFEST_PATH = 'artifacts/web-artifact-manifest.json';
+export const FISHING_ROLLBACK_MANIFEST_PATH = 'artifacts/web-artifact-manifest-rollback.json';
 
 /** The recorded-identity scripts, one pair per artifact. */
 export const FISHING_RECORD_SCRIPT = 'record:web-artifact:pixi-fishing';
 export const FISHING_VERIFY_SCRIPT = 'verify:web-artifact:pixi-fishing';
-export const FISHING_ROLLBACK_RECORD_SCRIPT = 'record:web-artifact';
-export const FISHING_ROLLBACK_VERIFY_SCRIPT = 'verify:web-artifact';
+export const FISHING_ROLLBACK_RECORD_SCRIPT = 'record:web-artifact:rollback';
+export const FISHING_ROLLBACK_VERIFY_SCRIPT = 'verify:web-artifact:rollback';
 
 /**
  * The Playwright invocation, spelled once.
@@ -305,11 +306,11 @@ export interface FishingLaneDeclaration {
   readonly expectedRendererMode: FishingRendererMode;
   /** Whether the artifact under test is expected to contain the Pixi fishing chunk. */
   readonly expectsPixiChunk: boolean;
-  /** The world renderer the artifact's **village** uses. Phaser, on both lanes. */
+  /** The world renderer the artifact's **village** uses. Phaser, pinned on both lanes. */
   readonly villageRenderer: 'phaser';
   readonly worldRenderer: 'phaser';
-  readonly storageRepository: 'legacy';
-  readonly dataProductsV2: false;
+  readonly storageRepository: 'v2' | 'legacy';
+  readonly dataProductsV2: boolean;
   readonly viewport: { readonly width: number; readonly height: number };
   readonly deviceScaleFactor: number;
   readonly hasTouch: boolean;
@@ -340,10 +341,14 @@ export const FISHING_LANE: FishingLaneDeclaration = Object.freeze({
   ciRunScript: FISHING_CI_RUN_SCRIPT,
   expectedRendererMode: 'pixi-fishing-pond',
   expectsPixiChunk: true,
+  // `build:web:pixi-fishing` pins `VITE_WORLD_RENDERER=phaser` and turns the two
+  // other Pixi world switches off, so the artifact is the pre-cutover "Phaser host,
+  // one Pixi world" shape the lane was written against. The storage and data-product
+  // flags are the post-cutover defaults, because this artifact is not the rollback.
   villageRenderer: 'phaser',
   worldRenderer: 'phaser',
-  storageRepository: 'legacy',
-  dataProductsV2: false,
+  storageRepository: 'v2',
+  dataProductsV2: true,
   viewport: FISHING_VIEWPORT,
   deviceScaleFactor: FISHING_DEVICE_SCALE_FACTOR,
   hasTouch: FISHING_HAS_TOUCH,
@@ -377,18 +382,21 @@ export const FISHING_ROLLBACK_LANE: FishingLaneDeclaration = Object.freeze({
   ciRunScript: FISHING_ROLLBACK_CI_RUN_SCRIPT,
   expectedRendererMode: 'phaser-fishing-scene',
   expectsPixiChunk: false,
+  // The rollback artifact is the pre-cutover build, so these are the legacy values.
+  storageRepository: 'legacy',
+  dataProductsV2: false,
   claim:
-    'Against the default production artifact, the built bundle contains no Pixi fishing chunk and the ' +
-    'village fishing-pond entry point reaches the Phaser FishingScene in the village game, not a Pixi ' +
-    'pond: the same single canvas stays in place, the cast is driven through the Phaser scene, Escape ' +
-    'returns to the village, no Pixi script is requested at any point, and every request the whole flow ' +
-    'makes stays on the preview origin. This is the plan section for Phase 17 rollback line as an ' +
-    'observation rather than as a claim: VITE_PIXI_FISHING=false is the rollback, and this lane is the ' +
-    'evidence that the rollback target still works.',
+    'Against the Phase 23 full-rollback artifact - every cutover flag at its pre-cutover value - the built bundle ' +
+    'contains no Pixi fishing chunk and the village fishing-pond entry point reaches the Phaser FishingScene in ' +
+    'the village game, not a Pixi pond: the same single canvas stays in place, the cast is driven through the ' +
+    'Phaser scene, Escape returns to the village, no Pixi script is requested at any point, and every request the ' +
+    'whole flow makes stays on the preview origin. This is the Phase 17 rollback line as an observation rather ' +
+    'than as a claim: VITE_PIXI_FISHING=false is the rollback, and this lane is the evidence that the rollback ' +
+    'target still works.',
   doesNotProve: [
     ...EMULATION_LIMITATIONS,
     ...SHARED_LIMITATIONS,
-    'Not a claim that the Pixi pond is absent from a VITE_PIXI_FISHING=true build. This lane runs the default artifact; the flagged artifact is the other lane, and the fact that the two cannot be distinguished at the entry point today is a recorded defect, not a rollback result.',
+    'Not a claim that the Pixi pond is absent from a VITE_PIXI_FISHING=true build. This lane runs the Phase 23 rollback artifact; the isolated Pixi-pond artifact is the other lane, and the fact that the two cannot be distinguished at the entry point today is a recorded defect, not a rollback result.',
     'Not a Phaser-versus-Pixi comparison of the fishing loop. The Phaser scene has no DOM controls of its own, so this lane presses keys against a canvas and asserts the scene swap, and the cast-to-catch parity comparison is the flagged lane’s subject once the pond is reachable.',
   ],
 });
@@ -436,14 +444,23 @@ export function validateFishingLane(
   }
   if (lane.villageRenderer !== 'phaser' || lane.worldRenderer !== 'phaser') {
     problems.push(
-      'this lane does not switch the world or village renderer, so both must be recorded as the Phaser production default.',
+      'both lanes pin the world and village renderers to Phaser so the pond route stays reachable behind a Phaser host.',
     );
   }
-  if (lane.storageRepository !== 'legacy') {
-    problems.push('this build is a production-mode build, so its storage repository is the production default.');
-  }
-  if (lane.dataProductsV2 !== false) {
-    problems.push('this build is a production-mode build, so the data-products flag must be recorded as off.');
+  if (lane.expectsPixiChunk) {
+    if (lane.storageRepository !== 'v2') {
+      problems.push('the isolated Pixi-pond artifact is a post-cutover build, so its storage repository is v2.');
+    }
+    if (lane.dataProductsV2 !== true) {
+      problems.push('the isolated Pixi-pond artifact is a post-cutover build, so the data-products flag is on.');
+    }
+  } else {
+    if (lane.storageRepository !== 'legacy') {
+      problems.push('the rollback artifact restores the legacy storage repository.');
+    }
+    if (lane.dataProductsV2 !== false) {
+      problems.push('the rollback artifact has the data-products flag off.');
+    }
   }
   if (lane.engine !== 'chromium') {
     problems.push('the lane is Chromium only; Phase 21 owns cross-browser evidence for this surface.');

@@ -16,9 +16,12 @@
  *
  * ## Why two flags and not three, and what the Phase 22 chunking fix changed
  *
- * This lane's artifact is `VITE_PIXI_DUNGEON=true VITE_PIXI_FISHING=true`: the two
- * Pixi worlds whose teardown is a route change (the dungeon, a screen route) and an
- * overlay unmount (the pond), with the Phaser village as the route between them.
+ * This lane's artifact is `VITE_WORLD_RENDERER=phaser VITE_PIXI_DUNGEON=true
+ * VITE_PIXI_FISHING=true VITE_PIXI_VILLAGE=false`: the host stays on Phaser so `GameScreen`
+ * (and the dungeon route) is reachable, the two Pixi worlds whose teardown is a route change
+ * (the dungeon, a screen route) and an overlay unmount (the pond) are switched on, and the
+ * Phaser village is the route between them. After the Phase 23 cutover each of those switches
+ * defaults on, so the isolation is explicit in `build:web:pixi-route`.
  *
  * Until the Phase 22 chunking fix, a build with **two** lazy renderer boundaries - for
  * example `VITE_PIXI_VILLAGE=true` together with `VITE_PIXI_DUNGEON=true` - emitted

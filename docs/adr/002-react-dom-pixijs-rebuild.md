@@ -198,6 +198,31 @@ The immediate rollback controls are `VITE_WORLD_RENDERER=phaser` and
 `VITE_STORAGE_REPOSITORY=legacy`, with per-world Pixi flags disabled as needed.
 Rollback must not delete migrated or legacy data.
 
+### Phase 23 cutover note (2026-10-08)
+
+The cutover this decision describes is implemented. Production defaults are now
+Pixi (the per-world flags `VITE_PIXI_VILLAGE`, `VITE_PIXI_DUNGEON`, and
+`VITE_PIXI_FISHING` are `true` and select the real PixiJS worlds inside the
+application screens), storage-v2 (`VITE_STORAGE_REPOSITORY=v2`, with legacy
+mirror writes retained), Cozy visuals, the versioned data products, Gentle
+assistance, explicit-action Web Share, the redesigned Creator/Scribe/Archaeologist
+workspaces, and the offline static shell. Every one of those flags is retained
+for one release as the rollback, with its pre-cutover value declared in
+`CUTOVER_FLAG_ROLLBACKS` in `src/config/featureFlags.ts`.
+
+One distinction this ADR did not anticipate and now records: `VITE_WORLD_RENDERER`
+is **not** the world-renderer cutover. It is a retained **host adapter** switch
+that keeps its `'phaser'` production default; that host renders the real PixiJS
+worlds through the per-world flags, while `'pixi'` selects the Phase 9 test host
+(`PixiWorldHost`), not a production world. It is classified in
+`RETAINED_HOST_FLAG_KEYS`, and Phase 24 removes it along with the test host. The
+renderer rollback is therefore a rebuild with the per-world flags off
+(`npm run build:web:rollback`), not a change to `VITE_WORLD_RENDERER`.
+
+The seven-day soak, the physical-device accessibility gates, the macOS/Windows
+automated cells, and a deployment have not been completed and are not claimed
+here.
+
 ### Amendment: `VITE_AUDIO_ENABLED` (Phase 10)
 
 Phase 10 added a tenth flag, which the list above does not contain:
@@ -478,12 +503,21 @@ release-candidate matrix pass on their declared hosts against one recorded
 artifact per CI run. The maintainer accepted the verified checkpoint on
 2026-09-25, so its status in the authoritative plan is `complete`.
 
-The rebuild still does not implement renderer-neutral contracts, storage-v2,
-migrations, CC0 tooling, the full accessibility and responsive audit, PixiJS,
-performance/memory/offline hardening, production cutover, or Phaser removal. The
-automated macOS, Windows, and Edge lanes are runner evidence, while the
-physical-device, Safari, touch-platform, and screen-reader gates remain manual
-later work. Those later gates must not be treated as complete based on this ADR.
+The rebuild phases through Phase 22 were delivered and accepted against this
+architecture: renderer-neutral contracts, storage-v2 and its migrations, CC0
+tooling, the accessibility and responsive audit, the PixiJS runtime host and
+worlds, performance/memory/offline hardening, data products, assistance,
+statistics, and private sharing. **Phase 23 implemented the production cutover on
+2026-10-08:** Pixi, storage-v2 (with legacy mirrors), Cozy visuals, data products,
+Gentle assistance, Web Share, the redesigned workspaces, and the offline shell
+are the production defaults, and every cutover flag is retained for one release
+as a rollback. See the Phase 23 cutover note under Decision 6.
+
+Phaser removal (Phase 24) and the Phase 23 soak are not done. The automated
+macOS, Windows, and Edge lanes are runner evidence, while the physical-device,
+Safari, touch-platform, and screen-reader gates remain manual later work, and a
+seven-day soak and a deployment are not claimed. Those gates must not be treated
+as complete based on this ADR.
 
 ## Related Documents
 

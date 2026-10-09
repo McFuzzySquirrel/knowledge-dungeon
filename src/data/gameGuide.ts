@@ -3,13 +3,11 @@
  *
  * Why the Phase 3 section is selected here rather than written once.
  *
- * `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE` has `productionDefault: false`, so the build that
- * ships today renders the pre-Phase-16 review panel: the note body and a "Done reviewing"
- * button, and nothing else. A manual that describes the redesigned panel would send a learner in
- * the shipping build looking for a 0-5 rating control, a "Save and finish later" button, and a
- * next-review-date readout, none of which that build renders. A manual is supposed to describe
- * the app the reader is actually running, so the guide is built in two lanes and the flag picks
- * one at build time.
+ * `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE` has `productionDefault: true` after the Phase 23
+ * cutover, so the build that ships today renders the redesigned review panel. The flag-off
+ * lane is the one-release rollback to the pre-Phase-16 panel: the note body and a "Done
+ * reviewing" button, and nothing else. A manual is supposed to describe the app the reader is
+ * actually running, so the guide is built in two lanes and the flag picks one at build time.
  *
  * Read from `@/config/featureFlags` once, at module scope, for the same reason and with the same
  * shape as `CREATOR_WORKSPACE_ENABLED` in `RoomPanel.tsx`: the flag is inlined at build time,
@@ -56,8 +54,9 @@ const GUIDE_AFTER_PHASE_3: string = "\n\n---\n\n## Dungeon Mechanics\n\n### Navi
 const ARCHAEOLOGIST_REVIEW_WORKSPACE_PHASE_3: string = "Reviewing a room needs two gates: that room's own encounter is cleared, and every other room in the dungeon is cleared too. Open a cleared room with **E**, read its artifact, answer its recall prompts out loud, and rate how well you recalled it. Each room's next review date is then scheduled with the **SM-2 algorithm**.\n\n- Pressing **E** opens the room for review and marks nothing; the pass is counted when you finish with the room panel\n- Rate your recall from 0 to 5, labelled from Forgot through Perfect\n- A rating below 3 resets the room to 1 day; 3 or higher gives 1 day, then 6 days, then multiplies by the room's own ease factor\n- Completing the review counts the pass at the rating you chose; closing the room panel counts it at a rating of 3 instead\n- If you have to leave part way through, **Save and finish later** keeps the review here, and the room offers to **Pick this review back up** the next time you open it\n- The panel shows this room's next review date, how far you are toward the next full pass, and whether the room is overdue\n- Study Statistics tracks reviewable rooms, rooms reviewed, full review passes, due today, overdue reviews, and average ease factor";
 
 /**
- * Phase 3 with the pre-Phase-16 panel rendered - the production default, and the whole of what
- * a learner is running today.
+ * Phase 3 with the pre-Phase-16 panel rendered - the one-release rollback lane
+ * (`VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=false`), not the production default after the
+ * Phase 23 cutover.
  *
  * The SM-2 bullet is stated as the schedule that `ratingOfPass` actually produces in this lane
  * rather than as the general rule. The general rule is the flag-on bullet above; here every pass

@@ -519,21 +519,26 @@ describe('the renderer boundary is enforced by two mechanisms that cover differe
 /* -------------------------------------------------------------------------- */
 
 describe('VITE_WORLD_RENDERER=phaser is the same build as no flag at all', () => {
-  it('the parser answers `phaser` for the explicit value and for an absent one', () => {
+  it('the parser answers `phaser` for the explicit value and for an absent one, and pixi is the explicit test host', () => {
+    // `worldRenderer` is a retained host switch: the production default stays `phaser`
+    // (the application host), so the value that is a no-op relative to "no flag" is
+    // `phaser`; `pixi` selects the Phase 9 test host and is an explicit choice, not a
+    // cutover.
     const absent = parseRuntimeConfig({});
-    const explicit = parseRuntimeConfig({ VITE_WORLD_RENDERER: 'phaser' });
+    const explicitHost = parseRuntimeConfig({ VITE_WORLD_RENDERER: 'phaser' });
     expect(absent.worldRenderer).toBe('phaser');
-    expect(explicit.worldRenderer).toBe('phaser');
+    expect(explicitHost.worldRenderer).toBe('phaser');
     // Deep equality, not just the one field: if the explicit value changed any other
     // default, this is where it would show.
-    expect(JSON.stringify(explicit)).toBe(JSON.stringify(absent));
+    expect(JSON.stringify(explicitHost)).toBe(JSON.stringify(absent));
+    expect(parseRuntimeConfig({ VITE_WORLD_RENDERER: 'pixi' }).worldRenderer).toBe('pixi');
   });
 
-  it('the chunking decision is identical for both, so rollback cannot change the artifact', () => {
+  it('the chunking decision is identical for both, so the host switch cannot change the artifact', () => {
     // The claim: the two builds differ by the value of one parsed flag and by nothing
-    // in the chunk graph. A Phaser build - explicit or default - claims Phaser and React
-    // and nothing else; a Pixi module id is the only thing that can land in the Pixi
-    // group, and a Phaser build contains none.
+    // in the chunk graph. A Phaser (application-host) build claims Phaser and React and
+    // nothing else; a Pixi module id is the only thing that can land in the Pixi group,
+    // and a Phaser build contains none.
     expect(manualChunkFor('/repo/node_modules/phaser/dist/phaser.js')).toBe('vendor-phaser');
     expect(manualChunkFor('/repo/node_modules/react/index.js')).toBe('vendor-react');
     for (const id of ['/repo/src/ui/App.tsx', '/repo/src/game/scenes/DungeonScene.ts', '/repo/src/theme/index.ts']) {

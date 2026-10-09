@@ -30,13 +30,18 @@ vi.mock('@/config/featureFlags', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/config/featureFlags')>();
   return {
     ...actual,
-    // The production default, stated explicitly so the flag's own default cannot drift
-    // unnoticed: this suite is the evidence that `false` is the rollback build.
+    // The Reviewed rollback value, stated explicitly so the flag's own cutover default cannot
+    // drift unnoticed: this suite is the evidence that a `VITE_SCRIBE_ENCOUNTER_WORKSPACE=false`
+    // build still renders the pre-Phase-15 modal.
     runtimeConfig: { ...actual.runtimeConfig, scribeEncounterWorkspace: false },
   };
 });
 
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
@@ -71,13 +76,17 @@ afterEach(() => {
 });
 
 describe('the rollback build', () => {
-  it('defaults the flag to off, which is what makes the modal the Scribe view', () => {
+  it('ships the flag on after the cutover, so this rollback build must set it false explicitly', () => {
     /*
      * `src/config/runtimeConfig.ts` directly, not the mocked `@/config/featureFlags`: this is
      * the value a release actually ships with, and asserting the mock would only assert
-     * this file.
+     * this file. After the Phase 23 cutover the production default is `true`; a rollback build
+     * sets `VITE_SCRIBE_ENCOUNTER_WORKSPACE=false`, which is the value this suite mocks above.
      */
-    expect(DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.scribeEncounterWorkspace).toBe(true);
+    expect(
+      parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'false' }).scribeEncounterWorkspace,
+    ).toBe(false);
     expect(RUNTIME_FLAG_ENV_KEYS.scribeEncounterWorkspace).toBe('VITE_SCRIBE_ENCOUNTER_WORKSPACE');
   });
 

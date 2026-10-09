@@ -2,6 +2,13 @@
 
 This document captures key UI surfaces in Knowledge Dungeon and explains what each screen is for.
 
+> **Phase 23 renderer note (2026-10-08):** the village, dungeon, and fishing worlds
+> are rendered by **PixiJS 8** (`VITE_PIXI_VILLAGE/DUNGEON/FISHING=true` by default)
+> inside the React DOM shell. Phaser is retained for one release as the renderer
+> rollback and is removed in Phase 24. The redesigned Creator, Scribe, and
+> Archaeologist workspaces are the production default; the pre-cutover views
+> described below where noted are the one-release rollback lane.
+
 ## 1) Welcome screen (phase/class/subject setup)
 
 ![Welcome screen](./assets/ui/welcome-screen.png)
@@ -16,9 +23,10 @@ Use this screen to:
 - Access the **Data** tab, which exposes import/export tools. In desktop mode you also get folder-level helpers.
 
 > 🔒 **Privacy**: all data is stored **locally on your device only**. In the web version this means
-> your browser's `localStorage`; in the desktop app it is written to your user-data folder.
-> Nothing is ever sent to a server. Use the **Export** tools in the **Data** tab to back up
-> subjects before clearing browser storage.
+> versioned **storage-v2** IndexedDB generations, with legacy `localStorage` mirror writes retained;
+> in the desktop app it is written to your user-data folder. Image attachments are stored as local
+> bytes and are not uploaded. Nothing is ever sent to a server. Use the **Export** tools in the
+> **Data** tab to back up subjects before clearing browser storage.
 
 After creating or selecting a subject, clicking "Enter Dungeon" takes you to the **Dungeon Village** rather than directly into a dungeon.
 
@@ -49,7 +57,7 @@ shows a readiness line that turns green once an archetype is selected.
 ![Dungeon Village](./assets/ui/village-overview.png)
 
 After creating a subject, the player arrives in the **Dungeon Village** - a
-Phaser-rendered top-down hub world. The village replaces the direct jump from
+PixiJS-rendered top-down hub world. The village replaces the direct jump from
 welcome screen to dungeon, giving the player a persistent home base.
 
 ### 2a) Village layout
@@ -137,7 +145,7 @@ dungeon count. Data is aggregated from the per-subject progression store.
 ![Main game shell](./assets/ui/game-screen.png)
 
 The game shell combines several persistent UI regions, all rendered as
-**floating overlays** above a full-canvas Phaser scene so the dungeon map
+**floating overlays** above a full-canvas PixiJS dungeon scene so the dungeon map
 gets the maximum amount of screen space:
 
 - **Top HUD (floating):** subject, room count, XP/rank, active phase, plus
@@ -146,7 +154,7 @@ gets the maximum amount of screen space:
   `Home` returns to the village, `?` opens the help overlay. First-time
   users see **one-time tooltips** on Map, Teleport, and Info buttons that explain
   each feature with a "Got it" dismiss button.
-- **Center gameplay canvas:** Phaser dungeon movement and interactions. The
+- **Center gameplay canvas:** PixiJS dungeon movement and interactions. The
   camera automatically zooms **in** when the player is standing inside a
   room (so the active room feels focused) and **out** when traveling along
   a corridor between rooms (so more of the map is visible). The player is drawn
@@ -215,6 +223,10 @@ The help dialog is opened from the `?` button (or keyboard `?`) and summarizes
 movement controls, map controls, collections, teleport usage, and phase differences.
 
 ## 9) Note editor modal (encounter resolution)
+
+> **Phase 23 note:** the redesigned Scribe encounter workspace is the production
+> default. This section describes the pre-Phase-15 `NoteEditorModal`, which the
+> one-release rollback build (`VITE_SCRIBE_ENCOUNTER_WORKSPACE=false`) still uses.
 
 ![Note editor modal in rich-text preview mode](./assets/ui/note-editor-modal.png)
 

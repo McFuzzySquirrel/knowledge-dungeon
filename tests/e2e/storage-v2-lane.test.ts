@@ -94,6 +94,7 @@ describe('Phase 4 storage-v2 lane declaration', () => {
   it('is internally consistent', () => {
     expect(validateStorageV2Lane()).toEqual([]);
     expect(STORAGE_V2_LANE.storageRepository).toBe('v2');
+    // Phase 23 keeps the application host; the PixiJS worlds are per-world flags.
     expect(STORAGE_V2_LANE.worldRenderer).toBe('phaser');
     expect(STORAGE_V2_LANE.claim.length).toBeGreaterThan(80);
     expect(STORAGE_V2_LANE.doesNotProve.length).toBeGreaterThanOrEqual(4);

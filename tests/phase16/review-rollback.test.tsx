@@ -39,13 +39,18 @@ vi.mock('@/config/featureFlags', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/config/featureFlags')>();
   return {
     ...actual,
-    // The production default, stated explicitly so the flag's own default cannot drift
-    // unnoticed: this suite is the evidence that `false` is the rollback build.
+    // The reviewed rollback value, stated explicitly so the flag's own cutover default cannot
+    // drift unnoticed: this suite is the evidence that a
+    // `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=false` build still renders the old notes tab.
     runtimeConfig: { ...actual.runtimeConfig, archaeologistReviewWorkspace: false },
   };
 });
 
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
@@ -106,8 +111,14 @@ afterEach(() => {
 });
 
 describe('the rollback build', () => {
-  it('defaults the flag to off, which is what makes the old notes tab the review view', () => {
-    expect(DEFAULT_RUNTIME_CONFIG.archaeologistReviewWorkspace).toBe(false);
+  it('ships the flag on after the cutover, so this rollback build must set it false explicitly', () => {
+    // After the Phase 23 cutover the production default is `true`; a rollback build sets
+    // `VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE=false`, which is the value this suite mocks above.
+    expect(DEFAULT_RUNTIME_CONFIG.archaeologistReviewWorkspace).toBe(true);
+    expect(
+      parseRuntimeConfig({ VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE: 'false' })
+        .archaeologistReviewWorkspace,
+    ).toBe(false);
     expect(RUNTIME_FLAG_ENV_KEYS.archaeologistReviewWorkspace).toBe(
       'VITE_ARCHAEOLOGIST_REVIEW_WORKSPACE',
     );

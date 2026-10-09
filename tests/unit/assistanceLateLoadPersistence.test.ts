@@ -1,9 +1,9 @@
 /**
- * Phase 22: a stored assistance mode survives a default build that never loads the store at boot.
+ * Phase 22: a stored assistance mode survives a rollback build that never loads the store at boot.
  *
  * ## The regression this file exists to catch
  *
- * The production default build (`VITE_ADAPTIVE_ASSISTANCE=false`) no longer fetches
+ * The Phase 23 rollback build (`VITE_ADAPTIVE_ASSISTANCE=false`) no longer fetches
  * `assistanceStore-*.js` at boot: the bootstrap reads and holds the record through
  * `@/services/assistance/assistanceRecord` instead. But the store is still loaded **later** on
  * that build - `useVillageFishing.onDecide` dynamically imports it to call `bumpSignals` when a
@@ -12,6 +12,10 @@
  * rather than the record the bootstrap read, that missed recall would **silently overwrite** a
  * learner's stored `off` with `standard`, on the very build whose flag is off. That is the
  * persistence loss this guard is written to make impossible.
+ *
+ * After the Phase 23 cutover the production default is `true` (the store is preloaded), so this
+ * file mocks the flag off to drive the rollback path; the positive control below asserts the
+ * shipped default and the rollback value from the real config module.
  *
  * ## Why this file imports the store dynamically, and nothing static
  *
@@ -31,7 +35,17 @@
  * `standard` and the write assertion sees `standard` in `localStorage`, so this file fails on
  * both counts. Verified by mutating that one function and re-running; see the Phase 22 record.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/config/featureFlags', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/config/featureFlags')>();
+  // The Phase 23 rollback build. On the default (flag-on) build bootstrap preloads the store,
+  // so the late-load record path this file guards only exists with the flag off.
+  return {
+    ...actual,
+    runtimeConfig: { ...actual.runtimeConfig, adaptiveAssistance: false },
+  };
+});
 
 import {
   __resetAssistanceRecordForTests,
@@ -39,6 +53,7 @@ import {
   pendingAssistanceRecord,
   readPersistedAssistance,
 } from '@/services/assistance/assistanceRecord';
+import { DEFAULT_RUNTIME_CONFIG, parseRuntimeConfig } from '@/config/runtimeConfig';
 import {
   bootstrapApplication,
   resetBootstrap,
@@ -106,6 +121,13 @@ beforeEach(() => {
 });
 
 describe('a record read at boot survives a store that loads only when it is first written to', () => {
+  it('the production default is on, and this file exercises the false rollback', () => {
+    // The positive control: the shipped default preloads the store, and this suite drives the
+    // rollback value via the module mock above.
+    expect(DEFAULT_RUNTIME_CONFIG.adaptiveAssistance).toBe(true);
+    expect(parseRuntimeConfig({ VITE_ADAPTIVE_ASSISTANCE: 'false' }).adaptiveAssistance).toBe(false);
+  });
+
   it('holds the record while no store is loaded, and the later store starts from it without clobbering it', async () => {
     window.localStorage.setItem(KEY, JSON.stringify(STORED_OFF));
 
@@ -117,7 +139,7 @@ describe('a record read at boot survives a store that loads only when it is firs
     expect(held?.mode, 'the bootstrap did not read the stored mode').toBe('off');
     expect(held?.dismissalCount).toBe(3);
     // ... and did **not** load the store to do it. This is the unit-level statement of the
-    // browser observation that `assistanceStore-*.js` is not requested at boot on the default
+    // browser observation that `assistanceStore-*.js` is not requested at boot on the rollback
     // artifact: nothing has bound the store, so nothing has loaded it.
     expect(
       assistanceStoreBound(),

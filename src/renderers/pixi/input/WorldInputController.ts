@@ -82,12 +82,14 @@ export interface WorldInputOptions {
    */
   readonly now?: () => number;
   /**
-   * Whether a keyboard event belongs to a text control and must be ignored.
+   * Whether a movement keystroke belongs to a focused control that natively
+   * consumes it, and must therefore not move the world.
    *
-   * Defaults to a local tag-based check. The renderer host has its own copy of
-   * this rule; the two are allowed to differ because only the host's is pinned by
-   * a gate, and this one exists for the same reason - typing `w` into a note must
-   * not walk the player.
+   * Defaults to {@link nativelyConsumesMovementKeys}, which is the durable rule:
+   * a text field, a `select`, a `range`, a radio, or an ARIA `slider` owns its
+   * keys, while a `button` or `checkbox` does not - so a learner may hold a
+   * direction while a non-consuming control has focus. Injected so a test can
+   * state the classification directly.
    */
   readonly shouldIgnoreKeyboard?: (target: EventTarget | null) => boolean;
 }
@@ -128,18 +130,100 @@ const MOVE_KEYS: ReadonlySet<string> = new Set([
 
 const INTERACT_KEYS: ReadonlySet<string> = new Set(['e', ' ']);
 
-/** A tag name a keystroke should not be taken from: the learner is typing. */
-function isTextEntry(target: EventTarget | null): boolean {
-  if (target === null || typeof (target as HTMLElement).tagName !== 'string') return false;
-  const element = target as HTMLElement;
+/** Input types that carry no caret: a keystroke in one is not typing. */
+const NON_TEXT_INPUT_TYPES: ReadonlySet<string> = new Set([
+  'checkbox',
+  'radio',
+  'button',
+  'submit',
+  'reset',
+  'range',
+  'color',
+  'file',
+  'image',
+  'hidden',
+]);
+
+/** Non-text inputs whose own default action still consumes the arrow keys. */
+const ARROW_OWNING_INPUT_TYPES: ReadonlySet<string> = new Set(['range', 'radio']);
+
+/**
+ * ARIA roles built on the same interaction as a slider or a radio: with one of
+ * these focused, an arrow key's default action is to change the element, not to
+ * move the world.
+ */
+const ARROW_CONSUMING_ROLES: ReadonlySet<string> = new Set([
+  'slider',
+  'spinbutton',
+  'listbox',
+  'combobox',
+  'radiogroup',
+  'radio',
+  'tablist',
+  'tree',
+  'grid',
+  'menu',
+  'menubar',
+  'option',
+]);
+
+/** The element a keyboard event landed in, if it landed in one. */
+function elementOf(target: EventTarget | null): HTMLElement | null {
+  if (target === null || typeof (target as HTMLElement).tagName !== 'string') return null;
+  return target as HTMLElement;
+}
+
+/** A control a keystroke is typing into, so the world must not take the key. */
+function isTextEntry(element: HTMLElement): boolean {
   if (element.isContentEditable) return true;
   const tag = element.tagName;
   if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
   if (tag !== 'INPUT') return false;
   const type = (element as HTMLInputElement).type?.toLowerCase() ?? '';
-  return !['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file', 'image', 'hidden'].includes(
-    type,
-  );
+  return !NON_TEXT_INPUT_TYPES.has(type);
+}
+
+/**
+ * The durable movement rule: **does this focused element natively consume the
+ * movement key?**
+ *
+ * A world that walks a player on ArrowRight and `D` is a global shortcut, and a
+ * global shortcut must never take a key a focused control is already using.
+ * That is the same reason text entry is excluded, generalised from "the learner
+ * is typing" to "the control owns the key". Two families qualify:
+ *
+ * 1. **Text entry** - a text field, a `number`/`date` field, a `textarea`, a
+ *    `select`, or a `contenteditable` region. The arrows move a caret and the
+ *    letters are typed, so the world must take neither.
+ * 2. **Directional controls** - `input[type=range]`, `input[type=radio]`, and
+ *    the ARIA roles that share their interaction (`slider`, `spinbutton`,
+ *    `listbox`, `combobox`, `radiogroup`, ...). The arrows, Home, End, PageUp,
+ *    and PageDown are the control's own *value change*.
+ *
+ * Everything else - `button`, `checkbox`, `a`, a plain `div` - owns Space and
+ * Enter but not the arrows, so a learner may still hold a direction while it has
+ * focus (the Phase 21 contract). The decision is about the *element's* native
+ * key handling, not about whether the element is merely focusable, so when a
+ * control owns the arrows the world yields every movement key it holds rather
+ * than racing the control for a subset of them.
+ *
+ * `input[type=range]` is the case that regressed in production. It is not text
+ * entry, so a rule that only asked "is the learner typing?" let the world claim
+ * ArrowRight from a focused volume slider - the player walked and the slider
+ * never moved. A range belongs to the second family, and this predicate is where
+ * that is decided.
+ */
+export function nativelyConsumesMovementKeys(target: EventTarget | null): boolean {
+  const element = elementOf(target);
+  if (element === null) return false;
+  if (isTextEntry(element)) return true;
+  const tag = element.tagName;
+  if (tag === 'INPUT') {
+    const type = (element as HTMLInputElement).type?.toLowerCase() ?? '';
+    return ARROW_OWNING_INPUT_TYPES.has(type);
+  }
+  const role = element.getAttribute('role')?.toLowerCase() ?? '';
+  return ARROW_CONSUMING_ROLES.has(role);
 }
 
 /**
@@ -148,7 +232,8 @@ function isTextEntry(target: EventTarget | null): boolean {
  * Used for the interact keys only: Space on a focused button fires the button's
  * click, and a controller that also queued an interact would perform the action
  * twice for one keypress. Movement keys ignore this - a learner may hold a
- * direction while a control has focus - and guard only against text entry.
+ * direction while a control has focus - and are yielded only through
+ * {@link nativelyConsumesMovementKeys}.
  */
 function isInteractiveControl(target: EventTarget | null): boolean {
   if (target === null || typeof (target as HTMLElement).tagName !== 'string') return false;
@@ -187,7 +272,7 @@ export function createWorldInputController(options: WorldInputOptions): WorldInp
   const zoomMin = options.zoomMin ?? ZOOM_MIN;
   const zoomMax = options.zoomMax ?? ZOOM_MAX;
   const now = options.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
-  const ignoreKeyboard = options.shouldIgnoreKeyboard ?? isTextEntry;
+  const ignoreMovement = options.shouldIgnoreKeyboard ?? nativelyConsumesMovementKeys;
 
   let enabled = true;
   let zoom = clampLocal(options.initialZoom ?? ZOOM_DEFAULT);
@@ -241,7 +326,10 @@ export function createWorldInputController(options: WorldInputOptions): WorldInp
     }
 
     if (!MOVE_KEYS.has(key)) return;
-    if (ignoreKeyboard(event.target)) return;
+    // A focused control that owns the key keeps it. The guard answers "does this
+    // element natively consume the movement key?", not "is this element
+    // focusable", so a button lets the world move and a range slider does not.
+    if (ignoreMovement(event.target)) return;
     pressed.add(key);
     if (key.startsWith('arrow') && typeof event.preventDefault === 'function') event.preventDefault();
   }

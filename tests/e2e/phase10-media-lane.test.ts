@@ -140,9 +140,10 @@ describe('phase 10 media lane declaration', () => {
   it('previews the production artifact and records that it is the production one', () => {
     expect(PHASE10_MEDIA_LANE.buildScript).toBe('build:web');
     expect(PHASE10_MEDIA_LANE.manifestPath).toBe('artifacts/web-artifact-manifest.json');
+    // Phase 23 keeps the application host; the PixiJS worlds are per-world flags.
     expect(PHASE10_MEDIA_LANE.worldRenderer).toBe('phaser');
-    expect(PHASE10_MEDIA_LANE.storageRepository).toBe('legacy');
-    expect(PHASE10_MEDIA_LANE.dataProductsV2).toBe(false);
+    expect(PHASE10_MEDIA_LANE.storageRepository).toBe('v2');
+    expect(PHASE10_MEDIA_LANE.dataProductsV2).toBe(true);
   });
 
   it('states the two boundaries a reader of this gate most needs', () => {
@@ -426,8 +427,11 @@ describe('phase 10 media spec', () => {
       'A context was constructed by neither',
     );
     // And the confound has its own test, so the attribution cannot rot into
-    // "always zero".
-    expect(specSource).toContain('records the pre-existing Phaser context rather than hiding it');
+    // "always zero". After the Phase 23 cutover the world is the PixiJS world on the
+    // production artifact and Phaser only on a rollback build, so the test reads the
+    // artifact's compiled flag and asserts the contribution that artifact actually makes.
+    expect(specSource).toContain('records what the world boot contributes to the audio probe');
+    expect(specSource).toContain("readCompiledBooleanFlag");
   });
 
   it('drives the real PixiJS asset runtime and the real loader, not a double', () => {

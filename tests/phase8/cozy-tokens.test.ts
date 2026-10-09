@@ -496,9 +496,11 @@ describe('Cozy theme preference mapping', () => {
 });
 
 describe('Cozy flag gate', () => {
-  it('keeps the production default false, with a documented rollback', () => {
+  it('defaults true after the cutover, with a documented false rollback', () => {
+    // Phase 23 makes the Cozy visual system the production default; `false` is the
+    // one-release rollback to the legacy renderer themes.
     const parsed = parseRuntimeConfig({});
-    expect(parsed.cozyVisuals).toBe(false);
+    expect(parsed.cozyVisuals).toBe(true);
     expect(parseRuntimeConfig({ VITE_COZY_VISUALS: 'false' }).cozyVisuals).toBe(false);
     expect(parseRuntimeConfig({ VITE_COZY_VISUALS: 'true' }).cozyVisuals).toBe(true);
   });

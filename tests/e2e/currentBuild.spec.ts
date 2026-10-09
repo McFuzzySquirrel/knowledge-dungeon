@@ -37,6 +37,11 @@ import {
 // own records is the honest shape: these two are the portrait/landscape pair the
 // village resize check exercises, not a second definition of the 320px gate.
 import { supportEntryForProject } from './support-matrix';
+// The renderer variant is read from the served artifact's compiled flags, not from
+// `process.env`: after the Phase 23 cutover the default build has every per-world flag
+// on without an environment variable, so `process.env` would describe a different
+// artifact than the one this spec runs against.
+import { defaultDistDir, readCompiledBooleanFlag } from './baked-flag';
 // The authored village content and the two shared numbers the NPC behaviour below
 // is measured against, imported rather than restated.
 //
@@ -279,7 +284,7 @@ test('safe tutorial action renders the dungeon world with static-only network tr
     webSocketUrls.push(`${url.origin}${url.pathname}`);
   });
 
-  const expectedPixiDungeon = process.env.VITE_PIXI_DUNGEON === 'true';
+  const expectedPixiDungeon = readCompiledBooleanFlag(defaultDistDir(), 'VITE_PIXI_DUNGEON');
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -537,15 +542,47 @@ function villageSubjectIds(names: readonly string[]): readonly string[] {
  * the narrowed helper seeds exactly one, and the village needs the full six-slot set
  * to show what the data model can hold. Every value is synthetic.
  */
+/**
+ * Clone a legacy subject fixture and give it its own attachment ids.
+ *
+ * The one legacy fixture carries a single attachment, and every seeded subject is a
+ * clone of it. Several subjects sharing one `attachmentId` migrate into one storage-v2
+ * generation whose duplicate attachment records the migration's own validation rejects
+ * (a genuine integrity check), which is what produced a `VALIDATION_FAILED` recovery
+ * surface when this lane seeded six subjects. The fix is to seed subjects that do not
+ * collide, not to tolerate the collision in the product.
+ */
+function withUniqueAttachmentIds<T>(value: T, suffix: string): T {
+  const clone = JSON.parse(JSON.stringify(value)) as T;
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const entry of node) visit(entry);
+      return;
+    }
+    if (node === null || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    for (const [key, entry] of Object.entries(record)) {
+      if (key === 'attachmentId' && typeof entry === 'string') {
+        record[key] = `${entry}${suffix}`;
+      } else {
+        visit(entry);
+      }
+    }
+  };
+  visit(clone);
+  return clone;
+}
+
 async function seedLegacySubjects(page: Page, names: readonly string[]): Promise<void> {
   const template = JSON.parse(readFileSync(VILLAGE_FIXTURE, 'utf8')) as {
     dungeon: Record<string, unknown>;
   };
   const entries = names.map((name, index) => {
     const id = `${VILLAGE_SUBJECT_ID_PREFIX}${index}`;
+    const namespaced = withUniqueAttachmentIds(template, `-${index}`);
     const snapshot = {
-      ...template,
-      dungeon: { ...template.dungeon, dungeonId: id, subjectName: name },
+      ...namespaced,
+      dungeon: { ...namespaced.dungeon, dungeonId: id, subjectName: name },
     };
     return { id, snapshot: JSON.stringify(snapshot) };
   });
@@ -700,7 +737,7 @@ async function readVillageScene(page: Page): Promise<VillageSceneReading> {
 }
 
 test('the village route mounts the renderer this build was asked for', async ({ page }, testInfo) => {
-  const expectedPixi = process.env.VITE_PIXI_VILLAGE === 'true';
+  const expectedPixi = readCompiledBooleanFlag(defaultDistDir(), 'VITE_PIXI_VILLAGE');
   const scriptRequests: string[] = [];
   page.on('request', (request) => {
     if (request.resourceType() === 'script') {
@@ -1544,7 +1581,11 @@ async function enterDefaultVillage(page: Page): Promise<void> {
   await waitForSubjectListEntry(page, VILLAGE_SUBJECT_NAMES[0]);
   await page.getByRole('button', { name: 'Continue to Village' }).click();
 
-  await expect(page.locator('.village-canvas canvas')).toBeVisible({ timeout: 30_000 });
+  // The default village is the PixiJS world after the Phase 23 cutover; the Phaser village is
+  // the rollback/isolation view. The readiness wait matches whichever mounted.
+  await expect(
+    page.locator('.village-canvas canvas, .pixi-village-world canvas').first(),
+  ).toBeVisible({ timeout: 30_000 });
 }
 
 
@@ -1762,11 +1803,12 @@ async function seedStatisticsSubjects(page: Page): Promise<readonly string[]> {
   };
   const entries = STATISTICS_SUBJECT_NAMES.map((name, index) => {
     const id = `${VILLAGE_SUBJECT_ID_PREFIX}stats-${index}`;
+    const namespaced = withUniqueAttachmentIds(template, `-stats-${index}`);
     return {
       id,
       snapshot: JSON.stringify({
-        ...template,
-        dungeon: { ...template.dungeon, dungeonId: id, subjectName: name },
+        ...namespaced,
+        dungeon: { ...namespaced.dungeon, dungeonId: id, subjectName: name },
       }),
     };
   });
@@ -1825,7 +1867,11 @@ test('a real study session is recorded, ends on every signal, and its totals sur
   // ── Step 2: enter the subject.
   await page.goto('/');
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
-  await expect(page.locator('.game-canvas-host canvas')).toBeVisible({ timeout: 30_000 });
+  // Either renderer mounts the dungeon; the production default is the PixiJS dungeon after the
+  // Phase 23 cutover and the Phaser host remains for a rollback build.
+  await expect(
+    page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').first(),
+  ).toBeVisible({ timeout: 30_000 });
 
   // The first-run onboarding modal intercepts pointer events until it is dismissed, so it is
   // dismissed the way a learner dismisses it.
@@ -1892,16 +1938,26 @@ test('a real study session is recorded, ends on every signal, and its totals sur
   // projects do not focus it for us, so the canvas is focused first and the key is retried. The
   // retry is not a workaround for a missing editor: if neither attempt opens it, the assertion
   // below still fails, and it fails with the editor's absence rather than with a timeout.
-  const editor = page.getByRole('dialog').filter({ hasText: 'Encounter:' });
+  const legacyEditor = page.getByRole('dialog').filter({ hasText: 'Encounter:' });
+  const scribeWorkspace = page.locator('#scribe-encounter-dialog');
   await page.keyboard.press('e');
-  if ((await editor.count()) === 0) {
-    await page.locator('.game-canvas-host canvas').click({ position: { x: 8, y: 8 } });
+  if ((await legacyEditor.count()) === 0 && (await scribeWorkspace.count()) === 0) {
+    await page
+      .locator('.game-canvas-host canvas, .pixi-dungeon-world canvas')
+      .first()
+      .click({ position: { x: 8, y: 8 } });
     await page.keyboard.press('e');
   }
+  // The interact key opens the Phase 15 Scribe encounter workspace on the cutover default and
+  // the legacy NoteEditorModal on a rollback build. Both expose the same three section tabs and
+  // the same confirmation/submit wording; only the frame's identity and the editor's id differ.
+  const usesScribeWorkspace = (await scribeWorkspace.count()) > 0;
+  const editor = usesScribeWorkspace ? scribeWorkspace : legacyEditor;
+  const sectionEditorSelector = usesScribeWorkspace ? '#scribe-note-editor' : '#note-section-editor';
   await expect(editor).toBeVisible({ timeout: 15_000 });
   for (const section of ['Summary', 'Key Points', 'Recall Question']) {
     await editor.getByRole('tab', { name: section }).click();
-    await editor.locator('#note-section-editor').fill(
+    await editor.locator(sectionEditorSelector).fill(
       `Synthetic ${section} body written by the Phase 18 browser lane.`,
     );
   }
@@ -1914,12 +1970,27 @@ test('a real study session is recorded, ends on every signal, and its totals sur
   // confirmation is ticked, so this label is the flow's own proof the note validated.
   await expect(submit).toHaveText('Defeat encounter');
   await submit.click();
-  // The XP toast is the reward's own announcement. Scoped to `.toast-message` because the room
-  // panel also renders a "Room cleared!" status line, and a strict-mode violation on two matches
-  // is a failure of the *locator*, not of the flow.
-  await expect(page.locator('.toast-message', { hasText: 'Room cleared!' })).toBeVisible({
-    timeout: 20_000,
-  });
+  // The reward's own announcement. The legacy NoteEditorModal raises a `.toast-message`; the
+  // Scribe encounter workspace reports through its in-panel feedback sentence instead, so the
+  // assertion is scoped to whichever surface opened. The room panel's own "Room cleared!" status
+  // line is deliberately not matched: it would satisfy a page-wide search even if no reward
+  // announcement had been made.
+  const clearedAnnouncement = usesScribeWorkspace
+    ? editor.getByText(/Room cleared[.!]/).first()
+    : page.locator('.toast-message', { hasText: /Room cleared[.!]/ });
+  await expect(clearedAnnouncement).toBeVisible({ timeout: 20_000 });
+
+  // The announcement is rendered from the command result; the progression record is persisted
+  // asynchronously just after. Wait for the persist rather than racing it, then assert on the
+  // same record the assertions below read. This does not relax the reward assertion: it still
+  // requires a nonzero XP total and one cleared room.
+  await expect
+    .poll(
+      async () =>
+        (await readPersistedStatistics(page)).progression['tutorial-first-walkthrough']?.xpTotal ?? 0,
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
 
   const afterNote = await readPersistedStatistics(page);
   expectUniqueSessionIds(afterNote.sessions);
@@ -1998,6 +2069,13 @@ test('a real study session is recorded, ends on every signal, and its totals sur
   // touch-emulated projects that produced a session that never closed - which is a failure of the
   // step's precondition, not of the lifecycle, and the assertion below could not tell the
   // difference.
+  // The legacy NoteEditorModal closes itself shortly after a clearing submit; the Phase 15
+  // Scribe encounter workspace stays open on its cleared state and is closed by its own control.
+  // Both are awaited closed before the next step, because a click aimed at a control behind an
+  // open dialog does nothing.
+  if (usesScribeWorkspace) {
+    await page.locator('#scribe-encounter-close').click();
+  }
   await expect(editor).toHaveCount(0, { timeout: 20_000 });
   await page.mouse.move(4, 4);
   const openBeforeLeave = left0(await readPersistedStatistics(page)).map((entry) => entry.sessionId);
@@ -2055,8 +2133,8 @@ test('a real study session is recorded, ends on every signal, and its totals sur
   await expect
     .poll(
       async () =>
-        (await page.locator('.game-canvas-host canvas').count()) +
-        (await page.locator('.village-canvas canvas').count()),
+        (await page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').count()) +
+        (await page.locator('.village-canvas canvas, .pixi-village-world canvas').count()),
       { timeout: 30_000 },
     )
     .toBeGreaterThan(0);
@@ -2659,7 +2737,7 @@ test('the Pixi village NPC conversation is reachable by pointer, keyboard, and t
 test('the default village build moves the player with the arrow keys', async ({ page }, testInfo) => {
   test.setTimeout(120_000);
 
-  const expectedPixi = process.env.VITE_PIXI_VILLAGE === 'true';
+  const expectedPixi = readCompiledBooleanFlag(defaultDistDir(), 'VITE_PIXI_VILLAGE');
   test.skip(
     expectedPixi,
     'Skipped: this spec covers the default Phaser village, the build that ships until Phase 24. The PixiJS ' +

@@ -165,8 +165,8 @@ export interface ReloadLaneDeclaration {
 const EMULATION_LIMITATIONS = [
   'Not a physical device, ChromeOS, or operating-system version certification.',
   'Not a cross-engine result; Firefox, WebKit, and Edge lanes do not run this spec.',
-  'Not the production artifact: this lane previews a build with VITE_STORAGE_REPOSITORY=v2 and VITE_DATA_PRODUCTS_V2=true, neither of which is the default.',
-  'Not evidence that the default build reaches the Data Center; the production default keeps the flag off.',
+  'Not a comparison against the pre-cutover stack: this artifact and the Phase 23 production default both use storage-v2 and have the data products on.',
+  'Not evidence that the legacy rollback still reloads; the Phase 23 rollback artifact is the evidence for that.',
   'Not a two-tab or concurrent-writer result.',
 ] as const;
 
@@ -271,7 +271,7 @@ export function validateReloadLane(lane: ReloadLaneDeclaration = RELOAD_LANE): r
   }
   if (lane.storageRepository !== 'v2') problems.push('the lane must record storageRepository v2.');
   if (lane.worldRenderer !== 'phaser') {
-    problems.push('no phase in scope changes the renderer, so the lane must still expect Phaser.');
+    problems.push('the flagged artifact is a post-cutover build, whose host is still the application host (phaser); the PixiJS worlds are per-world flags.');
   }
   if (lane.viewport.width !== 1440 || lane.viewport.height !== 900) {
     problems.push('the lane must use the desktop-chromium-equivalent viewport.');

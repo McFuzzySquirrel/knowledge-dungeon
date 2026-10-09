@@ -243,7 +243,7 @@ interface CompatibilityEvidence {
 
 const NOT_OBSERVED_RENDERER: RendererEvidence = {
   mode: 'not-observed',
-  expectedMode: 'phaser',
+  expectedMode: 'pixi',
   graphicsContext: 'not-observed',
   canvas: { width: 0, height: 0, clientWidth: 0, clientHeight: 0 },
   phaserChunkRequested: false,
@@ -599,7 +599,10 @@ async function runCompatLane(
       artifact.servedEntrypointMatchesRecorded,
       'The preview server must serve the recorded manifest entrypoint byte-for-byte.',
     ).toBe(true);
-    expect(artifact.distIncludesRendererChunkMatchingPixi).toBe(false);
+    expect(
+      artifact.distIncludesRendererChunkMatchingPixi,
+      'After the Phase 23 cutover the recorded production artifact mounts the Pixi worlds, so it must contain a Pixi chunk.',
+    ).toBe(true);
 
     await body({ artifact, requests, webSockets, setRenderer: (next) => (renderer = next) });
   } catch (error) {
@@ -776,7 +779,7 @@ test('records the approved support-matrix lane and the recorded artifact identit
   });
 });
 
-test('renders the default Phaser world from the recorded artifact with static-only traffic', async ({
+test('renders the default Pixi world from the recorded artifact with static-only traffic', async ({
   page,
   browser,
   request,
@@ -795,13 +798,16 @@ test('renders the default Phaser world from the recorded artifact with static-on
       await page.goto('/');
       await page.getByRole('button', { name: 'Start Tutorial' }).click();
 
-      const canvas = page.locator('.game-canvas-host canvas');
+      // After the Phase 23 cutover the default production dungeon is the PixiJS world on
+      // the application host, so the surface is `.pixi-dungeon-world` rather than the
+      // Phaser `.game-canvas-host`.
+      const canvas = page.locator('.pixi-dungeon-world canvas');
       await expect(canvas).toBeVisible({ timeout: 30_000 });
 
       const canvasState = await canvas.evaluate((element) => {
         const worldCanvas = element as HTMLCanvasElement;
         // getContext never creates a context of a different type, so probing for
-        // an existing WebGL context is side-effect free for a canvas Phaser owns.
+        // an existing WebGL context is side-effect free for the Pixi renderer's canvas.
         const graphicsContext = worldCanvas.getContext('webgl2')
           ? 'webgl2'
           : worldCanvas.getContext('webgl')
@@ -829,7 +835,7 @@ test('renders the default Phaser world from the recorded artifact with static-on
       );
 
       setRenderer({
-        mode: 'phaser',
+        mode: 'pixi',
         expectedMode: entry.expectedRendererMode,
         graphicsContext: canvasState.graphicsContext,
         canvas: {
@@ -841,15 +847,20 @@ test('renders the default Phaser world from the recorded artifact with static-on
         phaserChunkRequested,
       });
 
-      // The default production renderer in Phase 1A is Phaser on every approved
-      // engine, and the recorded artifact must not contain a Pixi chunk at all.
-      expect(entry.expectedRendererMode).toBe('phaser');
+      // The Phase 23 cutover makes the PixiJS world the production default on every
+      // approved engine: the artifact contains the Pixi runtime and requests it, the
+      // application host is not the Phase 9 test host, and no Phaser vendor chunk is
+      // emitted or fetched.
+      expect(entry.expectedRendererMode).toBe('pixi');
+      expect(
+        rendererChunkMatchingPixi,
+        'Expected the recorded production artifact to load its named Pixi chunk.',
+      ).toBe(true);
       expect(
         phaserChunkRequested,
-        'Expected the recorded production artifact to load its named Phaser vendor chunk.',
-      ).toBe(true);
-      expect(rendererChunkMatchingPixi).toBe(false);
-      expect(artifact.distIncludesRendererChunkMatchingPixi).toBe(false);
+        'The recorded production artifact must not load a Phaser vendor chunk after the cutover.',
+      ).toBe(false);
+      expect(artifact.distIncludesRendererChunkMatchingPixi).toBe(true);
     },
   );
 });

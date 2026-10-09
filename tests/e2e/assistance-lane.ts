@@ -102,12 +102,21 @@ export const ASSISTANCE_DEFAULT_CONFIG_BASENAME = 'playwright.assistance-default
 
 /** The build scripts that produce the two artifacts these lanes preview. */
 export const ASSISTANCE_BUILD_SCRIPT = 'build:web:assistance';
-export const ASSISTANCE_DEFAULT_BUILD_SCRIPT = 'build:web';
+/**
+ * The rollback artifact's build script.
+ *
+ * Before the Phase 23 cutover this lane previewed `npm run build:web`, because the
+ * default build *was* the pre-cutover artifact. After the cutover the default build
+ * carries the assistance flag at `true`, so a "no assistance" claim verified against
+ * it would be vacuous. `build:web:rollback` forces every cutover flag to its
+ * pre-cutover value, so this is the same artifact the previous release shipped.
+ */
+export const ASSISTANCE_DEFAULT_BUILD_SCRIPT = 'build:web:rollback';
 
-/** The build-time flag, its value on the flagged build, and its production default. */
+/** The build-time flag, its value on the flagged build, and the cutover production default. */
 export const ASSISTANCE_FLAG = 'VITE_ADAPTIVE_ASSISTANCE';
 export const ASSISTANCE_FLAG_VALUE = 'true';
-export const ASSISTANCE_FLAG_PRODUCTION_DEFAULT = 'false';
+export const ASSISTANCE_FLAG_PRODUCTION_DEFAULT = 'true';
 
 /**
  * The flag key as the bundler emits it, and the shape a preflight matches in `dist/`.
@@ -183,15 +192,15 @@ export const ASSISTANCE_LANE_CHUNK_STEMS = Object.freeze([
   ASSISTANCE_STORE_CHUNK_STEM,
 ]);
 
-/** One recorded identity per artifact, so a flagged build is never mistaken for a default one. */
+/** One recorded identity per artifact, so a flagged build is never mistaken for a rollback one. */
 export const ASSISTANCE_MANIFEST_PATH = 'artifacts/web-artifact-manifest-assistance.json';
-export const ASSISTANCE_DEFAULT_MANIFEST_PATH = 'artifacts/web-artifact-manifest.json';
+export const ASSISTANCE_DEFAULT_MANIFEST_PATH = 'artifacts/web-artifact-manifest-rollback.json';
 
 /** The recorded-identity script pair, per artifact. */
 export const ASSISTANCE_RECORD_SCRIPT = 'record:web-artifact:assistance';
 export const ASSISTANCE_VERIFY_SCRIPT = 'verify:web-artifact:assistance';
-export const ASSISTANCE_DEFAULT_RECORD_SCRIPT = 'record:web-artifact';
-export const ASSISTANCE_DEFAULT_VERIFY_SCRIPT = 'verify:web-artifact';
+export const ASSISTANCE_DEFAULT_RECORD_SCRIPT = 'record:web-artifact:rollback';
+export const ASSISTANCE_DEFAULT_VERIFY_SCRIPT = 'verify:web-artifact:rollback';
 
 /** The Playwright invocations, spelled once each. */
 export const ASSISTANCE_PLAYWRIGHT_COMMAND = `playwright test --config=${ASSISTANCE_CONFIG_FILE}`;
@@ -331,7 +340,7 @@ const EMULATION_LIMITATIONS = [
 ] as const;
 
 const SHARED_LIMITATIONS = [
-  'Not a claim about the other four Phase 19 surfaces. The Creator, Scribe and Archaeologist slots are each behind their own productionDefault:false workspace flag, which build:web:assistance does not set, so the fishing slot is the only surface this artifact can reach and no card was observed on any other one.',
+  'Not a claim about the other four Phase 19 surfaces. The Creator, Scribe and Archaeologist workspaces are each behind their own flag, which the cutover default now turns on, so this artifact carries those surfaces too; the lane only drives the fishing slot, and no card was observed on any other one.',
   'Not a data-integrity certification: what the lane asserts about dismissal is that the control is advisory, so dismissing a suggestion removes the row and publishes a sentence and nothing else is written.',
   'Not a backup, data-product, offline, or licence result; those are Phases 5 through 8.',
 ] as const;
@@ -361,10 +370,10 @@ export interface AssistanceLaneDeclaration {
   readonly expectsFlagOn: boolean;
   /** Whether the lane is expected to observe a rendered suggestion card. */
   readonly expectsCard: boolean;
-  readonly worldRenderer: 'phaser';
-  readonly villageRenderer: 'phaser';
-  readonly storageRepository: 'legacy';
-  readonly dataProductsV2: false;
+  readonly worldRenderer: 'pixi' | 'phaser';
+  readonly villageRenderer: 'pixi' | 'phaser';
+  readonly storageRepository: 'v2' | 'legacy';
+  readonly dataProductsV2: boolean;
   readonly viewport: { readonly width: number; readonly height: number };
   readonly deviceScaleFactor: number;
   readonly hasTouch: boolean;
@@ -401,10 +410,12 @@ export const ASSISTANCE_LANE: AssistanceLaneDeclaration = Object.freeze({
   ciRunScript: ASSISTANCE_CI_RUN_SCRIPT,
   expectsFlagOn: true,
   expectsCard: true,
+  // The cutover default keeps the application host, but `VITE_PIXI_VILLAGE` defaults on,
+  // so the village world is the PixiJS one.
   worldRenderer: 'phaser',
-  villageRenderer: 'phaser',
-  storageRepository: 'legacy',
-  dataProductsV2: false,
+  villageRenderer: 'pixi',
+  storageRepository: 'v2',
+  dataProductsV2: true,
   viewport: ASSISTANCE_VIEWPORT,
   deviceScaleFactor: ASSISTANCE_DEVICE_SCALE_FACTOR,
   hasTouch: ASSISTANCE_HAS_TOUCH,
@@ -446,20 +457,30 @@ export const ASSISTANCE_DEFAULT_LANE: AssistanceLaneDeclaration = Object.freeze(
   ciRunScript: ASSISTANCE_DEFAULT_CI_RUN_SCRIPT,
   expectsFlagOn: false,
   expectsCard: false,
+  // The rollback artifact is the pre-cutover build: Phaser on both renderers, the
+  // legacy repository, and the data-products flag off. Overriding the cutover
+  // identity inherited from `ASSISTANCE_LANE` is what keeps the pair's two claims
+  // about two genuinely different artifacts.
+  worldRenderer: 'phaser',
+  villageRenderer: 'phaser',
+  storageRepository: 'legacy',
+  dataProductsV2: false,
   claim:
-    'Against the default production artifact, the identical journey - the same seeded subject, the same walk to the ' +
-    'pond, the same cast, hook, and a recall question answered wrong for the room it came from - renders no ' +
-    'assistance element of any kind: the card region, a suggestion, a reason sentence and a Dismiss control are all ' +
-    'absent from the document, and the lazy card chunk is never requested even though the journey reached the ' +
-    'DOM state that mounts it. The Welcome route also makes no request for the assistance store chunk: Phase 22 ' +
-    'removed the unconditional boot fetch, so on the production default a launch no longer pulls the store for a ' +
-    'feature it renders nothing of. This is the Phase 19 production-default line observed rather than asserted, and ' +
-    'it is the half of the evidence that a card which is always on screen cannot produce.',
+    'Against the Phase 23 full-rollback artifact - every cutover flag at its pre-cutover value - the identical ' +
+    'journey - the same seeded subject, the same walk to the pond, the same cast, hook, and a recall question ' +
+    'answered wrong for the room it came from - renders no assistance element of any kind: the card region, a ' +
+    'suggestion, a reason sentence and a Dismiss control are all absent from the document, and the lazy card ' +
+    'chunk is never requested even though the journey reached the DOM state that mounts it. The Welcome route ' +
+    'also makes no request for the assistance store chunk: Phase 22 removed the unconditional boot fetch, so on ' +
+    'the rollback artifact a launch no longer pulls the store for a feature it renders nothing of. This is the ' +
+    'Phase 19 rollback line observed rather than asserted, and it is the half of the evidence that a card which ' +
+    'is always on screen cannot produce.',
   doesNotProve: [
     ...EMULATION_LIMITATIONS,
     ...SHARED_LIMITATIONS,
-    'Not a claim that the card is absent because the code is absent. The default build emits the same lazy lane chunks as the flagged one; what differs is the compiled flag constant, and the preflight reads it out of the emitted bytes rather than out of the environment.',
-    'Not a claim that the assistance store chunk is never requested at all on the default build. It is absent at boot, which is what Phase 22 removed, but a missed recall later in the journey dynamically imports the store to record a signal - a write-time fetch, not a boot one.',
+    'Not a claim that the card is absent because the code is absent. The rollback build emits the same lazy lane chunks as the cutover one; what differs is the compiled flag constant, and the preflight reads it out of the emitted bytes rather than out of the environment.',
+    'Not a claim that the assistance store chunk is never requested at all on the rollback build. It is absent at boot, which is what Phase 22 removed, but a missed recall later in the journey dynamically imports the store to record a signal - a write-time fetch, not a boot one.',
+    'Not the complete absence of assistance from the shipped product: this lane observes the Phase 23 rollback artifact. The cutover default build carries the same code with the flag compiled on, which is the flagged lane\'s subject and this lane\'s positive control.',
   ],
 });
 
@@ -502,8 +523,8 @@ export function validateAssistanceLanePair(
   }
   if (flagged.buildScript !== ASSISTANCE_BUILD_SCRIPT || fallback.buildScript !== ASSISTANCE_DEFAULT_BUILD_SCRIPT) {
     problems.push(
-      'the flagged lane previews `build:web:assistance` and the default lane previews `build:web`; anything else ' +
-        'makes one of the two claims a claim about an artifact neither flag describes.',
+      'the cutover lane previews `build:web:assistance` and the rollback lane previews `build:web:rollback`; ' +
+        'anything else makes one of the two claims a claim about an artifact neither flag describes.',
     );
   }
   return problems;
@@ -589,16 +610,32 @@ export function validateAssistanceLane(
   ) {
     problems.push('the assistance lane must not bind an existing suite spec file.');
   }
-  if (lane.worldRenderer !== 'phaser' || lane.villageRenderer !== 'phaser') {
-    problems.push(
-      'build:web:assistance sets no renderer switch, so both renderers are the Phaser production default.',
-    );
-  }
-  if (lane.storageRepository !== 'legacy') {
-    problems.push('this build is a production-mode build, so its storage repository is the production default.');
-  }
-  if (lane.dataProductsV2 !== false) {
-    problems.push('this build is a production-mode build, so the data-products flag must be recorded as off.');
+  if (lane.expectsFlagOn) {
+    // The Phase 23 cutover keeps the application host (`phaser`) and turns the per-world
+    // flags on, so the village world is the PixiJS one (`pixi`).
+    if (lane.worldRenderer !== 'phaser' || lane.villageRenderer !== 'pixi') {
+      problems.push(
+        'build:web:assistance produces the Phase 23 cutover default: the application host (phaser) with the PixiJS village world (pixi).',
+      );
+    }
+    if (lane.storageRepository !== 'v2') {
+      problems.push('the cutover-default artifact reads and writes storage-v2.');
+    }
+    if (lane.dataProductsV2 !== true) {
+      problems.push('the cutover-default artifact has the data-products flag on.');
+    }
+  } else {
+    if (lane.worldRenderer !== 'phaser' || lane.villageRenderer !== 'phaser') {
+      problems.push(
+        'build:web:rollback restores the Phaser renderers, so both must be recorded as phaser.',
+      );
+    }
+    if (lane.storageRepository !== 'legacy') {
+      problems.push('the rollback artifact restores the legacy storage repository.');
+    }
+    if (lane.dataProductsV2 !== false) {
+      problems.push('the rollback artifact has the data-products flag off.');
+    }
   }
   if (lane.engine !== 'chromium') problems.push('the lane is Chromium only; cross-browser evidence is Phase 21 matrix work.');
   if (lane.hasTouch !== false) {

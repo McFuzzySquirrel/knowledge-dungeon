@@ -1314,16 +1314,17 @@ describe('QA storage-v2 is reachable only through the selection boundary', () =>
     expect(offenders).toEqual([]);
   });
 
-  it('the default build selects the legacy repository and holds no storage-v2 handle', async () => {
-    // The flag is the cutover control. This asserts the production default is
-    // still the safe one and that a module asking "which repository?" before the
-    // bootstrap runs gets the legacy answer rather than an unopened handle.
+  it('the default build selects storage-v2, and the pre-bootstrap answer is still the safe legacy one', async () => {
+    // The flag is the cutover control. The Phase 23 cutover makes storage-v2 the
+    // production default; `legacy` is the documented rollback. Independently, a module
+    // asking "which repository?" *before* the bootstrap runs still gets the safe legacy
+    // answer rather than an unopened handle.
     const { DEFAULT_RUNTIME_CONFIG, parseRuntimeConfig } = await import('@/config/runtimeConfig');
     const selection = await import('@/services/persistence/v2/repositorySelection');
 
-    expect(DEFAULT_RUNTIME_CONFIG.storageRepository).toBe('legacy');
-    expect(parseRuntimeConfig({}).storageRepository).toBe('legacy');
-    expect(parseRuntimeConfig({ VITE_STORAGE_REPOSITORY: 'v2' }).storageRepository).toBe('v2');
+    expect(DEFAULT_RUNTIME_CONFIG.storageRepository).toBe('v2');
+    expect(parseRuntimeConfig({}).storageRepository).toBe('v2');
+    expect(parseRuntimeConfig({ VITE_STORAGE_REPOSITORY: 'legacy' }).storageRepository).toBe('legacy');
 
     selection.resetRepositorySelection();
     expect(selection.currentRepositorySelection()).toBe('legacy');

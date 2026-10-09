@@ -6,12 +6,14 @@
  * ## Rule 1: it renders nothing at all unless the flag says so
  *
  * `VITE_DATA_PRODUCTS_V2` is the plan's owner flag for all three data-product
- * phases and it defaults to `false`. The Welcome screen mounts this component only
- * when the flag is on, and this component reads the flag itself as well, so a
- * build that is served this file by mistake still renders nothing: no heading, no
- * tab, no control, no live region. The default build's data tab is therefore
- * exactly what it was before this file existed, and the plan's Phase 5 rollback is
- * a build-time flag rather than a source change.
+ * phases. After the Phase 23 cutover it defaults to `true`, so the production
+ * build mounts this component; `false` is the one-release rollback. The Welcome
+ * screen mounts this component only when the flag is on, and this component reads
+ * the flag itself as well, so a build that is served this file by mistake still
+ * renders nothing: no heading, no tab, no control, no live region. The
+ * flag-off (rollback) build's data tab is therefore exactly what it was before
+ * this file existed, and the plan's Phase 5 rollback is a build-time flag rather
+ * than a source change.
  *
  * ## Rule 2: both products are reached only through a lazy `import()`
  *

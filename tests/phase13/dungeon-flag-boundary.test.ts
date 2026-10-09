@@ -71,22 +71,23 @@ function sourceFilesIn(directory: string): string[] {
   return found.sort();
 }
 
-describe('VITE_PIXI_DUNGEON is a build-time switch whose default is still off', () => {
-  it('is declared with the Phase 13 owner and an unchanged production default', () => {
+describe('VITE_PIXI_DUNGEON is a build-time switch whose production default is now on', () => {
+  it('is declared with the Phase 13 owner and the post-cutover production default', () => {
     const definition = FEATURE_FLAG_MATRIX.pixiDungeon;
     expect(definition.environmentVariable).toBe('VITE_PIXI_DUNGEON');
     expect(definition.valueKind).toBe('boolean');
-    // The plan's rollback line is "set VITE_PIXI_DUNGEON=false", which only means
-    // something if the default is already false.
-    expect(definition.productionDefault).toBe(false);
+    // The plan's rollback line is "set VITE_PIXI_DUNGEON=false"; the Phase 23 cutover
+    // makes the Pixi dungeon the production default, so that rollback is now the off
+    // switch.
+    expect(definition.productionDefault).toBe(true);
     expect(definition.ownerPhase).toBe(13);
     expect(definition.rollback).toContain('VITE_PIXI_DUNGEON=false');
   });
 
   it('parses exactly as the village flag parses, in all three spellings', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.pixiDungeon).toBe('VITE_PIXI_DUNGEON');
-    expect(DEFAULT_RUNTIME_CONFIG.pixiDungeon).toBe(false);
-    expect(parseRuntimeConfig({}).pixiDungeon).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.pixiDungeon).toBe(true);
+    expect(parseRuntimeConfig({}).pixiDungeon).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_DUNGEON: 'false' }).pixiDungeon).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_DUNGEON: 'true' }).pixiDungeon).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_DUNGEON: ' TRUE ' }).pixiDungeon).toBe(true);
@@ -124,16 +125,21 @@ describe('VITE_PIXI_DUNGEON is a build-time switch whose default is still off', 
 });
 
 describe('the flagged build has a chunk gate of its own', () => {
-  it('the build script sets the dungeon flag and nothing else', () => {
+  it('the build script sets the dungeon flag and pins the other worlds off', () => {
     const manifest = JSON.parse(
       readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
+    // After the Phase 23 cutover every per-world switch defaults on, so the isolation is
+    // explicit: the world host is pinned to `phaser` (so GameScreen, and therefore the dungeon
+    // route, stays reachable) and the other two Pixi worlds are pinned off.
     expect(manifest.scripts['build:web:pixi-dungeon']).toBe(
-      'VITE_PIXI_DUNGEON=true npm run build:web',
+      'VITE_WORLD_RENDERER=phaser VITE_PIXI_DUNGEON=true VITE_PIXI_VILLAGE=false VITE_PIXI_FISHING=false npm run build:web',
     );
-    // `VITE_WORLD_RENDERER` deliberately stays `phaser`, which is what makes a separate
-    // gate necessary: the Phase 9 renderer check cannot see this switch.
-    expect(manifest.scripts['build:web:pixi-dungeon']).not.toContain('VITE_WORLD_RENDERER');
+    // The world host stays `phaser`, which is what makes a separate gate necessary: the Phase 9
+    // renderer check cannot see this switch when the host is phaser.
+    expect(manifest.scripts['build:web:pixi-dungeon']).toContain('VITE_WORLD_RENDERER=phaser');
+    expect(manifest.scripts['build:web:pixi-dungeon']).toContain('VITE_PIXI_VILLAGE=false');
+    expect(manifest.scripts['build:web:pixi-dungeon']).toContain('VITE_PIXI_FISHING=false');
   });
 
   it('the build plugin is handed the parsed dungeon flag', () => {

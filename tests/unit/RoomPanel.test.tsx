@@ -1,5 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+
+vi.mock('@/config/featureFlags', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/config/featureFlags')>();
+  // Phase 23 makes the redesigned Creator and Archaeologist workspaces the production
+  // default. This file pins the legacy RoomPanel behaviour that survives as the one-release
+  // rollback (the redesigned default is covered by tests/phase14/creator-workspace.test.tsx
+  // and tests/phase16/review-workspace.test.tsx), so it drives the flag-off surface.
+  return {
+    ...actual,
+    runtimeConfig: {
+      ...actual.runtimeConfig,
+      creatorWorkspace: false,
+      archaeologistReviewWorkspace: false,
+    },
+  };
+});
+
 import { useSessionStore } from '@/store/sessionStore';
 import type { SubjectSnapshot } from '@/core/validation/persistence';
 import { RoomPanel } from '@/ui/components/RoomPanel';

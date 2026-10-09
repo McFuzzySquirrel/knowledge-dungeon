@@ -1557,7 +1557,8 @@ describe('the Phase 18 rollback gate', () => {
   });
 
   it('is not a build-time feature flag, and the flag matrix is unchanged', async () => {
-    const { NON_CUTOVER_FLAG_KEYS, FEATURE_FLAG_MATRIX } = await import('@/config/featureFlags');
+    const { CUTOVER_BOOLEAN_FLAG_KEYS, NON_CUTOVER_FLAG_KEYS, FEATURE_FLAG_MATRIX } =
+      await import('@/config/featureFlags');
     const { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } = await import('@/config/runtimeConfig');
 
     // Exactly the one kill switch Phase 10 added, and no Phase 18 entry beside it.
@@ -1569,12 +1570,14 @@ describe('the Phase 18 rollback gate', () => {
     for (const key of Object.values(RUNTIME_FLAG_ENV_KEYS)) {
       expect(key).not.toMatch(/STAT/i);
     }
-    // Every flag except the one kill switch still defaults off, so the three gates that
-    // assert "no cutover flag defaults on" need no change.
-    const defaultsOn = Object.entries(FEATURE_FLAG_MATRIX).filter(
-      ([, definition]) => definition.productionDefault === true,
-    );
-    expect(defaultsOn.map(([key]) => key)).toEqual(['audioEnabled']);
+    // The flags that default on are exactly the reviewed cutover booleans plus the one kill
+    // switch, so an unreviewed flag cannot quietly default on - and this phase added no flag
+    // at all.
+    const defaultsOn = Object.entries(FEATURE_FLAG_MATRIX)
+      .filter(([, definition]) => definition.productionDefault === true)
+      .map(([key]) => key)
+      .sort();
+    expect(defaultsOn).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, 'audioEnabled'].sort());
   });
 });
 

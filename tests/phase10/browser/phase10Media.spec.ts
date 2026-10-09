@@ -6,6 +6,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type TestInfo } from '@playwright/test';
 
 import { evidenceRelativePath } from '../../e2e/compat-evidence';
+import { readCompiledBooleanFlag } from '../../e2e/baked-flag';
 
 import {
   PHASE10_MEDIA_DEV_ORIGIN,
@@ -365,7 +366,13 @@ async function openWelcome(page: Page, origin = PHASE10_MEDIA_PREVIEW_ORIGIN): P
 /** The tutorial subject, which is the repository's own synthetic fixture. */
 async function enterGameWorld(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
-  await expect(page.locator('.game-canvas-host canvas')).toBeVisible({ timeout: WORLD_PRESENT_TIMEOUT_MS });
+  // The game screen mounts the dungeon in either renderer; after the Phase 23 cutover the
+  // production default is the PixiJS dungeon, and the Phaser host remains for a rollback
+  // build. Matching both keeps this readiness wait renderer-agnostic rather than pinned to
+  // a `.game-canvas-host` that no longer exists on the cutover artifact.
+  await expect(
+    page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').first(),
+  ).toBeVisible({ timeout: WORLD_PRESENT_TIMEOUT_MS });
   await dismissOnboarding(page);
 }
 
@@ -600,7 +607,10 @@ test.describe('the artifact under test', () => {
   test('is the recorded production build, verified rather than assumed', () => {
     expect(LANE.buildScript).toBe('build:web');
     expect(LANE.manifestPath).toBe('artifacts/web-artifact-manifest.json');
+    // Phase 23: the production build is the cutover artifact on storage-v2, and it keeps
+    // the application host (`phaser`); the PixiJS worlds are per-world flags.
     expect(LANE.worldRenderer).toBe('phaser');
+    expect(LANE.storageRepository).toBe('v2');
   });
 });
 
@@ -656,10 +666,16 @@ test.describe('manual check 1, negative half: nothing constructs a context befor
     ).toBe(0);
   });
 
-  test('records the pre-existing Phaser context rather than hiding it', async ({ page }, testInfo) => {
+  test('records what the world boot contributes to the audio probe rather than hiding it', async ({
+    page,
+  }, testInfo) => {
     // A second test for the confound itself, so the attribution above cannot rot
-    // into "always zero". If Phaser stopped constructing a context, or started
-    // constructing one the audio service owns, this test is the one that notices.
+    // into "always zero". After the Phase 23 cutover the production dungeon is the
+    // PixiJS world (the Phaser host is only a rollback build), so the world-boot
+    // contribution is read from the artifact's own compiled flag rather than assumed
+    // to be Phaser's. If the world builds a context the probe cannot attribute, this
+    // test is the one that notices.
+    const pixiDungeon = readCompiledBooleanFlag(path.join(REPO_ROOT, 'dist'), 'VITE_PIXI_DUNGEON');
     await installAudioProbe(page);
     await seedReturningLearner(page);
     await openWelcome(page);
@@ -667,20 +683,35 @@ test.describe('manual check 1, negative half: nothing constructs a context befor
     const atWelcome = await readAudioProbe(page);
     await enterGameWorld(page);
     const afterWorld = await readAudioProbe(page);
-    await attachJson(testInfo, 'audio-probe-phaser-attribution.json', { atWelcome, afterWorld });
+    await attachJson(testInfo, 'audio-probe-world-attribution.json', {
+      pixiDungeon,
+      atWelcome,
+      afterWorld,
+    });
 
     expect(atWelcome.byAudioService, 'Welcome constructs no context at all').toBe(0);
-    expect(atWelcome.byPhaser, 'Welcome constructs none, so Phaser has not booted yet').toBe(0);
+    expect(atWelcome.byPhaser, 'Welcome constructs none, so no world engine has booted yet').toBe(0);
     expect(
       afterWorld.byAudioService,
-      'Booting the Phaser world does not make the audio service build a context',
+      'Booting the world does not make the audio service build a context',
     ).toBe(0);
-    // The recorded fact: the world boot costs one Phaser-owned context. Asserted
-    // rather than allowed for, so a change in either direction is visible.
-    expect(
-      afterWorld.byPhaser,
-      'The Phaser world constructs its own sound-manager context, which is pre-existing and not Phase 10\'s',
-    ).toBe(1);
+    if (pixiDungeon) {
+      // The PixiJS world constructs no audio context, so there is no engine-owned
+      // confound. An unexplained context would still be a finding rather than a pass.
+      expect(afterWorld.byPhaser, 'The PixiJS world constructs no Phaser context').toBe(0);
+      expect(
+        afterWorld.byUnknown,
+        'Booting the world constructed a context neither the audio service nor the world engine owns',
+      ).toBe(0);
+    } else {
+      // The recorded fact for a Phaser-dungeon artifact: the world boot costs one
+      // Phaser-owned context. Asserted rather than allowed for, so a change in either
+      // direction is visible.
+      expect(
+        afterWorld.byPhaser,
+        "The Phaser world constructs its own sound-manager context, which is pre-existing and not Phase 10's",
+      ).toBe(1);
+    }
   });
 });
 
@@ -999,8 +1030,11 @@ test.describe('manual check 4: optional missing art does not break a route', () 
       'the bundle members were really requested, so the failure below is a real one',
     ).toBeGreaterThan(0);
 
-    // The route is still rendered, in the same page, after the failures.
-    await expect(page.locator('.game-canvas-host canvas')).toBeVisible();
+    // The route is still rendered, in the same page, after the failures. Either renderer's
+    // dungeon canvas satisfies this; the production default is the PixiJS dungeon.
+    await expect(
+      page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').first(),
+    ).toBeVisible();
 
     // Every member failed, every member fell back, and the loader resolved rather
     // than rejecting — the property the whole no-reject policy exists for.

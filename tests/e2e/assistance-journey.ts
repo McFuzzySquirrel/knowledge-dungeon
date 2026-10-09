@@ -84,6 +84,7 @@ import {
   burstMsFor,
   gridDistanceTiles,
   holdKey,
+  readPondPhase,
   waitForPlayerGrid,
   type VillageGridPoint,
   type WalkArrowKey,
@@ -134,6 +135,15 @@ export const MINIMUM_ASSUMED_CANVAS_PX = 400;
  * should reproduce.
  */
 export const CHARGE_HOLD_MS = 140;
+
+/**
+ * The hold the PixiJS pond's charge control needs, in milliseconds.
+ *
+ * The Pixi pond exposes the cast as `#fishing-charge-hold`, a hold-to-charge button, and a
+ * short tap casts at near-zero power. The Phase 17 fishing lane drives it at 700ms, so this
+ * lane uses the same value rather than a second, unproven one.
+ */
+export const PIXI_CHARGE_HOLD_MS = 700;
 
 /** Wall-clock budget for the whole cast-to-catch loop, across every retry. */
 export const CATCH_LOOP_BUDGET_MS = 150_000;
@@ -384,6 +394,65 @@ async function walkToPondPanel(
 }
 
 /**
+ * Cast and hook on the PixiJS pond through its own DOM controls.
+ *
+ * The production pond is the PixiJS world after the Phase 23 cutover, and it exposes the
+ * cast as `#fishing-charge-hold` and the hook as `#fishing-set-hook` rather than as canvas
+ * pointer input. This is the same sequence the Phase 17 fishing lane drives, so the loop
+ * converges the same way: keep casting until the catch panel appears.
+ */
+async function castUntilCaughtOnPixiPond(
+  page: Page,
+  spy: { pageErrors(): readonly string[] },
+): Promise<number> {
+  const charge = page.locator('#fishing-charge-hold');
+  await charge.waitFor({ timeout: 30_000 });
+  const catchPanel = page.locator(CATCH_PANEL_SELECTOR);
+  const deadline = Date.now() + CATCH_LOOP_BUDGET_MS;
+  let pressCount = 0;
+  while (Date.now() < deadline && (await catchPanel.count()) === 0) {
+    pressCount += 1;
+    await charge.focus();
+    await page.keyboard.down('Space');
+    await page.waitForTimeout(PIXI_CHARGE_HOLD_MS);
+    await page.keyboard.up('Space');
+    const phase = await waitForPondPhase(page, ['biting', 'caught', 'missed'], 30_000);
+    if (phase === 'biting') {
+      await page.locator('#fishing-set-hook').click({ timeout: 5_000 });
+      const afterHook = await waitForPondPhase(page, ['caught', 'missed', 'idle', 'waiting'], 30_000);
+      if (afterHook === 'idle' || afterHook === 'waiting') {
+        // The hook window closed before the press landed; the next loop casts again.
+        continue;
+      }
+    }
+    if (phase === 'missed') {
+      await page.locator('#fishing-try-again').click();
+      await waitForPondPhase(page, ['idle'], 30_000);
+    }
+    if (spy.pageErrors().length > 0) break;
+  }
+  return pressCount;
+}
+
+/** Wait for the pond's HUD to reach one of `phases`, reading its own `data-fishing-phase`. */
+async function waitForPondPhase(
+  page: Page,
+  phases: readonly string[],
+  timeoutMs: number,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  let last: string | null = null;
+  while (Date.now() < deadline) {
+    last = await readPondPhase(page);
+    if (last !== null && phases.includes(last)) return last;
+    await page.waitForTimeout(120);
+  }
+  throw new Error(
+    `The pond never reached ${phases.join(' or ')}; it was ${JSON.stringify(last)} after ${timeoutMs}ms.`,
+  );
+}
+
+/**
  * Drive the whole journey, and report what happened rather than only whether it worked.
  *
  * The return value exists for the two specs' shared failure diagnosis: a lane that reports "the
@@ -437,41 +506,55 @@ export async function driveMissedRecallJourney(
   await expect(page.getByText(FISHING_LIVE_REGION_TEXT)).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(2_500);
 
-  const canvas = page.locator(`.${FISHING_PHASER_FALLBACK_CLASS} canvas`);
-  const box = await canvas.boundingBox();
-  const boxReading = box === null ? null : { width: Math.round(box.width), height: Math.round(box.height) };
-  if (box === null || box.width < MINIMUM_ASSUMED_CANVAS_PX || box.height < MINIMUM_ASSUMED_CANVAS_PX) {
-    premiseFailures.push(
-      `the village canvas measured ${boxReading === null ? 'no box' : `${boxReading.width}x${boxReading.height}`}, ` +
-        `which is below the ${MINIMUM_ASSUMED_CANVAS_PX}x${MINIMUM_ASSUMED_CANVAS_PX} the press geometry needs, so the ` +
-        'cast would land in the shore rather than in the water.',
-    );
-    return {
-      reading: earlyReading(walk.iterations, walk.stoppedAt, {
-        pondPanelOpened: true,
-        enteredFishing: true,
-        canvasBox: boxReading,
-      }),
-      premiseFailures,
-    };
-  }
-  const pressAt = {
-    x: box.x + box.width * WATER_PRESS_FRACTION.x,
-    y: box.y + box.height * WATER_PRESS_FRACTION.y,
-  };
-  await page.mouse.move(pressAt.x, pressAt.y);
-
+  // The cast is driven through whichever pond is mounted. The PixiJS pond exposes DOM
+  // controls (`#fishing-charge-hold`, `#fishing-set-hook`); the Phaser `FishingScene` takes
+  // canvas pointer input. Both publish the same `.fishing-catch-panel`, which is the
+  // observable this loop waits on, so the only difference is how the cast is issued.
+  const pixiPondMounted = (await page.locator('.pixi-fishing-world').count()) > 0;
   const catchPanel = page.locator(CATCH_PANEL_SELECTOR);
-  const deadline = Date.now() + CATCH_LOOP_BUDGET_MS;
   let pressCount = 0;
-  while (Date.now() < deadline && (await catchPanel.count()) === 0) {
-    pressCount += 1;
-    await page.mouse.down();
-    await page.waitForTimeout(CHARGE_HOLD_MS);
-    await page.mouse.up();
-    await page.waitForTimeout(40);
-    if (spy.pageErrors().length > 0) break;
+  let boxReading: { readonly width: number; readonly height: number } | null = null;
+
+  if (pixiPondMounted) {
+    await page
+      .locator('.pixi-fishing-world canvas')
+      .first()
+      .waitFor({ state: 'attached', timeout: 30_000 });
+    pressCount = await castUntilCaughtOnPixiPond(page, spy);
+  } else {
+    const box = await page.locator(`.${FISHING_PHASER_FALLBACK_CLASS} canvas`).boundingBox();
+    boxReading = box === null ? null : { width: Math.round(box.width), height: Math.round(box.height) };
+    if (box === null || box.width < MINIMUM_ASSUMED_CANVAS_PX || box.height < MINIMUM_ASSUMED_CANVAS_PX) {
+      premiseFailures.push(
+        `the village canvas measured ${boxReading === null ? 'no box' : `${boxReading.width}x${boxReading.height}`}, ` +
+          `which is below the ${MINIMUM_ASSUMED_CANVAS_PX}x${MINIMUM_ASSUMED_CANVAS_PX} the press geometry needs, so the ` +
+          'cast would land in the shore rather than in the water.',
+      );
+      return {
+        reading: earlyReading(walk.iterations, walk.stoppedAt, {
+          pondPanelOpened: true,
+          enteredFishing: true,
+          canvasBox: boxReading,
+        }),
+        premiseFailures,
+      };
+    }
+    const pressAt = {
+      x: box.x + box.width * WATER_PRESS_FRACTION.x,
+      y: box.y + box.height * WATER_PRESS_FRACTION.y,
+    };
+    await page.mouse.move(pressAt.x, pressAt.y);
+    const deadline = Date.now() + CATCH_LOOP_BUDGET_MS;
+    while (Date.now() < deadline && (await catchPanel.count()) === 0) {
+      pressCount += 1;
+      await page.mouse.down();
+      await page.waitForTimeout(CHARGE_HOLD_MS);
+      await page.mouse.up();
+      await page.waitForTimeout(40);
+      if (spy.pageErrors().length > 0) break;
+    }
   }
+
   const caught = (await catchPanel.count()) > 0;
   const caughtFishLabel = caught
     ? await catchPanel.first().getAttribute('aria-label').catch(() => null)

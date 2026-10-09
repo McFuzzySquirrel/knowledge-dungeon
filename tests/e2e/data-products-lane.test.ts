@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest';
 import playwrightConfig from '../../playwright.config';
 import storageV2Config from '../../playwright.storage-v2.config';
 import dataProductsConfig from '../../playwright.data-products.config';
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
 import { CURRENT_BUILD_TEST_FILE, SUPPORT_MATRIX } from './support-matrix';
 import { STORAGE_V2_LANE, STORAGE_V2_TEST_FILE } from './storage-v2-lane';
@@ -136,14 +140,15 @@ describe('Phase 5 fresh-profile restore lane declaration', () => {
     expect(existsSync(path.join(REPO_ROOT, DATA_PRODUCTS_ENV_FILE))).toBe(true);
   });
 
-  it('the Phase 5 owner flag is the one the plan names, is default-off, and this lane turns it on', () => {
+  it('the Phase 5 owner flag is the one the plan names, defaults on after the cutover, and this lane pins it on', () => {
     expect(DATA_PRODUCTS_OWNER_FLAG).toBe('VITE_DATA_PRODUCTS_V2');
     expect(RUNTIME_FLAG_ENV_KEYS.dataProductsV2).toBe(DATA_PRODUCTS_OWNER_FLAG);
-    // The *production default* is unchanged: the flag is still opt-in for the
-    // default build, and the rollback is still a build-time flag.
+    // Phase 23 makes the products the production default; the rollback is still a
+    // build-time flag, and the positive control below still disables the product.
     expect(FEATURE_FLAG_MATRIX.dataProductsV2.ownerPhase).toBe(5);
-    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
-    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(true);
+    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(true);
+    expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'false' }).dataProductsV2).toBe(false);
     // What changed is only the artifact this lane previews, and it is recorded
     // rather than inferred: every evidence file says `dataProductsV2: true`.
     expect(DATA_PRODUCTS_OWNER_FLAG_ENABLED_IN_THIS_LANE).toBe(true);

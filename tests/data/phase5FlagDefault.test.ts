@@ -38,7 +38,15 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
-import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
+import {
+  CUTOVER_BOOLEAN_FLAG_KEYS,
+  CUTOVER_FLAG_KEYS,
+  CUTOVER_FLAG_ROLLBACKS,
+  FEATURE_FLAG_MATRIX,
+  NON_CUTOVER_FLAG_KEYS,
+  RETAINED_HOST_FLAG_KEYS,
+  REVIEWED_FLAG_KEYS,
+} from '@/config/featureFlags';
 import { blankComments, walk } from './support/importGraph';
 import { classifySpecifierEdges } from './support/importGraph';
 import {
@@ -157,17 +165,18 @@ const PRODUCT_MODULE_PATHS = [
  */
 const PRODUCTS_TREE = 'src/services/persistence/products/';
 
-describe('Phase 5 gate 8: the owner flag defaults to off and is owned by Phase 5', () => {
-  it('the flag key is VITE_DATA_PRODUCTS_V2 and it defaults to false three ways', () => {
+describe('Phase 5 gate 8: the owner flag is owned by Phase 5 and defaults on after the cutover', () => {
+  it('the flag key is VITE_DATA_PRODUCTS_V2 and it defaults on, with false still disabling it', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.dataProductsV2).toBe(PHASE_5_FLAG_ENV_KEY);
     expect(PHASE_5_FLAG_ENV_KEY).toBe('VITE_DATA_PRODUCTS_V2');
-    // The safe production default, the parsed default with no environment, and
-    // the declared matrix default all agree.
-    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(false);
-    expect(parseRuntimeConfig({}).dataProductsV2).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
-    // ...and the flag can be turned on explicitly, which is the opt-in the plan
-    // requires before cutover.
+    // Phase 23 made the product the production default: the safe production default,
+    // the parsed default with no environment, and the declared matrix default agree on
+    // `true`. The `false` rollback is the opt-out and still yields the pre-cutover
+    // behaviour.
+    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(true);
+    expect(parseRuntimeConfig({}).dataProductsV2).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(true);
+    expect(CUTOVER_FLAG_ROLLBACKS.dataProductsV2).toBe(false);
     expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'true' }).dataProductsV2).toBe(true);
     expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'false' }).dataProductsV2).toBe(false);
     // A malformed value fails the build rather than silently defaulting, and the
@@ -187,18 +196,46 @@ describe('Phase 5 gate 8: the owner flag defaults to off and is owned by Phase 5
     // The rollback is a build-time flag, matching the plan's Phase 5 rollback:
     // "Hide the tab and disable import. The format is additive."
     expect(definition.rollback).toContain('VITE_DATA_PRODUCTS_V2=false');
-    // No *cutover* flag may default to on before its cutover phase. Phase 10 adds one
-    // flag that is not a cutover gate - `audioEnabled`, a kill switch for a service
-    // that phase delivers rather than a switch on an existing behaviour - and it
-    // declares that in `NON_CUTOVER_FLAG_KEYS` so the exception is a reviewed list
-    // rather than a quiet hole. The property is still asserted for every other flag,
-    // and the exception itself is asserted below rather than assumed.
+  });
+
+  it('the flag matrix is partitioned into reviewed cutover, kill-switch, and retained-host flags', () => {
+    // Phase 23 re-foundation. Before the cutover this gate asserted "no cutover flag
+    // defaults on". The cutover inverts that for the cutover flags by design, so the
+    // durable invariant is the partition, and each part can still fail:
+    //   1. every key of the matrix belongs to exactly one of the three reviewed sets, so
+    //      no flag is silently unclassified;
+    //   2. the matrix key set is the pinned reviewed set, so no flag was removed;
+    //   3. the flags that default on are exactly the cutover booleans plus the kill
+    //      switches, so a cutover flag left off fails; and
+    //   4. every cutover flag's declared rollback still parses to the pre-cutover value
+    //      and is documented as an env var/value, so the rollback cannot rot.
+    const matrixKeys = Object.keys(FEATURE_FLAG_MATRIX).sort();
+    const classified = [
+      ...CUTOVER_FLAG_KEYS,
+      ...NON_CUTOVER_FLAG_KEYS,
+      ...RETAINED_HOST_FLAG_KEYS,
+    ].sort();
+    expect(classified).toEqual(matrixKeys);
+    expect(new Set(classified).size).toBe(classified.length);
+    expect(matrixKeys).toEqual([...REVIEWED_FLAG_KEYS].sort());
+
+    // `productionDefault` is typed `boolean | string`, so the comparison is made
+    // against an explicitly widened boolean rather than relying on inference.
     const enabledByDefault = Object.entries(FEATURE_FLAG_MATRIX)
-      // `productionDefault` is typed `boolean | string`, so the comparison is made
-      // against an explicitly widened boolean rather than relying on inference.
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
-      .map(([key]) => key);
-    expect(enabledByDefault.sort()).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
+      .map(([key]) => key)
+      .sort();
+    expect(enabledByDefault).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort());
+
+    for (const key of CUTOVER_FLAG_KEYS) {
+      const rollback = CUTOVER_FLAG_ROLLBACKS[key];
+      const environment = { [RUNTIME_FLAG_ENV_KEYS[key]]: String(rollback) };
+      expect(parseRuntimeConfig(environment)[key]).toBe(rollback);
+      expect(FEATURE_FLAG_MATRIX[key].rollback).toContain(
+        `${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`,
+      );
+      expect(FEATURE_FLAG_MATRIX[key].productionDefault).not.toBe(rollback);
+    }
   });
 });
 

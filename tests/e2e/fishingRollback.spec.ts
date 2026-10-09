@@ -22,13 +22,13 @@ import {
 } from './fishing-harness';
 
 /**
- * The Phase 17 fishing **rollback** lane, against the default production artifact.
+ * The Phase 17 fishing **rollback** lane, against the Phase 23 full-rollback artifact.
  *
  * ## What this is for
  *
  * Phase 17's rollback line is `VITE_PIXI_FISHING=false`. A rollback that has never been observed
  * is a hope, and this is the observation: the entry point a learner uses to reach a fishing pond
- * still reaches the Phaser `FishingScene` on the artifact that actually ships.
+ * still reaches the Phaser `FishingScene` on the artifact the previous release shipped.
  *
  * Three measurements make that a claim rather than an intention:
  *
@@ -102,14 +102,14 @@ async function enterFishingScene(page: Page): Promise<boolean> {
   return outcome.arrived;
 }
 
-test('the default artifact verifies its identity and contains no Pixi fishing chunk', async ({
+test('the rollback artifact verifies its identity and contains no Pixi fishing chunk', async ({
   page,
 }, testInfo) => {
   const census = censusForDist(repoRoot());
   if (census === null) {
     throw new Error(
       'There is no dist/ to census. Run "npm run test:e2e:fishing:rollback:full", which builds, ' +
-        'records and verifies the default artifact before invoking this lane.',
+        'records and verifies the rollback artifact before invoking this lane.',
     );
   }
   const verification = verifyRecordedArtifact(repoRoot(), FISHING_ROLLBACK_MANIFEST_PATH);
@@ -121,9 +121,9 @@ test('the default artifact verifies its identity and contains no Pixi fishing ch
   // The rollback target's defining property, read from the bytes that will be served.
   expect(
     census.fishingChunks,
-    'the default build emitted a Pixi fishing chunk, so it is not the production default',
+    'the rollback build emitted a Pixi fishing chunk, so it is not the production default',
   ).toEqual([]);
-  expect(census.pixiChunks, 'the default build emitted a Pixi vendor chunk').toEqual([]);
+  expect(census.pixiChunks, 'the rollback build emitted a Pixi vendor chunk').toEqual([]);
   // Phaser is still the world renderer, and its vendor chunk is still there.
   expect(census.phaserChunks.length).toBe(1);
 
@@ -157,7 +157,7 @@ test('the default artifact verifies its identity and contains no Pixi fishing ch
     observedPhases: [],
     notes: [
       'the chunk census is read from dist/assets, not from a flag constant',
-      'Welcome requested no Pixi chunk on the default artifact',
+      'Welcome requested no Pixi chunk on the rollback artifact',
     ],
   });
 });
@@ -195,7 +195,7 @@ test('the entry point reaches the Phaser FishingScene in the village game, not a
   expect(await page.locator('canvas').count(), 'entering fishing added a second canvas').toBe(1);
   expect(
     spy.fishingScriptPaths(),
-    'the default build requested a Pixi fishing chunk',
+    'the rollback build requested a Pixi fishing chunk',
   ).toEqual([]);
   expect(spy.pixiScriptPaths(), 'entering fishing requested a Pixi chunk').toEqual([]);
   expect(

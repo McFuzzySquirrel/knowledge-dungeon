@@ -42,7 +42,11 @@ import { describe, expect, it } from 'vitest';
 import swShellConfig from './playwright.sw-shell.config';
 import offlineConfig from './playwright.offline.config';
 import playwrightConfig from '../../playwright.config';
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
 import {
   COMPATIBILITY_PROJECTS,
@@ -153,12 +157,13 @@ describe('sw-shell compatibility lane declaration', () => {
     expect(SW_SHELL_LANE.manifestPath).toBe(OFFLINE_LANE_MANIFEST_PATH);
     expect(SW_SHELL_MANIFEST_PATH).toBe(OFFLINE_LANE_MANIFEST_PATH);
     // ...and it is the same build-time flag the offline lane is the browser evidence
-    // for, still off by production default.
+    // for, now on by production default after the Phase 23 cutover.
     expect(SW_SHELL_LANE.flag).toBe('VITE_OFFLINE_SHELL');
     expect(SW_SHELL_LANE.flagValue).toBe('true');
     expect(RUNTIME_FLAG_ENV_KEYS.offlineShell).toBe(SW_SHELL_LANE.flag);
-    expect(DEFAULT_RUNTIME_CONFIG.offlineShell).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.offlineShell.productionDefault).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.offlineShell).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.offlineShell.productionDefault).toBe(true);
+    expect(parseRuntimeConfig({ VITE_OFFLINE_SHELL: 'false' }).offlineShell).toBe(false);
     expect(FEATURE_FLAG_MATRIX.offlineShell.ownerPhase).toBe(22);
   });
 

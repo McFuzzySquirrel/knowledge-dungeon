@@ -203,8 +203,8 @@ export interface Phase10MediaLaneDeclaration {
   readonly buildScript: string;
   readonly manifestPath: string;
   readonly worldRenderer: 'phaser';
-  readonly storageRepository: 'legacy';
-  readonly dataProductsV2: false;
+  readonly storageRepository: 'v2';
+  readonly dataProductsV2: boolean;
   readonly viewport: { readonly width: number; readonly height: number };
   readonly deviceScaleFactor: number;
   readonly hasTouch: boolean;
@@ -249,8 +249,8 @@ export const PHASE10_MEDIA_LANE: Phase10MediaLaneDeclaration = Object.freeze({
   buildScript: PHASE10_MEDIA_BUILD_SCRIPT,
   manifestPath: PHASE10_MEDIA_MANIFEST_PATH,
   worldRenderer: 'phaser',
-  storageRepository: 'legacy',
-  dataProductsV2: false,
+  storageRepository: 'v2',
+  dataProductsV2: true,
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
   hasTouch: false,
@@ -311,13 +311,15 @@ export function validatePhase10MediaLane(
     problems.push('the phase 10 media lane must not bind an existing suite spec file.');
   }
   if (lane.worldRenderer !== 'phaser') {
-    problems.push('this lane previews the production artifact, whose world renderer is phaser.');
+    problems.push(
+      'this lane previews the post-cutover production artifact, whose host is the application host (phaser); the PixiJS worlds are per-world flags.',
+    );
   }
-  if (lane.storageRepository !== 'legacy') {
-    problems.push('this build is a production-mode build, so its storage repository is the production default.');
+  if (lane.storageRepository !== 'v2') {
+    problems.push('this lane previews the post-cutover production artifact, whose storage repository is v2.');
   }
-  if (lane.dataProductsV2 !== false) {
-    problems.push('this build is a production-mode build, so the data-products flag must be recorded as off.');
+  if (lane.dataProductsV2 !== true) {
+    problems.push('this lane previews the post-cutover production artifact, so the data-products flag is on.');
   }
   if (lane.viewport.width !== 1440 || lane.viewport.height !== 900) {
     problems.push('the lane must use the desktop-chromium-equivalent viewport.');

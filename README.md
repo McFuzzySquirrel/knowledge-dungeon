@@ -13,7 +13,7 @@ quality gates. Defeated rooms drop loot, XP, and a generated artifact. When
 every room is cleared, the **Archaeologist** phase unlocks self-check prompts
 and review-streak tracking.
 
-Your journey begins in the **Dungeon Village** - a Phaser-rendered hub world
+Your journey begins in the **Dungeon Village** - a PixiJS-rendered hub world
 with buildings, NPCs, signposts, and portals. Create subjects, select your
 archetype, meet the guide NPC, view your collections, and step through any
 portal to enter a dungeon.
@@ -21,7 +21,49 @@ portal to enter a dungeon.
 Built with a simple goal: make learning feel fun again by turning note-taking,
 revision, and concept mapping into an interactive adventure instead of a static checklist.
 
+## Phase 23 Production Cutover (2026-10-08)
+
+The React DOM + PixiJS rebuild is the production default as of the Phase 23
+cutover. An `npm run build:web` artifact ships:
+
+- **PixiJS 8** for the village, dungeon, and fishing worlds. The per-world flags
+  `VITE_PIXI_VILLAGE`, `VITE_PIXI_DUNGEON`, and `VITE_PIXI_FISHING` default to
+  `true` and select the real Pixi worlds inside `VillageScreen`, `GameScreen`,
+  and the village fishing flow, on top of the React DOM application shell.
+- **storage-v2** (`VITE_STORAGE_REPOSITORY=v2`) with the legacy mirror writes
+  retained, so the app reads and writes IndexedDB generations and still mirrors
+  to legacy storage.
+- The **Cozy** design system, the versioned **data products** (`.kdbak`,
+  `.kdsubject`, `.kdtemplate`), **Gentle** adaptive assistance, explicit-action
+  **Web Share**, the redesigned **Creator / Scribe / Archaeologist** workspaces,
+  and the **offline static shell** - all on by default.
+
+Every one of those switches is a **cutover flag retained for one release as a
+rollback**. Its pre-cutover value is declared in `CUTOVER_FLAG_ROLLBACKS` in
+`src/config/featureFlags.ts`; the renderer rollback is a rebuild with the
+per-world flags off (`npm run build:web:rollback`).
+
+`VITE_WORLD_RENDERER` is **not** the world-renderer cutover. It is a retained
+host adapter switch that keeps its `'phaser'` default in production - that host
+renders the real Pixi worlds through the per-world flags - while `'pixi'`
+selects the Phase 9 test host. Phase 24 removes `worldRenderer` and the test
+host.
+
+Phaser remains in the source tree as the one-release fallback and is removed in
+Phase 24; the default production artifact contains no Phaser chunk. Electron
+packaging remains deferred and is outside the web release path.
+
+This note records the cutover itself. It does not claim a soak, the
+physical-device accessibility gates, the macOS/Windows automated cells, or a
+deployment - those remain open Phase 23 exit conditions (see
+[Physical-device gates still required](#physical-device-gates-still-required)).
+
 ## Phase 0 Baseline (2026-09-24)
+
+> **Historical record - superseded by the Phase 23 cutover above.** This section
+> is the dated pre-rebuild baseline and is kept as evidence of what the
+> application was, not a description of what ships now. Its renderer, storage,
+> control, and limitation claims describe the pre-cutover application.
 
 This is the dated Phase 0 baseline for the renderer rebuild. It records the
 current application behavior, compatibility surface, and measured build output;
@@ -160,6 +202,11 @@ later rebuild phase. The maintainer accepted Phase 0 on 2026-09-24, so it is
 it does not describe the current rebuild status.
 
 ### Current rebuild status
+
+The rebuild phases through Phase 22 were delivered and accepted against the
+authoritative plan. **Phase 23, the production cutover, landed on 2026-10-08**
+(see [Phase 23 Production Cutover](#phase-23-production-cutover-2026-10-08));
+Phaser removal is Phase 24 and the soak remains Phase 23 exit work.
 
 Phase 1 was verified and accepted on 2026-09-25 and is `complete` in the
 authoritative plan. It added typed build-time flags, Linux/Chromium Playwright
@@ -780,7 +827,8 @@ These three views are available from the room-panel **Collections** shortcuts an
 
 ## Tech stack
 
-- React 19, Phaser 3, Zustand
+- React 19 (DOM application shell), PixiJS 8 (village, dungeon, and fishing worlds), Zustand
+- Phaser 3 retained only as the one-release renderer rollback, removed in Phase 24
 - Vite 8, TypeScript 5
 - Electron 42 (desktop), electron-builder for mac / win / linux
 - Vitest + Testing Library for unit tests
@@ -835,8 +883,9 @@ podman-compose up -d
 ```
 
 Open `http://<your-host-ip>:3000` in any browser on the local network.
-The production server includes an image upload endpoint so you can attach
-photos from your phone directly into notes.
+The redesigned app stores subjects, progress, and image attachments locally in
+the browser on the device you use; the server's legacy subject and upload
+endpoints remain only for compatibility with the pre-cutover path.
 
 ## Play in browser
 
@@ -926,27 +975,28 @@ src/
     progression/         # XP/rank/badge engine + loot system + achievements
     artifacts/           # markdown artifact generator
     review/              # archaeologist phase logic + SM-2 spaced repetition
-  game/                  # Phaser scenes + systems
+  game/                  # Phaser scenes + systems (one-release rollback; removed in Phase 24)
     systems/             # boss rooms, procedural textures (biomes), player classes
+  renderers/pixi/        # PixiJS 8 worlds: village, dungeon, fishing, runtime host
   store/                 # Zustand stores (session, subject, progression)
   services/
-    persistence/         # localStorage + Electron bridge + templates
+    persistence/         # storage-v2 (IndexedDB) + legacy mirror + Electron bridge + products
     customSprites.ts     # sprite URL resolution + pack management
     spriteManifest.ts    # dynamic SVG asset discovery
     sessionTracker.ts    # study session logging & analytics
     audioManager.ts      # BGM/SFX infrastructure
   electron/              # main + preload (Electron only)
-  ui/                    # React shell: welcome, HUD, room panel, modals
-    components/          # NoteEditorModal, StudyStatsPanel, TagEditor, RoomNpcDialog,
+  ui/                    # React shell: welcome, HUD, room panel, workspaces, modals
+    components/          # NoteEditorModal (rollback), StudyStatsPanel, TagEditor, RoomNpcDialog,
                           # SpriteBrowser, SpriteEditor, MakeItYoursTab, CollectionSwitcher
     screens/             # WelcomeScreen, VillageScreen, GameScreen
     utils/               # markdown rendering, syntax highlighting, auto-complete
   data/                  # village layout, tutorial subject, game guide
-tests/                    # 38 files / 313 tests measured
+tests/                    # unit, contracts, migrations, privacy, data, and phase suites
   unit/                  # existing Vitest unit tests
   contracts/             # Phase 0 baseline and characterization tests
   e2e/
-    currentBuild.spec.ts # Phase 1 Phaser/axe/privacy suite (4 Chromium viewports)
+    currentBuild.spec.ts # current-build axe/privacy suite (4 Chromium viewports)
     compatibility.spec.ts# Phase 1A cross-engine suite over the recorded artifact
     support-matrix.ts    # machine-readable web support matrix (drives the projects)
   fixtures/
@@ -962,19 +1012,20 @@ docs/                      # plans, ADRs, and game/user guides
   backups under `.backups/`. The home-screen **Admin** section can open the
   subjects root or export either the full subjects directory or an individual
   subject folder for migration between machines.
-- **Web**: subjects fall back to `localStorage`; import/export is supported
-  via the persistence facade.
+- **Web**: storage-v2 in IndexedDB is the default (`VITE_STORAGE_REPOSITORY=v2`),
+  with legacy `localStorage` mirror writes retained; `VITE_STORAGE_REPOSITORY=legacy`
+  is the one-release rollback. Import/export is supported via the persistence
+  facade and the versioned data products in the **Data Center**.
 
-> 🔒 **Current privacy baseline:** subjects, notes, progression, preferences, and
-> other app state are stored locally in the browser's `localStorage` or in the
-> Electron user-data folder. The current web image-attachment path can still post
-> image bytes to the legacy Express `/api/upload` endpoint, so image attachments
-> are **not** covered by a blanket “nothing leaves the device” guarantee in this
-> baseline. The rebuild target is local IndexedDB attachments with no redesigned-app
-> upload; that target is not implemented yet. Clearing browser site data can
-> permanently remove web subjects, so use the **Export** tools in the **Data** tab
-> to back up anything you want to keep. The app periodically nudges web users to
-> export a backup as a reminder.
+> 🔒 **Privacy:** subjects, notes, progression, preferences, assistance state, and
+> web image attachments are stored locally on the device - IndexedDB generations
+> (with legacy mirror writes) in the browser, or the Electron user-data folder.
+> The redesigned web flow stores image attachments as local bytes and does **not**
+> call the legacy Express `/api/upload` endpoint. An image added as an external
+> URL stays a link and its bytes are never downloaded. Clearing browser site data
+> can permanently remove web subjects, so use the **Export** tools in the **Data**
+> tab to back up anything you want to keep. The app periodically nudges web users
+> to export a backup as a reminder.
 
 ## Why this exists
 

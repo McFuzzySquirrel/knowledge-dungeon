@@ -91,6 +91,20 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      # PHASE 23 CUTOVER. `npm run build:web` now builds the release artifact with the
+      # post-cutover defaults: PixiJS, storage-v2 (legacy mirror writes retained), Cozy
+      # visuals, data products, Gentle assistance, Web Share, the redesigned workspaces,
+      # and the offline shell are all on. Every corresponding VITE_* flag is retained as a
+      # documented one-release rollback. The immediate full-rollback configuration is:
+      #
+      #   VITE_WORLD_RENDERER=phaser VITE_STORAGE_REPOSITORY=legacy npm run build:web
+      #
+      # with `VITE_PIXI_VILLAGE=false`, `VITE_PIXI_DUNGEON=false`, `VITE_PIXI_FISHING=false`,
+      # `VITE_COZY_VISUALS=false`, `VITE_ADAPTIVE_ASSISTANCE=false`,
+      # `VITE_DATA_PRODUCTS_V2=false`, `VITE_WEB_SHARE=false`, the three workspace flags
+      # false, and `VITE_OFFLINE_SHELL=false` added as needed. No workflow pins a
+      # pre-cutover default; the flagged build steps below set a flag explicitly to pin a
+      # lane's recorded identity, not to override a differing production default.
       - run: npm ci --ignore-scripts
       - run: npm run build:web
       - run: npm run check:bundle-size
@@ -191,9 +205,10 @@ jobs:
       #   and the four compatibility lanes download the uploaded `web-artifact`, not
       #   this runner's working directory - so the rebuild cannot be mistaken for the
       #   artifact that shipped.
-      # - It records and uploads no second *production* artifact. The production
-      #   default stays `VITE_WORLD_RENDERER=phaser`, and this build is a flagged one
-      #   that exists to be measured and then discarded. The one thing it does upload
+      # - It records and uploads no second *production* artifact. After the Phase 23
+      #   cutover the production default is `VITE_WORLD_RENDERER=pixi`; this build pins
+      #   the flag explicitly so the lane's identity is recorded rather than inherited,
+      #   and it exists to be measured and then discarded. The one thing it does upload
       #   is the flagged build's own identity, to its own manifest, and only because
       #   the browser-backed lane below measures it from a different job.
       # - It installs no browser. The renderer switch is exercised at build level
@@ -283,9 +298,10 @@ jobs:
       #   verified and uploaded. Nothing downstream reads this runner's
       #   `dist` — the browser jobs download the uploaded artifacts — so this
       #   rebuild cannot be mistaken for the artifact that shipped.
-      # - It records and uploads no second **production** artifact. The
-      #   production default stays `VITE_WORLD_RENDERER=phaser` and
-      #   `VITE_PIXI_FISHING` absent; this is a flagged build that exists to be
+      # - It records and uploads no second **production** artifact. After the
+      #   Phase 23 cutover the production default is `VITE_WORLD_RENDERER=pixi`
+      #   and `VITE_PIXI_FISHING=true`; this build pins both explicitly so the
+      #   lane's identity is recorded rather than inherited, and it exists to be
       #   measured and then discarded. Its identity goes to its OWN manifest,
       #   and `vite.config.ts` already refuses to emit a build in which the
       #   flag is on and the pond chunk is missing, so a silently dropped flag
@@ -324,9 +340,10 @@ jobs:
       # - It runs strictly AFTER the production artifact has been recorded, verified and uploaded.
       #   Nothing downstream reads this runner's `dist` - the browser jobs download the uploaded
       #   artifacts - so this rebuild cannot be mistaken for the artifact that shipped.
-      # - It records and uploads no second **production** artifact. The production default stays
-      #   `VITE_ADAPTIVE_ASSISTANCE` absent, so `check:budget:welcome` below still measures the
-      #   default. This is a flagged build that exists to be measured and then discarded, and its
+      # - It records and uploads no second **production** artifact. After the Phase 23
+      #   cutover the production default is `VITE_ADAPTIVE_ASSISTANCE=true`, so this step pins
+      #   the flag explicitly to record the lane's identity; it exists to be measured and then
+      #   discarded, and its
       #   identity goes to its OWN manifest, so it can never overwrite the release identity.
       # - It installs no browser, exactly like the build job's other three flagged builds.
       #
@@ -367,10 +384,10 @@ jobs:
       #   and uploaded. Nothing downstream reads this runner's `dist` - the browser
       #   jobs download the uploaded artifacts - so this rebuild cannot be mistaken
       #   for the artifact that shipped.
-      # - It records and uploads no second **production** artifact. The production
-      #   default stays `VITE_OFFLINE_SHELL` absent, so `check:budget:welcome` above
-      #   still measures the default. This is a flagged build that exists to be
-      #   measured and then discarded, and its identity goes to its OWN manifest.
+      # - It records and uploads no second **production** artifact. After the Phase 23
+      #   cutover the production default is `VITE_OFFLINE_SHELL=true`; this step pins the
+      #   flag explicitly to record the lane's identity, and it exists to be measured and
+      #   then discarded, with its identity going to its OWN manifest.
       # - It installs no browser, exactly like the build job's other four flagged
       #   builds. The browser-backed half runs in `browser-smoke`.
       #
@@ -415,10 +432,10 @@ jobs:
       #   and uploaded. Nothing downstream reads this runner's `dist` - the browser jobs
       #   download the uploaded artifacts - so this rebuild cannot be mistaken for the
       #   artifact that shipped.
-      # - It records and uploads no second **production** artifact. The production
-      #   default stays `VITE_PIXI_DUNGEON` absent, so `check:budget:welcome` above still
-      #   measures the default. This is a flagged build that exists to be measured and
-      #   then discarded, and its identity goes to its OWN manifest.
+      # - It records and uploads no second **production** artifact. After the Phase 23
+      #   cutover the production default is `VITE_PIXI_DUNGEON=true`; this step pins the
+      #   flag explicitly to record the lane's identity, and it exists to be measured and
+      #   then discarded, with its identity going to its OWN manifest.
       # - It installs no browser, exactly like the build job's other five flagged
       #   builds. The browser-backed half runs in `browser-smoke`.
       #
@@ -464,11 +481,11 @@ jobs:
       #   uploaded. Nothing downstream reads this runner's `dist` - the browser jobs
       #   download the uploaded artifacts - so this rebuild cannot be mistaken for the
       #   artifact that shipped.
-      # - It records and uploads no second **production** artifact. The production
-      #   default stays `VITE_PIXI_DUNGEON` and `VITE_PIXI_FISHING` absent, so
-      #   `check:budget:welcome` above still measures the default. This is a flagged
-      #   build that exists to be measured and then discarded, and its identity goes to
-      #   its OWN manifest.
+      # - It records and uploads no second **production** artifact. After the Phase 23
+      #   cutover the production default is `VITE_PIXI_DUNGEON=true` and
+      #   `VITE_PIXI_FISHING=true`; this step pins both explicitly to record the lane's
+      #   identity, and it exists to be measured and then discarded, with its identity
+      #   going to its OWN manifest.
       # - It installs no browser, exactly like the build job's other six flagged builds.
       #   The browser-backed half runs in `browser-smoke`.
       #
@@ -490,6 +507,31 @@ jobs:
           path: |
             dist
             artifacts/web-artifact-manifest-pixi-route.json
+          if-no-files-found: error
+          retention-days: 14
+      # Phase 23 full-rollback artifact, and the last artifact this run produces.
+      #
+      # `scripts/build-rollback.mjs` forces every cutover flag to its pre-cutover value, so
+      # this is the only artifact in which the assistance feature is genuinely absent: the
+      # cutover production build now includes it, and the Phase 19 absence lane can only
+      # make its claim about absence against a tree where the flag is off. It is built,
+      # bundled-checked, recorded, verified and uploaded here exactly like the flagged
+      # artifacts above, and only after the production artifact has been recorded and
+      # uploaded, so it can never be mistaken for the release identity.
+      - name: Build the Phase 23 rollback artifact
+        run: npm run build:web:rollback
+      - run: npm run check:bundle-size
+      - name: Record the rollback artifact identity
+        run: npm run record:web-artifact:rollback
+      - name: Verify the rollback artifact identity
+        run: npm run verify:web-artifact:rollback
+      - name: Upload the rollback web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-web-artifact
+          path: |
+            dist
+            artifacts/web-artifact-manifest-rollback.json
           if-no-files-found: error
           retention-days: 14
 
@@ -730,22 +772,37 @@ jobs:
         run: npm run verify:web-artifact:assistance
       - name: Run the flagged assistance lane
         run: npm run test:e2e:assistance:recorded
-      - name: Discard the assistance dist before the production re-download
-        # The mirror image, and the half that cannot be inferred. This lane previews the
-        # **production** artifact, so the production tree is downloaded back and its own identity
-        # re-verified first: a lane claiming "the card is absent" while pointed at a flagged build
-        # would describe something other than what it claims, which is the same shape of defect the
-        # discards above exist to prevent.
+      - name: Discard the assistance dist before the rollback download
+        # The mirror image, and the half that cannot be inferred. After the Phase 23 cutover
+        # the **production** artifact includes the assistance feature, so this absence lane
+        # previews the **rollback** artifact instead - the one tree in which the flag is
+        # genuinely off - and verifies that identity before it runs. A lane claiming "the card
+        # is absent" while pointed at the cutover production build, or at a flagged build,
+        # would describe something other than what it claims, which is the same shape of
+        # defect the discards above exist to prevent.
         run: rm -rf dist
-      - name: Download the shared production artifact for the absence lane
+      - name: Download the rollback artifact for the absence lane
+        uses: actions/download-artifact@v4
+        with:
+          name: rollback-web-artifact
+          path: .
+      - name: Verify the rollback artifact identity
+        run: npm run verify:web-artifact:rollback
+      - name: Run the default-artifact assistance lane
+        run: npm run test:e2e:assistance:default:recorded
+      - name: Discard the rollback dist before the production re-download
+        # The accessibility audit below still describes **what ships**, so the cutover
+        # production tree is downloaded back and re-verified after the rollback lane: the
+        # rollback lane leaves a tree whose worlds fall back to Phaser, which is not the
+        # artifact the audit is meant to certify.
+        run: rm -rf dist
+      - name: Download the shared production artifact for the accessibility audit
         uses: actions/download-artifact@v4
         with:
           name: web-artifact
           path: .
-      - name: Verify the production artifact identity again
+      - name: Verify the production artifact identity before the accessibility audit
         run: npm run verify:web-artifact
-      - name: Run the default-artifact assistance lane
-        run: npm run test:e2e:assistance:default:recorded
       # Phase 21 automated accessibility suite.
       #
       # Placed here because the artifact and the single Chromium install both already exist, so a
@@ -776,9 +833,9 @@ jobs:
       # it once and both the service-worker compatibility lane and the offline reload
       # lane run against that one download. The download is preceded by its own
       # discard for the same reason the four above are: `actions/download-artifact`
-      # extracts **into** the working directory, so a sixth download merged into the
-      # tree the absence lane's production re-download left behind would be a union of
-      # two builds that is neither of them.
+      # extracts **into** the working directory, so a further download merged into the
+      # tree the accessibility audit's production re-download left behind would be a
+      # union of two builds that is neither of them.
       #
       # The two lanes run in the order below on purpose. The compatibility lane is
       # read-only; the offline lane's version-bump step rewrites
@@ -904,9 +961,12 @@ jobs:
   # not a second production artifact:
   #
   # - It builds with `VITE_STORAGE_REPOSITORY=v2` through `--mode storage-v2`,
-  #   which reads `.env.storage-v2`. The production default stays
-  #   `VITE_STORAGE_REPOSITORY=legacy`, so `web-build` above remains the single
-  #   build, record, and upload point for the production `web-artifact`.
+  #   which reads `.env.storage-v2`. After the Phase 23 cutover the production
+  #   default is also `VITE_STORAGE_REPOSITORY=v2` (with `legacy` as the rollback),
+  #   so this lane is no longer a divergence in the storage flag; `web-build` above
+  #   remains the single build, record, and upload point for the production
+  #   `web-artifact`, and the extra value this lane adds is the Phase 5 data
+  #   products plus the recorded migration evidence.
   # - The build is `build:storage-v2-data-products`, which is that same flagged
   #   build with one extra flag value, `VITE_DATA_PRODUCTS_V2=true`, in the
   #   environment. It is a strict superset, so one artifact serves both lanes and

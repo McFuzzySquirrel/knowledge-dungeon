@@ -50,6 +50,7 @@ import { describe, expect, it } from 'vitest';
 
 import { isEditableElement } from '../../src/ui/utils/editableElement';
 import { ASSET_BUNDLE_IDS } from '../../src/renderers/pixi/assets/assetManifest';
+import { nativelyConsumesMovementKeys } from '../../src/renderers/pixi/input/WorldInputController';
 import { isHandledElsewhere } from '../../src/renderers/pixi/runtime/createPixiWorldHost';
 import { REPO_ROOT, sourceOf, stripComments } from './support/phase9Build';
 
@@ -587,6 +588,9 @@ describe('the duplicate keyboard guard agrees with the DOM copy it stands in for
     { what: 'a plain button', make: () => document.createElement('button'), expected: false },
     { what: 'a text input', make: () => document.createElement('input'), expected: true },
     { what: 'a checkbox', make: () => makeInput('checkbox'), expected: false },
+    // Not text entry - and the companion table below pins the same element as one
+    // that *does* own its keys. The distinction "not editable" is not "owns no
+    // key", and reading it as the latter is the Phase 23 production defect.
     { what: 'a range', make: () => makeInput('range'), expected: false },
     { what: 'a textarea', make: () => document.createElement('textarea'), expected: true },
     { what: 'a select', make: () => document.createElement('select'), expected: true },
@@ -646,5 +650,83 @@ describe('the duplicate keyboard guard agrees with the DOM copy it stands in for
       mirror.remove();
       outside.remove();
     }
+  });
+});
+
+/**
+ * Phase 23 re-expressed the range case above.
+ *
+ * The table above pins the *text-entry* classification, and a range is still
+ * `false` there: it carries no caret, so it is not a place a learner is typing.
+ * That answer alone was read by the world as "a range does not own its keys",
+ * and the production cutover turned that reading into a defect - a focused volume
+ * slider lost ArrowRight to the player and never moved.
+ *
+ * So the same element is pinned a second time, against the predicate that
+ * actually decides movement, because the durable distinction is not "editable"
+ * but "does this focused element natively consume the movement key?". A range
+ * does; a button does not. Every row below can fail, and the range row is the
+ * one the old table could not express. The behaviour is exercised end to end in
+ * `tests/phase11/world-input-controller.test.ts` and, in a real browser, by
+ * `tests/e2e/phase10-media-lane`'s keyboard sweep of the Settings sliders.
+ */
+describe('the movement guard yields a key to any focused control that consumes it', () => {
+  function inputOf(type: string): HTMLInputElement {
+    const input = document.createElement('input');
+    input.type = type;
+    return input;
+  }
+
+  const cases: ReadonlyArray<{ what: string; make: () => Element; expected: boolean }> = [
+    // The re-expressed case: a range is not text entry, but it does own its keys.
+    { what: 'a range', make: () => inputOf('range'), expected: true },
+    { what: 'a radio', make: () => inputOf('radio'), expected: true },
+    { what: 'a text input', make: () => document.createElement('input'), expected: true },
+    { what: 'a number input', make: () => inputOf('number'), expected: true },
+    { what: 'a date input', make: () => inputOf('date'), expected: true },
+    { what: 'a textarea', make: () => document.createElement('textarea'), expected: true },
+    { what: 'a select', make: () => document.createElement('select'), expected: true },
+    // The Phase 21 contract: these own Space and Enter but not the arrows, so a
+    // learner may hold a direction while one has focus.
+    { what: 'a button', make: () => document.createElement('button'), expected: false },
+    { what: 'a checkbox', make: () => inputOf('checkbox'), expected: false },
+    { what: 'a div', make: () => document.createElement('div'), expected: false },
+    { what: 'an anchor', make: () => document.createElement('a'), expected: false },
+  ];
+
+  it('answers for every element shape a movement key can land in', () => {
+    for (const testCase of cases) {
+      expect(nativelyConsumesMovementKeys(testCase.make()), testCase.what).toBe(testCase.expected);
+    }
+  });
+
+  it('a range owns its arrows even though it is not text entry', () => {
+    // The exact distinction the Phase 23 fix rests on. If the two predicates
+    // agreed for a range, "not editable" would again be read as "claims no key".
+    const range = inputOf('range');
+    expect(isEditableElement(range)).toBe(false);
+    expect(nativelyConsumesMovementKeys(range)).toBe(true);
+    // A checkbox is the complement: not text entry and does not own a key.
+    const checkbox = inputOf('checkbox');
+    expect(isEditableElement(checkbox)).toBe(false);
+    expect(nativelyConsumesMovementKeys(checkbox)).toBe(false);
+  });
+
+  it('recognises the ARIA roles whose own interaction consumes the arrows', () => {
+    for (const role of ['slider', 'spinbutton', 'listbox', 'combobox', 'radiogroup']) {
+      const element = document.createElement('div');
+      element.setAttribute('role', role);
+      expect(nativelyConsumesMovementKeys(element), `role=${role}`).toBe(true);
+    }
+    // A plain div, and a role that does not consume arrows, keep no key.
+    expect(nativelyConsumesMovementKeys(document.createElement('div'))).toBe(false);
+    const buttonRole = document.createElement('div');
+    buttonRole.setAttribute('role', 'button');
+    expect(nativelyConsumesMovementKeys(buttonRole)).toBe(false);
+  });
+
+  it('does not throw on a null or a non-element target', () => {
+    expect(nativelyConsumesMovementKeys(null)).toBe(false);
+    expect(nativelyConsumesMovementKeys(window)).toBe(false);
   });
 });

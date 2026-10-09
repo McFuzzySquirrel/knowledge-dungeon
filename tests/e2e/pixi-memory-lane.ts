@@ -202,8 +202,8 @@ export interface PixiMemoryLaneDeclaration {
   /** The world renderer this lane is the only browser evidence for. */
   readonly worldRenderer: 'pixi';
   /** Recorded in the evidence for every test in the lane, and true of the artifact. */
-  readonly storageRepository: 'legacy';
-  readonly dataProductsV2: false;
+  readonly storageRepository: 'v2';
+  readonly dataProductsV2: boolean;
   readonly cycles: number;
   readonly viewport: { readonly width: number; readonly height: number };
   readonly deviceScaleFactor: number;
@@ -221,7 +221,7 @@ export interface PixiMemoryLaneDeclaration {
 const EMULATION_LIMITATIONS = [
   'Not a physical device, ChromeOS, or operating-system version certification.',
   'Not a cross-engine result; Firefox, WebKit, and Edge lanes do not run this spec, so nothing here is evidence about another renderer engine.',
-  'Not the production artifact: the production default stays VITE_WORLD_RENDERER=phaser, and this lane previews a build that asked for Pixi.',
+  'Not the production artifact certification: build:web:pixi now produces the Phase 23 cutover default, and this lane records that artifact\'s identity but measures only the world-host mount and unmount memory property, not the application\'s whole release surface.',
   'Not a hardware-GPU result: the WebGL2 context the lane obtains is real, and the evidence records the unmasked renderer string, which in a headless Linux container is a software rasteriser.',
   'Not Electron; native packaging and installer workflows do not satisfy this gate and this lane does not run in them.',
 ] as const;
@@ -248,8 +248,8 @@ export const PIXI_MEMORY_LANE: PixiMemoryLaneDeclaration = Object.freeze({
   flagValue: PIXI_MEMORY_FLAG_VALUE,
   manifestPath: PIXI_MEMORY_MANIFEST_PATH,
   worldRenderer: 'pixi',
-  storageRepository: 'legacy',
-  dataProductsV2: false,
+  storageRepository: 'v2',
+  dataProductsV2: true,
   cycles: 20,
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
@@ -284,11 +284,11 @@ export function validatePixiMemoryLane(
     problems.push('the pixi memory lane must not bind an existing suite spec file.');
   }
   if (lane.worldRenderer !== 'pixi') problems.push('the lane must record the pixi world renderer.');
-  if (lane.storageRepository !== 'legacy') {
-    problems.push('this build is a production-mode build, so its storage repository is the production default.');
+  if (lane.storageRepository !== 'v2') {
+    problems.push('build:web:pixi now produces the cutover default, whose storage repository is v2.');
   }
-  if (lane.dataProductsV2 !== false) {
-    problems.push('this build is a production-mode build, so the data-products flag must be recorded as off.');
+  if (lane.dataProductsV2 !== true) {
+    problems.push('build:web:pixi now produces the cutover default, so the data-products flag is on.');
   }
   if (lane.cycles < 20) problems.push('the lane must run at least plan section 10.2 cycle count of 20.');
   if (lane.viewport.width !== 1440 || lane.viewport.height !== 900) {

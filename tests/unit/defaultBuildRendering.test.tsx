@@ -1,21 +1,21 @@
 /**
- * Phase 4: the default build's rendered output is pinned.
+ * Phase 4 / Phase 23: the default build's rendered output is pinned.
  *
- * The cutover flag must not change what the default build shows. This file pins
- * the Welcome screen's rendered structure in the *default* configuration, so a
- * regression that leaks the migration, the storage repository, or the attachment
- * store into the default UI fails here rather than in a browser lane that only
- * runs on a pull request.
+ * Phase 4 pinned the default build while storage-v2 was opt-in. The Phase 23 cutover
+ * makes storage-v2 the default, so this file now pins the *post-cutover* default: the
+ * repository is `v2`, `legacy` remains the one-release rollback, and the Welcome screen
+ * still renders the same landmark structure rather than leaking migration or recovery
+ * surfaces into the default UI.
  *
  * What is asserted:
  *
- * - the repository the default build selects is `legacy`;
+ * - the repository the default build selects is `v2`, and `legacy` still parses as the
+ *   rollback;
  * - the rendered Welcome screen names the same landmark structure, in the same
  *   order, with the same tab set and the same primary action;
  * - nothing storage-v2-specific is rendered: no generation id, no migration
  *   state, no repository name, no recovery banner;
- * - the privacy paragraph is present and accurate, and the storage-v2
- *   configuration is not.
+ * - the privacy paragraph is present and accurate.
  *
  * The flag is asserted from the build-time contract rather than by simulating a
  * build: `DEFAULT_RUNTIME_CONFIG` is what `VITE_STORAGE_REPOSITORY` absent
@@ -74,16 +74,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Phase 4: the default build keeps the legacy repository', () => {
-  it('resolves to legacy with no flag set, and the default config is frozen', () => {
-    expect(DEFAULT_RUNTIME_CONFIG.storageRepository).toBe('legacy');
+describe('Phase 23: the default build selects storage-v2, with legacy as the rollback', () => {
+  it('resolves to v2 with no flag set, and the legacy rollback still parses', () => {
+    // Phase 4 pinned the pre-cutover default (`legacy`); the Phase 23 cutover flips it,
+    // so the pinned default is now `v2` and `legacy` is the one-release rollback.
+    expect(DEFAULT_RUNTIME_CONFIG.storageRepository).toBe('v2');
     expect(Object.isFrozen(DEFAULT_RUNTIME_CONFIG)).toBe(true);
-    expect(parseRuntimeConfig({}).storageRepository).toBe('legacy');
+    expect(parseRuntimeConfig({}).storageRepository).toBe('v2');
     // An empty value is an invalid value, and an invalid value fails the build
     // rather than silently selecting a repository.
     expect(() => parseRuntimeConfig({ VITE_STORAGE_REPOSITORY: '' })).toThrow(/VITE_STORAGE_REPOSITORY/);
-    // The flagged value is a real option, not the default.
-    expect(parseRuntimeConfig({ VITE_STORAGE_REPOSITORY: 'v2' }).storageRepository).toBe('v2');
+    // The rollback is a real option, and it still selects the legacy repository.
+    expect(parseRuntimeConfig({ VITE_STORAGE_REPOSITORY: 'legacy' }).storageRepository).toBe('legacy');
   });
 });
 

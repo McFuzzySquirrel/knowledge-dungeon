@@ -57,7 +57,11 @@ import storageV2Config from '../../playwright.storage-v2.config';
 import dataProductsConfig from '../../playwright.data-products.config';
 import subjectConfig from '../../playwright.subject-product.config';
 import reloadConfig from '../../playwright.reload-persistence.config';
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
 import { CURRENT_BUILD_TEST_FILE, SUPPORT_MATRIX } from './support-matrix';
 import { DATA_PRODUCTS_TEST_FILE } from './data-products-lane';
@@ -151,8 +155,8 @@ describe('pixi memory lane declaration', () => {
   it('is internally consistent and claims its own bounded scope', () => {
     expect(validatePixiMemoryLane()).toEqual([]);
     expect(PIXI_MEMORY_LANE.worldRenderer).toBe('pixi');
-    expect(PIXI_MEMORY_LANE.storageRepository).toBe('legacy');
-    expect(PIXI_MEMORY_LANE.dataProductsV2).toBe(false);
+    expect(PIXI_MEMORY_LANE.storageRepository).toBe('v2');
+    expect(PIXI_MEMORY_LANE.dataProductsV2).toBe(true);
     // The lane is a step in `browser-smoke`, not a step beside the storage-v2
     // flagged builds. It could not be the other one: that job's own gate asserts it
     // neither downloads an artifact nor runs a `build:web*` script, and it uploads
@@ -199,11 +203,15 @@ describe('pixi memory lane declaration', () => {
     expect(preflight).toMatch(/A Playwright lane that mounts and unmounts the world/);
   });
 
-  it('the flag is the plan flag, its production default is still phaser, and this lane turns it on', () => {
+  it('the flag is the plan flag, the production default stays the application host, and this lane pins the test host', () => {
     expect(PIXI_MEMORY_FLAG).toBe('VITE_WORLD_RENDERER');
     expect(RUNTIME_FLAG_ENV_KEYS.worldRenderer).toBe(PIXI_MEMORY_FLAG);
+    // Phase 23 does not move `worldRenderer`: it is a retained host switch, so production
+    // keeps the application host (`phaser`) and this lane explicitly pins the Phase 9 test
+    // host (`pixi`) to measure it.
     expect(FEATURE_FLAG_MATRIX.worldRenderer.productionDefault).toBe('phaser');
     expect(DEFAULT_RUNTIME_CONFIG.worldRenderer).toBe('phaser');
+    expect(parseRuntimeConfig({ VITE_WORLD_RENDERER: 'pixi' }).worldRenderer).toBe('pixi');
     expect(FEATURE_FLAG_MATRIX.worldRenderer.ownerPhase).toBe(9);
     expect(PIXI_MEMORY_FLAG_VALUE).toBe('pixi');
     expect(PIXI_MEMORY_LANE.worldRenderer).toBe(PIXI_MEMORY_FLAG_VALUE);

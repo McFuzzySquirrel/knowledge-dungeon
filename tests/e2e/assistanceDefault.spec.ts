@@ -14,11 +14,11 @@ import {
 } from './assistance-journey';
 
 /**
- * The Phase 21 assistance **rollback** lane, against the default production artifact.
+ * The Phase 21 assistance **rollback** lane, against the Phase 23 full-rollback artifact.
  *
  * ## Why this lane exists, and what makes it more than the absence of a positive
  *
- * The Phase 19 production default is `VITE_ADAPTIVE_ASSISTANCE=false`, and "the feature is
+ * The Phase 19 rollback value is `VITE_ADAPTIVE_ASSISTANCE=false`, and "the feature is
  * switched off" is a claim a reader will otherwise take on trust from a flag table. The flagged
  * lane proves the card renders; on its own that would also pass for a card that is *always* on
  * screen, gated by nothing. This lane is the other half, and it is a half rather than a footnote
@@ -55,7 +55,7 @@ import {
 
 const LOCAL_ORIGIN = localOriginFor(ASSISTANCE_DEFAULT_LANE.previewPort);
 
-test.describe('the default artifact shows no assistance, and the lane is what proves it', () => {
+test.describe('the rollback artifact shows no assistance, and the lane is what proves it', () => {
   test('the same journey mounts no assistance card, a suggestion, a reason or a dismiss control', async ({
     page,
   }) => {
@@ -94,7 +94,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
     for (const [name, selector] of Object.entries(ASSISTANCE_PROBES)) {
       expect(
         await page.locator(selector).count(),
-        `the default artifact rendered ${name} (${selector}), so either the feature is not gated or ` +
+        `the rollback artifact rendered ${name} (${selector}), so either the feature is not gated or ` +
           'the flagged and default lanes are pointed at the same artifact',
       ).toBe(0);
     }
@@ -107,7 +107,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
     // The second, independent witness, and the one that survives a reviewer's objection that the
     // DOM assertion could be satisfied by a page that simply failed to render anything.
     //
-    // On this artifact the lane chunks *are* emitted - measured at this phase, the default build
+    // On this artifact the lane chunks *are* emitted - measured at this phase, the rollback build
     // ships `assets/AssistanceRegion-*.js` and `assets/assistanceStore-*.js` exactly as the flagged
     // one does, and `vite.config.ts` reports 2/2 declared lane paths fetchable for both. What
     // differs is that nothing asks the browser for them. So the assertion is about the request
@@ -120,7 +120,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
 
     expect(
       spy.scriptPathsMatching(ASSISTANCE_CARD_CHUNK_REQUEST_MATCH),
-      'the default artifact fetched the assistance lane after the journey reached the state that mounts it',
+      'the rollback artifact fetched the assistance lane after the journey reached the state that mounts it',
     ).toEqual([]);
     // And the page really did load scripts, so "no lane request" is not "no requests".
     expect(spy.observations().filter(({ resourceType }) => resourceType === 'script').length).toBeGreaterThan(
@@ -133,7 +133,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
     ).toEqual([]);
   });
 
-  test('the artifact really is the production default, and not the flagged build', async ({ page }) => {
+  test('the artifact really is the Phase 23 rollback build, and not the cutover one', async ({ page }) => {
     // Read from the served page rather than from the environment, for the reason the fishing lane
     // reads its chunk census from `dist/` rather than from a flag constant: the flag is the thing
     // under test, so reading it back would make the lane assert the flag rather than the product.
@@ -148,7 +148,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
     ).toBeVisible({ timeout: 30_000 });
     await page.waitForLoadState('networkidle');
 
-    expect(ASSISTANCE_DEFAULT_LANE.expectsFlagOn, 'this lane runs against the production default').toBe(
+    expect(ASSISTANCE_DEFAULT_LANE.expectsFlagOn, 'this lane runs against the Phase 23 full-rollback build').toBe(
       false,
     );
     expect(await page.locator(ASSISTANCE_ANY_SELECTOR).count()).toBe(0);
@@ -168,7 +168,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
      */
     expect(
       spy.scriptPathsMatching(ASSISTANCE_STORE_CHUNK_REQUEST_MATCH),
-      'the production default build fetched the assistance store chunk at boot, so the Phase 22 ' +
+      'the rollback build fetched the assistance store chunk at boot, so the Phase 22 ' +
         'removal regressed',
     ).toEqual([]);
     expect(
@@ -178,13 +178,13 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
     expect(spy.offOriginPaths(LOCAL_ORIGIN)).toEqual([]);
   });
 
-  test('a stored assistance mode survives a missed recall and a reload on the default build', async ({
+  test('a stored assistance mode survives a missed recall and a reload on the rollback build', async ({
     page,
   }) => {
     /*
      * The regression guard for the Phase 22 removal, at the browser level.
      *
-     * The default build no longer loads the store at boot, so the **first** time the store exists
+     * The rollback build no longer loads the store at boot, so the **first** time the store exists
      * on this device is when a missed recall dynamically imports it to call `bumpSignals`.
      * `bumpSignals` rebuilds the whole record from the store's in-memory state, so if the store
      * started from the pre-hydration `standard` rather than the learner's stored `off`, this
@@ -244,7 +244,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
 
     expect(
       await storedMode(),
-      'a missed recall on the default build overwrote the learner’s stored assistance mode',
+      'a missed recall on the rollback build overwrote the learner’s stored assistance mode',
     ).toBe('off');
 
     await page.reload();
@@ -253,7 +253,7 @@ test.describe('the default artifact shows no assistance, and the lane is what pr
     ).toBeVisible({ timeout: 30_000 });
     expect(
       await storedMode(),
-      'the stored assistance mode did not survive a reload on the default build',
+      'the stored assistance mode did not survive a reload on the rollback build',
     ).toBe('off');
     expect(spy.pageErrors(), `page errors during the reload: ${spy.pageErrors().join(' | ')}`).toEqual([]);
   });

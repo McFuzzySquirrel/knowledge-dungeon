@@ -130,8 +130,8 @@ export interface SubjectLaneDeclaration {
 const EMULATION_LIMITATIONS = [
   'Not a physical device, ChromeOS, or operating-system version certification.',
   'Not a cross-engine result; Firefox, WebKit, and Edge lanes do not run this spec.',
-  'Not the production artifact: this lane previews a build with VITE_STORAGE_REPOSITORY=v2 and VITE_DATA_PRODUCTS_V2=true, neither of which is the default.',
-  'Not evidence that the default build reaches the Data Center; the production default keeps the flag off.',
+  'Not a comparison against the pre-cutover stack: this artifact and the Phase 23 production default both use storage-v2 and have the data products on.',
+  'Not evidence that the legacy rollback still round-trips; the Phase 23 rollback artifact is the evidence for that.',
   'Not a two-tab or concurrent-writer result.',
 ] as const;
 
@@ -193,7 +193,7 @@ export function validateSubjectLane(lane: SubjectLaneDeclaration = SUBJECT_LANE)
     problems.push('the subject lane must not bind an existing suite spec file.');
   }
   if (lane.storageRepository !== 'v2') problems.push('the lane must record storageRepository v2.');
-  if (lane.worldRenderer !== 'phaser') problems.push('Phase 6 does not change the renderer, so the lane must still expect Phaser.');
+  if (lane.worldRenderer !== 'phaser') problems.push('Phase 6 does not change the host; Phase 23 keeps the application host (phaser).');
   if (lane.viewport.width !== 1440 || lane.viewport.height !== 900) {
     problems.push('the lane must use the desktop-chromium-equivalent viewport.');
   }

@@ -15,14 +15,21 @@
  *    the product chunks without ever loading them.
  */
 
-import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
-import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
+import {
+  CUTOVER_BOOLEAN_FLAG_KEYS,
+  CUTOVER_FLAG_KEYS,
+  CUTOVER_FLAG_ROLLBACKS,
+  FEATURE_FLAG_MATRIX,
+  NON_CUTOVER_FLAG_KEYS,
+  RETAINED_HOST_FLAG_KEYS,
+  REVIEWED_FLAG_KEYS,
+} from '@/config/featureFlags';
 
 const ROOT = process.cwd();
 const SRC = join(ROOT, 'src');
@@ -239,38 +246,71 @@ describe('V7.1: no UI file names a storage-v2 module', () => {
 });
 
 describe('V7.2: the default build', () => {
-  it('VITE_DATA_PRODUCTS_V2 defaults to false, three ways', () => {
+  it('VITE_DATA_PRODUCTS_V2 defaults on after the Phase 23 cutover, and false still disables it', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.dataProductsV2).toBe('VITE_DATA_PRODUCTS_V2');
-    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(false);
-    expect(parseRuntimeConfig({}).dataProductsV2).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
+    // Before Phase 23 the product was opt-in, so this gate asserted the three-way
+    // `false` default. The cutover makes the product the production default; the
+    // `false` rollback is now the opt-out, and it still yields the pre-cutover
+    // behaviour, which the positive control below proves it can.
+    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(true);
+    expect(parseRuntimeConfig({}).dataProductsV2).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(true);
+    expect(CUTOVER_FLAG_ROLLBACKS.dataProductsV2).toBe(false);
+    expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'false' }).dataProductsV2).toBe(false);
   });
 
-  it('no cutover flag in the matrix is on by default before its cutover phase', () => {
-    // Phase 10 added `audioEnabled`, which defaults on because it is a kill switch for
-    // a service that phase delivers rather than a gate on an existing behaviour. It
-    // declares itself in `NON_CUTOVER_FLAG_KEYS`, so the exception is a reviewed list
-    // and the property is still asserted for every other flag.
-    const enabled = Object.entries(FEATURE_FLAG_MATRIX)
+  it('the flag matrix is partitioned into reviewed cutover, kill-switch, and retained-host flags', () => {
+    // Phase 23 re-foundation. Before the cutover this gate asserted "no cutover flag
+    // defaults on". The cutover inverts that for the cutover flags by design, so the
+    // durable invariant is the partition, and each part can still fail:
+    //   1. every key of the matrix belongs to exactly one of the three reviewed sets, so
+    //      no flag is silently unclassified;
+    //   2. the matrix key set is the pinned reviewed set, so no flag was removed;
+    //   3. the flags that default on are exactly the cutover booleans plus the kill
+    //      switches, so a cutover flag left off fails; and
+    //   4. every cutover flag's declared rollback still parses to the pre-cutover value
+    //      and is documented as an env var/value, so the rollback cannot rot.
+    const matrixKeys = Object.keys(FEATURE_FLAG_MATRIX).sort();
+    const classified = [
+      ...CUTOVER_FLAG_KEYS,
+      ...NON_CUTOVER_FLAG_KEYS,
+      ...RETAINED_HOST_FLAG_KEYS,
+    ].sort();
+    expect(classified).toEqual(matrixKeys);
+    expect(new Set(classified).size).toBe(classified.length);
+    expect(matrixKeys).toEqual([...REVIEWED_FLAG_KEYS].sort());
+
+    const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
-      .map(([key]) => key);
-    expect(enabled.sort()).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
+      .map(([key]) => key)
+      .sort();
+    expect(onByDefault).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort());
+
+    for (const key of CUTOVER_FLAG_KEYS) {
+      const rollback = CUTOVER_FLAG_ROLLBACKS[key];
+      const environment = { [RUNTIME_FLAG_ENV_KEYS[key]]: String(rollback) };
+      expect(parseRuntimeConfig(environment)[key]).toBe(rollback);
+      expect(FEATURE_FLAG_MATRIX[key].rollback).toContain(
+        `${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`,
+      );
+      expect(FEATURE_FLAG_MATRIX[key].productionDefault).not.toBe(rollback);
+    }
   });
 
-  it('tests/unit/defaultBuildRendering.test.tsx is unmodified by this phase', () => {
-    // A tracked file that this phase must not have touched. `git diff` is the
-    // authority, and an unstaged modification is the thing being checked.
-    const changed = execFileSync('git', ['status', '--porcelain', '--', 'tests/unit/defaultBuildRendering.test.tsx'], {
-      cwd: ROOT,
-      encoding: 'utf8',
-    }).trim();
-    expect(changed).toBe('');
+  it('tests/unit/defaultBuildRendering.test.tsx is the default-build rendering gate and reflects the cutover', () => {
     const file = join(ROOT, 'tests/unit/defaultBuildRendering.test.tsx');
     expect(existsSync(file)).toBe(true);
     // ...and it really is the default-build rendering gate.
     const text = readFileSync(file, 'utf8');
     expect(text).toMatch(/default build/i);
     expect(text).toMatch(/Welcome screen/);
+    // Phase 23 cutover. This gate used to assert the file was byte-for-byte unmodified,
+    // because the default build did not change; the cutover does change it, so the
+    // durable claim is that the gate tracks the new default and still exercises the
+    // legacy rollback. A file that silently kept the pre-cutover `legacy` default, or
+    // dropped the rollback control, fails here.
+    expect(text).toContain("DEFAULT_RUNTIME_CONFIG.storageRepository).toBe('v2')");
+    expect(text).toContain("VITE_STORAGE_REPOSITORY: 'legacy'");
     // The data-tab half of the same claim lives in the new Data Center unit
     // gate, which is where the Data Center's own owner put it. Asserted here so
     // the claim is not resting on a file this verifier has not read.

@@ -10,12 +10,13 @@
  * existing modal as the Scribe view while retaining shared commands", so nothing about the
  * rollback lane may have been broken by the new lane's arrival.
  *
- * ## Why this file does not mock the flag
+ * ## The flag contract after the cutover
  *
- * `qaAccessibility.test.tsx` forces the flag on to measure the new lane. This file does the
- * opposite: it asserts the **unmocked** `runtimeConfig.scribeEncounterWorkspace` is `false`
- * and then drives `NoteEditorModal` through the same real stores the new lane uses. A rollback
- * test that forced the flag off by mocking it would prove nothing about the default build.
+ * After the Phase 23 cutover the production default is on, so `qaAccessibility.test.tsx`
+ * measures the shipped default and this file drives the rollback build: it renders
+ * `NoteEditorModal` directly and asserts the `VITE_SCRIBE_ENCOUNTER_WORKSPACE=false` value
+ * still selects the pre-Phase-15 lane. The flag contract is asserted from the real
+ * `runtimeConfig`/`parseRuntimeConfig`, not from an assumption that the default is off.
  *
  * No renderer, no canvas, no network, no clock, no `dist/`. The subject store's own write is
  * stubbed, as everywhere else.
@@ -32,6 +33,7 @@ vi.mock('@/services/persistence/subjectPersistence', async (importOriginal) => {
 });
 
 import { runtimeConfig } from '@/config/featureFlags';
+import { parseRuntimeConfig } from '@/config/runtimeConfig';
 import {
   eventsOfKind,
   readStatisticsEventLedgerFromFields,
@@ -67,9 +69,12 @@ afterEach(() => {
   cleanup();
 });
 
-describe('the default build: the flag is off', () => {
-  it('is off without any mock, so the default artifact really is the pre-Phase-15 lane', () => {
-    expect(runtimeConfig.scribeEncounterWorkspace).toBe(false);
+describe('the flag contract: on by default, off is the rollback', () => {
+  it('ships the flag on after the cutover, and the false rollback still selects the pre-Phase-15 modal', () => {
+    expect(runtimeConfig.scribeEncounterWorkspace).toBe(true);
+    expect(
+      parseRuntimeConfig({ VITE_SCRIBE_ENCOUNTER_WORKSPACE: 'false' }).scribeEncounterWorkspace,
+    ).toBe(false);
   });
 });
 
@@ -225,7 +230,7 @@ describe('the rollback lane: the pre-Phase-15 modal still works end to end', () 
     expect(screen.queryByRole('dialog', { name: 'Scribe encounter' })).toBeNull();
   });
 
-  it('GameScreen picks the modal, not the workspace, on the default build', () => {
+  it('GameScreen picks the modal, not the workspace, on a VITE_SCRIBE_ENCOUNTER_WORKSPACE=false build', () => {
     // The choice is asserted at the screen, not at a helper: `GameScreen` reads the flag once
     // at module scope, so this is the only place the decision is observable.
     // Read the *rendered source* rather than the transpiled function body: the flag-gated

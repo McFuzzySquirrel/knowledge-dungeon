@@ -1023,56 +1023,114 @@ describe('control: every gate is green before a single mutation', () => {
   });
 
 
-  it('P18 no cutover flag defaults on, and the three cutover-flag gates still assert the reviewed contract', async () => {
-    // PRESERVED INTENT, RE-EXPRESSED - Phase 22, reviewed.
+  it('P18 the cutover contract is partitioned, rollbacks are live, and the three gates still assert it', async () => {
+    // PRESERVED INTENT, RE-EXPRESSED - Phase 23, reviewed.
     //
     // This check used to byte-compare `src/config/featureFlags.ts` and
     // `src/config/runtimeConfig.ts` against `HEAD`, so that *any* unreviewed edit to the
     // flag matrix failed here. Its subject was never really the bytes: it was the contract
     // the three cutover-flag gates read - `tests/phase5/seam.test.ts`,
-    // `tests/phase6/lazyBoundary.test.ts`, and `tests/data/phase5FlagDefault.test.ts` all
-    // assert "the set of flags whose `productionDefault` is `true` equals
-    // `NON_CUTOVER_FLAG_KEYS`". Phase 22 added the reviewed `offlineShell` flag, which
-    // changes those two files by design, and re-pointing a byte comparison at a moved
-    // `HEAD` would only re-freeze whatever is on disk without proving anything. So the
-    // contract is now asserted directly, from the module the gates read. It fails if a
-    // cutover flag is made to default on, if the `NON_CUTOVER_FLAG_KEYS` distinction is
-    // removed or widened, or if one of the three gates stops comparing against it.
-    const { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } = await import('@/config/featureFlags');
+    // `tests/phase6/lazyBoundary.test.ts`, and `tests/data/phase5FlagDefault.test.ts`.
+    // Before the Phase 23 cutover that contract was "the set of flags whose
+    // `productionDefault` is `true` equals `NON_CUTOVER_FLAG_KEYS`". The cutover inverts
+    // the cutover flags' defaults by design, so the contract is re-founded: the matrix must
+    // partition into `CUTOVER_FLAG_KEYS`, `NON_CUTOVER_FLAG_KEYS`, and
+    // `RETAINED_HOST_FLAG_KEYS` (the retained `worldRenderer` host switch), the pinned
+    // `REVIEWED_FLAG_KEYS` set must be intact, every cutover flag's declared
+    // `CUTOVER_FLAG_ROLLBACKS` value must still parse to the pre-cutover behaviour, and the
+    // three gates must still read the shared declaration. It fails if a flag is
+    // unclassified, removed, or added; if a rollback value stops parsing or stops being
+    // documented; or if a gate stops comparing against the declaration.
+    const {
+      CUTOVER_BOOLEAN_FLAG_KEYS,
+      CUTOVER_FLAG_KEYS,
+      CUTOVER_FLAG_ROLLBACKS,
+      FEATURE_FLAG_MATRIX,
+      NON_CUTOVER_FLAG_KEYS,
+      RETAINED_HOST_FLAG_KEYS,
+      REVIEWED_FLAG_KEYS,
+    } = await import('@/config/featureFlags');
 
+    const matrixKeys = Object.keys(FEATURE_FLAG_MATRIX).sort();
+    const classified = [
+      ...CUTOVER_FLAG_KEYS,
+      ...NON_CUTOVER_FLAG_KEYS,
+      ...RETAINED_HOST_FLAG_KEYS,
+    ].sort();
+    // The property the three gates state, recomputed here from the real matrix, so a
+    // flag left unclassified is caught even if a gate were edited around it.
+    expect(classified, 'a flag is unclassified').toEqual(matrixKeys);
+    expect([...new Set(classified)].sort(), 'a flag is classified twice').toEqual(matrixKeys);
+    // The retained host list itself, asserted as one value: `worldRenderer` is a host
+    // switch whose default does not move at the cutover, not a world-renderer rollback.
+    expect([...RETAINED_HOST_FLAG_KEYS], 'the retained-host list changed').toEqual([
+      'worldRenderer',
+    ]);
+    // The pinned reviewed set itself, so a removed or added flag fails even though the
+    // gates compare against the current declaration.
+    expect(matrixKeys, 'the reviewed flag set changed').toEqual([...REVIEWED_FLAG_KEYS].sort());
+    // The reviewed kill-switch list itself, asserted as one value rather than compared
+    // against whatever it currently holds: the three gates compare against it, so a
+    // widened list would otherwise agree with itself. `audioEnabled` is the only name
+    // allowed on it.
+    expect([...NON_CUTOVER_FLAG_KEYS], 'the non-cutover kill-switch list was widened').toEqual([
+      'audioEnabled',
+    ]);
+    // The flags that default on are exactly the cutover booleans plus the kill switches.
     const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
       .map(([key]) => key)
       .sort();
-    // The property the three gates state, recomputed here from the real matrix, so a
-    // cutover flag defaulting on is caught even if a gate were edited around it.
-    expect(onByDefault, 'a cutover flag is on by default').toEqual(['audioEnabled']);
-    // The reviewed exemption list itself, asserted as one value rather than compared
-    // against whatever it currently holds: the three gates compare against the list, so a
-    // widened list would otherwise agree with itself. `audioEnabled` is the only name
-    // allowed on it.
-    expect([...NON_CUTOVER_FLAG_KEYS], 'the non-cutover exemption list was widened').toEqual([
-      'audioEnabled',
-    ]);
-    // The two halves agree, which *is* the `NON_CUTOVER_FLAG_KEYS` distinction.
-    expect(onByDefault).toEqual([...NON_CUTOVER_FLAG_KEYS].sort());
+    expect(onByDefault, 'the on-by-default set drifted from the reviewed cutover booleans').toEqual(
+      [...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort(),
+    );
+    // Every cutover flag's declared rollback still parses to the pre-cutover value, and
+    // the rollback documentation names the environment variable and value.
+    for (const key of CUTOVER_FLAG_KEYS) {
+      const rollback = CUTOVER_FLAG_ROLLBACKS[key];
+      const { parseRuntimeConfig, RUNTIME_FLAG_ENV_KEYS } = await import('@/config/runtimeConfig');
+      const environment = { [RUNTIME_FLAG_ENV_KEYS[key]]: String(rollback) };
+      expect(parseRuntimeConfig(environment)[key], `${key} rollback no longer parses`).toBe(rollback);
+      expect(
+        FEATURE_FLAG_MATRIX[key].rollback,
+        `${key} does not document ${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`,
+      ).toContain(`${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`);
+      expect(FEATURE_FLAG_MATRIX[key].productionDefault, `${key} rollback equals its default`).not.toBe(
+        rollback,
+      );
+    }
 
     // And the three gates that read this contract must still be present and must still
-    // compare the on-by-default set to it, so removing the distinction from a gate fails
-    // here as well as on the config.
+    // compare against the shared declaration, so removing the distinction from a gate
+    // fails here as well as on the config.
     for (const gatePath of [
       'tests/phase5/seam.test.ts',
       'tests/phase6/lazyBoundary.test.ts',
       'tests/data/phase5FlagDefault.test.ts',
     ]) {
       const gateSource = readFileSync(join(REPO_ROOT, gatePath), 'utf8');
-      expect(gateSource, `${gatePath} no longer compares against NON_CUTOVER_FLAG_KEYS`).toContain(
-        'toEqual([...NON_CUTOVER_FLAG_KEYS].sort())',
+      expect(gateSource, `${gatePath} no longer compares against CUTOVER_FLAG_KEYS`).toContain(
+        'CUTOVER_FLAG_KEYS',
       );
-      expect(gateSource, `${gatePath} no longer inspects productionDefault`).toContain(
-        'productionDefault',
+      expect(gateSource, `${gatePath} no longer compares against NON_CUTOVER_FLAG_KEYS`).toContain(
+        'NON_CUTOVER_FLAG_KEYS',
+      );
+      expect(gateSource, `${gatePath} no longer reads the cutover rollback declaration`).toContain(
+        'CUTOVER_FLAG_ROLLBACKS',
+      );
+      expect(gateSource, `${gatePath} no longer classifies the retained host switch`).toContain(
+        'RETAINED_HOST_FLAG_KEYS',
+      );
+      expect(gateSource, `${gatePath} no longer pins the reviewed flag set`).toContain(
+        'REVIEWED_FLAG_KEYS',
       );
     }
+
+    // The retained host switch keeps its pre-cutover default: production uses the
+    // application host, and the real PixiJS worlds come from the per-world flags.
+    expect(FEATURE_FLAG_MATRIX.worldRenderer.productionDefault, 'worldRenderer moved at the cutover').toBe(
+      'phaser',
+    );
   });
 });
 

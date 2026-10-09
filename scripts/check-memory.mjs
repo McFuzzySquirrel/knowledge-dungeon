@@ -55,17 +55,18 @@
  * in the output whether or not this artifact contains it. An **absent** family is a
  * reported fact and deliberately not a finding:
  *
- * - It is not a finding because the default production build is the Phaser build,
- *   so `vendor-pixi` absence there is the correct and expected state. A finding
- *   would mean the default build could never pass its own gate, which is a gate
- *   that has stopped gating.
+ * - It is not a finding because the Phase 23 rollback build is the Phaser build (every
+ *   per-world flag off), so `vendor-pixi` absence there is the correct and expected
+ *   state. A finding would mean that rollback build could never pass its own gate, which
+ *   is a gate that has stopped gating.
  * - It is not silently "clean" either. It prints as `not present in this build`,
  *   with the reason it is nonetheless correct, and the run's closing sentence
  *   enumerates the families that were measured instead of asserting a property of
- *   a family it never looked at. Reading the default-build report, a reader sees
+ *   a family it never looked at. Reading a rollback-build report, a reader sees
  *   that the Pixi half of "no eager Phaser or Pixi load on Welcome" was *not
- *   measured*, and that the measurement lives on the `VITE_WORLD_RENDERER=pixi`
- *   build, which CI runs.
+ *   measured* there, and that the measurement lives on the cutover production build
+ *   (which routes the worlds to PixiJS through the per-world flags) and the
+ *   `VITE_WORLD_RENDERER=pixi` build, both of which CI runs.
  *
  * A family that *is* present is still held to the full rule: every chunk within
  * the ceiling, and the Pixi family specifically not named by the entry document.
@@ -146,16 +147,16 @@ export const RENDERER_CHUNK_FAMILIES = {
   'vendor-phaser': {
     renderer: 'Phaser',
     reason:
-      'The current world renderer, statically imported by src/game/**. Phase 24 deletes it, at which point this family stops matching anything.',
+      'The Phaser fallback, statically imported by src/game/** and reached only when a per-world flag is off. Phase 24 deletes it, at which point this family stops matching anything.',
     absence:
-      'Absent from a build that does not reach Phaser. It is present in both the production and the VITE_WORLD_RENDERER=pixi build today, because src/game/** stays in the module graph until Phase 24 deletes it.',
+      'Absent from the cutover production build and from a VITE_WORLD_RENDERER=pixi build, because both route the world screens to the per-world PixiJS worlds. It is present only in a rollback build (every per-world flag off). src/game/** stays in the module graph until Phase 24 deletes it.',
   },
   'vendor-pixi': {
     renderer: 'PixiJS',
     reason:
-      'The Phase 9 renderer. Plan section 10.2 excludes lazy renderer bundles from the Welcome budget and forbids an eager Pixi load on Welcome.',
+      'The Phase 9 renderer, and the one the cutover production build reaches through the per-world flags. Plan section 10.2 excludes lazy renderer bundles from the Welcome budget and forbids an eager Pixi load on Welcome.',
     absence:
-      'Absent from a VITE_WORLD_RENDERER=phaser build, which is the production default, so the "no eager Pixi load on Welcome" half is NOT measured on that build. It is measured on the VITE_WORLD_RENDERER=pixi build, which CI runs, where this family is present and lazy.',
+      'Absent from a rollback build (every per-world flag off), where the world screens fall back to Phaser, so the "no eager Pixi load on Welcome" half is NOT measured on that artifact. It is measured on the cutover production build and on the VITE_WORLD_RENDERER=pixi build, which CI runs, where this family is present and lazy.',
   },
 };
 

@@ -14,6 +14,15 @@ vi.mock('@/services/electronBridge', () => ({
   getElectronEnvironmentLabel: () => mockGetElectronEnvironmentLabel(),
 }));
 
+vi.mock('@/config/featureFlags', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/config/featureFlags')>();
+  // Phase 23 makes the Data Center the default Data tab, replacing the legacy admin panel this
+  // file drives. The Data Center's own default-path coverage lives in
+  // tests/unit/dataCenter.test.tsx; this file pins the rollback surface that still ships for
+  // one release.
+  return { ...actual, runtimeConfig: { ...actual.runtimeConfig, dataProductsV2: false } };
+});
+
 const mockListSubjectIds = vi.fn<() => Promise<string[]>>();
 const mockLoadSubjectSnapshot = vi.fn<(id: string) => Promise<SubjectSnapshot | null>>();
 const mockImportSubjectFolder = vi.fn<() => Promise<SubjectSnapshot | null>>();

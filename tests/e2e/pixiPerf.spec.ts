@@ -14,6 +14,7 @@ import {
 import {
   PERF_STORAGE_KEYS,
   PIXI_PERF_ROOM_COUNTS,
+  PIXI_PERF_SUBJECT_ID,
   buildPerfSubjectSnapshot,
   fixtureDigest,
 } from './pixi-perf-fixtures';
@@ -120,26 +121,56 @@ async function installProbe(page: Page): Promise<void> {
 /**
  * Seeds the deterministic synthetic subject and refuses the tutorial's own write to it.
  *
- * The seed is written with the native setter **before** the prototype is narrowed, so
- * the payload really is in `localStorage`; after that, only writes to the one tutorial
- * subject key are dropped, which is what keeps `Start Tutorial` from replacing the
- * fixture with its built-in three-room subject. Every other storage key — the subject
- * index, the active subject pointer, a study session, progression — is written
- * normally, so the application's own bookkeeping still happens.
+ * Two storage generations are covered, because the artifact this lane previews uses
+ * `VITE_STORAGE_REPOSITORY=v2`:
+ *
+ * - **Legacy path.** The seed is written with the native setter *before* the prototype is
+ *   narrowed, so the payload really is in `localStorage`; after that, only writes to the
+ *   one tutorial subject key are dropped, which keeps `Start Tutorial` from replacing the
+ *   fixture with its built-in three-room subject.
+ * - **storage-v2 path.** The default build reads and writes the storage-v2 IndexedDB
+ *   generation. The seed above is migrated into it by the application's own bootstrap, and
+ *   the tutorial's later write to the `subjects` object store is dropped **once the lane
+ *   raises its block flag** (see {@link enterDungeonWorld}). The flag is raised after the
+ *   bootstrap migration has completed, so the migration itself is never interfered with and
+ *   the record `loadSubject` reads back is the fixture, not the tutorial's three rooms.
  */
 async function seedFixture(page: Page, rooms: number): Promise<string> {
   const snapshot = buildPerfSubjectSnapshot(rooms);
   const payloadJson = JSON.stringify(snapshot);
   await page.addInitScript(
-    ({ subjectKey, payload }: { readonly subjectKey: string; readonly payload: string }) => {
+    ({
+      subjectKey,
+      subjectId,
+      payload,
+    }: {
+      readonly subjectKey: string;
+      readonly subjectId: string;
+      readonly payload: string;
+    }) => {
       const nativeSetItem = Storage.prototype.setItem;
       nativeSetItem.call(window.localStorage, subjectKey, payload);
       Storage.prototype.setItem = function (key: string, value: string) {
         if (key === subjectKey) return;
         return nativeSetItem.call(this, key, value);
       };
+
+      // storage-v2: drop the tutorial's own `subjects` write while the lane's flag is up.
+      // `putAll` in the v2 repository ignores `IDBObjectStore.put`'s return value, so a
+      // skipped put leaves the transaction healthy and the migrated record in place.
+      const nativePut = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (record: unknown, key?: IDBValidKey) {
+        const scope = globalThis as unknown as { __KD_PERF_BLOCK_TUTORIAL_SUBJECT__?: boolean };
+        if (scope.__KD_PERF_BLOCK_TUTORIAL_SUBJECT__ === true && this.name === 'subjects') {
+          const envelope = record as { readonly recordId?: unknown } | null;
+          if (envelope !== null && typeof envelope === 'object' && envelope.recordId === subjectId) {
+            return undefined as unknown as IDBRequest<IDBValidKey>;
+          }
+        }
+        return nativePut.call(this, record, key);
+      };
     },
-    { subjectKey: PERF_STORAGE_KEYS.subject, payload: payloadJson },
+    { subjectKey: PERF_STORAGE_KEYS.subject, subjectId: PIXI_PERF_SUBJECT_ID, payload: payloadJson },
   );
   return fixtureDigest(snapshot);
 }
@@ -148,6 +179,13 @@ async function seedFixture(page: Page, rooms: number): Promise<string> {
 async function enterDungeonWorld(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Knowledge Dungeon' })).toBeVisible();
+  // The bootstrap migration has already copied the legacy fixture into storage-v2 by the
+  // time Welcome is interactive; raising the flag now drops only the tutorial's own later
+  // write to the tutorial subject, so the fixture is what `loadSubject` reads back.
+  await page.evaluate(() => {
+    (globalThis as unknown as { __KD_PERF_BLOCK_TUTORIAL_SUBJECT__?: boolean }).__KD_PERF_BLOCK_TUTORIAL_SUBJECT__ =
+      true;
+  });
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
   await expect(page.locator(WORLD_SURFACE)).toBeVisible({ timeout: 30_000 });
   await expect(

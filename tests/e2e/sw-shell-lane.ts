@@ -172,7 +172,7 @@ export interface SwShellLaneDeclaration {
 const LIMITATIONS = [
   'Not a cross-engine result: Chromium only. No Firefox, WebKit, or Edge project runs this spec.',
   'Not a physical-device or ChromeOS certification; the viewport is emulated.',
-  'Not the production default: this lane previews a build with VITE_OFFLINE_SHELL=true and VITE_STORAGE_REPOSITORY=v2, neither of which is the default.',
+  'Not a comparison against the pre-cutover stack: this artifact and the Phase 23 production default both enable the offline shell and use storage-v2.',
   'Not a reload, data-survival, or cache-content proof; the offline lane owns those and this lane makes no claim about them.',
   'Not an offline write queue, background sync, runtime caching, push, install-prompt, or offline-editing result; the locked Phase 22 scope is the reload guarantee only.',
   'Not a WebGPU, GPU-memory, or frame-time result of any kind.',

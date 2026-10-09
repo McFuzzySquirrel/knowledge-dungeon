@@ -17,12 +17,13 @@ export interface RuntimeConfig {
   /**
    * Whether the audio service may construct a context and make sound.
    *
-   * The one flag here that is not a cutover gate. Every other flag below defaults to
-   * the pre-phase behaviour so that nothing changes for a learner until its cutover is
-   * reviewed; audio has no pre-phase behaviour to keep, so this defaults to `true` and
-   * exists to be turned off. That is what the Phase 10 rollback line asks for -
-   * "Disable audio independently and retain procedural art fallbacks" - which only
-   * means something if there is audio to disable.
+   * The one flag here that is not a cutover gate, and after the Phase 23 cutover the
+   * only flag that is still a kill switch rather than a one-release rollback. Every
+   * other flag below now defaults to the post-cutover behaviour and exists to restore
+   * the pre-cutover behaviour; audio has no pre-phase behaviour to keep, so it defaults
+   * to `true` and exists to be turned off. That is what the Phase 10 rollback line asks
+   * for - "Disable audio independently and retain procedural art fallbacks" - which
+   * only means something if there is audio to disable.
    */
   readonly audioEnabled: boolean;
   readonly creatorWorkspace: boolean;
@@ -31,10 +32,11 @@ export interface RuntimeConfig {
   /**
    * Whether the offline static-shell service worker may be registered.
    *
-   * A cutover gate for Phase 22: the pre-Phase-22 build has no service worker, so
-   * the production default is `false` and the rollback is a build with it off. When
-   * off, the build emits no `sw.js`, no shell manifest, and no registration script,
-   * so the default artifact is unchanged.
+   * A cutover gate for Phase 22, now on by default after the Phase 23 cutover. The
+   * production build registers the shell service worker; `VITE_OFFLINE_SHELL=false` is
+   * the one-release rollback, and with it off the build emits no `sw.js`, no shell
+   * manifest, and no registration script, restoring the pre-Phase-22 artifact. The
+   * worker caches build-time shell assets only and never caches learner data.
    */
   readonly offlineShell: boolean;
 }
@@ -60,24 +62,33 @@ export const RUNTIME_FLAG_ENV_KEYS = {
 } as const satisfies Readonly<Record<RuntimeConfigKey, string>>;
 
 /**
- * Safe production defaults. Phaser and legacy localStorage remain active until
- * their separately reviewed cutover phases.
+ * Production defaults after the Phase 23 cutover. The PixiJS worlds, storage-v2, the Cozy
+ * visual system, data products, Gentle assistance, Web Share, the redesigned workspaces,
+ * and the offline shell are on by default. Each corresponding flag is retained for one
+ * release as a documented rollback to its pre-cutover behaviour, declared in
+ * `CUTOVER_FLAG_ROLLBACKS` in `./featureFlags`. `audioEnabled` is the only kill switch.
+ *
+ * `worldRenderer` does **not** move at the cutover: it stays `'phaser'`. It is a retained
+ * host switch, not a world-renderer cutover. The real PixiJS worlds are selected by the
+ * per-world flags (`pixiVillage`, `pixiDungeon`, `pixiFishing`) inside the screens, and
+ * the `'pixi'` value selects the Phase 9 test host (`PixiWorldHost`), not a production
+ * world. Phase 24 removes the flag. See `RETAINED_HOST_FLAG_KEYS` in `./featureFlags`.
  */
 export const DEFAULT_RUNTIME_CONFIG: Readonly<RuntimeConfig> = Object.freeze({
   worldRenderer: 'phaser',
-  storageRepository: 'legacy',
-  pixiVillage: false,
-  pixiDungeon: false,
-  pixiFishing: false,
-  cozyVisuals: false,
-  adaptiveAssistance: false,
-  dataProductsV2: false,
-  webShare: false,
+  storageRepository: 'v2',
+  pixiVillage: true,
+  pixiDungeon: true,
+  pixiFishing: true,
+  cozyVisuals: true,
+  adaptiveAssistance: true,
+  dataProductsV2: true,
+  webShare: true,
   audioEnabled: true,
-  creatorWorkspace: false,
-  scribeEncounterWorkspace: false,
-  archaeologistReviewWorkspace: false,
-  offlineShell: false,
+  creatorWorkspace: true,
+  scribeEncounterWorkspace: true,
+  archaeologistReviewWorkspace: true,
+  offlineShell: true,
 });
 
 function normalizedRawValue(

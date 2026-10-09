@@ -628,15 +628,19 @@ describe('the production artifact is never re-read after the Pixi build overwrit
   });
 });
 
-describe('the production default is unchanged', () => {
+describe('the production default stays on the application host at the Phase 23 cutover', () => {
   it('npm run build:web sets no renderer flag', () => {
     expect(npmScripts['build:web']).toBe('npm run build');
     expect(npmScripts['build']).not.toContain('VITE_WORLD_RENDERER');
   });
 
-  it('the flag matrix still names phaser as the production default for phase 9', () => {
+  it('the flag matrix keeps phaser as the phase 9 production default, because it is a retained host switch', () => {
     const matrix = sourceOf('src/config/featureFlags.ts');
-    expect(matrix).toContain('productionDefault: \'phaser\'');
+    // Phase 23: `worldRenderer` is a retained host switch, not a cutover. Production keeps
+    // the application host (`phaser`), and the real PixiJS worlds come from the per-world
+    // flags. `pixi` selects the Phase 9 test host and is not a production default.
+    expect(matrix).toContain("productionDefault: 'phaser'");
+    expect(matrix).toContain('VITE_WORLD_RENDERER=pixi');
     expect(matrix).toContain('ownerPhase: 9');
   });
 });

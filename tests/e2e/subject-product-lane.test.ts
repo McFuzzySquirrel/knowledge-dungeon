@@ -37,7 +37,11 @@ import playwrightConfig from '../../playwright.config';
 import storageV2Config from '../../playwright.storage-v2.config';
 import dataProductsConfig from '../../playwright.data-products.config';
 import subjectConfig from '../../playwright.subject-product.config';
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX } from '@/config/featureFlags';
 import { CURRENT_BUILD_TEST_FILE, SUPPORT_MATRIX } from './support-matrix';
 import { STORAGE_V2_LANE, STORAGE_V2_STORAGE_CONTRACT, STORAGE_V2_TEST_FILE } from './storage-v2-lane';
@@ -116,11 +120,12 @@ describe('Phase 6 individual-subject backup lane declaration', () => {
     expect(existsSync(path.join(REPO_ROOT, SUBJECT_LANE.envFile))).toBe(true);
   });
 
-  it('the owner flag is the plan\'s flag, default-off, and this lane turns it on', () => {
+  it('the owner flag is the plan\'s flag, default-on after the cutover, and this lane pins it on', () => {
     expect(SUBJECT_LANE_OWNER_FLAG).toBe('VITE_DATA_PRODUCTS_V2');
     expect(RUNTIME_FLAG_ENV_KEYS.dataProductsV2).toBe(SUBJECT_LANE_OWNER_FLAG);
-    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(false);
-    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.dataProductsV2.productionDefault).toBe(true);
+    expect(DEFAULT_RUNTIME_CONFIG.dataProductsV2).toBe(true);
+    expect(parseRuntimeConfig({ VITE_DATA_PRODUCTS_V2: 'false' }).dataProductsV2).toBe(false);
     expect(SUBJECT_LANE.dataProductsV2).toBe(true);
   });
 });

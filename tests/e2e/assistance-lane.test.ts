@@ -54,7 +54,11 @@ import playwrightConfig from '../../playwright.config';
 import storageV2Config from '../../playwright.storage-v2.config';
 import pixiMemoryConfig from './playwright.pixi-memory.config';
 import { ASSISTANCE_SUGGESTION_KINDS } from '../../src/core/assistance/types';
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '../../src/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '../../src/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '../../src/config/featureFlags';
 import { CURRENT_BUILD_TEST_FILE, SUPPORT_MATRIX } from './support-matrix';
 import { FISHING_TEST_FILE } from './fishing-lane';
@@ -227,11 +231,13 @@ describe('the flagged build has a script that turns on exactly one flag', () => 
     expect(ASSISTANCE_FLAG_VALUE).toBe('true');
   });
 
-  it('the flag parses, defaults to false, and stays a cutover gate rather than a kill switch', () => {
-    // The production default is what makes the flag-off build the rollback, and the flag-off build
-    // is what this lane's second half observes.
-    expect(DEFAULT_RUNTIME_CONFIG.adaptiveAssistance).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.adaptiveAssistance.productionDefault).toBe(false);
+  it('the flag parses, defaults to true after the cutover, and stays a cutover gate rather than a kill switch', () => {
+    // Phase 23 makes Gentle assistance the production default. The flag-off build is now the
+    // rollback, and the flag-off build is what this lane's second half observes.
+    expect(DEFAULT_RUNTIME_CONFIG.adaptiveAssistance).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.adaptiveAssistance.productionDefault).toBe(true);
+    // Positive control: the rollback value still disables it.
+    expect(parseRuntimeConfig({ VITE_ADAPTIVE_ASSISTANCE: 'false' }).adaptiveAssistance).toBe(false);
     // And `NON_CUTOVER_FLAG_KEYS` must remain exactly `['audioEnabled']`, asserted as the negative
     // that keeps a second flag from joining it.
     expect([...NON_CUTOVER_FLAG_KEYS]).toEqual(['audioEnabled']);
@@ -612,22 +618,24 @@ describe('the npm scripts are the repository three shapes and the two preview-on
     expect(npmScripts[ASSISTANCE_CI_RUN_SCRIPT]).not.toContain('build:web');
   });
 
-  it('the default lane has the same three shapes, against the production build', () => {
+  it('the rollback lane has the same three shapes, against the full-rollback build', () => {
     expect(npmScripts[ASSISTANCE_DEFAULT_LANE_SCRIPT]).toBeDefined();
-    expect(npmScripts[ASSISTANCE_DEFAULT_LANE_FULL_SCRIPT]).toContain('npm run build:web &&');
+    expect(npmScripts[ASSISTANCE_DEFAULT_LANE_FULL_SCRIPT]).toContain('npm run build:web:rollback &&');
     expect(npmScripts[ASSISTANCE_DEFAULT_LANE_SCRIPT]).not.toContain('build:web');
     expect(npmScripts[ASSISTANCE_DEFAULT_CI_RUN_SCRIPT]).not.toContain('build:web');
   });
 
-  it('the record and verify scripts name this lane own manifest, not another lane s', () => {
+  it('the record and verify scripts name each lane own manifest, rollback included', () => {
     expect(npmScripts[ASSISTANCE_RECORD_SCRIPT]).toContain(ASSISTANCE_MANIFEST_PATH);
     expect(npmScripts[ASSISTANCE_VERIFY_SCRIPT]).toContain(ASSISTANCE_MANIFEST_PATH);
-    // The default lane's verify relies on `web-artifact-manifest.mjs`'s own default path, which is
-    // the production manifest, and does not pass `--manifest` at all. Asserted so the two are
-    // distinguishable: the flagged lane names its manifest, the default lane inherits it.
-    expect(ASSISTANCE_DEFAULT_VERIFY_SCRIPT).toBe('verify:web-artifact');
-    expect(npmScripts[ASSISTANCE_DEFAULT_VERIFY_SCRIPT]).toBe('node scripts/web-artifact-manifest.mjs verify');
-    expect(npmScripts[ASSISTANCE_DEFAULT_VERIFY_SCRIPT]).not.toContain('--manifest');
+    // After the Phase 23 cutover the rollback lane previews `build:web:rollback` and records
+    // its own manifest rather than inheriting the production one, so a "no assistance" claim
+    // can never be checked against the cutover artifact that carries the flag on.
+    expect(ASSISTANCE_DEFAULT_VERIFY_SCRIPT).toBe('verify:web-artifact:rollback');
+    expect(npmScripts[ASSISTANCE_DEFAULT_VERIFY_SCRIPT]).toBe(
+      `node scripts/web-artifact-manifest.mjs verify --manifest=${ASSISTANCE_DEFAULT_MANIFEST_PATH}`,
+    );
+    expect(ASSISTANCE_DEFAULT_MANIFEST_PATH).toBe('artifacts/web-artifact-manifest-rollback.json');
     expect(npmScripts[ASSISTANCE_VERIFY_SCRIPT]).toContain(`--manifest=${ASSISTANCE_MANIFEST_PATH}`);
     expect(npmScripts[ASSISTANCE_VERIFY_SCRIPT]).not.toBe(npmScripts[ASSISTANCE_DEFAULT_VERIFY_SCRIPT]);
   });
@@ -788,17 +796,25 @@ describe('CI builds, uploads, downloads, verifies and runs both lanes in that or
     expect(runDefault).toBeGreaterThan(runFlagged);
   });
 
-  it('the absence lane downloads the production artifact back and re-verifies it first', () => {
-    // A lane claiming "the card is absent" while pointed at a flagged build would describe
-    // something other than what it claims - the same shape of defect the discards exist to prevent.
+  it('the absence lane downloads the rollback artifact and verifies it first', () => {
+    // After the Phase 23 cutover the production build *includes* the assistance feature, so
+    // a lane claiming "the card is absent" is only meaningful against the full-rollback
+    // build. It previews that artifact and verifies its identity first, for the same reason
+    // the discards exist: a lane pointed at the wrong tree describes something other than
+    // what it claims.
     const runDefault = BROWSER_JOB.indexOf(`npm run ${ASSISTANCE_DEFAULT_CI_RUN_SCRIPT}`);
-    const reverify = BROWSER_JOB.lastIndexOf('npm run verify:web-artifact\n', runDefault);
-    expect(reverify, 'the production identity is verified again before the absence lane').toBeGreaterThan(-1);
-    expect(reverify).toBeLessThan(runDefault);
-    // And the production download it pairs with is the second one in the job, not the first.
-    expect(BROWSER_JOB.indexOf('name: web-artifact')).not.toBe(
-      BROWSER_JOB.lastIndexOf('name: web-artifact'),
+    const rollbackDownload = BROWSER_JOB.lastIndexOf('name: rollback-web-artifact', runDefault);
+    const rollbackVerify = BROWSER_JOB.lastIndexOf(
+      `npm run ${ASSISTANCE_DEFAULT_VERIFY_SCRIPT}\n`,
+      runDefault,
     );
+    expect(runDefault, 'the absence lane step was found').toBeGreaterThan(-1);
+    expect(rollbackDownload, 'the rollback artifact is downloaded for the absence lane').toBeGreaterThan(-1);
+    expect(rollbackVerify, 'the rollback identity is verified first').toBeGreaterThan(rollbackDownload);
+    expect(rollbackVerify).toBeLessThan(runDefault);
+    // The rollback artifact is not the release artifact: the absence lane must not run
+    // against the cutover production identity.
+    expect(BROWSER_JOB.slice(rollbackDownload, runDefault)).not.toContain('name: web-artifact');
   });
 
   it('both lane steps are not exempt from failing', () => {
@@ -832,15 +848,19 @@ describe('the accessibility audit is wired into the same job and asserts its own
   });
 
   it('the accessibility audit runs against the production artifact, so it describes what ships', () => {
-    // It runs after the production re-download that the absence lane performed, so the tree it scans
-    // is the production one rather than whichever flagged build happened to be last. Asserted by
-    // position inside the browser job, because a whole-file index finds the build job's copies.
+    // The absence lane leaves the rollback tree, so the job downloads the cutover production
+    // artifact back and re-verifies it before the audit: the tree the audit scans is the
+    // release one rather than the flagged or rollback build the previous lanes left behind.
+    // Asserted by position inside the browser job, because a whole-file index finds the build
+    // job's copies.
     const runA11y = BROWSER_JOB.indexOf('npm run test:a11y:runnable');
     const runDefault = BROWSER_JOB.indexOf(`npm run ${ASSISTANCE_DEFAULT_CI_RUN_SCRIPT}`);
-    const reverify = BROWSER_JOB.lastIndexOf('npm run verify:web-artifact\n', runDefault);
-    expect(runDefault).toBeGreaterThan(-1);
-    expect(reverify).toBeGreaterThan(-1);
-    expect(runA11y).toBeGreaterThan(runDefault);
-    expect(runA11y).toBeGreaterThan(reverify);
+    const verifyProduction = BROWSER_JOB.lastIndexOf('npm run verify:web-artifact\n', runA11y);
+    expect(runDefault, 'the absence lane step was found').toBeGreaterThan(-1);
+    expect(
+      verifyProduction,
+      'the production identity is re-verified after the absence lane and before the audit',
+    ).toBeGreaterThan(runDefault);
+    expect(runA11y).toBeGreaterThan(verifyProduction);
   });
 });

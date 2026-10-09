@@ -91,6 +91,9 @@ vi.mock('@/core/graph', async () => {
   return {
     ...actual,
     deriveGraphHierarchy: () => ({
+      // Phase 23 makes the redesigned Scribe workspace the default, and it reads the
+      // hierarchy's breadcrumb alongside the floor labels, so the fixture needs both.
+      breadcrumbRoomIdsByRoomId: { 'room-1': ['room-1'] },
       floorIdByRoomId: { 'room-1': 'room-1' },
       floorLabelByFloorId: { 'room-1': 'Floor 1' },
     }),
@@ -370,13 +373,16 @@ describe('GameScreen NPC dialog callbacks', () => {
     act(() => {
       capturedCallbacks?.onNpcInteract?.({ roomId: 'room-1', clientX: 420, clientY: 260 });
     });
-    expect(screen.getByText(/Room Guide/i)).toBeInTheDocument();
+    // The dialogue's own brief title, not the loose "Room Guide" eyebrow: with the redesigned
+    // Scribe workspace now the default, a persistent "Talk to the room guide" control also
+    // matches /Room Guide/i, so the assertion pins the dialogue itself.
+    expect(screen.getByText(/Scribe Brief: Vector Spaces/i)).toBeInTheDocument();
 
     act(() => {
       capturedCallbacks?.onInteract?.('room-1');
     });
 
-    expect(screen.queryByText(/Room Guide/i)).toBeNull();
+    expect(screen.queryByText(/Scribe Brief: Vector Spaces/i)).toBeNull();
     expect(useSessionStore.getState().isNoteEditorOpen).toBe(true);
   });
 

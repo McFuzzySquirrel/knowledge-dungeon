@@ -1,6 +1,7 @@
 /**
- * The Phase 17 flag gate: `VITE_PIXI_FISHING` is a build-time switch, and the default
- * artifact ships no Pixi fishing chunk.
+ * The Phase 17 flag gate: `VITE_PIXI_FISHING` is a build-time switch. After the Phase 23
+ * cutover it defaults on; `VITE_PIXI_FISHING=false` is the rollback whose artifact ships no
+ * Pixi fishing chunk.
  *
  * ## What this file asserts, and what only a build can
  *
@@ -10,8 +11,8 @@
  * mechanism the folding depends on, and it can prove the parsed flag is what produces the
  * mismatch message. So this file asserts:
  *
- * 1. the flag's declaration - Phase 17 owner, production default still `false`, and a rollback
- *    line that means something;
+ * 1. the flag's declaration - Phase 17 owner, post-cutover production default `true`, and a
+ *    rollback line that still disables it;
  * 2. `runtimeConfig.pixiFishing` parses in all three spellings, identically to `pixiDungeon`;
  * 3. the switch is a **literal** `=== 'true'` comparison, with no normalisation before it -
  *    the reason the folding works;
@@ -103,22 +104,22 @@ function sourceFilesIn(directory: string): string[] {
   return found.sort();
 }
 
-describe('VITE_PIXI_FISHING is a build-time switch whose default is still off', () => {
-  it('is declared with the Phase 17 owner and an unchanged production default', () => {
+describe('VITE_PIXI_FISHING is a build-time switch whose production default is now on', () => {
+  it('is declared with the Phase 17 owner and the post-cutover production default', () => {
     const definition = FEATURE_FLAG_MATRIX.pixiFishing;
     expect(definition.environmentVariable).toBe('VITE_PIXI_FISHING');
     expect(definition.valueKind).toBe('boolean');
-    // The plan's rollback line is "set VITE_PIXI_FISHING=false", which only means something
-    // if the default is already false.
-    expect(definition.productionDefault).toBe(false);
+    // The plan's rollback line is "set VITE_PIXI_FISHING=false"; the Phase 23 cutover makes
+    // the Pixi fishing world the production default, so that rollback is now the off switch.
+    expect(definition.productionDefault).toBe(true);
     expect(definition.ownerPhase).toBe(17);
     expect(definition.rollback).toContain('VITE_PIXI_FISHING=false');
   });
 
   it('parses exactly as the dungeon flag parses, in all three spellings', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.pixiFishing).toBe('VITE_PIXI_FISHING');
-    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(false);
-    expect(parseRuntimeConfig({}).pixiFishing).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(true);
+    expect(parseRuntimeConfig({}).pixiFishing).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_FISHING: 'false' }).pixiFishing).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_FISHING: 'true' }).pixiFishing).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_FISHING: ' TRUE ' }).pixiFishing).toBe(true);
@@ -342,12 +343,13 @@ describe('the renderer tree holds the chunk, the flag, and no Phaser', () => {
 /* ── The build-side wiring, which now closes the loop this phase could only record ── */
 
 describe('the flagged build has a script and a chunk gate of its own', () => {
-  it('there is a build:web:pixi-fishing script, and it sets exactly the fishing flag', () => {
+  it('there is a build:web:pixi-fishing script, and it isolates the fishing flag', () => {
     // The three sibling lanes each have one. The shape is load-bearing rather than
-    // cosmetic: `build:web:pixi-fishing` sets only `VITE_PIXI_FISHING`, so the *other*
-    // three chunk checks (the renderer switch, the village, the dungeon) all sit on
-    // their production defaults and none of them can see this build. That is what makes
-    // a fishing-specific chunk gate necessary rather than redundant.
+    // cosmetic: `build:web:pixi-fishing` pins the world host to `phaser` and turns the
+    // village and dungeon switches off, so none of the other three chunk checks can see
+    // this build. After the Phase 23 cutover every per-world switch defaults on, so the
+    // isolation has to be explicit; that is what still makes a fishing-specific chunk
+    // gate necessary rather than redundant.
     const manifest = JSON.parse(
       readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
@@ -355,11 +357,11 @@ describe('the flagged build has a script and a chunk gate of its own', () => {
     expect(manifest.scripts['build:web:pixi-village']).toBeDefined();
     expect(manifest.scripts['build:web:pixi-dungeon']).toBeDefined();
     expect(manifest.scripts['build:web:pixi-fishing']).toBe(
-      'VITE_PIXI_FISHING=true npm run build:web',
+      'VITE_WORLD_RENDERER=phaser VITE_PIXI_FISHING=true VITE_PIXI_VILLAGE=false VITE_PIXI_DUNGEON=false npm run build:web',
     );
-    expect(manifest.scripts['build:web:pixi-fishing']).not.toContain('VITE_WORLD_RENDERER');
-    expect(manifest.scripts['build:web:pixi-fishing']).not.toContain('VITE_PIXI_VILLAGE');
-    expect(manifest.scripts['build:web:pixi-fishing']).not.toContain('VITE_PIXI_DUNGEON');
+    expect(manifest.scripts['build:web:pixi-fishing']).toContain('VITE_WORLD_RENDERER=phaser');
+    expect(manifest.scripts['build:web:pixi-fishing']).toContain('VITE_PIXI_VILLAGE=false');
+    expect(manifest.scripts['build:web:pixi-fishing']).toContain('VITE_PIXI_DUNGEON=false');
   });
 
   it('the build plugin is handed the parsed fishing flag', () => {

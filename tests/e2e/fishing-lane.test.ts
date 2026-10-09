@@ -9,10 +9,10 @@
  *    `doesNotProve` list, and the boundaries a reader of this gate most needs are asserted *by
  *    content* rather than by count, because a list of plausible sentences can omit the one that
  *    matters.
- * 2. **The flag is the plan's flag, its production default is still off, and the build script
- *    turns on nothing else.** `build:web:pixi-fishing` sets only `VITE_PIXI_FISHING`, which is
- *    what makes the chunk check in `vite.config.ts` the only one that could catch a missing pond
- *    chunk.
+ * 2. **The flag is the plan's flag, its production default is now on after the Phase 23
+ *    cutover, and the build script turns on nothing else.** `build:web:pixi-fishing` sets only
+ *    `VITE_PIXI_FISHING`, pinning the lane's identity; the chunk check in `vite.config.ts` is
+ *    what catches a missing pond chunk.
  * 3. **The Playwright configs bind exactly one project to exactly one spec**, preview an existing
  *    build on its own port, never decide to rebuild, and record no raw failure artifact.
  * 4. **Every release path stays disjoint.** The default config and the five older flagged configs
@@ -49,7 +49,11 @@ import dataProductsConfig from '../../playwright.data-products.config';
 import subjectConfig from '../../playwright.subject-product.config';
 import reloadConfig from '../../playwright.reload-persistence.config';
 import pixiMemoryConfig from './playwright.pixi-memory.config';
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
 import {
   PLAYER_SPEED,
@@ -212,11 +216,14 @@ describe('fishing lane declaration', () => {
     }
   });
 
-  it('the flag is the plan flag, its production default is still off, and this lane turns it on', () => {
+  it('the flag is the plan flag, its production default is now on, and this lane pins it on', () => {
     expect(FISHING_FLAG).toBe('VITE_PIXI_FISHING');
     expect(RUNTIME_FLAG_ENV_KEYS.pixiFishing).toBe(FISHING_FLAG);
-    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.pixiFishing.productionDefault).toBe(false);
+    // Phase 23 makes the Pixi fishing world the production default; `false` is the
+    // one-release rollback and still disables it.
+    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.pixiFishing.productionDefault).toBe(true);
+    expect(parseRuntimeConfig({ VITE_PIXI_FISHING: 'false' }).pixiFishing).toBe(false);
     expect(FEATURE_FLAG_MATRIX.pixiFishing.ownerPhase).toBe(17);
     expect(FEATURE_FLAG_MATRIX.pixiFishing.valueKind).toBe('boolean');
     expect(FEATURE_FLAG_MATRIX.pixiFishing.rollback).toContain('VITE_PIXI_FISHING=false');
@@ -275,15 +282,20 @@ describe('fishing lane npm scripts', () => {
     ]);
   });
 
-  it('the build script sets the fishing flag and nothing else', () => {
-    expect(npmScripts[FISHING_LANE.buildScript]).toBe('VITE_PIXI_FISHING=true npm run build:web');
-    // `VITE_WORLD_RENDERER` deliberately stays `phaser`, which is exactly what makes the Phase 17
-    // chunk check its own: the Phase 9 renderer check cannot see this switch.
-    expect(npmScripts[FISHING_LANE.buildScript]).not.toContain('VITE_WORLD_RENDERER');
-    expect(npmScripts[FISHING_LANE.buildScript]).not.toContain('VITE_PIXI_VILLAGE');
-    expect(npmScripts[FISHING_LANE.buildScript]).not.toContain('VITE_PIXI_DUNGEON');
-    // The rollback lane previews the production build, which is the plain production script.
-    expect(npmScripts[FISHING_ROLLBACK_LANE.buildScript]).toBe('npm run build');
+  it('the build script isolates the fishing world and the rollback script rolls everything back', () => {
+    // After the Phase 23 cutover the per-world switches default on, so the isolation has to
+    // be explicit: the world host and the two other Pixi worlds are pinned off, leaving the
+    // pond the only Pixi world on the artifact the lane measures.
+    expect(npmScripts[FISHING_LANE.buildScript]).toBe(
+      'VITE_WORLD_RENDERER=phaser VITE_PIXI_FISHING=true VITE_PIXI_VILLAGE=false VITE_PIXI_DUNGEON=false npm run build:web',
+    );
+    // Pin the world host to `phaser`, which is exactly what makes the Phase 17 chunk check
+    // its own: the Phase 9 renderer check cannot see this switch when the host is phaser.
+    expect(npmScripts[FISHING_LANE.buildScript]).toContain('VITE_WORLD_RENDERER=phaser');
+    expect(npmScripts[FISHING_LANE.buildScript]).toContain('VITE_PIXI_VILLAGE=false');
+    expect(npmScripts[FISHING_LANE.buildScript]).toContain('VITE_PIXI_DUNGEON=false');
+    // The rollback lane previews the full-rollback artifact, not the production build.
+    expect(npmScripts[FISHING_ROLLBACK_LANE.buildScript]).toBe('node scripts/build-rollback.mjs');
     expect(npmScripts[FISHING_ROLLBACK_LANE.buildScript]).not.toContain('VITE_PIXI_FISHING');
   });
 
@@ -339,14 +351,16 @@ describe('fishing lane npm scripts', () => {
     expect(npmScripts[FISHING_LANE.verifyScript]).toBe(
       `node scripts/web-artifact-manifest.mjs verify --manifest=${FISHING_MANIFEST_PATH}`,
     );
-    expect(npmScripts[FISHING_ROLLBACK_LANE.recordScript]).toBe('node scripts/web-artifact-manifest.mjs write');
+    expect(npmScripts[FISHING_ROLLBACK_LANE.recordScript]).toBe(
+      `node scripts/web-artifact-manifest.mjs write --out=${FISHING_ROLLBACK_MANIFEST_PATH}`,
+    );
     expect(npmScripts[FISHING_ROLLBACK_LANE.verifyScript]).toBe(
-      'node scripts/web-artifact-manifest.mjs verify',
+      `node scripts/web-artifact-manifest.mjs verify --manifest=${FISHING_ROLLBACK_MANIFEST_PATH}`,
     );
     // The whole point of two manifests: a rollback claim verified against an artifact that still
     // contains the pond would pass on the wrong bytes.
     expect(FISHING_MANIFEST_PATH).toBe('artifacts/web-artifact-manifest-pixi-fishing.json');
-    expect(FISHING_ROLLBACK_MANIFEST_PATH).toBe('artifacts/web-artifact-manifest.json');
+    expect(FISHING_ROLLBACK_MANIFEST_PATH).toBe('artifacts/web-artifact-manifest-rollback.json');
     expect(FISHING_MANIFEST_PATH).not.toBe(FISHING_ROLLBACK_MANIFEST_PATH);
     expect(FISHING_MANIFEST_PATH).not.toBe('artifacts/web-artifact-manifest-pixi.json');
     // And the script they name really takes those flags and really has both modes.
@@ -1675,7 +1689,9 @@ describe('fishing lane CI wiring (ci.yml)', () => {
      * any `build:web*` script. So this step is here by arithmetic, not by preference.
      */
     expect(ciStepFor(buildJob, PHASE17_BUILD_STEP)).toContain(`run: npm run ${FISHING_LANE.buildScript}`);
-    expect(npmScripts[FISHING_LANE.buildScript]).toBe('VITE_PIXI_FISHING=true npm run build:web');
+    expect(npmScripts[FISHING_LANE.buildScript]).toBe(
+      'VITE_WORLD_RENDERER=phaser VITE_PIXI_FISHING=true VITE_PIXI_VILLAGE=false VITE_PIXI_DUNGEON=false npm run build:web',
+    );
     expect(ciStepFor(buildJob, PHASE17_RECORD_STEP)).toContain(
       `run: npm run ${FISHING_LANE.recordScript}`,
     );

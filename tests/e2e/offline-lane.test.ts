@@ -3,7 +3,11 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } from '@/config/runtimeConfig';
+import {
+  DEFAULT_RUNTIME_CONFIG,
+  parseRuntimeConfig,
+  RUNTIME_FLAG_ENV_KEYS,
+} from '@/config/runtimeConfig';
 import { FEATURE_FLAG_MATRIX, NON_CUTOVER_FLAG_KEYS } from '@/config/featureFlags';
 import offlineConfig from './playwright.offline.config';
 import playwrightConfig from '../../playwright.config';
@@ -91,10 +95,13 @@ describe('the Phase 22 offline-shell lane is wired and bounded', () => {
     }
   });
 
-  it('defaults the flag off three ways and keeps it a cutover gate', () => {
+  it('defaults the flag on after the cutover and keeps it a cutover gate', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.offlineShell).toBe('VITE_OFFLINE_SHELL');
-    expect(DEFAULT_RUNTIME_CONFIG.offlineShell).toBe(false);
-    expect(FEATURE_FLAG_MATRIX.offlineShell.productionDefault).toBe(false);
+    // Phase 23 makes the offline shell the production default; `false` is the one-release
+    // rollback and still removes the worker, manifest, and registration script.
+    expect(DEFAULT_RUNTIME_CONFIG.offlineShell).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.offlineShell.productionDefault).toBe(true);
+    expect(parseRuntimeConfig({ VITE_OFFLINE_SHELL: 'false' }).offlineShell).toBe(false);
     expect(FEATURE_FLAG_MATRIX.offlineShell.ownerPhase).toBe(22);
     expect(NON_CUTOVER_FLAG_KEYS).not.toContain('offlineShell');
   });

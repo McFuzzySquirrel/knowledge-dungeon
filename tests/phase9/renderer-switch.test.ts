@@ -57,7 +57,7 @@ const PHASE9_ROOT = path.join(REPO_ROOT, 'tests', 'phase9');
 const npmScripts = (JSON.parse(sourceOf('package.json')) as { scripts: Record<string, string> }).scripts;
 const ciJobs = parseWorkflowJobs(readFileSync(path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml'), 'utf8'));
 
-describe('the renderer flag has one mechanism, and its production default is Phaser', () => {
+describe('the renderer flag has one mechanism, and its production default is the application host', () => {
   it('accepts exactly the two values the plan names', () => {
     expect([...WORLD_RENDERERS]).toEqual(['phaser', 'pixi']);
     expect(RUNTIME_FLAG_ENV_KEYS.worldRenderer).toBe('VITE_WORLD_RENDERER');
@@ -70,12 +70,17 @@ describe('the renderer flag has one mechanism, and its production default is Pha
     expect(parseRuntimeConfig({ VITE_WORLD_RENDERER: '  PIXI \n' }).worldRenderer).toBe('pixi');
   });
 
-  it('defaults to Phaser when nothing sets it', () => {
+  it('defaults to the application host (phaser); pixi selects the Phase 9 test host', () => {
+    // This flag does not move at the Phase 23 cutover. It is a retained host switch, not a
+    // world-renderer cutover: the real PixiJS worlds come from the per-world flags, and
+    // `pixi` here selects the Phase 9 test host (`PixiWorldHost`), not a production world.
     expect(parseRuntimeConfig({}).worldRenderer).toBe('phaser');
     expect(DEFAULT_RUNTIME_CONFIG.worldRenderer).toBe('phaser');
     expect(FEATURE_FLAG_MATRIX.worldRenderer.productionDefault).toBe('phaser');
     expect(FEATURE_FLAG_MATRIX.worldRenderer.ownerPhase).toBe(9);
     expect(FEATURE_FLAG_MATRIX.worldRenderer.valueKind).toBe('enum');
+    // The test-host value is a real option, and selecting it is explicit.
+    expect(parseRuntimeConfig({ VITE_WORLD_RENDERER: 'pixi' }).worldRenderer).toBe('pixi');
   });
 
   it('fails the build on a value that is neither', () => {
@@ -105,24 +110,31 @@ describe('the renderer flag has one mechanism, and its production default is Pha
     expect(message).not.toContain('a-note-the-operator-pasted');
   });
 
-  it('leaves the production build script untouched, so no build sets the flag by default', () => {
+  it('keeps the explicit Pixi builds as delegations, and isolates the per-world switches', () => {
     expect(npmScripts['build:web']).toBe('npm run build');
     expect(npmScripts['build']).not.toContain('VITE_WORLD_RENDERER');
     // The Pixi build delegates to the production script with one variable changed,
-    // which is what keeps the two builds from drifting apart.
+    // which is what keeps the two builds from drifting apart. After the Phase 23
+    // cutover this is an explicit pin of the value the production default already has.
     expect(npmScripts['build:web:pixi']).toBe('VITE_WORLD_RENDERER=pixi npm run build:web');
     // The Phase 11 village build is the same delegation for the renderer-neutral
-    // village switch: it leaves the world renderer on Phaser, so the village is the
-    // only thing switched on and the Phase 9 renderer check cannot cover it.
+    // village switch, but the cutover makes every per-world switch default on, so the
+    // isolation is explicit: the host stays phaser and the other two worlds are off, so
+    // the village is the only Pixi world switched on and the Phase 9 renderer check
+    // cannot cover it.
     expect(npmScripts['build:web:pixi-village']).toBe(
-      'VITE_PIXI_VILLAGE=true npm run build:web',
+      'VITE_WORLD_RENDERER=phaser VITE_PIXI_VILLAGE=true VITE_PIXI_DUNGEON=false VITE_PIXI_FISHING=false npm run build:web',
     );
   });
 
   it('is a build-time variable, not a runtime setting a learner can change', () => {
     const flag = FEATURE_FLAG_MATRIX.worldRenderer;
     expect(flag.purpose).toContain('adapter');
-    expect(flag.rollback).toBe('Set VITE_WORLD_RENDERER=phaser or remove the build override.');
+    // A host switch, documented as such: the default is the application host and `pixi`
+    // is the Phase 9 test host, not a production world.
+    expect(flag.rollback).toBe(
+      'Not a cutover: keep VITE_WORLD_RENDERER unset (or `phaser`) for the application host. `VITE_WORLD_RENDERER=pixi` selects the Phase 9 test host and is not a production world renderer.',
+    );
     // Nothing writes it into local storage or into a URL. The one place the flag is
     // read is the build-time parser and the module that parses it once.
     const parser = sourceOf('src/config/runtimeConfig.ts');
@@ -153,27 +165,32 @@ describe('the renderer flag has one mechanism, and its production default is Pha
  * imports, so the default build can delete the Pixi arm and its chunk. The plugin's
  * own truth table lives in `tests/phase9/renderer-chunk-boundary.test.ts`.
  */
-describe('the village switch is additive to the renderer switch, and defaults off', () => {
+describe('the village switch is additive to the renderer switch, and defaults on after the cutover', () => {
   const dynamicImports = (source: string): string[] =>
     [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map((match) => match[1]);
 
-  it('parses with the safe default, and never moves the renderer switch', () => {
+  it('parses with the cutover default, and never moves any other flag', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.pixiVillage).toBe('VITE_PIXI_VILLAGE');
-    expect(parseRuntimeConfig({}).pixiVillage).toBe(false);
-    expect(DEFAULT_RUNTIME_CONFIG.pixiVillage).toBe(false);
+    expect(parseRuntimeConfig({}).pixiVillage).toBe(true);
+    expect(DEFAULT_RUNTIME_CONFIG.pixiVillage).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'true' }).pixiVillage).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'false' }).pixiVillage).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: ' TRUE ' }).pixiVillage).toBe(true);
-    // Adding the village flag does not move the world renderer: the two are
-    // independent contracts, and a build that set both would be an explicit choice.
-    expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'true' }).worldRenderer).toBe('phaser');
+    // Setting the village flag does not move any other flag: the contracts are
+    // independent, and a build that set several would be an explicit choice.
+    const withVillage = parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'true' });
+    const defaults = parseRuntimeConfig({});
+    for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) {
+      if (key === 'pixiVillage') continue;
+      expect(withVillage[key], key).toBe(defaults[key]);
+    }
     expect(() => parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'yes' })).toThrow(/VITE_PIXI_VILLAGE/);
   });
 
   it('is registered against this phase and documents its rollback', () => {
     expect(FEATURE_FLAG_MATRIX.pixiVillage.environmentVariable).toBe('VITE_PIXI_VILLAGE');
     expect(FEATURE_FLAG_MATRIX.pixiVillage.valueKind).toBe('boolean');
-    expect(FEATURE_FLAG_MATRIX.pixiVillage.productionDefault).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.pixiVillage.productionDefault).toBe(true);
     expect(FEATURE_FLAG_MATRIX.pixiVillage.ownerPhase).toBe(11);
     expect(FEATURE_FLAG_MATRIX.pixiVillage.rollback).toContain('VITE_PIXI_VILLAGE=false');
   });
@@ -204,11 +221,14 @@ describe('the village switch is additive to the renderer switch, and defaults of
     expect(screen).not.toMatch(/^\s*import\s+(?!type\b)[^\n]*['"]@\/game\/createVillageGame['"]/m);
   });
 
-  it('documents the flag as build-time only, with the Phaser default', () => {
+  it('documents the flag as build-time only, with its post-cutover default and rollback', () => {
     const example = sourceOf('.env.example');
     expect(example).toContain('VITE_PIXI_VILLAGE');
-    expect(example).toMatch(/Default: false/i);
-    expect(example).toMatch(/build-time only/i);
+    // Phase 23 flips the default on; the file must state both the default and the
+    // rollback value a release operator would set.
+    expect(example).toMatch(/build-time flag/i);
+    expect(example).toMatch(/Default: true/i);
+    expect(example).toContain('VITE_PIXI_VILLAGE=false');
   });
 });
 

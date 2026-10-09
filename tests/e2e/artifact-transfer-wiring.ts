@@ -4,9 +4,9 @@
  * ## Why this file exists
  *
  * `.github/workflows/ci.yml` moves artifacts in **both** directions. `web-build` uploads
- * eight of them - the build census, the release artifact, and one per flagged build - and
- * `browser-smoke` downloads eight - the release artifact twice, and each flagged artifact
- * once, with a production re-download at the end for the Phase 21 absence lane.
+ * nine of them - the build census, the release artifact, the Phase 23 rollback artifact,
+ * and one per flagged build - and `browser-smoke` downloads nine - the release artifact
+ * twice, the rollback artifact once, and each flagged artifact once.
  *
  * Six gates across three phases pinned those movements by **count**, and their histories
  * are the same history:
@@ -14,8 +14,9 @@
  * - Phase 9 wrote `toBe(2)` for the downloads and a three-entry upload list.
  * - Phase 17 added the fishing artifact and rewrote three of them to `toBe(3)` / four entries.
  * - Phase 19 added the assistance artifact and they all had to be rewritten again, to `toBe(4)` / five.
- * - Phase 21 added the production re-download for the absence lane, so the download count is
- *   `toBe(5)` now.
+ * - Phase 21 added the production re-download for the absence lane.
+ * - Phase 23 added the full-rollback artifact and moved the absence lane onto it, which also
+ *   added a production re-download for the accessibility audit that follows it.
  *
  * Every one of those amendments was legitimate. That is the point: the gates were holding
  * the right property with the wrong instrument, so a correct change to the workflow arrived
@@ -362,15 +363,21 @@ export const DOWNLOAD_DECLARATION: readonly DeclaredTransfer[] = Object.freeze([
   },
   {
     action: 'download',
+    artifact: 'rollback-web-artifact',
+    stepName: 'Download the rollback artifact for the absence lane',
+    why: 'The Phase 23 full-rollback build, and the only tree in which the assistance flag is genuinely off, because the cutover production build now includes the feature. The Phase 19 absence lane must claim the card is absent from a flag-off build, so it previews this artifact and verifies its identity first. It replaces the assistance tree, so it needs its own discard.',
+  },
+  {
+    action: 'download',
     artifact: RELEASE_ARTIFACT,
-    stepName: 'Download the shared production artifact for the absence lane',
-    why: 'The release artifact downloaded back, and its identity re-verified, so the Phase 19 absence lane can claim the card is absent from a production build rather than from a flagged one. It replaces the assistance tree, so it needs its own discard.',
+    stepName: 'Download the shared production artifact for the accessibility audit',
+    why: 'The release artifact downloaded back, and its identity re-verified, so the Phase 21 accessibility audit below describes the cutover build that ships rather than the rollback tree the absence lane just measured. It replaces the rollback tree, so it needs its own discard.',
   },
   {
     action: 'download',
     artifact: 'offline-shell-web-artifact',
     stepName: 'Download the offline-shell-flagged artifact',
-    why: 'The Phase 22 flagged build, the only artifact in which VITE_OFFLINE_SHELL is on and therefore the only one that carries the service worker, the shell manifest, and the web app manifest. Two lanes measure it from this one download: the offline reload lane and the service-worker-enabled compatibility lane. It replaces the production tree the absence lane re-downloaded, so it needs its own discard.',
+    why: 'The Phase 22 flagged build, the only artifact in which VITE_OFFLINE_SHELL is on and therefore the only one that carries the service worker, the shell manifest, and the web app manifest. Two lanes measure it from this one download: the offline reload lane and the service-worker-enabled compatibility lane. It replaces the production tree the accessibility audit re-downloaded, so it needs its own discard.',
   },
   {
     action: 'download',
@@ -434,6 +441,12 @@ export const UPLOAD_DECLARATION: readonly DeclaredTransfer[] = Object.freeze([
     artifact: 'pixi-route-web-artifact',
     stepName: 'Upload the Pixi-route-flagged web artifact',
     why: 'The Phase 22 flagged build with VITE_PIXI_DUNGEON=true and VITE_PIXI_FISHING=true, with its own manifest. The only build that carries both Pixi worlds the route-teardown lane changes between, so it is the only artifact that lane can measure.',
+  },
+  {
+    action: 'upload',
+    artifact: 'rollback-web-artifact',
+    stepName: 'Upload the rollback web artifact',
+    why: 'The Phase 23 full-rollback build, with its own manifest. The only artifact in which every cutover flag is at its pre-cutover value, including the assistance flag the Phase 19 absence lane must observe as off; a lane that proved absence against the cutover or any flagged build would be vacuous.',
   },
 ]);
 

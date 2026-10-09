@@ -421,8 +421,11 @@ describe('Phase 4 bootstrap: the flag selects the repository', () => {
   });
 
   it('the default dependency set takes the repository from the build flag', () => {
-    expect(createDefaultBootstrapDeps().repository).toBe('legacy');
+    // Phase 23 makes storage-v2 the production default; `legacy` is the one-release
+    // rollback, and both values are still accepted by the bootstrap.
+    expect(createDefaultBootstrapDeps().repository).toBe('v2');
     expect(createDefaultBootstrapDeps({ repository: 'v2' }).repository).toBe('v2');
+    expect(createDefaultBootstrapDeps({ repository: 'legacy' }).repository).toBe('legacy');
   });
 });
 

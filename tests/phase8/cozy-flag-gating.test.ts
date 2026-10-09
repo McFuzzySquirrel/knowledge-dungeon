@@ -167,14 +167,17 @@ function ruleBody(css: string, selector: string): string {
   return withoutComments.slice(start, index - 1);
 }
 
-describe('Phase 8 flag gate: the off state', () => {
-  it('defaults VITE_COZY_VISUALS to false and documents the rollback', () => {
+describe('Phase 8 flag gate: the flag contract', () => {
+  it('defaults VITE_COZY_VISUALS to true after the cutover and documents the false rollback', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.cozyVisuals).toBe('VITE_COZY_VISUALS');
-    expect(parseRuntimeConfig({}).cozyVisuals).toBe(false);
+    expect(parseRuntimeConfig({}).cozyVisuals).toBe(true);
     const definition = FEATURE_FLAG_MATRIX.cozyVisuals;
-    expect(definition.productionDefault).toBe(false);
+    // Phase 23 makes the Cozy visual system the production default; `false` is the
+    // one-release rollback to the legacy renderer themes.
+    expect(definition.productionDefault).toBe(true);
     expect(definition.ownerPhase).toBe(8);
     expect(definition.rollback).toContain('VITE_COZY_VISUALS=false');
+    expect(parseRuntimeConfig({ VITE_COZY_VISUALS: 'false' }).cozyVisuals).toBe(false);
   });
 
   it('leaves every legacy theme block byte-for-byte as it was', () => {

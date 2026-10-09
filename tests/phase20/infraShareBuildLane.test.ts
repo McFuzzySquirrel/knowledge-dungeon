@@ -19,11 +19,13 @@
  *    never fetched* is the Phase 17 dead lane: `build:web:pixi-fishing` once reported green
  *    while its host published nothing. A `build:web:share` with no share code in it is the
  *    same shape, and it is a **red build** here rather than a green lane.
- * 2. **Flag at its production default -> the entry must not statically reach lane code.** A
+ * 2. **Flag off (the rollback build) -> the entry must not statically reach lane code.** A
  *    static import edge becomes a `<link rel="modulepreload">` in `dist/index.html`, so every
  *    Welcome visitor downloads those bytes whatever the flag says. This is plan section 10.2's
  *    renderer rule applied to a feature, and the Phase 19 assistance group cost the Welcome
- *    budget 10.28 KiB for a feature that could never fire.
+ *    budget 10.28 KiB for a feature that could never fire. Since the Phase 23 cutover the
+ *    production default is `true`, so check 1 runs on the default build and check 2 runs on a
+ *    `VITE_WEB_SHARE=false` rollback build.
  *
  * A check that only did 1 would pass the default build. A check that only did 2 would pass a
  * dead lane. Both are asserted.
@@ -257,24 +259,25 @@ describe('the flagged share build has a script that turns on exactly one flag', 
     expect(viteConfig).toContain('webShare: runtimeConfig.webShare');
   });
 
-  it('the flag itself parses, defaults to false, and rejects anything but true/false', () => {
+  it('the flag itself parses, defaults to true after the cutover, and rejects anything but true/false', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.webShare).toBe('VITE_WEB_SHARE');
-    // The production default is what makes check 2 fire. If it ever became `true` the flag
-    // would stop being a cutover gate and check 2 would never run on `npm run build:web`.
-    expect(DEFAULT_RUNTIME_CONFIG.webShare).toBe(false);
-    expect(parseRuntimeConfig({}).webShare).toBe(false);
+    // Phase 23 makes explicit-action Web Share the production default, so check 1 fires on
+    // `npm run build:web`; `false` is the one-release rollback, and check 2 is exercised on a
+    // `VITE_WEB_SHARE=false` rollback build.
+    expect(DEFAULT_RUNTIME_CONFIG.webShare).toBe(true);
+    expect(parseRuntimeConfig({}).webShare).toBe(true);
     expect(parseRuntimeConfig({ VITE_WEB_SHARE: 'true' }).webShare).toBe(true);
     expect(parseRuntimeConfig({ VITE_WEB_SHARE: 'false' }).webShare).toBe(false);
     expect(() => parseRuntimeConfig({ VITE_WEB_SHARE: 'yes' })).toThrow(/VITE_WEB_SHARE/);
   });
 
-  it('webShare is a cutover gate, not a kill switch, so it is not a NON_CUTOVER key', () => {
-    // `NON_CUTOVER_FLAG_KEYS` must stay exactly `['audioEnabled']`. Adding `webShare` would
-    // mean the flag defaults on, which is the opposite of the plan's rollback line, so this
-    // asserts the negative rather than restating the list.
+  it('webShare is a cutover flag, not a kill switch, so it is not a NON_CUTOVER key', () => {
+    // `NON_CUTOVER_FLAG_KEYS` must stay exactly `['audioEnabled']`. `webShare` is a cutover
+    // flag whose pre-cutover value (`false`) is now its rollback, not a kill switch, so it
+    // must not be on that list.
     expect([...NON_CUTOVER_FLAG_KEYS]).not.toContain('webShare');
     const matrix = FEATURE_FLAG_MATRIX.webShare;
-    expect(matrix.productionDefault).toBe(false);
+    expect(matrix.productionDefault).toBe(true);
     expect(matrix.ownerPhase).toBe(20);
     // And the rollback the flag declares names the local download path, which is the surface
     // that must survive the flag being turned off.

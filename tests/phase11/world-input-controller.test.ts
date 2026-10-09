@@ -164,6 +164,137 @@ describe('keyboard movement', () => {
   });
 });
 
+/**
+ * Phase 23: a focused control that natively consumes a movement key keeps it.
+ *
+ * The defect this pins: with a focused `input[type=range]` (the Settings volume
+ * slider) over a mounted Pixi world, the old guard asked only "is the learner
+ * typing?" - and a range is not text entry - so the world claimed ArrowRight,
+ * called `preventDefault`, and walked the player while the slider never moved.
+ * The durable rule is "does this focused element natively consume the movement
+ * key?", and these cases state it at both ends: a range owns its arrows, a plain
+ * button does not, and the same key proves the controller is live in the second
+ * case.
+ */
+describe('a focused control that owns its keys keeps them', () => {
+  it('a focused range slider takes ArrowRight and the player does not walk', () => {
+    const { element, now } = harness();
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.value = '50';
+    document.body.appendChild(slider);
+
+    const controller = createWorldInputController({ element, now });
+
+    // jsdom does not implement a range's arrow default action, so the platform is
+    // modelled here. The `defaultPrevented` guard is not a convenience: it is the
+    // exact coupling under test. The browser steps the slider only because the
+    // controller did *not* claim the key; if the controller calls
+    // `preventDefault` (the pre-Phase-23 behaviour) the guard skips the step and
+    // both assertions below go red. That makes this a non-vacuity test, not a
+    // restatement of "the slider is a slider".
+    const platformArrow = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented) return;
+      if (event.key === 'ArrowRight') slider.stepUp();
+      else if (event.key === 'ArrowLeft') slider.stepDown();
+    };
+    // Registered *after* the controller, so it runs after the controller's window
+    // listener in the same bubble phase and sees whatever the controller claimed.
+    window.addEventListener('keydown', platformArrow);
+    try {
+      slider.focus();
+      expect(document.activeElement, 'the slider must hold focus').toBe(slider);
+
+      const right = keyDown('ArrowRight', slider);
+      expect(right.defaultPrevented, 'the world must not claim a focused range key').toBe(false);
+      expect(slider.value, 'the slider must take the key, not the player').toBe('51');
+      expect(controller.getMoveVector(), 'the player must not walk').toEqual({ x: 0, y: 0 });
+
+      // Non-vacuity: the same key still moves when it lands somewhere that does
+      // not consume it, so the zero above is the range owning the key rather than
+      // a controller that stopped listening.
+      keyDown('ArrowRight', document.body);
+      expect(controller.getMoveVector(), 'the controller is still live').toEqual({ x: 1, y: 0 });
+    } finally {
+      window.removeEventListener('keydown', platformArrow);
+      controller.destroy();
+    }
+  });
+
+  it('Home, End, PageUp and PageDown on a range are never claimed by the world', () => {
+    const { element, now } = harness();
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '100';
+    slider.value = '50';
+    document.body.appendChild(slider);
+    const controller = createWorldInputController({ element, now });
+    try {
+      slider.focus();
+      for (const key of ['Home', 'End', 'PageUp', 'PageDown']) {
+        const event = keyDown(key, slider);
+        expect(event.defaultPrevented, `${key} belongs to the range`).toBe(false);
+        expect(controller.getMoveVector(), `${key} must not move the player`).toEqual({ x: 0, y: 0 });
+      }
+    } finally {
+      controller.destroy();
+    }
+  });
+
+  it('movement still works while a non-consuming control has focus', () => {
+    const { element, now } = harness();
+    const controller = createWorldInputController({ element, now });
+    const button = document.createElement('button');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    document.body.append(button, checkbox);
+    try {
+      // The Phase 21 contract: a button and a checkbox own Space and Enter, not
+      // the arrows, so a learner may hold a direction while one has focus.
+      for (const target of [button, checkbox, document.body] as const) {
+        keyDown('ArrowRight', target);
+        expect(controller.getMoveVector(), target.tagName).toEqual({ x: 1, y: 0 });
+        keyUp('ArrowRight', target);
+      }
+    } finally {
+      controller.destroy();
+    }
+  });
+
+  it('a control that owns the arrows yields every movement key, including WASD', () => {
+    const { element, now } = harness();
+    const controller = createWorldInputController({ element, now });
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    const roleSlider = document.createElement('div');
+    roleSlider.setAttribute('role', 'slider');
+    roleSlider.tabIndex = 0;
+    document.body.append(slider, roleSlider);
+    try {
+      // The rule is about element shape, not key-by-key bookkeeping: once a
+      // control owns the arrows the world does not race it for the letters
+      // either, because the learner is driving the control.
+      for (const target of [slider, roleSlider] as const) {
+        for (const key of ['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'd', 'w', 'a', 's']) {
+          keyDown(key, target);
+          expect(controller.getMoveVector(), `${target.tagName}/${key}`).toEqual({ x: 0, y: 0 });
+          keyUp(key, target);
+        }
+      }
+      // And the guard is not "anything focused": a plain div keeps no key.
+      roleSlider.removeAttribute('role');
+      roleSlider.tabIndex = 0;
+      keyDown('ArrowRight', roleSlider);
+      expect(controller.getMoveVector()).toEqual({ x: 1, y: 0 });
+    } finally {
+      controller.destroy();
+    }
+  });
+});
+
 describe('pointer and touch gestures', () => {
   it('a drag past the threshold produces a normalised movement vector', () => {
     const { element, now } = harness();
