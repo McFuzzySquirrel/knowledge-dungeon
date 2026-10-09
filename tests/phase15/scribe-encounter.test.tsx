@@ -719,13 +719,29 @@ describe('the composer keeps the capabilities the modal had', () => {
 });
 
 describe('one live region carries every command outcome', () => {
-  it('has exactly one role=status in the workspace, before and after a command', async () => {
+  /**
+   * The workspace's command live channel: the StudyShell's single `.study-feedback` status region.
+   *
+   * The Scribe workspace also hosts the Phase 19 assistance slot (`ScribeEncounter.tsx`), whose
+   * card mounts its own `role="status"` region for suggestion-count announcements once its lazy
+   * chunk resolves. That is a different concern, and the product documents it as such ("the card's
+   * live region is not a second channel for an *action*"), so a workspace-wide `role="status"`
+   * count conflates the two and flickers as the lazy region appears. Scoping to the shell's channel
+   * keeps the assertion "exactly one region carries a command outcome" - still an exact count, not
+   * a lower bound - and still fails if the shell gains a second command-status region.
+   */
+  const commandChannel = (): HTMLElement[] => {
+    const workspace = screen.getByRole('region', { name: 'Scribe encounter workspace' });
+    return [...workspace.querySelectorAll<HTMLElement>('.study-feedback[role="status"]')];
+  };
+
+  it('has exactly one role=status carrying command feedback, before and after a command', async () => {
     renderEncounter();
-    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(commandChannel()).toHaveLength(1);
 
     writeSummary('A draft.');
     fireEvent.click(submitButton());
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Draft saved'));
-    expect(screen.getAllByRole('status')).toHaveLength(1);
+    await waitFor(() => expect(commandChannel()[0]).toHaveTextContent('Draft saved'));
+    expect(commandChannel()).toHaveLength(1);
   });
 });

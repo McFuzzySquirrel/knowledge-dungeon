@@ -161,18 +161,35 @@ function readsCheckoutHistory(source: string): boolean {
   return HISTORY_READ.test(stripComments(source));
 }
 
-/** Every `.ts`/`.tsx` under `tests/phase8/`, recursively. Only these can execute. */
-function phase8Sources(directory: string): string[] {
+/** Every `.ts`/`.tsx` under a directory, recursively. Only these can execute. */
+function sourcesUnder(directory: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const full = path.join(directory, entry.name);
-    if (entry.isDirectory()) found.push(...phase8Sources(full));
+    if (entry.isDirectory()) found.push(...sourcesUnder(full));
     else if (/\.tsx?$/.test(entry.name)) found.push(full);
   }
   return found.sort();
 }
 
-const scanned = phase8Sources(PHASE8_ROOT);
+const scanned = sourcesUnder(PHASE8_ROOT);
+
+/**
+ * Phase 17 is scanned too.
+ *
+ * A scoped extension of the same rule, not a repo-wide rewrite: `tests/phase17/fishingPhaseInvariants.test.ts`
+ * read `git show ade1f78:<path>` (which returned `null` on a depth-1 clone, turning every
+ * byte-identity assertion into a vacuous pass) and ran `git diff --stat ade1f78...HEAD` uncaught
+ * (which threw). Both are exactly this defect class, so the scan covers the phase that had it.
+ * Before that file was repaired it would have been an offender here; now it reads committed
+ * fixtures through `tests/phase17/support/phase17Baseline.ts`.
+ */
+const PHASE17_ROOT = path.join(REPO_ROOT, 'tests', 'phase17');
+const scannedPhase17 = sourcesUnder(PHASE17_ROOT);
+const PHASE17_GUARDED_FILES = [
+  path.join(PHASE17_ROOT, 'fishingPhaseInvariants.test.ts'),
+  path.join(PHASE17_ROOT, 'support', 'phase17Baseline.ts'),
+];
 
 describe('no phase 8 gate reads the history of the checkout', () => {
   it('finds the phase 8 sources, so the scan below is not an empty walk', () => {
@@ -251,6 +268,28 @@ describe('no phase 8 gate reads the history of the checkout', () => {
       'a phase 8 test resolves a commit, so its verdict depends on the checkout rather ' +
         'than on the product. Commit the "before" as a fixture with its own digest, as ' +
         'tests/phase7/support/fixtures and tests/phase8/support/fixtures do.',
+    ).toEqual([]);
+  });
+
+  it('finds the phase 17 sources, so the scoped scan is not an empty walk', () => {
+    expect(scannedPhase17.length, 'the phase 17 walk found no sources').toBeGreaterThan(0);
+    for (const file of PHASE17_GUARDED_FILES) {
+      expect(scannedPhase17, `${file} is not in the phase 17 walk`).toContain(file);
+    }
+    for (const file of scannedPhase17) {
+      expect(readFileSync(file, 'utf8').length, `${file} is empty`).toBeGreaterThan(0);
+    }
+  });
+
+  it('has no phase 17 offender either', () => {
+    const offenders = scannedPhase17
+      .filter((file) => readsCheckoutHistory(readFileSync(file, 'utf8')))
+      .map((file) => path.relative(REPO_ROOT, file));
+    expect(
+      offenders,
+      'a phase 17 test resolves a commit, so its verdict depends on the checkout rather ' +
+        'than on the product. Commit the "before" as a fixture with its own digest, as ' +
+        'tests/phase17/support/fixtures does.',
     ).toEqual([]);
   });
 });

@@ -1,0 +1,20 @@
+/**
+ * Phase 17 baseline fixture: src/game/systems/fishingTypes.ts
+ *
+ * Source path  : src/game/systems/fishingTypes.ts
+ * Taken from   : commit ade1f78bbd9271018dbdb818ac4f1fd9b8ca13ab (short form ade1f78)
+ * Captured as  : 261 bytes, sha256 cc6aef7a20ea1a45095117d206545dd420166afb2cafb5ea64163be87290f11f
+ *
+ * The body below is this file verbatim as the baseline commit carried it. Phase 17's
+ * invariants compare the working tree against these committed bytes rather than against
+ * `git show <commit>:<path>`, because an `actions/checkout@v4` depth-1 clone does not have
+ * the commit's objects. `tests/phase17/support/phase17Baseline.ts` re-derives the digest
+ * on read and throws if the body has drifted.
+ */
+// __P17_FIXTURE_BODY_BELOW__
+/**
+ * Compatibility re-export. The renderer-neutral fishing catalog and types moved
+ * to `src/core/fishing/fishingTypes.ts`; this path is kept so existing
+ * first-party and third-party imports keep resolving.
+ */
+export * from '@/core/fishing/fishingTypes';

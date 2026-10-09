@@ -15,11 +15,13 @@
  * - The legacy `src/game/systems/` re-exports still resolve, so the rollback lane's
  *   imports do not break.
  *
- * The `git` check is skipped when the repository is unavailable rather than failed, so
- * this suite still runs in an exported tree.
+ * The baseline it compares against is committed as fixtures and read through
+ * `./support/phase17Baseline`, so this suite is hermetic: it does not read the checkout's
+ * history, and it cannot silently pass when the baseline is absent. The former `git show`/
+ * `git diff` lookups were broken on CI's depth-1 clone - they returned `null` (turning every
+ * comparison into a vacuous pass) or threw.
  */
-import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CURRENT_SCHEMA_VERSION } from '@/core/validation/persistence';
 import {
@@ -32,37 +34,20 @@ import {
   FISH_DIRECTION_WEIGHTS,
   MAX_PROXIMITY_WAIT_MS,
 } from '@/core/fishing/fishingTypes';
+import {
+  PHASE17_BASELINE_SHORT_COMMIT,
+  PHASE17_PINNED_PATHS,
+  baselineBody,
+} from './support/phase17Baseline';
 
 /** The baseline commit this phase was authorised to change nothing in. */
-const BASELINE = 'ade1f78';
+const BASELINE = PHASE17_BASELINE_SHORT_COMMIT;
 
 /** Files that must be byte-identical to the baseline. */
 const BYTE_IDENTICAL = [
   'src/core/progression/canonicalProgression.ts',
   'src/services/persistence/v2/validation.ts',
 ];
-
-function gitAvailable(): boolean {
-  try {
-    execFileSync('git', ['rev-parse', '--git-dir'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** A file's bytes at the baseline, or `null` when it did not exist / git is absent. */
-function baselineBytes(path: string): string | null {
-  if (!gitAvailable()) return null;
-  try {
-    return execFileSync('git', ['show', `${BASELINE}:${path}`], {
-      encoding: 'utf8',
-      maxBuffer: 32 * 1024 * 1024,
-    });
-  } catch {
-    return null;
-  }
-}
 
 // ── Subject schema ───────────────────────────────────────────────────────────
 
@@ -90,20 +75,24 @@ describe('Phase 17 invariants - the subject schema', () => {
   });
 
   it('leaves the storage-v2 store and generation definitions byte-identical', () => {
+    // `records.ts` and `generations.ts` were stale paths that do not exist in the tree (and did
+    // not exist at the baseline either), so the old `existsSync(path) continue` made this test a
+    // no-op for both. The files that actually define the storage-v2 stores and generation members
+    // are `schema.ts` (the store-name set) and `database.ts` (the store/index creation), and both
+    // are pinned here byte for byte against the committed baseline.
     for (const path of [
-      'src/services/persistence/v2/records.ts',
-      'src/services/persistence/v2/generations.ts',
+      'src/services/persistence/v2/schema.ts',
+      'src/services/persistence/v2/database.ts',
     ]) {
-      if (!existsSync(path)) continue;
-      const baseline = baselineBytes(path);
-      if (baseline === null) continue;
-      expect(readFileSync(path, 'utf8')).toBe(baseline);
+      expect(readFileSync(path, 'utf8'), `${path} is not byte-identical to ${BASELINE}`).toBe(
+        baselineBody(path),
+      );
     }
     // `dualWrite.ts` left this list in Phase 19, and the reason is the subject of the next test
     // rather than an omission. Listing it here as well would have produced one absolute
     // assertion and one contradictory one, and the reader would have had to work out which to
     // believe. The property this list protects - no storage-v2 **store** and no **generation
-    // member** was added - is fully intact: `records.ts` and `generations.ts` are the files that
+    // member** was added - is fully intact: `schema.ts` and `database.ts` are the files that
     // define those, and both are still checked byte for byte.
   });
 
@@ -146,8 +135,7 @@ describe('Phase 17 invariants - the subject schema', () => {
     // existed, and `src/core/progression/canonicalProgression.ts` and
     // `src/services/persistence/v2/validation.ts` are still checked that way in the suite below.
     const path = 'src/services/persistence/v2/dualWrite.ts';
-    const baseline = baselineBytes(path);
-    if (baseline === null) return;
+    const baseline = baselineBody(path);
     const current = readFileSync(path, 'utf8');
 
     const unionMembers = (source: string): Set<string> => {
@@ -188,25 +176,35 @@ describe('Phase 17 invariants - the subject schema', () => {
 describe('Phase 17 invariants - byte-identical files', () => {
   for (const path of BYTE_IDENTICAL) {
     it(`${path} is unchanged from ${BASELINE}`, () => {
-      const baseline = baselineBytes(path);
-      if (baseline === null) {
-        // The file exists in the working tree and could not be read from git (an export,
-        // or a shallow clone). Assert it exists rather than skipping silently.
-        expect(existsSync(path)).toBe(true);
-        return;
-      }
-      expect(readFileSync(path, 'utf8')).toBe(baseline);
+      expect(readFileSync(path, 'utf8'), `${path} is not byte-identical to ${BASELINE}`).toBe(
+        baselineBody(path),
+      );
     });
   }
 
-  it('reports the same diff for the whole phase', () => {
-    if (!gitAvailable()) return;
-    const stat = execFileSync('git', ['diff', '--stat', `${BASELINE}...HEAD`], {
-      encoding: 'utf8',
-    });
-    // Recorded as an evidence value rather than asserted, because the phase's changed
-    // file list is a fact for the report, not a pass/fail condition.
-    expect(typeof stat).toBe('string');
+  it('pins every compared file in the committed fixture, so no comparison can no-op', () => {
+    // This replaces the former `git diff --stat ade1f78...HEAD` recording, which threw on a
+    // depth-1 clone. It records the same fact - which files this suite holds to the baseline - but
+    // from the committed fixture rather than from the checkout's history, and it asserts the two
+    // sets agree, so a comparison can never silently fall back to nothing.
+    const compared = [
+      ...BYTE_IDENTICAL,
+      'src/services/persistence/v2/schema.ts',
+      'src/services/persistence/v2/database.ts',
+      'src/services/persistence/v2/dualWrite.ts',
+      'src/core/fishing/fishingTypes.ts',
+      'src/core/progression/types.ts',
+      'src/core/progression/roomClearRewards.ts',
+      'src/core/review/reviewPassRewards.ts',
+      'src/core/review/interruptedReviewSession.ts',
+      'src/game/systems/fishingMechanics.ts',
+      'src/game/systems/fishingTypes.ts',
+      'src/game/scenes/FishingScene.ts',
+    ];
+    expect(new Set(compared)).toEqual(new Set(PHASE17_PINNED_PATHS));
+    for (const path of compared) {
+      expect(baselineBody(path).length, `${path} has an empty baseline body`).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -227,11 +225,11 @@ describe('Phase 17 invariants - the catalogue is untouched', () => {
   });
 
   it('adds no species', () => {
-    const baseline = baselineBytes('src/core/fishing/fishingTypes.ts');
-    if (baseline === null) return;
     // A byte comparison is the strongest form of "no new fish species": it also catches
     // a rename, a rarity change, and a description edit.
-    expect(readFileSync('src/core/fishing/fishingTypes.ts', 'utf8')).toBe(baseline);
+    expect(readFileSync('src/core/fishing/fishingTypes.ts', 'utf8')).toBe(
+      baselineBody('src/core/fishing/fishingTypes.ts'),
+    );
   });
 
   it('has the same rarity weights, summing to 100', () => {
@@ -253,11 +251,11 @@ describe('Phase 17 invariants - the catalogue is untouched', () => {
   });
 
   it('adds no currency and no XP scale', () => {
-    const baseline = baselineBytes('src/core/progression/types.ts');
-    if (baseline === null) return;
     // The per-answer rate the ledger pays for a correct answer, and every fishing badge
     // threshold, live in this file. Unchanged bytes means unchanged economy.
-    expect(readFileSync('src/core/progression/types.ts', 'utf8')).toBe(baseline);
+    expect(readFileSync('src/core/progression/types.ts', 'utf8')).toBe(
+      baselineBody('src/core/progression/types.ts'),
+    );
   });
 });
 
@@ -287,9 +285,9 @@ describe('Phase 17 invariants - the Phase 15 and 16 carriers', () => {
       'src/core/review/reviewPassRewards.ts',
       'src/core/review/interruptedReviewSession.ts',
     ]) {
-      const baseline = baselineBytes(path);
-      if (baseline === null) continue;
-      expect(readFileSync(path, 'utf8')).toBe(baseline);
+      expect(readFileSync(path, 'utf8'), `${path} is not byte-identical to ${BASELINE}`).toBe(
+        baselineBody(path),
+      );
     }
   });
 });
@@ -319,9 +317,9 @@ describe('Phase 17 invariants - the game-layer re-exports', () => {
       'src/game/systems/fishingMechanics.ts',
       'src/game/systems/fishingTypes.ts',
     ]) {
-      const baseline = baselineBytes(path);
-      if (baseline === null) continue;
-      expect(readFileSync(path, 'utf8')).toBe(baseline);
+      expect(readFileSync(path, 'utf8'), `${path} is not byte-identical to ${BASELINE}`).toBe(
+        baselineBody(path),
+      );
     }
   });
 });
@@ -342,11 +340,11 @@ describe('Phase 17 invariants - the rollback lane', () => {
   });
 
   it('leaves the Phaser fishing scene untouched, since it is the rollback', () => {
-    const baseline = baselineBytes('src/game/scenes/FishingScene.ts');
-    if (baseline === null) return;
     // The machine was *extracted* from the scene but the scene was not *changed*: the
     // rollback lane has to keep working, and the scene still calls the three store
     // actions through the village screen.
-    expect(readFileSync('src/game/scenes/FishingScene.ts', 'utf8')).toBe(baseline);
+    expect(readFileSync('src/game/scenes/FishingScene.ts', 'utf8')).toBe(
+      baselineBody('src/game/scenes/FishingScene.ts'),
+    );
   });
 });

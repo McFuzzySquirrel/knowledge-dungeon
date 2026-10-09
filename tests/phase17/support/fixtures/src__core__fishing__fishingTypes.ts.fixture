@@ -1,0 +1,195 @@
+/**
+ * Phase 17 baseline fixture: src/core/fishing/fishingTypes.ts
+ *
+ * Source path  : src/core/fishing/fishingTypes.ts
+ * Taken from   : commit ade1f78bbd9271018dbdb818ac4f1fd9b8ca13ab (short form ade1f78)
+ * Captured as  : 6394 bytes, sha256 5b2d1ef42fd7e97d5e18c37d88b2a5fba9b5d8ae155c2d093bd0ed6ec3f2788f
+ *
+ * The body below is this file verbatim as the baseline commit carried it. Phase 17's
+ * invariants compare the working tree against these committed bytes rather than against
+ * `git show <commit>:<path>`, because an `actions/checkout@v4` depth-1 clone does not have
+ * the commit's objects. `tests/phase17/support/phase17Baseline.ts` re-derives the digest
+ * on read and throws if the body has drifted.
+ */
+// __P17_FIXTURE_BODY_BELOW__
+/**
+ * Fisher's Rest - Fishing mini-game types.
+ *
+ * Defines the fish rarity tiers, individual fish entries, the fish catalog
+ * (all catchable fish across every rarity), and the per-player fish collection.
+ */
+
+/** Rarity tier for catchable fish. Determines appearance and XP multiplier. */
+export type FishRarity = 'common' | 'rare' | 'epic';
+
+/** A single fish that the player has caught and kept. */
+export interface FishEntry {
+  /** Unique id combining the fish catalog id + a random suffix. */
+  id: string;
+  /** Catalog name of the fish (e.g. "Moss Carp"). */
+  name: string;
+  /** Rarity tier. */
+  rarity: FishRarity;
+  /** The dungeon subject id this fish was caught from. */
+  subjectId: string;
+  /** Human-readable subject name for display. */
+  subjectName: string;
+  /** ISO-8601 timestamp of when the fish was caught. */
+  caughtAt: string;
+  /**
+   * Canonical catalog identity, when the caller knows it.
+   *
+   * Optional so every existing producer and fixture still compiles; persisted
+   * collections that predate this field deserialize unchanged. Storage, backup,
+   * and migration use {@link CanonicalFishEntry}, where the identity is always
+   * resolved. See `toCanonicalFishEntry` for the resolution order.
+   */
+  catalogId?: string;
+}
+
+/** How a canonical catalog id was resolved from a persisted entry. */
+export type FishCatalogIdSource =
+  /** The entry already carried a `catalogId`. */
+  | 'catalog-id-field'
+  /** The entry id uses the `createFishId` shape `<catalogId>:<suffix>`. */
+  | 'entry-id-prefix'
+  /** The display name matched a catalog entry exactly. */
+  | 'catalog-name-match'
+  /** No catalog match; a deterministic slug of the display name was used. */
+  | 'name-slug'
+  /** No usable identity at all; the explicit unknown marker was used. */
+  | 'unknown';
+
+/** Marker used when no catalog identity can be resolved for an entry. */
+export const UNKNOWN_FISH_CATALOG_ID = 'unknown-fish';
+
+/**
+ * A fish entry with catalog identity always resolved.
+ *
+ * This is the only fish shape storage, backup, and migration code writes. The
+ * resolution is deterministic and never mints a random id, and it is idempotent:
+ * canonicalizing a canonical entry returns an equal entry.
+ *
+ * How an id was resolved is available from `resolveFishCatalogId` for
+ * diagnostics. It is deliberately **not** a field of the canonical entry,
+ * because a second canonicalization would then report a different source and the
+ * transform would stop being idempotent.
+ */
+export interface CanonicalFishEntry extends FishEntry {
+  catalogId: string;
+}
+
+/** A collection of caught fish entries. */
+export type FishCollection = FishEntry[];
+
+/** A single fish type definition in the catchable catalog. */
+export interface FishCatalogEntry {
+  id: string;
+  name: string;
+  rarity: FishRarity;
+  /** Flavor text shown when the fish is caught. */
+  description: string;
+  /** Sprite filename in public/assets/sprites/fishing/ */
+  sprite: string;
+}
+
+/**
+ * Complete catalog of all catchable fish.
+ *
+ * Must contain at least 6 fish across all 3 rarities (Phase F1 validation).
+ */
+export const FISH_CATALOG: readonly FishCatalogEntry[] = [
+  // ── Common (65% drop rate) ────────────────────────
+  {
+    id: 'moss-carp',
+    name: 'Moss Carp',
+    rarity: 'common',
+    description: 'A placid bottom-feeder with scales the colour of river stones. Common in still waters near settlements.',
+    sprite: 'fish-moss-carp.svg',
+  },
+  {
+    id: 'sun-skip',
+    name: 'Sun Skip',
+    rarity: 'common',
+    description: 'A quick little silver fish that flashes in the light as it leaps from the water.',
+    sprite: 'fish-sun-skip.svg',
+  },
+  {
+    id: 'reed-darter',
+    name: 'Reed Darter',
+    rarity: 'common',
+    description: 'A slender fish that darts between water weeds. Its green-brown stripes make it hard to spot.',
+    sprite: 'fish-reed-darter.svg',
+  },
+  {
+    id: 'ink-minnow',
+    name: 'Ink Minnow',
+    rarity: 'common',
+    description: 'Tiny and dark as spilled ink, these minnows swim in swirling schools.',
+    sprite: 'fish-ink-minnow.svg',
+  },
+  // ── Rare (28% drop rate) ──────────────────────────
+  {
+    id: 'lunar-trout',
+    name: 'Lunar Trout',
+    rarity: 'rare',
+    description: 'Its pale blue spots glow faintly in the dark. Said to only bite when the moon is high.',
+    sprite: 'fish-lunar-trout.svg',
+  },
+  {
+    id: 'ember-perch',
+    name: 'Ember Perch',
+    rarity: 'rare',
+    description: 'Warm to the touch, as if a tiny flame burns within. Prized by alchemists for its heat.',
+    sprite: 'fish-ember-perch.svg',
+  },
+  // ── Epic (7% drop rate) ───────────────────────────
+  {
+    id: 'gilded-koi',
+    name: 'Gilded Koi',
+    rarity: 'epic',
+    description: 'A magnificent fish with scales that gleam like polished gold. Legends say it grants wisdom.',
+    sprite: 'fish-gilded-koi.svg',
+  },
+  {
+    id: 'abyssal-eel',
+    name: 'Abyssal Eel',
+    rarity: 'epic',
+    description: 'A ribbon of living shadow pulled from the deep. Its eyes hold the memory of forgotten knowledge.',
+    sprite: 'fish-abyssal-eel.svg',
+  },
+];
+
+export const FISH_RARITY_WEIGHTS: Record<FishRarity, number> = {
+  common: 65,
+  rare: 28,
+  epic: 7,
+};
+
+/** XP multiplier applied to the base fishing XP based on rarity. */
+export const FISH_RARITY_XP_MULTIPLIER: Record<FishRarity, number> = {
+  common: 1.0,
+  rare: 1.5,
+  epic: 2.0,
+};
+
+/** Minimum and maximum wait time (seconds) before a fish bites. */
+export const BITE_TIMER_MIN_SEC = 3;
+export const BITE_TIMER_MAX_SEC = 15;
+
+/** Window (seconds) the player has to click after the bite indicator appears. */
+export const BITE_WINDOW_SEC = 2;
+
+// ── Proximity-based bite (Phase F3 redesign) ─────────────────────────────
+
+/** Direction from which a fish enters the scene to swim toward the bobber. */
+export type FishDirection = 'right' | 'bottom';
+
+/** Equal weights for random fish-direction selection each cast. */
+export const FISH_DIRECTION_WEIGHTS: Record<FishDirection, number> = {
+  right: 1,
+  bottom: 1,
+};
+
+/** Maximum time (ms) a fish will search for the bobber before giving up and swimming away. */
+export const MAX_PROXIMITY_WAIT_MS = 20_000;
