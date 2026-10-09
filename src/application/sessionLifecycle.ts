@@ -62,19 +62,23 @@
  * before this phase and from every fixture, so no byte-comparison or archive fixture
  * changes.
  *
- * ## Why the session id is deterministic
+ * ## Why the session id is unique (and where idempotency lives)
  *
- * {@link defaultMintSessionId} is `session-<start ms in base 36>-<digest of the subject
- * id>`: the same (start instant, subject) always produces the same id, and the id factory
- * is injected so a test gets a reproducible one. The pre-Phase-18 id was
- * `Date.now() + Math.random()`, which is neither deterministic nor injectable and cannot
- * be reproduced by a test.
+ * {@link defaultMintSessionId} is `session-<start ms base 36>-<counter>-<random>`: a
+ * monotonic per-process counter plus a random suffix make two mints unique even when they
+ * share a start instant and a subject, which is exactly the close-then-restart a reliable
+ * visibility transition performs. The id factory is injected, so a test still gets a
+ * reproducible one.
  *
- * Determinism buys one extra guarantee for free: because a session is persisted **keyed by
- * its own id**, two starts in the same millisecond for the same subject converge on one
- * record rather than racing to write two. The controller's own guards
- * ({@link SessionLifecycleController.handleSubjectActivated}) already prevent that, so the
- * property is belt and braces rather than load-bearing.
+ * **Uniqueness is the id's job; idempotency is the controller's.** Re-activating the
+ * subject that is already open returns the existing session and writes nothing
+ * ({@link SessionLifecycleController.handleSubjectActivated}), so a StrictMode
+ * double-invocation of one activation produces one record and one id. Persistence being
+ * keyed by id is a convergence property for a *retried write of the same session*; it is
+ * not a substitute for the controller guard. The earlier deterministic id conflated the
+ * two: it made a duplicated activation converge, but it also made two *distinct* sessions
+ * started in the same millisecond collapse, so the closed session was overwritten and
+ * statistics lost it.
  *
  * ## Privacy
  *
@@ -188,25 +192,60 @@ export interface SessionLifecycleDeps {
   readonly onChange?: (record: LifecycleSessionRecord | null) => void;
 }
 
-/** FNV-1a, 32-bit, eight lowercase hex digits. Same function the reward ledgers use. */
-function fnv1a32(input: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
+/**
+ * Monotonic per-process counter.
+ *
+ * The clock alone cannot separate two sessions minted in the same millisecond - and the
+ * close-then-restart a visibility transition performs is exactly that - so every mint also
+ * takes the next counter value. It is monotonic, so ids are ordered within a process; it
+ * never decreases, so two sessions can never share a counter.
+ */
+let sessionIdCounter = 0;
+
+/**
+ * A short opaque random suffix.
+ *
+ * `crypto.randomUUID` where Web Crypto is available (the web build and Node 24), with a
+ * two-draw `Math.random` fallback otherwise. The counter already makes two mints on one
+ * process distinct; the suffix keeps that true across processes and across a page reload,
+ * which resets the counter. It contains no learner content.
+ */
+function sessionIdRandomSuffix(): string {
+  const global = globalThis as { crypto?: { randomUUID?: () => string } };
+  if (typeof global.crypto?.randomUUID === 'function') {
+    return global.crypto.randomUUID().replace(/-/g, '').slice(0, 12);
   }
-  return hash.toString(16).padStart(8, '0');
+  const first = Math.random().toString(36).slice(2, 10).padStart(8, '0');
+  const second = Math.random().toString(36).slice(2, 10).padStart(8, '0');
+  return `${first}${second}`.slice(0, 12);
 }
 
 /**
- * The default session-id factory: deterministic in (start instant, subject).
+ * The default session-id factory: unique per mint, stable once minted.
  *
- * Two subjects starting in the same millisecond get different ids because the subject id
- * is hashed; the same subject starting twice in the same millisecond gets the same id,
- * which - because persistence is keyed by id - converges on one record rather than two.
+ * The id is `session-<start ms base 36>-<counter>-<random>`:
+ *
+ * - the **monotonic counter** makes two mints on one process distinct even in the same
+ *   millisecond for the same subject - the close-then-restart a visibility transition can
+ *   land in one millisecond;
+ * - the **random suffix** keeps that true across processes and across a reload, which
+ *   resets the counter;
+ * - the **clock** keeps ids roughly ordered and readable;
+ * - nothing is derived from learner content. The subject id is neither embedded nor hashed,
+ *   so the id is opaque and carries no study data.
+ *
+ * The factory is injected through {@link SessionLifecycleDeps.mintSessionId}, which is what
+ * makes a test reproducible. The default is deliberately **not** deterministic: a
+ * deterministic id cannot tell a close-then-restart from a duplicated activation, and
+ * because persistence is keyed by id it made the two collapse into one record. Idempotency
+ * for a duplicated activation lives in
+ * {@link SessionLifecycleController.handleSubjectActivated}, not here.
  */
 export function defaultMintSessionId(input: { startedAtMs: number; subjectId: string }): string {
-  return `session-${input.startedAtMs.toString(36)}-${fnv1a32(input.subjectId)}`;
+  sessionIdCounter += 1;
+  const clock = input.startedAtMs.toString(36);
+  const counter = sessionIdCounter.toString(36).padStart(4, '0');
+  return `session-${clock}-${counter}-${sessionIdRandomSuffix()}`;
 }
 
 // ── The controller ─────────────────────────────────────────────────────────

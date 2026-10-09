@@ -132,6 +132,10 @@ describe('starting a session', () => {
   });
 
   it('is idempotent for the same subject: the StrictMode double-invocation case', () => {
+    // The harness factory mints a *fresh* id on every call, so this cannot be green because
+    // the ids collide. It is green only because `handleSubjectActivated` short-circuits when
+    // the same subject is already open - which is where idempotency lives, now that the id
+    // factory is collision-free by construction.
     const harness = makeHarness();
     const first = harness.controller.handleSubjectActivated({ subjectId: SUBJECT, subjectName: NAME });
     const second = harness.controller.handleSubjectActivated({ subjectId: SUBJECT, subjectName: NAME });
@@ -645,11 +649,19 @@ describe('recovering an unterminated session', () => {
 });
 
 describe('the default session id factory', () => {
-  it('is deterministic in (start instant, subject)', () => {
-    const left = defaultMintSessionId({ startedAtMs: T0, subjectId: SUBJECT });
-    const same = defaultMintSessionId({ startedAtMs: T0, subjectId: SUBJECT });
-    expect(same).toBe(left);
-    expect(left).toBe('session-mq0p19c0-7781dff6');
+  it('mints a distinct id for every mint, even with the same start instant and subject', () => {
+    // The property the lifecycle depends on: a close-then-restart can land in the same
+    // millisecond as the close - the visibility-hidden path does exactly that - and the two
+    // sessions must not share an id. Persistence is keyed by id, so a shared id would merge
+    // the closed record into the fresh one and lose a session rather than de-duplicate a
+    // retry.
+    const first = defaultMintSessionId({ startedAtMs: T0, subjectId: SUBJECT });
+    const second = defaultMintSessionId({ startedAtMs: T0, subjectId: SUBJECT });
+    expect(second).not.toBe(first);
+    expect(first).toMatch(/^session-[0-9a-z-]+$/);
+    expect(second).toMatch(/^session-[0-9a-z-]+$/);
+    // Opaque: the raw subject id is never embedded in the session id.
+    expect(first).not.toContain(SUBJECT);
   });
 
   it('separates two subjects that start in the same millisecond', () => {
@@ -662,6 +674,39 @@ describe('the default session id factory', () => {
     expect(defaultMintSessionId({ startedAtMs: T0, subjectId: SUBJECT })).not.toBe(
       defaultMintSessionId({ startedAtMs: T0 + 1, subjectId: SUBJECT }),
     );
+  });
+
+  it('does not collapse a close-then-restart that lands in the same millisecond', () => {
+    // The defect in situ, with the clock frozen so the only thing that can distinguish the two
+    // sessions is the factory itself. Before the fix the resumed session reused the closed
+    // session's id, and the keyed write merged them into one record: statistics lost a
+    // session. This mirrors the visibility-hidden -> pagehide sequence the real wiring runs.
+    const written: LifecycleSessionRecord[] = [];
+    const controller = createSessionLifecycleController({
+      nowMs: () => T0,
+      // No `mintSessionId` override: this exercises `defaultMintSessionId`.
+      persistence: {
+        write(record) {
+          written.push({ ...record, roomsVisited: [...record.roomsVisited] });
+          return Promise.resolve();
+        },
+        read: () => Promise.resolve(written),
+      },
+      subject: { readActiveSubject: () => ({ subjectId: SUBJECT, subjectName: NAME }) },
+    });
+
+    const first = controller.handleSubjectActivated({ subjectId: SUBJECT, subjectName: NAME });
+    const outcome = controller.handleVisibilityHidden();
+    const resumed = controller.activeSession();
+
+    expect(outcome.ended).toBe(true);
+    expect(resumed, 'the resume did not start a session').not.toBeNull();
+    expect(resumed?.sessionId, 'the resume reused the closed session id').not.toBe(first?.sessionId);
+    // Two distinct session ids, one closed record for the first, one open for the second.
+    expect(new Set(written.map((record) => record.sessionId)).size).toBe(2);
+    expect(written.filter((record) => record.endedAt !== null).map((record) => record.sessionId)).toEqual([
+      first?.sessionId,
+    ]);
   });
 
   it('is injectable, which is what makes a session id reproducible in a test', () => {
