@@ -559,12 +559,13 @@ describe('QA checksum against Web Crypto', () => {
     //
     // `bytes.buffer.slice(...)` looks equivalent but is not portable. Under
     // jsdom the test realm and Node's crypto realm differ, so the sliced value
-    // is a cross-realm ArrayBuffer. Node 20's SubtleCrypto validates its
-    // argument with an `instanceof` chain and rejects it with "Failed to
+    // is a cross-realm ArrayBuffer. A `SubtleCrypto` that validates its
+    // argument with an `instanceof` chain rejects it with "Failed to
     // execute 'digest' on 'SubtleCrypto': 2nd argument is not instance of
-    // ArrayBuffer, Buffer, TypedArray, or DataView"; Node 22 accepts it. CI
-    // pins Node 20 (see .github/workflows/ci.yml) while local development runs
-    // Node 22, so the original form passed locally and failed only in CI.
+    // ArrayBuffer, Buffer, TypedArray, or DataView"; one that accepts it makes
+    // the difference independent of the pinned Node major. This was originally
+    // observed as a Node 20 versus Node 22 divergence, which is why the portable
+    // form exists rather than the sliced one.
     //
     // `new Uint8Array(bytes)` copies exactly the view's elements into the
     // current realm, is accepted on every engine, and preserves the slice

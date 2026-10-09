@@ -352,6 +352,12 @@ describe('exit criterion 2: a valid note clears and rewards a room exactly once'
     );
     const artifact = snapshot().rooms[fixture.matrixRoomId]?.artifactMarkdown;
 
+    // Wait for the first submit to settle before re-submitting. The store records `finalPass`
+    // before the async command finishes, so at that instant the control still reads "Saving…"
+    // (disabled) and the name query below would find no button. Node 20's slower async start
+    // made that window observable; the wait is the precondition of a resubmission, not a
+    // relaxation of what this test asserts.
+    await waitFor(() => expect(submitButton()).toBeEnabled());
     fireEvent.click(submitButton());
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent('already rewarded');

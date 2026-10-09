@@ -125,6 +125,10 @@ async function submitTwice(): Promise<{
   const firstArtifact = artifactNow() as string;
   const firstNote = noteNow();
 
+  // The first submit's artifact is in the store before its async command settles, and while it
+  // settles the control reads "Saving…"/"Submitting…" and the name query below finds no button.
+  // Wait for the control to be usable again; that is the precondition of the second submit.
+  await waitFor(() => expect(submitButton()).toBeEnabled());
   fireEvent.click(submitButton());
   await waitFor(() => {
     expect(useProgressionStore.getState().roomsCleared).toBe(1);

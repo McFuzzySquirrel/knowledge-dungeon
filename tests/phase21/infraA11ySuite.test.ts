@@ -31,12 +31,15 @@
  *    turn into a recurring false red. `artifacts/` is excluded by construction because this gate does
  *    not walk at all; the assertion that matters is that the lane records no trace.
  *
- * Hermeticity: reads repository files and the flag tables only. No `dist/`, no build, no browser, no
- * network, no learner data.
+ * Hermeticity: the declaration, script, and CI assertions read repository files and the flag tables
+ * only. One test, the exit-3 proof, additionally spawns the real runner against a scratch engine
+ * suite. When a built artifact exists it proves the exit-3 verdict end to end; in a unit-only
+ * checkout with no `dist/` it asserts the runner's own no-artifact refusal instead, which is that
+ * checkout's real behaviour. No test builds, and no test writes learner data.
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -404,6 +407,21 @@ describe('the runner reports its coverage rather than asserting a partial matrix
     };
 
     const runnable = runWith('runnable');
+
+    /*
+     * A unit-only checkout (CI's `unit-tests` job runs `npm ci && npm test`) has no `dist/`,
+     * because `npm test` does not build. The runner's behaviour there is its no-artifact refusal,
+     * and that is what this test asserts in that case. The exit-3 proof below is about the
+     * *coverage verdict*, which cannot be reached without an artifact to audit; it runs whenever
+     * one exists (a developer checkout after `npm run build:web`, or any job that records one).
+     * Neither branch is a skip: each asserts the real behaviour of the tree it is handed.
+     */
+    if (!existsSync(path.join(REPO_ROOT, 'dist', 'index.html'))) {
+      expect(runnable.status, runnable.output).toBe(1);
+      expect(runnable.output).toContain('there is no web artifact to audit');
+      return;
+    }
+
     expect(runnable.status, runnable.output).toBe(0);
     expect(runnable.output).toContain('COVERAGE: complete for scope "runnable"');
     expect(runnable.output).toContain('RESULT: PASSED');

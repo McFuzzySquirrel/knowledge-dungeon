@@ -57,8 +57,8 @@
  * application.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { globSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { Container } from 'pixi.js';
 
 import { addLinkedRooms, createRootDungeon } from '@/core/graph';
@@ -704,6 +704,28 @@ describe('the fishing pond under prefers-reduced-motion', () => {
 
 /* ── One way to ask about the preference ───────────────────────────────────── */
 
+/**
+ * Every `.ts` file under `root`, recursively, as repo-relative POSIX paths.
+ *
+ * Hand-rolled rather than `globSync` from `node:fs`: the recursive walk is kept portable rather
+ * than tied to a runtime API. The returned set is the same one the previous recursive glob
+ * produced, and the separator normalisation keeps the `endsWith(...)` filters below portable.
+ */
+function typescriptFilesUnder(root: string): string[] {
+  const found: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const full = join(directory, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && entry.name.endsWith('.ts')) {
+        found.push(relative(process.cwd(), full).split(sep).join('/'));
+      }
+    }
+  };
+  walk(root);
+  return found;
+}
+
 describe('prefers-reduced-motion is read through the one environment seam', () => {
   it('the scenes never read the media query themselves', () => {
     // Only the two seam modules may ask. A scene that called `matchMedia` itself would be a
@@ -716,7 +738,7 @@ describe('prefers-reduced-motion is read through the one environment seam', () =
     const code = (source: string): string =>
       source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 
-    const offenders = globSync('src/renderers/pixi/**/*.ts')
+    const offenders = typescriptFilesUnder('src/renderers/pixi')
       .filter(
         (file) =>
           !file.endsWith('runtime/worldEnvironment.ts') && !file.endsWith('runtime/useWorldQuality.ts'),

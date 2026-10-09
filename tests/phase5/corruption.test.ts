@@ -562,10 +562,10 @@ describe('V3: corrupt archives never replace current data', () => {
   // The two tests below drive a loop over every corruption, each iteration
   // building a device, a fingerprint, and an import. Measured in isolation they
   // take 3.0 s and 3.2 s, which clears the 5 s default on this machine and does not
-  // clear it when `test:node20` runs the whole suite in parallel - they failed there
-  // for want of a budget, not because an assertion moved. They get the same explicit
-  // budget the two long tests above already have, and no assertion is changed: being
-  // killed at 5 s was a way of running *less* of this loop, not more of it.
+  // clear it when the whole suite runs in parallel on a slower runtime - they failed
+  // there for want of a budget, not because an assertion moved. They get the same
+  // explicit budget the two long tests above already have, and no assertion is changed:
+  // being killed at 5 s was a way of running *less* of this loop, not more of it.
   it('no corruption can make the reader return a preview that names learner content', { timeout: 60_000 }, async () => {
     for (const corruption of CORRUPTIONS) {
       const bytes = corruption.build(good.bytes, source);

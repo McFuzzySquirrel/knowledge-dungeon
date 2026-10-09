@@ -136,7 +136,9 @@ describe('the license gate is a gating CI job, not an advisory one', () => {
     expect(licenseJob).toContain(`name: ${LICENSE_JOB_NAME}`);
     expect(licenseJob).toContain('runs-on: ubuntu-latest');
     expect(licenseJob).toContain('actions/checkout@v4');
-    expect(licenseJob).toContain('node-version: 20');
+    // The job pins the supported Node major. Node 24 is the floor declared in
+    // package.json's `engines` and in `.nvmrc`.
+    expect(licenseJob).toContain('node-version: 24');
   });
 
   it('runs the npm script, so the CI step and the local command are the same command', () => {

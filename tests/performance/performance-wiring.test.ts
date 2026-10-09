@@ -7,7 +7,7 @@
  * 1. `npm run check:perf` disappears from `package.json`, stops pointing at the
  *    enforcer, or starts building something.
  * 2. The enforcer imports anything but Node built-ins and sibling repository scripts,
- *    so it cannot be run by a bare `node` on the CI's Node 20.
+ *    so it cannot be run by a bare `node` on the CI's supported Node.
  * 3. The enforcer re-declares a number another script owns. `LAZY_CHUNK_GZIP_BYTES`
  *    (800 KiB) is declared once in `check-memory.mjs` and `TOTAL_DIST_RAW_BYTES`
  *    (12 MB) once in `check-bundle-size.mjs`; the gate must read them, not copy them.

@@ -28,8 +28,8 @@
  * ## There is deliberately no `activeTab` clamp here
  *
  * An earlier revision of this module also exported `resolveActiveSettingsTab`, which mapped a
- * selection naming a hidden tab back to the first visible one. Two non-vacuity probes (G5 and G6 in
- * `/tmp/opencode/kd19/gate-probes.sh`) removed it and removed the render-time use of it, and
+ * selection naming a hidden tab back to the first visible one. Two throwaway non-vacuity probes
+ * (G5 and G6) removed it and removed the render-time use of it, and
  * **nothing went red** in either direction.
  *
  * That is the correct result, and the reason is structural rather than a missing test: `activeTab`

@@ -5,6 +5,9 @@
   "description": "Knowledge Dungeon - a local-first, mindmap-driven dungeon crawler for studying. Built on the Repo Dungeon engine.",
   "author": "McFuzzySquirrel",
   "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -74,7 +77,6 @@
     "test:privacy": "vitest run tests/privacy",
     "test:data": "vitest run tests/data",
     "test:licenses": "node scripts/check-cc0-assets.mjs",
-    "test:node20": "npx -y node@20 node_modules/vitest/vitest.mjs run",
     "test:e2e": "npm run build:web && playwright test tests/e2e/currentBuild.spec.ts",
     "test:e2e:recorded": "playwright test tests/e2e/currentBuild.spec.ts",
     "test:e2e:compat": "npm run build:web && npm run record:web-artifact && playwright test tests/e2e/compatibility.spec.ts --project=compat-chromium --project=compat-firefox --project=compat-webkit --project=compat-edge",
@@ -153,7 +155,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^22.9.0",
+    "@types/node": "^24.19.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@typescript-eslint/eslint-plugin": "^8.14.0",

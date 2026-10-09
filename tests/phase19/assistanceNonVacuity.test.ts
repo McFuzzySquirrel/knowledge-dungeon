@@ -34,7 +34,9 @@
  *    filesystem-mutating gate timing out because a second agent was editing underneath it, and
  *    that failure mode is not acceptable to reproduce.
  *
- * So the behavioural probes write mutated copies to `/tmp/opencode/phase19-probe/` and run the
+ * So the behavioural probes write mutated copies to a project-specific directory under the
+ * operating system's temp dir (`<os.tmpdir()>/kd-phase19-probe/`, resolved at run time so it is
+ * portable) and run the
  * child process against a **temporary vitest config** whose `resolve.alias` redirects
  * `@/core/assistance/types` and `@/core/assistance/assistanceEngine` to those copies. Nothing in
  * `src/` or `tests/` is ever written, so there is no cross-suite window at all - which is
@@ -56,13 +58,22 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const REPO_ROOT = process.cwd();
-const SCRATCH = '/tmp/opencode/phase19-probe';
+/**
+ * The probe scratch directory: a project-specific directory under the OS temp dir.
+ *
+ * Resolved at run time rather than hardcoded, so it is portable. An earlier revision hardcoded a
+ * developer's private scratch path; on any other machine the generated probe config could not
+ * resolve its imports, which turned every gate red and left the run in a state the assertions
+ * could not tell apart from a real failure.
+ */
+const SCRATCH = join(tmpdir(), 'kd-phase19-probe');
 const MUTATED = join(SCRATCH, 'mutated');
 const PROBE_CONFIG = join(SCRATCH, 'probe.vitest.config.ts');
 
@@ -170,9 +181,13 @@ function writeScratch(mutations: Partial<Record<MutableModule, string>>): void {
   writeFileSync(
     PROBE_CONFIG,
     [
-      "import { defineConfig } from 'vitest/config';",
-      '',
-      'export default defineConfig({',
+      '// Self-contained, with no bare import on purpose. Node resolves a config file\'s imports',
+      '// from the config file\'s own directory, so a config outside the repository cannot resolve',
+      '// `vitest/config` (or anything else in `node_modules`). That is what made this probe',
+      '// machine-specific: it only worked where a stray `node_modules` symlink happened to sit',
+      '// beside the scratch directory. Vitest accepts a plain object export, so no import is',
+      '// needed and the config resolves from anywhere.',
+      'export default {',
       `  root: '${REPO_ROOT}',`,
       '  resolve: {',
       '    alias: [',
@@ -187,7 +202,7 @@ function writeScratch(mutations: Partial<Record<MutableModule, string>>): void {
       '    globals: true,',
       "    setupFiles: ['vitest.setup.ts'],",
       '  },',
-      '});',
+      '};',
       '',
     ].join('\n'),
   );
@@ -437,7 +452,11 @@ describe('control: every gate is green before a single mutation', () => {
         run.failed,
         `${input.id}: the gate did not go red on this mutation.\n${run.output.slice(0, 1500)}`,
       ).toBe(true);
-    });
+    // The child `runGate` spawns carries its own 120-second timeout, so this test must be
+    // allowed to wait at least that long. Node 20 starts the child (vitest + jsdom + the aliased
+    // module graph) in more than Vitest's 5-second default, which read as a probe failure rather
+    // than as a slow runtime. The timeout is the child's budget, not a relaxation of the probe.
+    }, 180_000);
   }
 
   isolated({
@@ -925,8 +944,10 @@ describe('control: every gate is green before a single mutation', () => {
     expect(existsSync(REPO_ROOT)).toBe(true);
     expect(existsSync(join(REPO_ROOT, '.git'))).toBe(true);
 
-    // And the scratch directory is outside the repository.
-    expect(SCRATCH.startsWith('/tmp/opencode/')).toBe(true);
+    // And the scratch directory is a project-specific directory under the OS temp dir,
+    // outside the repository. Both properties are resolved rather than hardcoded.
+    expect(SCRATCH).toBe(join(tmpdir(), 'kd-phase19-probe'));
+    expect(SCRATCH.startsWith(tmpdir())).toBe(true);
     expect(SCRATCH.startsWith(REPO_ROOT)).toBe(false);
   });
 

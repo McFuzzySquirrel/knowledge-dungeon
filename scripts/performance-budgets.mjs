@@ -20,7 +20,7 @@
  *   definition rather than one per reader.
  *
  * This module is plain ESM with no imports and no dependency, so both `node` (which
- * runs `scripts/check-performance.mjs` on Node 20 in CI) and the Vite config loader
+ * runs `scripts/check-performance.mjs` on the supported Node in CI) and the Vite config loader
  * (which bundles `vite.config.ts` for the build) can consume it. It is deliberately
  * not TypeScript: `vite.config.ts` is compiled by esbuild, but the gate is run by a
  * bare `node`, and a `.ts` file would not be loadable there without a dependency the

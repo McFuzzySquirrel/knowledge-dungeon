@@ -43,9 +43,10 @@
  * it emitted; the gate budgets it; neither re-derives the other.
  *
  * This is also why the gate is a bare `node` script with no dependency. CI's
- * `web-build` job runs **Node 20**, which cannot import the TypeScript census
- * functions, and the repository's rule is no new dependency. A JSON sidecar produced
- * by the build is the one shape that both Node 20 and the gate can agree on.
+ * `web-build` job runs the supported Node (**24**), which does not load the TypeScript
+ * census functions without a loader, and the repository's rule is no new dependency.
+ * A JSON sidecar produced by the build is the one shape that both the bare `node`
+ * gate and the build can agree on.
  *
  * ## What it measures, and what it reports per boundary
  *

@@ -295,7 +295,6 @@ npm run test:contracts          # renderer-neutral application contract gate (te
 npm run test:migrations         # storage-v2 migration gate (tests/migrations)
 npm run test:privacy            # source-level and unit-level privacy gate (tests/privacy)
 npm run test:data               # data-product gate: .kdbak export/import, corruption, privacy (tests/data)
-npm run test:node20             # run the whole Vitest suite under the CI Node major
 ```
 
 `npm run test:e2e` and `npm run test:e2e:compat` are separate suites. Each
@@ -464,23 +463,19 @@ browser context** that the state comes back.
   or private URL. The project records no trace, screenshot, or video, and the CI job
   still uploads only the allowlisted `artifacts/compatibility-evidence` directory.
 
-### Verifying under the CI Node major
+### Node.js version
 
-`.github/workflows/ci.yml` pins **Node 20** while local development may run a
-newer major. Phase 3 shipped a real CI-only failure from that gap: under jsdom the
-test realm and Node's crypto realm differ, so a cross-realm `ArrayBuffer` is
-accepted by Node 22 and rejected by Node 20. A green local run is therefore not by
-itself evidence of a green CI run.
+The supported runtime is declared once: `package.json`'s `engines` field
+(`"node": ">=24"`) and `.nvmrc` (`24`), and every CI workflow pins
+`node-version: 24`. Development and CI therefore run the same Node major, so a green
+local `npm test` on a supported Node is directly comparable to CI.
 
-```bash
-npm run test:node20   # npx node@20 + the local Vitest binary, no reinstall
-```
-
-This is a **local convenience, not a replacement for CI**: it reuses whatever is
-already in `node_modules`, needs network access the first time to fetch the Node
-20 binary, and does not reproduce the runner image, the browser matrix, or any
-other job. Run it whenever a change touches a Node built-in, Web Crypto, a typed
-array, or any other cross-realm object.
+There is no separate "oldest supported runtime" script. With a single supported major,
+the oldest supported runtime is the one CI and local development already use, so a
+second-runtime convenience script would only reproduce the same runtime. The portable
+helpers that earlier work introduced remain in place regardless: scratch directories
+use `os.tmpdir()`, and source walks use a `readdirSync` traversal rather than a
+runtime-specific glob, because portability is desirable at every supported version.
 
 ### Lane selection and failure behavior
 
@@ -859,7 +854,6 @@ npm run typecheck
 npm run test              # vitest --run
 npm run test:privacy      # privacy gate; see "Commands" above
 npm run test:data         # data-product gate; see "Commands" above
-npm run test:node20       # the same suite under the CI Node major; see "Verifying under the CI Node major"
 npm run build:web         # production web bundle
 npm run start             # production server (serves dist/ + image upload API)
 npm run check:bundle-size # bundle-size guard used in CI
