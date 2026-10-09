@@ -355,6 +355,37 @@ async function flipAndAwaitApplication(
 }
 
 /**
+ * Wait until the probe reports at least `expected` applications, without changing any
+ * media state.
+ *
+ * `flipAndAwaitApplication` also drives reduced motion, which is what a cycle wants;
+ * a test that rebuilds the world by changing the core count or the device ratio needs
+ * only the wait. Boolean and never thrown, matching its sibling, so a caller reports a
+ * finding rather than a timeout.
+ */
+async function waitForApplications(
+  page: Page,
+  expected: number,
+  timeoutMs: number = APPLICATION_WAIT_MS,
+): Promise<boolean> {
+  return page
+    .waitForFunction(
+      (count) => {
+        const probe = (globalThis as unknown as Record<string, unknown>)['__KD_PIXI_MEMORY_PROBE__'] as
+          | { applications: unknown[] }
+          | undefined;
+        return (probe?.applications.length ?? 0) >= count;
+      },
+      expected,
+      { timeout: timeoutMs },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
+}
+
+/**
  * Whether the world that just mounted reached the presented state.
  *
  * Two frames are allowed to pass first, so a "World presented" sentence left on the
@@ -1506,22 +1537,30 @@ test('the ticker pauses while the document is hidden, and resumes when it is sho
   if (failure) throw failure;
 });
 
-test('a constrained device gets the constrained profile on the live renderer, and a capable one gets balanced', async ({
+test('the profile resolution reaches the live renderer as a cap on the device ratio', async ({
   page,
   browser,
 }, testInfo) => {
   // Plan section 10.2: "Lower resolution and antialiasing profiles for constrained
-  // devices." The unit suite proves `resolveWorldQuality` *computes* `constrained` from
-  // two cores; this proves the computed profile reaches the real `Application`: the
-  // live renderer's own resolution is `1` and the real WebGL context was created with
-  // `antialias: false`. It then raises the core count and proves the live renderer
-  // rebuilds into `balanced` (`2`/`true`), so neither half can pass on a build that
-  // ignored the profile.
+  // devices", and plan section 12: "cap renderer resolution and antialiasing on
+  // constrained devices". The unit suite proves `resolveWorldQuality` *computes*
+  // `constrained` from two cores; this proves the computed profile reaches the real
+  // `Application` and that its `resolution` is a *cap*, not an absolute multiplier.
+  //
+  // Three live readings, each after the world rebuilt into a new `Application`:
+  //   1. constrained at the lane's DPR 1: resolution 1, antialias false.
+  //   2. balanced at DPR 1 (raise the core count): resolution 1, antialias true. The
+  //      profile's own cap is 2, and a DPR-1 display must not render at 2 - that is
+  //      4x the raster pixels, downscaled, which is the regression QA measured on
+  //      the built artifact.
+  //   3. high at DPR 3 (raise the device ratio while the core count stays high):
+  //      resolution 2, not 3, so the cap holds as density rises.
   const verification = verifyRecordedArtifact();
   const measurements: LaneMeasurement[] = [];
   let failure: Error | null = null;
   let constrained: LiveRendererQuality | null = null;
   let balanced: LiveRendererQuality | null = null;
+  let dense: LiveRendererQuality | null = null;
 
   try {
     // Two logical cores, set on the real navigator before any application code runs.
@@ -1539,23 +1578,20 @@ test('a constrained device gets the constrained profile on the live renderer, an
       Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => 8 });
       window.dispatchEvent(new Event('resize'));
     });
-    const rebuilt = await page
-      .waitForFunction(
-        () => {
-          const probe = (globalThis as unknown as Record<string, unknown>)['__KD_PIXI_MEMORY_PROBE__'] as
-            | { applications: unknown[] }
-            | undefined;
-          return (probe?.applications.length ?? 0) >= 2;
-        },
-        undefined,
-        { timeout: APPLICATION_WAIT_MS },
-      )
-      .then(
-        () => true,
-        () => false,
-      );
+    const rebuilt = await waitForApplications(page, 2);
     await settleFrames(page, SETTLE_FRAMES);
     balanced = await readLiveRendererQuality(page);
+
+    // A second live rebuild, this time raising the *device ratio* while the core count
+    // stays high. `resolveWorldQuality` then selects `high`, whose cap is also 2, and
+    // the question is whether the renderer takes the raw ratio (3) or the cap (2).
+    await page.evaluate(() => {
+      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: () => 3 });
+      window.dispatchEvent(new Event('resize'));
+    });
+    const denseRebuilt = await waitForApplications(page, 3);
+    await settleFrames(page, SETTLE_FRAMES);
+    dense = await readLiveRendererQuality(page);
 
     measurements.push({
       ...unmeasuredMeasurement(0),
@@ -1582,11 +1618,22 @@ test('a constrained device gets the constrained profile on the live renderer, an
     expect(balanced?.hasRenderer, 'No live renderer existed under the balanced profile.').toBe(true);
     expect(
       balanced?.resolution,
-      'The balanced profile did not reach the live renderer: expected resolution 2.',
-    ).toBe(2);
+      'A DPR-1 display rendered the balanced profile above resolution 1: the profile resolution ' +
+        'was applied as an absolute multiplier instead of capped at the device ratio.',
+    ).toBe(1);
     expect(
       balanced?.contextAntialias,
       'The balanced profile did not reach the live WebGL context: expected antialias true.',
+    ).toBe(true);
+    expect(denseRebuilt, 'Raising the device ratio did not rebuild the world.').toBe(true);
+    expect(dense?.hasRenderer, 'No live renderer existed under the high profile.').toBe(true);
+    expect(
+      dense?.resolution,
+      'A DPR-3 display rendered above the profile cap: expected resolution 2, not the raw ratio.',
+    ).toBe(2);
+    expect(
+      dense?.contextAntialias,
+      'The high profile did not reach the live WebGL context: expected antialias true.',
     ).toBe(true);
   } catch (error) {
     failure = error instanceof Error ? error : new Error(String(error));

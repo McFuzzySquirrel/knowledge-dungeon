@@ -106,7 +106,7 @@ async function pump(frames = 3): Promise<void> {
 
 describe('the init options are a decision, not a default', () => {
   it('asks for a private ticker, no auto-start, and no ResizePlugin listener', () => {
-    const options = pixiInitOptions(specFor(document.createElement('canvas')));
+    const options = pixiInitOptions(specFor(document.createElement('canvas')), 1);
     // A shared ticker would make this world's visibility pause freeze every other
     // renderer in the process, and `Ticker.shared` is process-wide.
     expect(options.sharedTicker).toBe(false);
@@ -121,25 +121,43 @@ describe('the init options are a decision, not a default', () => {
 
   it('takes resolution, antialiasing, and preference from the quality profile', () => {
     const canvas = document.createElement('canvas');
+    // A DPR-2 display: every profile's cap is at or below 2, so each reaches the
+    // renderer unchanged. This is the half that proves the profile arrives at the
+    // binding rather than being recomputed there.
     for (const [id, profile] of Object.entries(WORLD_QUALITY_PROFILES)) {
-      const options = pixiInitOptions(specFor(canvas, { quality: profile }));
+      const options = pixiInitOptions(specFor(canvas, { quality: profile }), 2);
       expect(options.resolution, id).toBe(profile.resolution);
       expect(options.antialias, id).toBe(profile.antialias);
       expect(options.preference, id).toBe(profile.preference);
     }
-    // A constrained device really is cheaper: quarter the pixels at ratio 2, and no
-    // antialiasing.
+
+    // A DPR-1 display is the case QA measured: `resolution` is a *cap*, so the
+    // effective value is `min(1, resolution)` = 1 for every profile. The old
+    // passthrough rendered `balanced` at 2 here - 4x the raster pixels, downscaled.
+    for (const [id, profile] of Object.entries(WORLD_QUALITY_PROFILES)) {
+      const options = pixiInitOptions(specFor(canvas, { quality: profile }), 1);
+      expect(options.resolution, id).toBe(1);
+    }
+
+    // A 3x display is capped back to 2: the cap holds as device density rises, so a
+    // denser screen does not reopen the pixel cost the cap exists for.
+    const dense = pixiInitOptions(specFor(canvas, { quality: resolveWorldQualityProfile('balanced') }), 3);
+    expect(dense.resolution).toBe(2);
+
+    // A constrained device really is cheaper at the same ratio: quarter the pixels
+    // at a device-pixel ratio of 2, and no antialiasing.
     const constrained = pixiInitOptions(
       specFor(canvas, { quality: resolveWorldQualityProfile('constrained') }),
+      2,
     );
-    const balanced = pixiInitOptions(specFor(canvas, { quality: resolveWorldQualityProfile('balanced') }));
+    const balanced = pixiInitOptions(specFor(canvas, { quality: resolveWorldQualityProfile('balanced') }), 2);
     expect(constrained.resolution).toBeLessThan(balanced.resolution);
     expect(constrained.antialias).toBe(false);
   });
 
   it('carries the clear colour and the caller’s canvas, and never names a body', () => {
     const canvas = document.createElement('canvas');
-    const options = pixiInitOptions(specFor(canvas, { background: 0x241d18 }));
+    const options = pixiInitOptions(specFor(canvas, { background: 0x241d18 }), 1);
     expect(options.canvas).toBe(canvas);
     expect(options.background).toBe(0x241d18);
     expect(options.backgroundAlpha).toBe(1);
@@ -155,7 +173,7 @@ describe('the init options are a decision, not a default', () => {
   });
 
   it('is frozen, so a caller cannot hand a mutated record to a later mount', () => {
-    const options = pixiInitOptions(specFor(document.createElement('canvas')));
+    const options = pixiInitOptions(specFor(document.createElement('canvas')), 1);
     expect(Object.isFrozen(options)).toBe(true);
   });
 });

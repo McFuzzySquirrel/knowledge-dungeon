@@ -13,6 +13,7 @@
  * record to a real `Application.init` in jsdom, which is what ties the names to the
  * library rather than to this file's comment.
  */
+import { resolveRendererResolution } from './types';
 import type { WorldApplicationSpec, WorldQualityProfile } from './types';
 
 /**
@@ -38,8 +39,9 @@ export interface PixiInitOptions {
   readonly background: number;
   readonly backgroundAlpha: number;
   /**
-   * Backing-store pixels per CSS pixel, and `autoDensity` to keep the element
-   * itself in CSS pixels.
+   * Backing-store pixels per CSS pixel: the profile's cap clamped to the device's
+   * own ratio by {@link resolveRendererResolution}, with `autoDensity` to keep the
+   * element itself in CSS pixels.
    *
    * Both are needed together: `resolution` alone makes a HiDPI canvas twice the
    * layout size of its container, and `autoDensity` alone leaves a soft image.
@@ -77,10 +79,17 @@ export interface PixiInitOptions {
 /**
  * Build the init options for one mount.
  *
+ * `devicePixelRatio` is passed in rather than read here, so this stays a pure
+ * function of its inputs and the binding - the only module that touches a DOM
+ * global - owns the observation. The effective resolution is the profile's cap
+ * clamped to that ratio by {@link resolveRendererResolution}; a profile whose
+ * `resolution` were handed to PixiJS unchanged would render a DPR-1 desktop at
+ * 2x and downscale, which is 4x the raster work for no visible gain.
+ *
  * Frozen, so a test double and the real binding cannot see different options from
  * the same call and a mutation cannot reach the next mount.
  */
-export function pixiInitOptions(spec: WorldApplicationSpec): PixiInitOptions {
+export function pixiInitOptions(spec: WorldApplicationSpec, devicePixelRatio: number): PixiInitOptions {
   const { canvas, quality } = spec;
   return Object.freeze({
     canvas,
@@ -88,7 +97,7 @@ export function pixiInitOptions(spec: WorldApplicationSpec): PixiInitOptions {
     height: 1,
     background: spec.background,
     backgroundAlpha: spec.backgroundAlpha,
-    resolution: quality.resolution,
+    resolution: resolveRendererResolution(quality.resolution, devicePixelRatio),
     autoDensity: true,
     antialias: quality.antialias,
     preference: quality.preference,

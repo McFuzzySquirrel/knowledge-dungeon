@@ -56,7 +56,16 @@ export type WorldRendererPreference = 'webgl' | 'webgpu' | 'canvas';
  */
 export interface WorldQualityProfile {
   readonly id: WorldQualityId;
-  /** Backing-store pixels per CSS pixel. Capped from the device's own ratio. */
+  /**
+   * The ceiling for backing-store pixels per CSS pixel.
+   *
+   * A *cap*, not a multiplier: the value the renderer is actually created with is
+   * `min(devicePixelRatio, resolution)`, computed by
+   * {@link resolveRendererResolution}. So a DPR-1 desktop on the `balanced` profile
+   * renders at 1 rather than at 2, and a 3x phone on `balanced` renders at 2 rather
+   * than at 3. The field is a fixed number because the profile is shared, frozen,
+   * device-independent data; the device's own ratio is applied at mount.
+   */
   readonly resolution: number;
   readonly antialias: boolean;
   readonly maxFps: number;
@@ -128,6 +137,29 @@ export function resolveWorldQualityProfile(id: string | null | undefined): World
     return WORLD_QUALITY_PROFILES[id as WorldQualityId];
   }
   return WORLD_QUALITY_PROFILES[DEFAULT_WORLD_QUALITY_ID];
+}
+
+/**
+ * The renderer's backing-store pixels per CSS pixel for a device.
+ *
+ * A profile's {@link WorldQualityProfile.resolution} is a *cap*, not an absolute
+ * multiplier: the field's own documentation says "capped from the device's own
+ * ratio", the `balanced` profile is described as "device-pixel resolution up to
+ * 2", and plan section 12 says "cap renderer resolution". This function is that
+ * sentence made executable, so the binding and its tests read one rule instead of
+ * agreeing by eye.
+ *
+ * `min(devicePixelRatio, cap)`. A DPR-1 desktop therefore renders at 1 on
+ * `balanced`, not at 2 and downscaled - the 4x raster cost QA measured - while a
+ * DPR-2 or DPR-3 display renders at 2, the cap. A non-finite or non-positive
+ * device ratio is read as 1 (the state a realm that cannot report one is in), and
+ * a non-finite or non-positive cap as 1, so neither can produce a zero-sized or
+ * `NaN` backing store.
+ */
+export function resolveRendererResolution(cap: number, devicePixelRatio: number): number {
+  const ratio = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const ceiling = Number.isFinite(cap) && cap > 0 ? cap : 1;
+  return Math.min(ratio, ceiling);
 }
 
 /* -------------------------------------------------------------------------- */

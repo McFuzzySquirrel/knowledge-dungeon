@@ -280,6 +280,29 @@ test('safe tutorial action renders the dungeon world with static-only network tr
   page,
   baseURL,
 }, testInfo) => {
+  /*
+   * TIMEOUT RAISED, recorded deliberately (Phase 23 software-floor follow-up, 2026-10-10).
+   *
+   * Commit 6f01494 gave the PixiJS world surfaces a real fill contract; the dungeon canvas
+   * went from ~218 CSS px tall to ~634 at 1440x900, matching the Phaser host it replaced.
+   * The pixels are the cost, and software WebGL (the CI floor) rasterises them slowly.
+   * Measured locally with the default four workers: desktop-chromium 16.4s, chromebook
+   * 15.6s, tablet/tablet-landscape 4.9s/5.0s. The touch projects are fast because a coarse
+   * pointer selects the `constrained` quality profile (resolution 1, antialias off), while
+   * the desktop projects select `balanced` (resolution 2, antialias on) and pay for the fill.
+   * Follow-up (2026-10-10): the profile's `resolution` is now applied as a *cap* on the device
+   * ratio (`min(devicePixelRatio, resolution)`) rather than as an absolute multiplier, so at
+   * these projects' DPR 1 the balanced profile renders at resolution 1. The timings above were
+   * taken while the 2x supersample was still in place; the cap removes that raster cost without
+   * changing the fill contract, the profile thresholds, or this timeout.
+   *
+   * This test passes at Playwright's 30s default today, but it is the same fill contract and
+   * the same software floor as the village test below (which does not), and it should not sit
+   * one slow run away from failing. 120s is the limit the sibling village-movement test
+   * already uses for the same world; every internal wait keeps its own shorter bound, so a
+   * world that never mounts still fails with the poll's own message rather than with this one.
+   */
+  test.setTimeout(120_000);
   if (!baseURL) throw new Error('Playwright baseURL is required for the privacy network spy.');
 
   const observations: NetworkObservation[] = [];
@@ -743,6 +766,38 @@ async function readVillageScene(page: Page): Promise<VillageSceneReading> {
 }
 
 test('the village route mounts the renderer this build was asked for', async ({ page }, testInfo) => {
+  /*
+   * TIMEOUT RAISED, recorded deliberately (Phase 23 software-floor follow-up, 2026-10-10).
+   *
+   * Commit 6f01494 gave the PixiJS world surfaces a real fill contract: the village canvas
+   * went from ~218 CSS px tall to ~816 at 1440x900, matching the Phaser host it replaced.
+   * That is the correct UX and it is not being reverted. The cost is pixels, and the CI
+   * floor is software WebGL, so the render grew from 10.8s to 34.3s on `desktop-chromium`
+   * in CI - past Playwright's 30s default - and the test failed there:
+   *
+   *   project            before (7914c5f)   after (bcbc560)   local, 4 workers
+   *   desktop-chromium        10.8s          34.3s (failed)     34.1s (failed)
+   *   chromebook              12.0s          31.5s              25.5s
+   *   tablet                   3.4s           8.5s               9.0s
+   *   tablet-landscape         5.1s           8.5s               8.3s
+   *
+   * The touch projects stay fast because a coarse pointer selects the `constrained` quality
+   * profile (resolution 1, antialias off); the desktop projects select `balanced`
+   * (resolution 2, antialias on) and pay for the fill. Reproduced locally with the default
+   * four workers, so this is the run's own cost and not a CI-only quirk.
+   *
+   * Follow-up (2026-10-10): the profile's `resolution` is now a *cap* on the device ratio
+   * (`min(devicePixelRatio, resolution)`), not an absolute multiplier, so at these projects'
+   * DPR 1 the balanced profile renders at resolution 1. The timings above were measured while
+   * the 2x supersample was still in place. The cap removes that raster cost; the fill contract,
+   * the profile thresholds, and this timeout are unchanged.
+   *
+   * 120 seconds is the same limit the sibling village-movement test already uses for the same
+   * world, and roughly 3.5x the CI measurement. No assertion is relaxed and no step skipped -
+   * a village that never mounts, never moves, or never draws its labels still fails, and the
+   * internal waits below keep their own shorter bounds so the failure names the missing step.
+   */
+  test.setTimeout(120_000);
   const expectedPixi = readCompiledBooleanFlag(defaultDistDir(), 'VITE_PIXI_VILLAGE');
   const scriptRequests: string[] = [];
   page.on('request', (request) => {

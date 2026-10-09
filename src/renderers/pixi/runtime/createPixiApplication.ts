@@ -162,7 +162,12 @@ export async function createPixiApplication(spec: WorldApplicationSpec): Promise
   // v8: no constructor options. The renderer does not exist until `init` resolves,
   // so `app.canvas`, `app.stage`, and `app.ticker` are all read after the await.
   const app = new Application();
-  await app.init({ ...pixiInitOptions(spec) });
+  // The device's own ratio is an observation this binding owns: it is the only
+  // module here that touches a renderer, so it is where `window.devicePixelRatio`
+  // is read, and `pixiInitOptions` stays a pure function of its inputs. The
+  // profile's `resolution` is a cap, so the effective value is the device ratio
+  // clamped to it (see `resolveRendererResolution`).
+  await app.init({ ...pixiInitOptions(spec, currentDevicePixelRatio()) });
   applyFrameRateCap(app, spec.quality.maxFps);
 
   return {
@@ -227,6 +232,22 @@ export async function createPixiApplication(spec: WorldApplicationSpec): Promise
       app.destroy({ removeView: true, releaseGlobalResources }, { children: true });
     },
   };
+}
+
+/**
+ * The device's own pixel ratio, or `1` where the realm does not report one.
+ *
+ * Read through `globalThis` rather than `window` so this is callable in a worker
+ * and in a test with no DOM, and guarded without a throw: a realm that cannot
+ * answer the question is in the same state as a DPR-1 display, and `1` is the
+ * value that renders one backing pixel per CSS pixel rather than a scaled guess.
+ * `resolveRendererResolution` validates the number again, so a `NaN` reported by
+ * an embed cannot reach the renderer.
+ */
+function currentDevicePixelRatio(): number {
+  const scope = globalThis as { devicePixelRatio?: unknown };
+  const ratio = scope.devicePixelRatio;
+  return typeof ratio === 'number' ? ratio : 1;
 }
 
 /**

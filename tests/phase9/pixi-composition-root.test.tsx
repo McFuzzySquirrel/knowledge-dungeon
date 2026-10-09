@@ -207,8 +207,17 @@ describe('the real binding and the real scene are bound to each other', () => {
 
     // The surface the host measured is the surface the renderer was resized to, and
     // the scene laid out from it: one resize, before the first frame.
-    expect(application.renderer).toBeTruthy();
-    expect(application.canvas.width).toBeGreaterThan(1);
+    //
+    // jsdom reports no layout and a device pixel ratio of 1, so the host's measured
+    // floor is 1 CSS pixel and the profile's `resolution` - a *cap* on the device
+    // ratio, not a multiplier - is 1. The backing store is therefore 1x1. The old
+    // `canvas.width > 1` passed only because a fixed resolution of 2 doubled the
+    // *initial* 1x1 surface, so it was never evidence the host resized anything.
+    // Assert the canvas-to-CSS coupling and the cap instead.
+    const resolution = (application.renderer as { readonly resolution: number }).resolution;
+    expect(application.canvas.style.width).toBe('1px');
+    expect(resolution).toBe(1);
+    expect(application.canvas.width).toBe(resolution);
   });
 
   it('presents a frame, and says so in the words a screen reader gets', async () => {
