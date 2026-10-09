@@ -145,6 +145,17 @@ export const CHARGE_HOLD_MS = 140;
  */
 export const PIXI_CHARGE_HOLD_MS = 700;
 
+/**
+ * How long the charge release may take to show up as a phase change before the lane treats it as
+ * a lost interaction rather than as a slow frame, in milliseconds.
+ *
+ * The release is a synchronous `powering -> casting` transition, so this only has to outlast the
+ * render commit that publishes the new phase - it is not a bite window and it is not a margin on
+ * the catch. It exists so a press that never reached the charge control fails as exactly that,
+ * instead of silently consuming the whole loop budget on a bite that can never arrive.
+ */
+export const CAST_REGISTRATION_MS = 15_000;
+
 /** Wall-clock budget for the whole cast-to-catch loop, across every retry. */
 export const CATCH_LOOP_BUDGET_MS = 150_000;
 
@@ -394,12 +405,69 @@ async function walkToPondPanel(
 }
 
 /**
+ * The loop budget still unspent, floored so a wait can never be zero.
+ *
+ * Every wait inside the cast loop is bounded by the loop's own wall-clock budget rather than by a
+ * fixed interval. The machine's windows (`waiting -> biting`, the two-second bite window, the
+ * twenty-second proximity deadline) advance on the renderer's frame delta, and PixiJS caps that
+ * delta at 100ms (`Ticker._maxElapsedMS`, `minFPS = 10`); a software-rasterised frame loop that
+ * drops under ten frames per second therefore advances the machine clock *slower than wall time*,
+ * and a three-to-fifteen-second bite arrives proportionally later in wall time. A fixed thirty
+ * seconds covered that at a healthy frame rate and not under a starved one. Spending the remaining
+ * budget keeps the lane's existing margin rather than inventing a new one: the budget is the same
+ * `CATCH_LOOP_BUDGET_MS` the loop already declared.
+ */
+function remainingBudget(deadline: number): number {
+  return Math.max(1_000, deadline - Date.now());
+}
+
+/**
+ * Wait, briefly, for the release to have registered as a cast.
+ *
+ * `powering -> casting` is dispatched synchronously on the release, so this only waits out the
+ * render commit that publishes the new phase. If the press never reached the charge control the
+ * pond stays `idle`/`powering`, and a cast that never registered fails here with that state rather
+ * than consuming the whole loop budget on a bite that can never come.
+ */
+async function waitForCastRegistration(page: Page, deadline: number): Promise<void> {
+  const registered = ['casting', 'waiting', 'biting', 'caught', 'missed'];
+  const registrationDeadline = Date.now() + Math.min(CAST_REGISTRATION_MS, remainingBudget(deadline));
+  let last: string | null = null;
+  while (Date.now() < registrationDeadline) {
+    last = await readPondPhase(page);
+    if (last !== null && registered.includes(last)) return;
+    await page.waitForTimeout(60);
+  }
+  throw new Error(
+    `the cast did not register: after the charge release the pond was ${JSON.stringify(last)} ` +
+      'rather than casting. The press did not reach the charge control, so no bite could arrive.',
+  );
+}
+
+/**
+ * Activate a control inside a short window, without Playwright's mouse choreography.
+ *
+ * The hook must land inside the pond's two-second bite window (`BITE_WINDOW_SEC`). A
+ * `locator.click` moves the mouse, waits for stability, and retries - several main-thread round
+ * trips that, on a starved software-rasterised frame loop, can outlast the window, at which point
+ * the control disables and the click can never land. A direct `click()` is the same activation a
+ * pointer delivers (React's delegated handler runs), dispatched in one call, so the window is not
+ * spent on choreography. The caller reaches this only after the pond reports `biting`, which is
+ * exactly what enables the control, so the enabled state is established before the activation.
+ */
+async function activateWithinBiteWindow(page: Page, selector: string): Promise<void> {
+  await page.locator(selector).evaluate((element) => (element as HTMLElement).click());
+}
+
+/**
  * Cast and hook on the PixiJS pond through its own DOM controls.
  *
- * The production pond is the PixiJS world after the Phase 23 cutover, and it exposes the
- * cast as `#fishing-charge-hold` and the hook as `#fishing-set-hook` rather than as canvas
- * pointer input. This is the same sequence the Phase 17 fishing lane drives, so the loop
- * converges the same way: keep casting until the catch panel appears.
+ * The production pond is the PixiJS world after the Phase 23 cutover, and it exposes the cast as
+ * `#fishing-charge-hold` and the hook as `#fishing-set-hook` rather than as canvas pointer input.
+ * This is the same sequence the Phase 17 fishing lane drives, so the loop converges the same way:
+ * keep casting until the catch panel appears. Each cast is confirmed to have registered before the
+ * loop waits for an outcome, and each wait spends the loop's remaining budget rather than a fixed
+ * interval - see {@link remainingBudget} and {@link waitForCastRegistration}.
  */
 async function castUntilCaughtOnPixiPond(
   page: Page,
@@ -416,10 +484,22 @@ async function castUntilCaughtOnPixiPond(
     await page.keyboard.down('Space');
     await page.waitForTimeout(PIXI_CHARGE_HOLD_MS);
     await page.keyboard.up('Space');
-    const phase = await waitForPondPhase(page, ['biting', 'caught', 'missed'], 30_000);
+    // A lost press is its own failure, distinct from a slow bite, and fails with the phase it
+    // was actually in.
+    await waitForCastRegistration(page, deadline);
+
+    const phase = await waitForPondPhase(
+      page,
+      ['biting', 'caught', 'missed'],
+      remainingBudget(deadline),
+    );
     if (phase === 'biting') {
-      await page.locator('#fishing-set-hook').click({ timeout: 5_000 });
-      const afterHook = await waitForPondPhase(page, ['caught', 'missed', 'idle', 'waiting'], 30_000);
+      await activateWithinBiteWindow(page, '#fishing-set-hook');
+      const afterHook = await waitForPondPhase(
+        page,
+        ['caught', 'missed', 'idle', 'waiting'],
+        remainingBudget(deadline),
+      );
       if (afterHook === 'idle' || afterHook === 'waiting') {
         // The hook window closed before the press landed; the next loop casts again.
         continue;
@@ -427,7 +507,7 @@ async function castUntilCaughtOnPixiPond(
     }
     if (phase === 'missed') {
       await page.locator('#fishing-try-again').click();
-      await waitForPondPhase(page, ['idle'], 30_000);
+      await waitForPondPhase(page, ['idle'], remainingBudget(deadline));
     }
     if (spy.pageErrors().length > 0) break;
   }
