@@ -23,6 +23,25 @@ export function MobileTouchHint(): JSX.Element | null {
     return () => clearTimeout(timer);
   }, []);
 
+  /*
+   * The hint is a first-run nudge, not a dialog: the first interaction anywhere
+   * dismisses it. That matters beyond tidiness - the visible card is centred over
+   * the world, and a dismiss button that outlived the learner's first tap could
+   * sit on a world control while they are trying to reach one. Its own button
+   * still dismisses it for a keyboard or screen-reader user, but a pointerdown
+   * anywhere does the same.
+   */
+  useEffect(() => {
+    if (!visible) return;
+    const dismiss = (): void => {
+      markHintSeen();
+      setVisible(false);
+      setDismissed(true);
+    };
+    window.addEventListener('pointerdown', dismiss, { capture: true, once: true });
+    return () => window.removeEventListener('pointerdown', dismiss, { capture: true });
+  }, [visible]);
+
   if (!visible || dismissed) return null;
 
   function handleDismiss() {
@@ -49,7 +68,9 @@ export function MobileTouchHint(): JSX.Element | null {
         textAlign: 'center',
         backdropFilter: 'blur(6px)',
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        pointerEvents: 'auto',
+        // A one-time first-run hint: visible over the world, but only its own
+        // dismiss button takes pointer events, so it never blocks a world control.
+        pointerEvents: 'none',
       }}
     >
       <div style={{ fontSize: 28, marginBottom: 12 }}>👆</div>
@@ -64,7 +85,17 @@ export function MobileTouchHint(): JSX.Element | null {
         onClick={handleDismiss}
         style={{
           marginTop: 14,
+          minHeight: 44,
+          minWidth: 44,
           padding: '8px 24px',
+          /*
+           * The hint must never swallow a pointer event that was aimed at a world
+           * control beneath it - the `.minimap` contract. A pointer anywhere still
+           * dismisses via the window listener above, and the button itself stays in
+           * the tab order and fires on Enter for a keyboard user, because
+           * `pointer-events: none` affects pointer hit-testing only.
+           */
+          pointerEvents: 'none',
           background: 'rgba(99, 179, 237, 0.2)',
           border: '1px solid rgba(99, 179, 237, 0.3)',
           borderRadius: 8,

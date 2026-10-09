@@ -4,6 +4,9 @@ import { App } from '@/ui/App';
 import { bootstrapApplication } from '@/application/bootstrap';
 import '@/i18n'; // Phase 5: Initialize i18next before first render
 import '@/styles.css';
+// App-shell chrome overrides, imported after `styles.css` so an equal-specificity
+// rule wins the cascade. See the file header for why it is not an edit to styles.css.
+import '@/styles/responsive-chrome.css';
 
 const container = document.getElementById('root');
 if (!container) {

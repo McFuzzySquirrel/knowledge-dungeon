@@ -16,6 +16,7 @@ import {
   isReachableViaSubtopics,
 } from '@/core/graph';
 import { runtimeConfig } from '@/config/featureFlags';
+import { NARROW_SHELL_QUERY, useMediaQuery } from '@/ui/hooks/useMediaQuery';
 import type { GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
 import { useSessionStore } from '@/store/sessionStore';
@@ -166,10 +167,11 @@ export function RoomPanel({
   const [portalFilter, setPortalFilter] = useState('');
   const [selectedPortalRoomId, setSelectedPortalRoomId] = useState<string | null>(null);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
-  const [isMobile] = useState(() => {
-    try { return window.matchMedia('(max-width: 768px)').matches; }
-    catch { return false; }
-  });
+  /*
+   * Reactive: a rotation or a resize across 768px switches the panel between the
+   * floating desktop panel and the mobile bottom sheet. See `useMediaQuery`.
+   */
+  const isMobile = useMediaQuery(NARROW_SHELL_QUERY);
   const [bottomsheetExpanded, setBottomsheetExpanded] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(false);
   const [showPhaseMenu, setShowPhaseMenu] = useState(false);

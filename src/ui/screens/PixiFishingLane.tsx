@@ -629,7 +629,13 @@ export function PixiFishingLaneSurface({
         zIndex: 1,
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden',
+        // The overlay owns the scroll, not the canvas: the pond fills the area the HUD
+        // leaves, and when a narrow viewport cannot show both, the controls below the
+        // pond scroll into view here instead of being clipped (the pre-fix
+        // `overflow: hidden`). `overflowX` stays hidden so a wrapping control never
+        // produces a horizontal scrollbar.
+        overflowY: 'auto',
+        overflowX: 'hidden',
       }}
     >
       <Suspense

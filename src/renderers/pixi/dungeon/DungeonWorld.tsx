@@ -414,6 +414,16 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
         flexDirection: 'column',
         gap: px(theme.space['3']),
         width: '100%',
+        // The screen's world area (`GameScreen`'s `.game-canvas`, which is `inset: 0`)
+        // is the height this root fills. Inside it the canvas surface grows into the
+        // leftover area and the mirror sits below, in normal flow; when a narrow
+        // viewport or 200% zoom leaves no room for both, *this* element is the scroll
+        // container, so every control stays reachable rather than being clipped by
+        // `.game-area { overflow: hidden }`.
+        height: '100%',
+        minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
         color: cssHex(theme.color.textPrimary),
         fontFamily: theme.fontFamily.body,
       }}
@@ -426,6 +436,9 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
         theme={theme}
         label="Dungeon canvas"
         description="Rooms, corridors, doors, floor portals, and the player for the subject dungeon. Move with the arrow keys or WASD, interact with E or Space, or use the dungeon actions below."
+        // The surface is the world area, not a fixed 220px strip: opt this screen into
+        // the fill contract so the renderer sizes to the height left after the mirror.
+        fillHeight
       >
         <p
           role="status"

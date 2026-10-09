@@ -46,6 +46,7 @@ import {
 } from '@/ui/utils/onboarding';
 import { setActiveSubjectId as persistActiveSubjectId } from '@/services/persistence/subjectPersistence';
 import { getStorageThreshold } from '@/services/errorRecovery';
+import { NARROW_SHELL_QUERY, useMediaQuery } from '@/ui/hooks/useMediaQuery';
 
 /**
  * The build-time dungeon renderer switch (Phase 13).
@@ -238,10 +239,13 @@ export function GameScreen(): JSX.Element {
   const [attachmentUrlsByRoomId, setAttachmentUrlsByRoomId] = useState<
     Record<string, Record<string, string>>
   >({});
-  const [isMobile] = useState(() => {
-    try { return window.matchMedia('(max-width: 768px)').matches; }
-    catch { return false; }
-  });
+  /*
+   * Reactive, not a one-shot snapshot: `useMediaQuery` re-reads on a resize or a
+   * rotation, so a window dragged across 768px (or a tablet rotated) switches
+   * the HUD between the desktop side column and the mobile drawer. See
+   * `useMediaQuery`.
+   */
+  const isMobile = useMediaQuery(NARROW_SHELL_QUERY);
   const setMobileHudOpen = useSessionStore((s) => s.setMobileHudOpen);
   const { toasts, pushToast, dismissToast } = useToasts();
   useExportReminder(pushToast);

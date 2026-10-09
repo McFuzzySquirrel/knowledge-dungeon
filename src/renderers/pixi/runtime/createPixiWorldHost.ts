@@ -332,6 +332,22 @@ export function createPixiWorldHost<
     // canvas that can never receive focus.
     element.setAttribute('aria-hidden', 'true');
     element.style.display = 'block';
+    // Positioned, so the canvas *paints* the surface rather than participating in its
+    // layout. This is the other half of the padding-box rule in `measureElement`: the
+    // renderer is sized from the surface's padding box, and PixiJS's `autoDensity`
+    // writes that size back onto `canvas.style` as explicit CSS pixels. A canvas left
+    // in flow would then contribute those pixels to the surface's intrinsic height,
+    // which sets the surface's automatic minimum size - so a surface that can flex
+    // (the world screens' fill contract) could only ever grow with the viewport and
+    // never shrink, and a resize from landscape to portrait would ratchet the surface
+    // to the largest size it had ever seen. Absolutely positioned, the surface's height
+    // is purely the layout's, the measurement has gain one, and that loop cannot form.
+    // The surface is `position: relative` in PixiCanvas, so the canvas fills it.
+    element.style.position = 'absolute';
+    element.style.top = '0';
+    element.style.right = '0';
+    element.style.bottom = '0';
+    element.style.left = '0';
     element.style.width = '100%';
     element.style.height = '100%';
 

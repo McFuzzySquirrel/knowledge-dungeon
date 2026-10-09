@@ -349,6 +349,14 @@ const VillageWorld = forwardRef<VillageWorldHandle, VillageWorldProps>(function 
         flexDirection: 'column',
         gap: px(theme.space['3']),
         width: '100%',
+        // The village's world area is `.village-game-area`, which is `flex: 1` inside a
+        // viewport-height row and therefore a definite height. This root fills it, the
+        // surface grows into what the mirror leaves, and the root scrolls when a narrow
+        // viewport cannot show both - so the Interact and Zoom controls stay reachable.
+        height: '100%',
+        minHeight: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
         color: cssHex(theme.color.textPrimary),
         fontFamily: theme.fontFamily.body,
       }}
@@ -361,6 +369,9 @@ const VillageWorld = forwardRef<VillageWorldHandle, VillageWorldProps>(function 
         theme={theme}
         label="Village world"
         description="The village, drawn on a canvas: paths, buildings, subject portals, and a player marker. The controls below perform the same actions as the canvas."
+        // The surface is the world area, not a fixed 220px strip: opt this screen into
+        // the fill contract so the renderer sizes to the height left after the controls.
+        fillHeight
       >
         <p
           // Announced when it changes, and never the only way the state is conveyed:

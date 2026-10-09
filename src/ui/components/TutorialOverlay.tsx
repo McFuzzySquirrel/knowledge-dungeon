@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react';
 import { TUTORIAL_SUBJECT_ID } from '@/data/tutorialSubject';
 import type { RoomState } from '@/core/validation/persistence';
+import { useMediaQuery } from '@/ui/hooks/useMediaQuery';
 
 interface TutorialOverlayProps {
   subjectId: string;
@@ -48,10 +49,7 @@ function allRoomsCleared(
 }
 
 export function TutorialOverlay({ subjectId, focusedRoomId, rooms, isPanelOpen = false }: TutorialOverlayProps): JSX.Element | null {
-  const [isMobile] = useState(() => {
-    try { return window.matchMedia('(max-width: 600px)').matches; }
-    catch { return false; }
-  });
+  const isMobile = useMediaQuery('(max-width: 600px)');
   const [expanded, setExpanded] = useState(false);
 
   if (subjectId !== TUTORIAL_SUBJECT_ID) return null;
@@ -74,7 +72,8 @@ export function TutorialOverlay({ subjectId, focusedRoomId, rooms, isPanelOpen =
           padding: '14px 18px', maxWidth: 280, maxHeight: isMobile ? '65vh' : 'calc(100% - 24px)',
           overflowY: 'auto',
           backdropFilter: 'blur(6px)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-          pointerEvents: 'auto',
+          // Informational only: never swallow a click on a world control below.
+          pointerEvents: 'none',
         }}
       >
         <div style={{ fontSize: 13, color: '#4ade80', fontWeight: 700, marginBottom: 6 }}>
@@ -110,8 +109,10 @@ export function TutorialOverlay({ subjectId, focusedRoomId, rooms, isPanelOpen =
         style={{
           position: 'absolute', top: 12, left: 12, zIndex: 95,
           background: 'rgba(17, 26, 48, 0.92)',
-          border: '1px solid rgba(99, 179, 237, 0.3)', borderRadius: 20,
+          border: '1px solid rgba(99, 179, 237, 0.3)', borderRadius: 22,
           padding: '6px 14px',
+          minHeight: 44,
+          minWidth: 44,
           backdropFilter: 'blur(6px)', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
           pointerEvents: 'auto', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 6,
@@ -135,7 +136,8 @@ export function TutorialOverlay({ subjectId, focusedRoomId, rooms, isPanelOpen =
         padding: '14px 18px', maxWidth: 280, maxHeight: isMobile ? '65vh' : 'calc(100% - 24px)',
         overflowY: 'auto',
         backdropFilter: 'blur(6px)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-        pointerEvents: 'auto',
+        // The card is a hint; only the collapse button below takes pointer events.
+        pointerEvents: 'none',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -153,7 +155,7 @@ export function TutorialOverlay({ subjectId, focusedRoomId, rooms, isPanelOpen =
             style={{
               marginLeft: 'auto', background: 'none', border: 'none',
               cursor: 'pointer', color: '#7fb2ff', fontSize: 14, lineHeight: 1,
-              padding: '2px 4px',
+              minHeight: 44, minWidth: 44, pointerEvents: 'auto',
             }}
             aria-label="Collapse tutorial"
           >

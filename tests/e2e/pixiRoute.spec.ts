@@ -275,6 +275,54 @@ async function settleFrames(page: Page, frames: number, maxWaitMs = 2_000): Prom
 }
 
 /**
+ * Wait until the pond's surface stops resizing.
+ *
+ * The pond surface is the flexible part of the fishing overlay (the fill contract), so
+ * it resizes once while the surrounding fishing HUD finishes its own layout - in the
+ * observed run the HUD settles from 415 to 388 CSS pixels about 600 ms after the pond
+ * opens, which grows the surface by 28 pixels. The scene *correctly* rebuilds its water
+ * bands on a resize, and a 32-pixel band boundary was crossed, so the display-object
+ * count changes by one.
+ *
+ * The idle-growth assertion below is about *per-frame* allocation, not layout settling:
+ * sampling `before` during that one-time resize would count a single rebuild as growth
+ * and report a leak that is not there. This waits for a quiet period first, so the two
+ * readings bracket idle frames only. Bounded, so a surface that never settles fails the
+ * assertion below rather than hanging here.
+ */
+async function waitForSurfaceSettled(page: Page, quietMs = 300, budgetMs = 8_000): Promise<void> {
+  await page.evaluate(
+    ({ quiet, budget }) =>
+      new Promise<void>((resolve) => {
+        const surface = document.querySelector('[data-pixi-surface]');
+        if (surface === null) {
+          resolve();
+          return;
+        }
+        let observer: ResizeObserver | null = null;
+        let quietTimer: ReturnType<typeof setTimeout> | undefined;
+        let settled = false;
+        const finish = (): void => {
+          if (settled) return;
+          settled = true;
+          if (quietTimer !== undefined) clearTimeout(quietTimer);
+          observer?.disconnect();
+          resolve();
+        };
+        const rearm = (): void => {
+          if (quietTimer !== undefined) clearTimeout(quietTimer);
+          quietTimer = setTimeout(finish, quiet);
+        };
+        observer = new ResizeObserver(rearm);
+        observer.observe(surface);
+        rearm();
+        setTimeout(finish, budget);
+      }),
+    { quiet: quietMs, budget: budgetMs },
+  );
+}
+
+/**
  * The number of display objects under the most recently created application's stage.
  *
  * A real-engine read for item 5: a scene that created its cosmetic effects *per frame*
@@ -522,6 +570,9 @@ test('a route change away from each Pixi world detaches its canvas and loses its
     // Item 5's measurement, taken while the pond is open: if the scene created its
     // cosmetic effects per frame, the stage would grow for as long as the pond is left
     // alone. A flat count is the measurement that says pooling buys nothing measurable.
+    // Settle first: the surface resizes once as the HUD lays out, and a resize rebuilds
+    // the water bands, so sampling before it would count that rebuild as growth.
+    await waitForSurfaceSettled(page);
     const stageBefore = await countStageNodes(page);
     await settleFrames(page, 30);
     const stageAfter = await countStageNodes(page);

@@ -294,6 +294,13 @@ const FishingWorld = forwardRef<FishingWorldHandle, FishingWorldProps>(function 
         flexDirection: 'column',
         gap: px(theme.space['3']),
         width: '100%',
+        // The fishing surface is mounted inside `.village-fishing-overlay`, which is a
+        // column flex box filling the village world area. This root grows into the
+        // space the fishing HUD leaves below it but never shrinks below the surface
+        // floor, so the pond fills the screen and the overlay (not the canvas) is what
+        // scrolls when a narrow viewport cannot show the pond and the controls at once.
+        flex: '1 0 auto',
+        minHeight: 0,
         color: cssHex(theme.color.textPrimary),
         fontFamily: theme.fontFamily.body,
       }}
@@ -306,6 +313,9 @@ const FishingWorld = forwardRef<FishingWorldHandle, FishingWorldProps>(function 
         theme={theme}
         label="Fishing pond"
         description="The pond, drawn on a canvas: a night sky over water, a shoreline, an angler with a rod, and a float. Every action on this surface is also available from the fishing controls in the page around it."
+        // The pond is the world area, not a fixed 220px strip: opt this screen into the
+        // fill contract so the renderer sizes to the height left after the HUD.
+        fillHeight
       >
         <p
           // Announced when it changes, and never the only way the state is conveyed: the

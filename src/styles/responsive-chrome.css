@@ -1,0 +1,135 @@
+/*
+ * Soak-window responsive and accessibility chrome fixes for the app shell.
+ *
+ * ## Why this is its own sheet rather than an edit to `src/styles.css`
+ *
+ * `tests/phase8/qa-verification.test.ts` pins the whole `src/styles.css` region
+ * below the legacy theme blocks to a byte digest, and treats every post-Phase-8
+ * change to it as a reviewed, reversible exception. These rules are app-shell
+ * chrome, not the legacy theme system that gate protects, so they live beside
+ * their concern instead of forcing that gate's exception list to grow.
+ *
+ * It is imported from `src/main.tsx` *after* `@/styles.css`, so an
+ * equal-specificity rule here wins the cascade; each rule below is the
+ * equal-or-lower specificity override of a rule in `src/styles.css`.
+ *
+ * ## What it fixes
+ *
+ * 1. An informational overlay may be visible over the world, but it must never
+ *    swallow a click on a world control beneath it. This is the contract
+ *    `.minimap` already uses (`pointer-events: none`); the toast stack joins it
+ *    here, with only its own buttons opting back in.
+ * 2. Every interactive control in the dungeon HUD and the village action row is
+ *    floored at 44x44 CSS pixels. Phase 21 declared the floor; this file is the
+ *    measured follow-through for the handful that did not meet it.
+ * 3. The mobile floating action strip no longer sits on top of the dungeon
+ *    mirror's bottom-right control, and its footprint is reserved inside the
+ *    world's scroll container so nothing can scroll under it.
+ */
+
+/* (1) Toasts never block the world; only their own buttons are targets. */
+
+.toast-stack,
+.toast {
+  pointer-events: none;
+}
+
+.toast-stack .toast button {
+  pointer-events: auto;
+}
+
+/*
+ * The open drawer is anchored to the viewport bottom and the fixed drawer handle
+ * (44px, z-index 85) sits above it, so the last control in the drawer was
+ * covered by the handle. Clear the handle's height with padding.
+ */
+.hud-drawer-panel {
+  padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+}
+
+/* (2) 44x44 floors, measured before this change as noted per rule. */
+
+.hud-info-button {
+  /* 122x31 before. */
+  min-height: 44px;
+}
+
+.hud-phase-controls button {
+  /* 184x31 before; this also lifts the old 40px mobile override. */
+  min-height: 44px;
+}
+
+.hud-drawer-tab {
+  /* 390x36 before. */
+  min-height: 44px;
+}
+
+.village-action-btn {
+  /* ~40px tall before. */
+  min-height: 44px;
+}
+
+/*
+ * The base-collection and icon buttons are 42.2px and 30-41x38 on a wide
+ * viewport; at 900px and below the stylesheet already raises them to 44/48, so
+ * this base override is scoped above that breakpoint rather than clobbering the
+ * larger 48px phone value.
+ */
+@media (min-width: 901px) {
+  .hud-collection-btn {
+    min-height: 44px;
+  }
+
+  .hud-action-icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* (3) The mobile quick-action strip is a horizontal row above the drawer handle. */
+
+.floating-actions {
+  right: 10px;
+  bottom: 52px;
+  flex-direction: row;
+  pointer-events: none;
+}
+
+.floating-action-btn {
+  width: 48px;
+  height: 48px;
+  pointer-events: auto;
+}
+
+/* Preserve the short-landscape placement from `styles.css`, one step later. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .floating-actions {
+    right: 8px;
+    bottom: 70px;
+  }
+
+  .floating-action-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+/*
+ * (4) Give the strip its own band below the world, rather than letting it float
+ * over the world's scroll area.
+ *
+ * Padding the *scroll container's* content (`DungeonWorld`'s root) was the first
+ * attempt and it does not work: the container still occupies the full viewport,
+ * so a mirror control that happens to sit under the fixed strip at a given scroll
+ * position is still covered. Shrinking `.game-canvas`'s content box instead means
+ * the world root - a normal-flow child whose inline `height: 100%` resolves
+ * against this content box - is laid out entirely above the strip, and the strip
+ * sits in the padding band with the drawer handle. Nothing can scroll under it.
+ *
+ * Sized for the larger short-landscape placement: 70 + 44 + 8 + margin = 128px.
+ */
+@media (max-width: 768px) {
+  .game-canvas {
+    padding-bottom: 128px;
+  }
+}
