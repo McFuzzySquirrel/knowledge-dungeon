@@ -772,7 +772,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 20 | complete | Redesign private share cards. |
 | 21 | complete | Complete accessibility and responsive verification. |
 | 22 | complete | Complete performance, memory, and offline hardening. |
-| 23 | not-started | Cut over production and complete the soak. |
+| 23 | in-progress | Cut over production and complete the soak. |
 | 24 | not-started | Remove Phaser and temporary migration infrastructure. |
 
 ---
@@ -8584,7 +8584,7 @@ Phase 23.
 
 ## Phase 23: Production Cutover and Soak
 
-**Status:** not-started
+**Status:** in-progress
 **Objective:** Make Pixi, Cozy visuals, storage-v2, data products, assistance, and Web Share the defaults with a tested rollback across the approved web OS/browser matrix.
 
 ### Prerequisites
@@ -8670,6 +8670,106 @@ npm run test:privacy
 ### Rollback
 
 Restore Phaser and legacy-storage defaults while retaining storage-v2 generations and mirror data.
+
+### Cutover and soak record (2026-10-09)
+
+**Status:** `not-started` -> `in-progress`. The production cutover is implemented, verified on the
+automated gates, and **deployed to GitHub Pages** at
+<https://mcfuzzysquirrel.github.io/knowledge-dungeon/>; the seven-day soak has **started**. The
+phase is not `verified`: the soak, the physical-device gates, and a real-GPU frame-time reference
+remain open.
+
+**Baseline.** Green at `6e6224e` (the accepted Phase 22 checkpoint) before any Phase 23 change:
+`npm run lint` 0, `npm run typecheck` 0, `npm test` 337 files / 7069 tests, build and budget gates
+passing.
+
+**Commits.** `6523420` (cutover), `76b82b0` (Node 24 + portability/CI repair), `ec777ca`
+(hermetic Phase 17 baseline + Scribe-status de-flake), `7914c5f` (compat offline-shell allowlist).
+Pushed to `origin/main`; deployed to Pages.
+
+**What the cutover changes.** `DEFAULT_RUNTIME_CONFIG` and `FEATURE_FLAG_MATRIX` now select
+storage-v2, the Pixi village/dungeon/fishing worlds, Cozy visuals, data products, Gentle
+assistance, Web Share, the redesigned workspaces, and the offline static shell by default. Every
+flag is retained as a one-release rollback declared in `CUTOVER_FLAG_ROLLBACKS`.
+`VITE_WORLD_RENDERER` is a **retained host switch**, not the renderer cutover: production keeps
+`'phaser'` (the application screens, which host the Pixi worlds through the per-world flags);
+`'pixi'` selects the Phase 9 test host; Phase 24 removes it. The flag contract was re-founded as a
+three-way partition (cutover rollbacks / kill switches / retained host switches) asserted by the
+Phase 5, Phase 6, Phase 19 and Phase 5-flag gates. A build-time `define` in `vite.config.ts` bakes
+each bundler-visible flag's effective value so the literal comparisons and the parsed config agree
+at cutover.
+
+**Defects found and fixed during the phase.**
+
+- **`worldRenderer='pixi'` rendered the Phase 9 test host, not the dungeon.** The initial cutover
+  made the dungeon unreachable on the shipped artifact. Fixed by keeping `worldRenderer='phaser'`
+  and carrying the renderer cutover on the per-world flags; this also re-activated the per-world
+  renderer chunk guards.
+- **The Pixi input controller stole arrow/Home/End from focused range sliders** (`isTextEntry`
+  excluded `range`), a WCAG 2.2 keyboard-operability regression exposed once Pixi became the
+  default world. Fixed with a `nativelyConsumesMovementKeys` rule.
+- **CI's assistance-absence lane downloaded the production artifact** after the absence lane was
+  re-pointed to the rollback artifact; repointed.
+- **`tests/phase17/fishingPhaseInvariants` depended on checkout history** (`git show ade1f78`), so
+  on CI's depth-1 clone its byte comparisons silently no-opped and the `git diff` recording threw.
+  Replaced with committed, digest-verified baseline fixtures; the Phase 8 hermeticity scan is
+  extended to `tests/phase17`.
+- **A committed developer-machine path** (`/tmp/opencode/phase19-probe`) made the Phase 19 probe
+  harness fail off this machine, cascading into collateral failures. Moved to `os.tmpdir()` with a
+  self-contained probe config.
+- **The compat network policy did not allow the offline shell's static files**, so
+  `pr-macos-webkit` failed on `manifest.webmanifest`; allowlisted exactly the three shell files.
+
+**Node 24.** CI, `.nvmrc`, `engines.node` and `@types/node` moved from Node 20 to Node 24; the
+`test:node20` script was removed. This retires the Node-20 compatibility class (the `fs.globSync`
+and cross-realm Web Crypto traps) and makes CI and the developer environment agree.
+
+**Evidence (local, Node 24).** `npm run lint` 0; `npm run typecheck` 0; `npm test` 338 files /
+7090 tests; `npm run build:web` 0 (`dist` 179 files, 4.55 MB); `npm run check:bundle-size` 0;
+`npm run check:budget:welcome` 287.90 KiB / 300.00; `npm run check:memory` 0 (`vendor-pixi`
+160.32 KiB gzip); `npm run check:perf` 0; `test:migrations` / `test:data` / `test:privacy` /
+`test:licenses` 0; `test:e2e` 30 passed / 18 skipped; `test:e2e:compat` 6 passed / 4 skipped;
+`test:a11y:runnable` 7-8 per cell / 0 gaps. Local browser lanes: `assistance` 4/4,
+`assistance:default` (rollback) 4/4, `fishing` 10/10, `fishing:rollback` 4/4, `pixi-memory` 10/10,
+`pixi-pointer` 3/3, `pixi-perf` 4/4, `pixi-route` 2/2, `storage` 9/9, `data-products` 4/4,
+`subject-product` 5/5, `reload-persistence` 6/6, `offline` 1/1, `sw-shell` 1/1, `phase10-media`
+14/14.
+
+**Evidence (CI, Node 24, commit `7914c5f`, run 37890640527).** **All jobs pass**: Lint, Asset
+Licenses, Typecheck, Unit Tests (338 files / 7090 tests), Web Build and Bundle, Browser (Storage v2
+Flagged Build), Browser Smoke (Chromium Matrix), and the compatibility PR matrix:
+`pr-linux-chromium`, `pr-linux-firefox`, `pr-macos-webkit`, `pr-windows-edge`. The macOS/WebKit and
+Windows/Edge automated engine-family cells now run and pass, discharging one of the Phase 21
+carried items.
+
+**Evidence (deployment).** The production artifact is deployed at
+<https://mcfuzzysquirrel.github.io/knowledge-dungeon/> (`deploy-pages.yml`, `VITE_BASE_PATH`). The
+base path returns 200 with base-prefixed asset URLs and the shell files present; a live headless
+Chromium load boots the app, renders the Welcome heading, issues 23 same-origin requests with **0
+off-origin** requests and 0 console errors.
+
+**Rollback (tested).** `npm run build:web:rollback` forces every cutover flag to its pre-cutover
+value; the resulting artifact contains **0 Pixi / 2 Phaser chunks**, and the rollback lanes
+(`assistance:default`, `fishing:rollback`) pass against it. Per-flag `VITE_*` overrides also work.
+No data is deleted; storage-v2 generations and mirror writes are retained.
+
+**Soak.** Started on 2026-10-09 with the cutover deployment. During the soak, per working rule 14,
+only privacy, data-loss, crash, security, or critical accessibility fixes are permitted. No
+production telemetry is used; the soak report is compiled from CI, the issue tracker, and the
+manual device records.
+
+**Open (not discharged).**
+
+- **Seven-day and one-release soak** — in progress.
+- **Physical-device gates 0/5** (`tests/e2e/PHASE21-MANUAL-VERIFICATION.md`). Linux, Windows and an
+  Android tablet are available to the maintainer; a Chromebook and a macOS/Safari device are not.
+- **Real-GPU frame-time reference** — Phase 22 measured p95 33.2 ms on software WebGL and carried
+  certification here.
+- **Residual flakes**: an intermittent `compat-firefox` / `settings` `color-contrast|serious`
+  result (passed on re-run) and an intermittent Scribe `role=status` count under full parallel
+  load (re-scoped, still parallel-load sensitive).
+- The scheduled release-candidate compatibility matrix (`compatibility.yml`) has not been run for
+  this release; it would add the remaining macOS/Windows Chromium/Firefox cells.
 
 ### Unlocks
 
