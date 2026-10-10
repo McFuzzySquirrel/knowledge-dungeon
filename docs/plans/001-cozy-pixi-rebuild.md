@@ -8771,6 +8771,50 @@ manual device records.
 - The scheduled release-candidate compatibility matrix (`compatibility.yml`) has not been run for
   this release; it would add the remaining macOS/Windows Chromium/Firefox cells.
 
+### Soak-window fixes (2026-10-09 to 2026-10-10)
+
+Soak testing found and fixed three defects and one CI-margin issue. All are within working rule 14's
+allowance (critical accessibility, data integrity, and the release gate itself); none adds feature
+scope.
+
+- **`6f01494` — the Pixi world surfaces did not fill their area.** The world surface carried only a
+  `min-height` (220px) and no definite height, so the renderer always sized the canvas to ~218px and
+  the rest of the screen was empty background - on the village, dungeon and fishing screens. The
+  Phaser host it replaced filled its area; the Pixi host never did, and the cutover made it the
+  default. The world root now fills and scrolls, the surface has a real fill contract with the 220px
+  floor preserved, and the canvas is absolutely positioned so its written size cannot feed back into
+  the surface. Village 218->816px, dungeon 218->634px at 1440x900. The same commit made the
+  mobile/desktop chrome reactive (a one-shot `matchMedia` snapshot left the wrong chrome on rotation)
+  and brought every app-shell interactive target to >=44x44 CSS px - the first *measured* check of a
+  rule Phase 21 had recorded as declarations only (its exit criterion 4 read "partially verified...
+  Real layout at 200% zoom is not measured").
+- **`4c4c0dc` — statistics session ids could collide.** `defaultMintSessionId` derived the id only
+  from `(startedAtMs, subjectId)`, so a visibility-hidden close-then-restart in the same millisecond
+  reused the closed session's id; because the ledger is keyed by id, two sessions collapsed into one
+  record. The id now adds a per-process monotonic counter and a random suffix, and idempotency stays
+  in the controller (proved by a frozen-clock regression test). This surfaced as an intermittent CI
+  failure in `statisticsIdempotency`.
+- **`77926b6` — renderer resolution was applied as an absolute multiplier, not the documented cap.**
+  `WorldQualityProfile.resolution` is documented "capped from the device's own ratio" / "device-pixel
+  resolution up to 2", but the binding passed the profile's `2` straight through, so a DPR-1 display
+  rendered at 2x and downscaled - 4x the raster pixels. `resolveRendererResolution` now applies
+  `min(devicePixelRatio, cap)`: the 1440x900 dungeon canvas backing goes 2436x1268 -> 1218x634 at
+  DPR 1 (-75%); DPR 2 stays native and DPR 3 is capped at 2.
+- **CI lane margins (`bcbc560`, `77926b6`)** — the world-surface fill made software-WebGL CI render
+  ~3.7x the pixels, which pushed the assistance pond lane past a fixed 30s wall wait (PixiJS
+  `Ticker` caps `deltaMS` at 100ms, so a sub-10-FPS loop advances the pond's clock at ~10% of wall
+  time) and the village lane past Playwright's 30s default (34.3s on CI). The pond lane now spends
+  the loop budget it already declared and positively asserts the cast registered; the current-build
+  lane has explicit timeouts sized for the software floor with a recorded rationale. Phase 22
+  designated software WebGL a floor, not the certification environment, so this is margin, not a
+  weakened gate.
+
+**Verification.** CI run 38006381067 at `77926b6`: **all jobs green** - Lint, Typecheck, Asset
+Licenses, Unit Tests (338 files / 7091 tests), Web Build and Bundle, Browser (Storage v2 Flagged
+Build), Browser Smoke (Chromium Matrix), and the compatibility PR matrix (`pr-linux-chromium`,
+`pr-linux-firefox`, `pr-macos-webkit`, `pr-windows-edge`). Deployed to Pages; the live bundle
+updated.
+
 ### Unlocks
 
 Phase 24.
