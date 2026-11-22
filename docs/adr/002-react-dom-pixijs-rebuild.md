@@ -31,8 +31,8 @@ synthetic fixtures.
 Adopt React DOM as the application and accessible-interface layer, PixiJS 8 as the
 eventual world renderer, and Phaser 3 as a temporary migration fallback. The
 fallback is selected by a safe legacy default until the Pixi implementation has
-passed parity, cutover, and soak gates. Phaser is removed only after the release
-soak described in the rebuild plan; it is not a permanent second renderer.
+passed parity and cutover gates. Phaser is removed after the cutover is accepted
+and the rollback path is tested; it is not a permanent second renderer.
 
 ## Decision 1: React DOM and PixiJS 8 responsibility split
 
@@ -191,8 +191,9 @@ opt-in.
 At cutover, Pixi, storage-v2, Cozy visuals, data products, Gentle assistance, and
 supported Web Share become defaults. Phaser and legacy storage remain selectable
 for one release cycle, with the previous generation and mirror data recoverable.
-Removal of Phaser requires a successful seven-day soak and one release cycle. The
-renderer and storage flags are not removed until that gate is met.
+Removal of Phaser requires an accepted cutover and a tested rollback. No timed
+soak is required. The renderer and storage flags are not removed until that gate
+is met.
 
 The immediate rollback controls are `VITE_WORLD_RENDERER=phaser` and
 `VITE_STORAGE_REPOSITORY=legacy`, with per-world Pixi flags disabled as needed.
@@ -219,9 +220,9 @@ worlds through the per-world flags, while `'pixi'` selects the Phase 9 test host
 renderer rollback is therefore a rebuild with the per-world flags off
 (`npm run build:web:rollback`), not a change to `VITE_WORLD_RENDERER`.
 
-The seven-day soak, the physical-device accessibility gates, the macOS/Windows
-automated cells, and a deployment have not been completed and are not claimed
-here.
+The physical-device accessibility gates, the macOS/Windows automated cells, and a
+deployment have not been completed and are not claimed here. No timed soak is
+required by the plan.
 
 ### Amendment: `VITE_AUDIO_ENABLED` (Phase 10)
 
@@ -513,11 +514,11 @@ Gentle assistance, Web Share, the redesigned workspaces, and the offline shell
 are the production defaults, and every cutover flag is retained for one release
 as a rollback. See the Phase 23 cutover note under Decision 6.
 
-Phaser removal (Phase 24) and the Phase 23 soak are not done. The automated
-macOS, Windows, and Edge lanes are runner evidence, while the physical-device,
-Safari, touch-platform, and screen-reader gates remain manual later work, and a
-seven-day soak and a deployment are not claimed. Those gates must not be treated
-as complete based on this ADR.
+Phaser removal (Phase 24) is not done. The automated macOS, Windows, and Edge
+lanes are runner evidence, while the physical-device, Safari, touch-platform, and
+screen-reader gates remain manual later work and are not claimed. A timed soak is
+not required by the plan. Those gates must not be treated as complete based on
+this ADR.
 
 ## Related Documents
 

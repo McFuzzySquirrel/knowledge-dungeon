@@ -4,7 +4,7 @@ import { useSubjectStore } from '@/store/subjectStore';
 import { usePreferencesStore, type ColorTheme } from '@/store/preferencesStore';
 import { useProgressionStore } from '@/store/progressionStore';
 import { useLoadSubjectFlow } from '@/ui/hooks/useLoadSubjectFlow';
-import { type VillageStructure, getDungeonPortalSlots } from '@/data/villageLayout';
+import { type VillageStructure, getDungeonPortalSlots, WHEEL_ZOOM_STEP } from '@/data/villageLayout';
 import type { PlayerClassId } from '@/game/systems/playerClasses';
 import type { VillageWorldModel, WorldPointOfInterest } from '@/application/contracts/world';
 import type { VillageRendererCapabilities, WorldRenderer } from '@/application/contracts/renderer';
@@ -45,6 +45,7 @@ import {
 import { useVillageNpcSurface, type VillageActionBridge } from '@/ui/village/useVillageNpcSurface';
 import { useVillageSurfaceMode } from '@/ui/village/useVillageSurfaceMode';
 import { VillageHud } from '@/ui/village/VillageHud';
+import { VillageGameplayHud } from '@/ui/gameplay/VillageGameplayHud';
 import { VillageLaunchers } from '@/ui/village/VillageLaunchers';
 import { AssistanceSlot } from '@/ui/assistance/AssistanceSlot';
 import type { VillageCollectionTotals, VillageStudyTotals, VillageSubjectSummary } from '@/ui/village/villageTypes';
@@ -392,6 +393,14 @@ export function VillageScreen(): JSX.Element {
     rendererRef.current?.triggerInteract();
   }, [pixiVillage]);
 
+  const zoomVillageIn = useCallback((): void => {
+    pixiVillageRef.current?.zoomBy(WHEEL_ZOOM_STEP);
+  }, []);
+
+  const zoomVillageOut = useCallback((): void => {
+    pixiVillageRef.current?.zoomBy(-WHEEL_ZOOM_STEP);
+  }, []);
+
   /**
    * The learner's village tile, published as `data-village-player` on this screen's root.
    *
@@ -664,29 +673,32 @@ export function VillageScreen(): JSX.Element {
       // without this the DOM could not tell a learner (or a test) that the
       // village they walked into had become the pond they are fishing in.
       data-world={fishing.active ? 'fishing' : 'village'}
+      data-gameplay-shell={pixiVillage ? 'village' : undefined}
     >
-      <VillageHud
-        questStep={questStep}
-        subjects={subjects}
-        selectedClass={selectedClass}
-        onSelectClass={(cls) => setSelectedClass(cls as PlayerClassId ?? null)}
-        onCreateSubject={() => setCreateOpen(true)}
-        onOpenData={() => setDataOpen(true)}
-        colorTheme={colorTheme}
-        onColorThemeChange={(theme) => setColorTheme(theme as ColorTheme)}
-        onQuestClick={handleSelectQuestStep}
-        onStatsClick={() => setShowStats(true)}
-        onSettingsClick={() => setSettingsOpen(true)}
-        nearbyTargets={npcSurface.targets}
-        nearbyListAvailable={npcSurface.listAvailable}
-        nearbyInvokeAvailable={npcSurface.invokeAvailable}
-        onInvokeNearby={onInvokeNearby}
-        // Two surfaces that both want the bottom of a touch viewport: opening one
-        // closes the other. A wide viewport has room for both and never fires this.
-        onDrawerOpenChange={(open) => {
-          if (open) setInfoPanel(null);
-        }}
-      />
+      {!pixiVillage ? (
+        <VillageHud
+          questStep={questStep}
+          subjects={subjects}
+          selectedClass={selectedClass}
+          onSelectClass={(cls) => setSelectedClass(cls as PlayerClassId ?? null)}
+          onCreateSubject={() => setCreateOpen(true)}
+          onOpenData={() => setDataOpen(true)}
+          colorTheme={colorTheme}
+          onColorThemeChange={(theme) => setColorTheme(theme as ColorTheme)}
+          onQuestClick={handleSelectQuestStep}
+          onStatsClick={() => setShowStats(true)}
+          onSettingsClick={() => setSettingsOpen(true)}
+          nearbyTargets={npcSurface.targets}
+          nearbyListAvailable={npcSurface.listAvailable}
+          nearbyInvokeAvailable={npcSurface.invokeAvailable}
+          onInvokeNearby={onInvokeNearby}
+          // Two surfaces that both want the bottom of a touch viewport: opening one
+          // closes the other. A wide viewport has room for both and never fires this.
+          onDrawerOpenChange={(open) => {
+            if (open) setInfoPanel(null);
+          }}
+        />
+      ) : null}
 
       <div className="village-game-area">
         {pixiVillage && LazyPixiVillageWorld !== null ? (
@@ -739,6 +751,28 @@ export function VillageScreen(): JSX.Element {
         <CompassOverlay readPoi={readPoi} />
         {/* Phase 21: the zoom read-out. See `VillageZoomReadOut` for the wording and the sampling. */}
         <VillageZoomReadOut readZoom={readZoom} />
+        {pixiVillage && !fishing.active ? (
+          <VillageGameplayHud
+            questStep={questStep}
+            subjects={subjects}
+            selectedClass={selectedClass}
+            onSelectClass={(cls) => setSelectedClass(cls as PlayerClassId ?? null)}
+            nearbyTargets={npcSurface.targets}
+            nearbyListAvailable={npcSurface.listAvailable}
+            nearbyInvokeAvailable={npcSurface.invokeAvailable}
+            onInvokeNearby={onInvokeNearby}
+            onQuestClick={handleSelectQuestStep}
+            onCreateSubject={() => setCreateOpen(true)}
+            onOpenData={() => setDataOpen(true)}
+            onStatsClick={() => setShowStats(true)}
+            onSettingsClick={() => setSettingsOpen(true)}
+            colorTheme={colorTheme}
+            onColorThemeChange={(theme) => setColorTheme(theme as ColorTheme)}
+            onInteract={triggerInteract}
+            onZoomIn={zoomVillageIn}
+            onZoomOut={zoomVillageOut}
+          />
+        ) : null}
       </div>
 
       {infoPanel !== null ? (

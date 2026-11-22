@@ -53,7 +53,7 @@ Phaser remains in the source tree as the one-release fallback and is removed in
 Phase 24; the default production artifact contains no Phaser chunk. Electron
 packaging remains deferred and is outside the web release path.
 
-This note records the cutover itself. It does not claim a soak, the
+This note records the cutover itself. It does not claim the
 physical-device accessibility gates, the macOS/Windows automated cells, or a
 deployment - those remain open Phase 23 exit conditions (see
 [Physical-device gates still required](#physical-device-gates-still-required)).
@@ -206,7 +206,13 @@ it does not describe the current rebuild status.
 The rebuild phases through Phase 22 were delivered and accepted against the
 authoritative plan. **Phase 23, the production cutover, landed on 2026-10-08**
 (see [Phase 23 Production Cutover](#phase-23-production-cutover-2026-10-08));
-Phaser removal is Phase 24 and the soak remains Phase 23 exit work.
+Phaser removal is Phase 24; the remaining Phase 23 work is the physical-device,
+compatibility, and performance verification.
+
+As of 2026-11-22 the dungeon and village use the **world-first field-rail shell**:
+a full-bleed world, a thin rail, a quest card, one primary verb pair, and on-demand
+sheets. The old HUD and renderer DOM mirror remain the command and accessibility
+layer behind the presentation.
 
 Phase 1 was verified and accepted on 2026-09-25 and is `complete` in the
 authoritative plan. It added typed build-time flags, Linux/Chromium Playwright

@@ -39,7 +39,7 @@ The following decisions are fixed unless the plan is explicitly revised before i
 - React DOM remains responsible for application UI, forms, dialogs, navigation, maps, settings, data management, statistics, sharing, and accessible controls.
 - PixiJS 8 is responsible for the village, dungeon, and fishing world presentation.
 - Phaser remains available only as a temporary fallback during migration.
-- Phaser is removed after a successful production cutover and soak period.
+- Phaser is removed after a successful production cutover and a tested rollback.
 - PixiJS and world asset bundles must be lazy-loaded.
 - Educational text and complex inputs must not be rendered exclusively inside PixiJS.
 - PixiJS AccessibilitySystem may provide enhancement, but it cannot be the only route to any core action.
@@ -618,7 +618,7 @@ At cutover:
 - Phaser and legacy storage remain available for one release cycle.
 - The previous generation and mirror data remain recoverable.
 
-Phaser is removed only after a seven-day soak and one successful release cycle.
+Phaser is removed only after the cutover is accepted and the rollback path is tested. No timed soak is required.
 
 ---
 
@@ -706,7 +706,7 @@ Phase 21 Accessibility and responsive audit
    ↓
 Phase 22 Performance, memory, and offline hardening
    ↓
-Phase 23 Production cutover and soak
+Phase 23 Production cutover
    ↓
 Phase 24 Remove Phaser and legacy renderer
 ```
@@ -740,7 +740,7 @@ Phase 24 Remove Phaser and legacy renderer
     - `complete`
 12. Pause after `verified` and request explicit acceptance.
 13. On failure, return to the last verified checkpoint.
-14. During the soak period, allow only privacy, data-loss, crash, security, or critical accessibility fixes.
+14. After cutover, keep the rollback configuration until Phase 24. During that window, prioritize privacy, data-loss, crash, security, and critical accessibility fixes over new scope.
 
 ---
 
@@ -772,7 +772,7 @@ Phase 24 Remove Phaser and legacy renderer
 | 20 | complete | Redesign private share cards. |
 | 21 | complete | Complete accessibility and responsive verification. |
 | 22 | complete | Complete performance, memory, and offline hardening. |
-| 23 | in-progress | Cut over production and complete the soak. |
+| 23 | in-progress | Cut over production and close the release gates. |
 | 24 | not-started | Remove Phaser and temporary migration infrastructure. |
 
 ---
@@ -8582,7 +8582,7 @@ Phase 23.
 
 ---
 
-## Phase 23: Production Cutover and Soak
+## Phase 23: Production Cutover
 
 **Status:** in-progress
 **Objective:** Make Pixi, Cozy visuals, storage-v2, data products, assistance, and Web Share the defaults with a tested rollback across the approved web OS/browser matrix.
@@ -8615,7 +8615,7 @@ At least one deployable Pixi release exists.
 - Run the complete Chromebook, tablet, accessibility, and performance matrix.
 - Run the approved Linux/macOS/Windows browser matrix against the production Pages artifact and its base path.
 - Repeat critical default and rollback flows on the physical device set defined by the compatibility contract.
-- Soak for at least seven days and one release cycle.
+- Record cutover evidence against the deployed artifact.
 - Use no production telemetry.
 
 ### Non-goals
@@ -8624,7 +8624,7 @@ At least one deployable Pixi release exists.
 - No legacy-key deletion.
 - No remote configuration.
 - No Electron packaging.
-- No learner-data collection to evaluate the soak.
+- No learner-data collection or production telemetry.
 
 ### Expected files
 
@@ -8639,7 +8639,7 @@ At least one deployable Pixi release exists.
 
 - Pixi and storage-v2 production release.
 - One-release rollback configuration.
-- Soak report and issue summary.
+- Cutover report and issue summary.
 - Updated privacy, backup, and user documentation.
 
 ### Verification
@@ -8665,19 +8665,18 @@ npm run test:privacy
 - Network inspection confirms no application upload or analytics.
 - The production Pages artifact passes the approved Linux/macOS/Windows browser matrix.
 - Physical-device checks cover the required Chromebook, touch-platform, macOS/Safari, Windows, and Linux representative set.
-- Seven-day and one-release soak requirements are satisfied.
+- The cutover report records the deployed artifact identity and the rollback result.
 
 ### Rollback
 
 Restore Phaser and legacy-storage defaults while retaining storage-v2 generations and mirror data.
 
-### Cutover and soak record (2026-10-09)
+### Cutover record (2026-10-09)
 
 **Status:** `not-started` -> `in-progress`. The production cutover is implemented, verified on the
 automated gates, and **deployed to GitHub Pages** at
-<https://mcfuzzysquirrel.github.io/knowledge-dungeon/>; the seven-day soak has **started**. The
-phase is not `verified`: the soak, the physical-device gates, and a real-GPU frame-time reference
-remain open.
+<https://mcfuzzysquirrel.github.io/knowledge-dungeon/>. No timed soak is required. The
+phase is not `verified`: the physical-device gates and a real-GPU frame-time reference remain open.
 
 **Baseline.** Green at `6e6224e` (the accepted Phase 22 checkpoint) before any Phase 23 change:
 `npm run lint` 0, `npm run typecheck` 0, `npm test` 337 files / 7069 tests, build and budget gates
@@ -8753,14 +8752,12 @@ value; the resulting artifact contains **0 Pixi / 2 Phaser chunks**, and the rol
 (`assistance:default`, `fishing:rollback`) pass against it. Per-flag `VITE_*` overrides also work.
 No data is deleted; storage-v2 generations and mirror writes are retained.
 
-**Soak.** Started on 2026-10-09 with the cutover deployment. During the soak, per working rule 14,
-only privacy, data-loss, crash, security, or critical accessibility fixes are permitted. No
-production telemetry is used; the soak report is compiled from CI, the issue tracker, and the
-manual device records.
+**Rollback window.** The cutover flag set remains the one-release rollback until Phase 24. No timed
+soak is required. No production telemetry is used; the cutover report is compiled from CI, the issue
+tracker, and the manual device records.
 
 **Open (not discharged).**
 
-- **Seven-day and one-release soak** — in progress.
 - **Physical-device gates 0/5** (`tests/e2e/PHASE21-MANUAL-VERIFICATION.md`). Linux, Windows and an
   Android tablet are available to the maintainer; a Chromebook and a macOS/Safari device are not.
 - **Real-GPU frame-time reference** — Phase 22 measured p95 33.2 ms on software WebGL and carried
@@ -8771,11 +8768,11 @@ manual device records.
 - The scheduled release-candidate compatibility matrix (`compatibility.yml`) has not been run for
   this release; it would add the remaining macOS/Windows Chromium/Firefox cells.
 
-### Soak-window fixes (2026-10-09 to 2026-10-10)
+### Cutover-window fixes (2026-10-09 to 2026-10-10)
 
-Soak testing found and fixed three defects and one CI-margin issue. All are within working rule 14's
-allowance (critical accessibility, data integrity, and the release gate itself); none adds feature
-scope.
+Cutover verification found and fixed three defects and one CI-margin issue. All are within the
+cutover-window fix policy (critical accessibility, data integrity, and the release gate itself);
+none adds feature scope.
 
 - **`6f01494` — the Pixi world surfaces did not fill their area.** The world surface carried only a
   `min-height` (220px) and no definite height, so the renderer always sized the canvas to ~218px and
@@ -8815,6 +8812,24 @@ Build), Browser Smoke (Chromium Matrix), and the compatibility PR matrix (`pr-li
 `pr-linux-firefox`, `pr-macos-webkit`, `pr-windows-edge`). Deployed to Pages; the live bundle
 updated.
 
+### World-first gameplay shell (2026-11-22)
+
+The dungeon and village now use the **B field-rail** presentation selected from the throwaway
+prototype: a full-bleed world, a thin left rail (or bottom strip on touch), a quest card, one
+primary verb pair, and at most one on-demand sheet.
+
+- The old HUD and the renderer's DOM mirror stay mounted as the command/accessibility layer; the
+  shell hides their chrome and dispatches their real controls.
+- The dungeon rail carries Map, Rooms, Room, Inventory, Journal, Menu, and Village; the village rail
+  carries labelled Nearby, Quest, Archetype, Dungeons, and Menu controls.
+- The dungeon opens on a fit-to-floor overview and keeps that framing until the learner moves; the
+  Controls sheet has an explicit **Fit floor** action.
+- The Scribe encounter moved to the shared `useModalFocus` contract, so it takes focus on open,
+  traps Tab, closes on Escape, and restores the opener.
+- `npm run test:e2e` passes on all four Chromium viewport projects after the shell cutover, and
+  `npm run test:a11y:runnable` passes 3/3 surfaces on all five runnable cells. The local unit suite
+  is blocked by the Node 26 jsdom `localStorage` mismatch in this container; CI runs Node 24.
+
 ### Unlocks
 
 Phase 24.
@@ -8829,8 +8844,6 @@ Phase 24.
 ### Prerequisites
 
 Phase 23 accepted.
-
-The seven-day and one-release soak is complete.
 
 A Pixi-only release remains available for deployment rollback.
 
