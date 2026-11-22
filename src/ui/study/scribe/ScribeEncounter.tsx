@@ -567,10 +567,19 @@ export function ScribeEncounterDialog(): ReactNode {
    * worked after the frame was focused by hand. `useModalFocus` is keyed on `isOpen`,
    * traps Tab, closes on Escape, restores the opener, and participates in the shared
    * stacking order with Settings and the village sheets.
+   *
+   * The guide conversation is a region inside this dialog and owns Escape while it is
+   * open, exactly as it did before the modal contract moved. The capture-phase modal
+   * handler must therefore decline, rather than closing the whole encounter and
+   * unmounting the guide's own focus restoration.
    */
+  const closeFromEscape = useCallback((): void => {
+    if (document.querySelector('[aria-label^="Guide conversation about "]') !== null) return;
+    closeNoteEditor();
+  }, [closeNoteEditor]);
   const frameRef = useModalFocus<HTMLDivElement>({
     active: isOpen,
-    onEscape: closeNoteEditor,
+    onEscape: closeFromEscape,
   });
 
   const room = roomId === null ? null : (snapshot?.rooms[roomId] ?? null);

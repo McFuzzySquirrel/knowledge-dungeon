@@ -77,17 +77,13 @@ function repoRelative(file: string): string {
 /**
  * The dialogs this audit covers by name.
  *
- * `src/ui/study/scribe/ScribeEncounter.tsx` is **excluded on purpose** and the exclusion is a finding,
- * not an oversight: it hand-rolls all four behaviours (its own `FOCUSABLE_SELECTOR`, its own Tab
- * containment, its own Escape, its own restoration) instead of calling the shared hook. It is correct
- * today and it is the one surface whose keyboard contract can drift from the other nineteen, because
- * nothing forces the two implementations to agree. Converting it is the recorded follow-up; it is not
- * done here because that surface is mid-migration from `NoteEditorModal` and rewriting it belongs with
- * whoever owns that migration.
+ * `src/ui/study/scribe/ScribeEncounter.tsx` used to be the one hand-rolled
+ * exception: its own focusable selector, Tab containment, Escape and restoration.
+ * It now calls `useModalFocus` like every other dialog, so there are no
+ * hand-rolled exceptions left. The source gate below therefore has one shape,
+ * not two.
  */
-const HAND_ROLLED_DIALOGS: readonly string[] = Object.freeze([
-  'src/ui/study/scribe/ScribeEncounter.tsx',
-]);
+const HAND_ROLLED_DIALOGS: readonly string[] = Object.freeze([]);
 
 /** Non-modal surfaces that declare a dialog role deliberately, with the reason. */
 const DELIBERATELY_NON_MODAL: readonly { file: string; reason: string }[] = Object.freeze([
@@ -124,16 +120,6 @@ describe('every dialog surface in src/ui has focus management', () => {
       dialogFiles.length,
       'no file under src/ui declares role="dialog", so the scan is looking at the wrong text',
     ).toBeGreaterThan(10);
-  });
-
-  it.each(HAND_ROLLED_DIALOGS)('%s is the recorded hand-rolled exception and still traps focus', (file) => {
-    const source = readFileSync(path.join(REPO_ROOT, file), 'utf8');
-    // Not "does it look right" - the four mechanics by name, so an edit that removes one is caught even
-    // while the conversion is still outstanding.
-    expect(source, 'the hand-rolled trap lost its focusable selector').toContain('FOCUSABLE_SELECTOR');
-    expect(source, 'the hand-rolled trap lost its Tab containment').toContain("event.key !== 'Tab'");
-    expect(source, 'the hand-rolled trap lost its Escape handling').toContain("event.key === 'Escape'");
-    expect(source, 'the hand-rolled trap lost its focus restoration').toContain('restoreFocusTo');
   });
 
   it.each(DELIBERATELY_NON_MODAL)('$file uses the shared hook - $reason', ({ file }) => {

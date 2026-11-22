@@ -1658,6 +1658,19 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       globals: true,
       setupFiles: ['vitest.setup.ts'],
+      /*
+       * Node 26 enables the experimental Web Storage API by default and exposes an
+       * undefined `globalThis.localStorage` when `--localstorage-file` was not
+       * supplied. Vitest's jsdom environment copies global properties onto the
+       * window, so that undefined global overwrites jsdom's real `localStorage` and
+       * every test that calls `window.localStorage.clear()` fails during setup.
+       *
+       * Disabling the Node global lets jsdom supply its own Storage. Node 24, the
+       * repository's `.nvmrc`, does not have the flag and does not need it.
+       */
+      ...(Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10) >= 26
+        ? { execArgv: ['--no-experimental-webstorage'] }
+        : {}),
     },
   };
 });
