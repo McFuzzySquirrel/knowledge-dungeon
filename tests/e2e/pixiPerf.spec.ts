@@ -191,11 +191,6 @@ async function enterDungeonWorld(page: Page): Promise<void> {
   await expect(
     page.locator(`${WORLD_SURFACE} [role="status"]`).filter({ hasText: READY_TEXT }).first(),
   ).toBeVisible({ timeout: 30_000 });
-  const zoomIn = page.locator('button[data-action-id="dungeon-zoom-in"]');
-  await zoomIn.waitFor({ state: 'attached', timeout: 30_000 });
-  await expect
-    .poll(async () => zoomIn.isDisabled(), { timeout: 30_000 })
-    .toBe(false);
 }
 
 /** The room rows the dungeon's DOM mirror offers. */

@@ -26,7 +26,7 @@
   overflow: hidden;
 }
 
-[data-gameplay-shell='dungeon'] .pixi-dungeon-world > :not([role='img']):not([role='group'][aria-label='Dungeon actions']) {
+[data-gameplay-shell='dungeon'] .pixi-dungeon-world > :not([role='img']) {
   display: none !important;
 }
 
@@ -35,6 +35,10 @@
   min-height: 0 !important;
   height: 100%;
   gap: 0 !important;
+}
+
+[data-gameplay-shell='dungeon'] .pixi-dungeon-world > [role='img'] > p {
+  display: none !important;
 }
 
 [data-gameplay-shell='dungeon'] .pixi-dungeon-world [data-pixi-surface] {
