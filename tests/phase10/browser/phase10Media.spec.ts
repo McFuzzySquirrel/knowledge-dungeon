@@ -440,6 +440,15 @@ async function openAudioTab(page: Page): Promise<void> {
   await (await settingsButton(page)).click();
   await page.getByRole('tab', { name: 'Audio' }).click();
   await expect(page.locator('.kd-audio-settings')).toBeVisible();
+  /*
+   * The modal enters with a short transform/opacity animation. The panel is
+   * visible at the first frame, so an axe scan taken immediately can measure a
+   * partially composited background and report a contrast failure that does not
+   * exist once the entrance settles. The tablet viewport is the one where this
+   * window was hit in CI; waiting for the animation removes the timing, not the
+   * assertion.
+   */
+  await page.waitForTimeout(450);
 }
 
 async function closeSettings(page: Page): Promise<void> {
