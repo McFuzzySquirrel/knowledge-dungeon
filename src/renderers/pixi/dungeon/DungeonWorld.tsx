@@ -110,6 +110,8 @@ export interface DungeonWorldHandle extends DungeonRendererCapabilities {
   restart(): void;
   /** Perform a named world action the way a DOM control does. */
   activateFromDom(actionId: string): void;
+  /** Frame the visible floor in the viewport. */
+  fitFloor(): void;
   /**
    * Read the artifact surface, so a parent surface renders the same words the canvas drew.
    *
@@ -340,6 +342,7 @@ const DungeonWorld = forwardRef<DungeonWorldHandle, DungeonWorldProps>(function 
       isReady: () => rendererRef.current?.isReady() ?? false,
       restart: () => rendererRef.current?.restart(),
       activateFromDom: (actionId) => rendererRef.current?.activateFromDom(actionId),
+      fitFloor: () => rendererRef.current?.fitFloor(),
       readArtifactSnapshot: () =>
         rendererRef.current?.readArtifactSnapshot() ?? IDLE_DUNGEON_ARTIFACT_SNAPSHOT,
       setFloorVisibility: (visibility) => rendererRef.current?.setFloorVisibility(visibility),

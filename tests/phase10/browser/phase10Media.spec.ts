@@ -377,38 +377,59 @@ async function enterGameWorld(page: Page): Promise<void> {
 }
 
 /**
- * A locator that matches the Settings control on either screen.
+ * A locator that matches the settings entry point on either screen.
  *
  * Used only as a *readiness* signal — "some settings control is on screen, so the
- * screen has mounted" — because it matches both names. Anything that has to click
- * the control uses {@link settingsButton}, which resolves which one it is.
+ * screen has mounted" — because it matches both names. The gameplay shell puts
+ * Settings inside its Menu sheet, so the Menu button is the readiness signal when
+ * no Settings control is directly visible. Anything that has to click Settings
+ * uses {@link settingsButton}, which opens that sheet when needed.
  */
 function settingsReady(page: Page) {
-  return page.getByRole('button', { name: /settings/i }).first();
+  return page
+    .getByRole('button', { name: /settings/i })
+    .first()
+    .or(
+      page
+        .locator('.gameplay-layer')
+        .getByRole('button', { name: /^(Menu|Open village status and controls)$/ })
+        .first(),
+    );
 }
 
 /**
  * The Settings control on whichever screen is mounted.
  *
- * The two screens name it differently and neither name contains the other as a
- * strict match: the game HUD's icon button is `Open settings`, and the village
- * sidebar's reads `⚙ Settings`. The HUD's own name is tried first because the game
- * screen is the one the audio journey spends most of its time on, and the fallback
- * is chosen by *label* rather than by index — an index would break the moment a
- * third screen adds a control whose name happens to contain "settings".
+ * The two screen families name it differently: the game HUD's icon button is
+ * `Open settings`, the village sidebar reads `⚙ Settings`, and the world-first
+ * shell keeps Settings in its Menu sheet. The shell is opened on demand here so
+ * the caller can keep treating the result as "the Settings control".
  */
 async function settingsButton(page: Page) {
   const hud = page.getByRole('button', { name: 'Open settings' });
-  if ((await hud.count()) > 0) return hud.first();
+  if ((await hud.count()) > 0 && (await hud.first().isVisible())) return hud.first();
   const candidates = page.getByRole('button', { name: /settings/i });
   const total = await candidates.count();
   for (let index = 0; index < total; index += 1) {
     const candidate = candidates.nth(index);
-    const label = ((await candidate.getAttribute('aria-label')) ?? (await candidate.innerText())).trim();
-    // A control whose label only *mentions* settings in its title is not the one.
-    if (/open settings/i.test(label)) continue;
+    if (!(await candidate.isVisible())) continue;
     return candidate;
   }
+
+  const shellMenu = page
+    .locator('.gameplay-layer')
+    .getByRole('button', { name: /^(Menu|Open village status and controls)$/ })
+    .first();
+  if ((await shellMenu.count()) > 0 && (await shellMenu.isVisible())) {
+    await shellMenu.click();
+    await expect(page.locator('.gameplay-sheet')).toBeVisible({ timeout: 15_000 });
+    const sheetSettings = page
+      .locator('.gameplay-sheet')
+      .getByRole('button', { name: /settings/i })
+      .first();
+    if ((await sheetSettings.count()) > 0) return sheetSettings;
+  }
+
   throw new Error('No Settings control is present on this screen.');
 }
 
@@ -419,11 +440,24 @@ async function openAudioTab(page: Page): Promise<void> {
   await (await settingsButton(page)).click();
   await page.getByRole('tab', { name: 'Audio' }).click();
   await expect(page.locator('.kd-audio-settings')).toBeVisible();
+  /*
+   * The modal enters with a short transform/opacity animation. The panel is
+   * visible at the first frame, so an axe scan taken immediately can measure a
+   * partially composited background and report a contrast failure that does not
+   * exist once the entrance settles. The tablet viewport is the one where this
+   * window was hit in CI; waiting for the animation removes the timing, not the
+   * assertion.
+   */
+  await page.waitForTimeout(450);
 }
 
 async function closeSettings(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.locator('.kd-audio-settings')).toHaveCount(0);
+  const shellSheet = page.locator('.gameplay-sheet');
+  if ((await shellSheet.count()) > 0) {
+    await shellSheet.getByRole('button', { name: /^Close/ }).click();
+  }
 }
 
 /** The three persisted values, read from the real controls. */

@@ -308,6 +308,13 @@ export interface DungeonScene extends WorldScene<DungeonRendererCapabilities> {
    * at a thousandth of its speed still eases.
    */
   readCameraState(): CameraState;
+  /**
+   * Frame the visible floor in the viewport.
+   *
+   * Used by the world-first shell on first mount and by its "Fit floor" control.
+   * Distinct from the per-room auto-zoom: this is an overview, not a room close-up.
+   */
+  fitFloor(): void;
 }
 
 /* ── The scene ─────────────────────────────────────────────────────────────── */
@@ -411,6 +418,14 @@ export function createDungeonScene(
   let zoomTarget = DUNGEON_ZOOM_INSIDE_ROOM;
   let zoomElapsedMs = 0;
   let zoomFrom = DUNGEON_ZOOM_INSIDE_ROOM;
+  /**
+   * True while the shell is showing the floor overview.
+   *
+   * The camera must stop following the player during the overview or the fit's
+   * centre is replaced by the player on the next frame. The first movement clears
+   * it, so walking resumes the ordinary follow camera.
+   */
+  let fitView = false;
 
   function applyCamera(): void {
     const state = camera.getState();
@@ -959,9 +974,11 @@ export function createDungeonScene(
         callbacks.onFloorTransition?.({ fromRoomId: currentRoomId, direction: 'down' });
         return true;
       case DUNGEON_ZOOM_IN_ACTION_ID:
+        fitView = false;
         adoptZoomAsTarget((rig) => rig.addZoom(DUNGEON_ZOOM_STEP));
         return true;
       case DUNGEON_ZOOM_OUT_ACTION_ID:
+        fitView = false;
         adoptZoomAsTarget((rig) => rig.addZoom(-DUNGEON_ZOOM_STEP));
         return true;
       case DUNGEON_ARTIFACT_ACTION_ID:
@@ -982,6 +999,7 @@ export function createDungeonScene(
       let vx = move.x;
       let vy = move.y;
       if (vx !== 0 || vy !== 0) {
+        fitView = false;
         const length = Math.hypot(vx, vy) || 1;
         vx = (vx / length) * DUNGEON_PLAYER_SPEED;
         vy = (vy / length) * DUNGEON_PLAYER_SPEED;
@@ -1044,11 +1062,13 @@ export function createDungeonScene(
     // `snapTo`, not `follow` plus a lerp of `1`. Both settle on the same frame, but `snapTo`
     // also writes the follow target, so the next `follow` starts from where the camera
     // actually is rather than easing toward a point the player left frames ago.
-    if (motion.scale > 0) {
-      camera.follow(rigX(player.x), rigY(player.y));
-      camera.update(deltaMs);
-    } else {
-      camera.snapTo(rigX(player.x), rigY(player.y));
+    if (!fitView) {
+      if (motion.scale > 0) {
+        camera.follow(rigX(player.x), rigY(player.y));
+        camera.update(deltaMs);
+      } else {
+        camera.snapTo(rigX(player.x), rigY(player.y));
+      }
     }
     applyCamera();
   }
@@ -1058,9 +1078,49 @@ export function createDungeonScene(
     return Object.freeze({ ...camera.getState() });
   }
 
+  /**
+   * Frame every visible room on this floor.
+   *
+   * The B shell opens on a floor overview; the per-room auto-zoom still applies as
+   * the player walks. Center and zoom are adopted together so the camera cannot
+   * ease from a stale center after the fit.
+   */
+  function fitFloor(): void {
+    const visibleRooms =
+      visibleRoomIds === null
+        ? map.rooms
+        : map.rooms.filter((room) => visibleRoomIds?.has(room.roomId) === true);
+    const rooms = visibleRooms.length > 0 ? visibleRooms : map.rooms;
+    const minX = Math.min(...rooms.map((room) => room.gridX));
+    const maxX = Math.max(...rooms.map((room) => room.gridX + room.width));
+    const minY = Math.min(...rooms.map((room) => room.gridY));
+    const maxY = Math.max(...rooms.map((room) => room.gridY + room.height));
+    const padding = tileSize * 1.5;
+    const width = (maxX - minX) * tileSize + padding * 2;
+    const height = (maxY - minY) * tileSize + padding * 2;
+    const state = camera.getState();
+    const fit = Math.min(state.viewportWidth / width, state.viewportHeight / height) * 0.82;
+    camera.setZoom(fit);
+    zoomTarget = camera.zoom;
+    zoomFrom = camera.zoom;
+    zoomElapsedMs = DUNGEON_ZOOM_TWEEN_MS;
+    input.setZoom(camera.zoom);
+    camera.snapTo(
+      ((minX + maxX) / 2) * tileSize - originX,
+      ((minY + maxY) / 2) * tileSize - originY,
+    );
+    fitView = true;
+    applyCamera();
+    publishToDomMirror();
+  }
+
   function onResize(width: number, height: number): void {
     camera.setViewport(width, height);
-    applyCamera();
+    if (fitView) {
+      fitFloor();
+    } else {
+      applyCamera();
+    }
     // The dialog anchor is a projection through this camera, so a resize invalidates it
     // even though nothing in the dungeon moved. Re-measuring emits nothing new: the guide
     // in range has not changed, so `onNpcOutOfRange` does not fire a second time.
@@ -1076,6 +1136,7 @@ export function createDungeonScene(
     if (landing === null) return;
     player.position.set(landing.x, landing.y);
     insideRoom = true;
+    fitView = false;
     setZoomTarget(DUNGEON_ZOOM_INSIDE_ROOM);
     enterRoom(roomId);
     camera.snapTo(rigX(landing.x), rigY(landing.y));
@@ -1138,6 +1199,7 @@ export function createDungeonScene(
     readState,
     readArtifactSnapshot,
     readCameraState,
+    fitFloor,
     update,
     onResize,
     setMotionProfile,

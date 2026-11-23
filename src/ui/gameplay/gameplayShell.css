@@ -1,0 +1,693 @@
+/*
+ * World-first gameplay shell (variant B).
+ *
+ * The world is the screen. A thin field rail, one quest card, one primary verb
+ * pair, and a single on-demand sheet carry the chrome. The old HUD and the DOM
+ * world mirror stay mounted as the command layer; this stylesheet hides their
+ * chrome and gives the shell the viewport.
+ */
+
+/* ── Dungeon: hide the old HUD and world mirror chrome ───────────────────── */
+[data-gameplay-shell='dungeon'] .hud-sidebar-wrapper,
+[data-gameplay-shell='dungeon'] .hud-drawer-tab,
+[data-gameplay-shell='dungeon'] .hud-drawer-panel,
+[data-gameplay-shell='dungeon'] .tutorial-overlay,
+[data-gameplay-shell='dungeon'] .floating-actions,
+[data-gameplay-shell='dungeon'] .feature-tooltip,
+[data-gameplay-shell='dungeon'] .mobile-touch-hint {
+  display: none !important;
+}
+
+[data-gameplay-shell='dungeon'] .game-canvas {
+  padding-bottom: 0 !important;
+}
+
+[data-gameplay-shell='dungeon'] .pixi-dungeon-world {
+  overflow: hidden;
+}
+
+[data-gameplay-shell='dungeon'] .pixi-dungeon-world > :not([role='img']) {
+  display: none !important;
+}
+
+[data-gameplay-shell='dungeon'] .pixi-dungeon-world > [role='img'] {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100%;
+  gap: 0 !important;
+}
+
+[data-gameplay-shell='dungeon'] .pixi-dungeon-world [data-pixi-surface] {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+[data-gameplay-shell='dungeon'] .toast-stack {
+  top: 12px;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+}
+
+[data-gameplay-shell='village'] .toast-stack {
+  top: 12px;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+}
+
+@media (max-width: 900px) {
+  [data-gameplay-shell] .toast-stack {
+    top: 132px;
+  }
+}
+
+[data-gameplay-shell='dungeon'] .minimap {
+  right: 12px;
+  bottom: 88px;
+}
+
+@media (max-width: 900px) {
+  [data-gameplay-shell='dungeon'] .minimap {
+    display: none;
+  }
+}
+
+/* ── Village: hide the old HUD and world mirror chrome ───────────────────── */
+[data-gameplay-shell='village'] .village-hud-wrapper,
+[data-gameplay-shell='village'] .village-hud-toggle,
+[data-gameplay-shell='village'] .village-hud,
+[data-gameplay-shell='village'] .village-compass,
+[data-gameplay-shell='village'] .village-zoom-readout {
+  display: none !important;
+}
+
+[data-gameplay-shell='village'] .game-canvas {
+  padding-bottom: 0 !important;
+}
+
+[data-gameplay-shell='village'] .pixi-village-world {
+  overflow: hidden;
+}
+
+[data-gameplay-shell='village'] .pixi-village-world > :not([role='img']) {
+  display: none !important;
+}
+
+[data-gameplay-shell='village'] .pixi-village-world > [role='img'] {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100%;
+  gap: 0 !important;
+}
+
+[data-gameplay-shell='village'] .pixi-village-world > [role='img'] > p {
+  display: none !important;
+}
+
+[data-gameplay-shell='village'] .pixi-village-world [data-pixi-surface] {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* ── Shell layer ─────────────────────────────────────────────────────────── */
+.gameplay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: var(--text-primary, #f4ead8);
+  font-family: var(--font-body, system-ui, sans-serif);
+}
+
+.gameplay-layer--dungeon {
+  z-index: 85;
+}
+
+.gameplay-layer--village {
+  z-index: 60;
+}
+
+.gameplay-layer button {
+  pointer-events: auto;
+}
+
+.gameplay-root {
+  position: absolute;
+  inset: 0;
+}
+
+.gameplay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--control-border, rgba(255, 255, 255, 0.22));
+  background: color-mix(in srgb, var(--bg-panel, #141b2c) 86%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+}
+
+.gameplay-btn:hover:not(:disabled) {
+  border-color: var(--accent, #e6b95c);
+}
+
+.gameplay-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.gameplay-btn:focus-visible,
+.gameplay-sheet__close:focus-visible,
+.gameplay-room-list__row:focus-visible,
+.gameplay-phase__btn:focus-visible,
+.gameplay-c__room:focus-visible,
+.gameplay-c__interact:focus-visible,
+.gameplay-tutorial:focus-visible {
+  outline: 3px solid var(--accent-soft, #7fb2ff);
+  outline-offset: 2px;
+}
+
+.gameplay-btn--primary {
+  background: var(--accent, #e6b95c);
+  border-color: color-mix(in srgb, var(--accent, #e6b95c) 75%, #fff);
+  color: #201708;
+  font-weight: 800;
+}
+
+.gameplay-btn--icon {
+  padding: 0;
+  width: 44px;
+}
+
+.gameplay-btn__text {
+  white-space: nowrap;
+}
+
+.gameplay-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--control-border, rgba(255, 255, 255, 0.22)) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-panel, #141b2c) 78%, transparent);
+  color: var(--text-secondary, #d8cfc0);
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gameplay-chip--accent {
+  color: #201708;
+  background: var(--accent, #e6b95c);
+  border-color: transparent;
+  text-transform: capitalize;
+}
+
+.gameplay-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: min(720px, 68vw);
+}
+
+.gameplay-hint {
+  margin: 0;
+  color: var(--text-muted, #b9ad9c);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.gameplay-prompt {
+  max-width: min(560px, 80vw);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #0b101b 72%, transparent);
+  color: var(--text-secondary, #d8cfc0);
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+
+/* ── Field rail ──────────────────────────────────────────────────────────── */
+.gameplay-root--dungeon,
+.gameplay-root--village {
+  padding: 14px;
+}
+
+.gameplay-rail {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 22px;
+  background: color-mix(in srgb, #0b101b 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--control-border, rgba(255, 255, 255, 0.22)) 60%, transparent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+}
+
+.gameplay-rail-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 56px;
+  min-height: 52px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.gameplay-rail-btn:hover {
+  border-color: color-mix(in srgb, var(--accent, #e6b95c) 45%, transparent);
+  background: color-mix(in srgb, var(--accent, #e6b95c) 10%, transparent);
+}
+
+.gameplay-rail-btn:focus-visible {
+  outline: 3px solid var(--accent-soft, #7fb2ff);
+  outline-offset: 2px;
+}
+
+.gameplay-rail-btn__glyph {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.gameplay-rail-btn__label {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.gameplay-subject {
+  position: absolute;
+  top: 14px;
+  left: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #0b101b 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--control-border, rgba(255, 255, 255, 0.22)) 55%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.gameplay-subject__name {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.gameplay-quest {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: min(310px, calc(100vw - 100px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent, #e6b95c) 28%, var(--control-border, rgba(255, 255, 255, 0.22)));
+  background: color-mix(in srgb, #0b101b 78%, transparent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+}
+
+.gameplay-quest__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.gameplay-quest__objective {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.gameplay-quest__meta {
+  color: var(--text-muted, #b9ad9c);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.gameplay-quest__action {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gameplay-verb {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #0b101b 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--control-border, rgba(255, 255, 255, 0.22)) 60%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.gameplay-verb__prompt {
+  position: absolute;
+  bottom: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, 80vw);
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #0b101b 72%, transparent);
+  color: var(--text-secondary, #d8cfc0);
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+
+/* ── Sheets ──────────────────────────────────────────────────────────────── */
+.gameplay-sheet {
+  position: absolute;
+  right: 14px;
+  bottom: 82px;
+  width: min(390px, calc(100vw - 28px));
+  max-height: min(68vh, 620px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--control-border, rgba(255, 255, 255, 0.22)) 75%, transparent);
+  background: color-mix(in srgb, #0b101b 88%, transparent);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+  z-index: 96;
+}
+
+.gameplay-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--control-border, rgba(255, 255, 255, 0.22)) 45%, transparent);
+}
+
+.gameplay-sheet__header h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.gameplay-sheet__close {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--control-border, rgba(255, 255, 255, 0.22));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.gameplay-sheet__body {
+  padding: 12px 14px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gameplay-sheet__divider {
+  height: 1px;
+  background: color-mix(in srgb, var(--control-border, rgba(255, 255, 255, 0.22)) 45%, transparent);
+  margin: 4px 0;
+}
+
+.gameplay-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gameplay-action {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gameplay-action .gameplay-btn {
+  justify-content: flex-start;
+  width: 100%;
+  border-radius: 10px;
+}
+
+.gameplay-action__status {
+  margin: 0;
+  color: var(--text-muted, #b9ad9c);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.gameplay-phase {
+  display: flex;
+  gap: 6px;
+}
+
+.gameplay-phase__btn {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--control-border, rgba(255, 255, 255, 0.22));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gameplay-phase__btn.is-active {
+  background: var(--accent, #e6b95c);
+  border-color: transparent;
+  color: #201708;
+  font-weight: 800;
+}
+
+.gameplay-room {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gameplay-room__headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gameplay-room__headline strong {
+  font-size: 16px;
+}
+
+.gameplay-room__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gameplay-room-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gameplay-room-list__row {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--control-border, rgba(255, 255, 255, 0.22));
+  background: color-mix(in srgb, var(--bg-panel, #141b2c) 55%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gameplay-room-list__row:hover:not(:disabled) {
+  border-color: var(--accent, #e6b95c);
+}
+
+.gameplay-room-list__row.is-active {
+  border-color: var(--accent, #e6b95c);
+  background: color-mix(in srgb, var(--accent, #e6b95c) 14%, transparent);
+}
+
+.gameplay-room-list__row .gameplay-hint {
+  display: block;
+  margin-top: 4px;
+}
+
+.gameplay-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gameplay-menu-grid .gameplay-btn {
+  justify-content: flex-start;
+  border-radius: 10px;
+}
+
+.gameplay-quest-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--control-border, rgba(255, 255, 255, 0.22));
+  background: color-mix(in srgb, var(--bg-panel, #141b2c) 55%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gameplay-quest-row.is-current {
+  border-color: var(--accent, #e6b95c);
+  background: color-mix(in srgb, var(--accent, #e6b95c) 16%, transparent);
+}
+
+.gameplay-quest-row.is-done {
+  color: var(--text-secondary, #d8cfc0);
+}
+
+.gameplay-tutorial {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-soft, #7fb2ff) 45%, transparent);
+  background: color-mix(in srgb, #0b101b 70%, transparent);
+  color: var(--accent-soft, #7fb2ff);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+/* ── Small screens ───────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .gameplay-root--dungeon,
+  .gameplay-root--village {
+    padding: 10px 10px 64px;
+  }
+
+  .gameplay-chips {
+    max-width: 100%;
+  }
+
+  .gameplay-rail {
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: 12px;
+    transform: none;
+    flex-direction: row;
+    justify-content: center;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .gameplay-rail-btn {
+    width: 52px;
+    min-height: 50px;
+  }
+
+  .gameplay-subject {
+    display: none;
+  }
+
+  .gameplay-quest {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+  }
+
+  .gameplay-verb {
+    bottom: 64px;
+    padding: 6px;
+  }
+
+  .gameplay-verb__prompt {
+    bottom: 120px;
+  }
+
+  .gameplay-quest__action .gameplay-btn {
+    padding: 8px 12px;
+  }
+
+  .gameplay-sheet {
+    left: 10px;
+    right: 10px;
+    bottom: 120px;
+    width: auto;
+    max-height: 56vh;
+  }
+
+  .gameplay-menu-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -322,6 +322,15 @@ test('safe tutorial action renders the dungeon world with static-only network tr
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
 
   if (expectedPixiDungeon) {
+    const onboarding = page.getByTestId('gameplay-onboarding');
+    const onboardingVisible = await onboarding
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (onboardingVisible) {
+      await onboarding.getByRole('button', { name: 'Start exploring' }).click();
+      await onboarding.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {});
+    }
     // The Pixi chunk is lazy, so the surface appears only after it evaluates.
     const pixiSurface = page.locator('.pixi-dungeon-world');
     const phaserSurface = page.locator('.game-canvas-host canvas');
@@ -340,35 +349,44 @@ test('safe tutorial action renders the dungeon world with static-only network tr
 
     // Every world verb has a DOM equivalent, and they are all real controls.
     //
-    // The names come from the scene's own action table, which is what `DungeonWorld`
-    // renders the accessible name from, so this cannot drift from the scene's declaration
-    // without failing here.
+    // The names come from the scene's own action table. The shell keeps the
+    // primary Interact verb on the dock and puts the rest in the Controls sheet.
     await expect(page.getByRole('button', { name: 'Interact (E or Space)' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Ascend' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Descend' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Zoom in', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Zoom out', exact: true })).toBeVisible();
+    await page
+      .locator('.gameplay-layer--dungeon')
+      .getByRole('button', { name: 'Actions' })
+      .click();
+    const dungeonControls = page.locator('.gameplay-sheet');
+    await expect(dungeonControls).toBeVisible();
+    await expect(dungeonControls.getByRole('button', { name: 'Ascend' })).toBeVisible();
+    await expect(dungeonControls.getByRole('button', { name: 'Descend' })).toBeVisible();
+    await expect(dungeonControls.getByRole('button', { name: 'Zoom in', exact: true })).toBeVisible();
+    await expect(dungeonControls.getByRole('button', { name: 'Zoom out', exact: true })).toBeVisible();
 
     // A refused action is disabled *and says why on the page*. This is the Phase 13
     // fix observed in a real browser rather than in jsdom: the tutorial spawns the player
     // in the root room, which has no stairs up and no stairs down, so both portal controls
     // are unavailable and both publish the reason.
-    await expect(page.getByRole('button', { name: 'Ascend' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'Descend' })).toBeDisabled();
+    await expect(dungeonControls.getByRole('button', { name: 'Ascend' })).toBeDisabled();
+    await expect(dungeonControls.getByRole('button', { name: 'Descend' })).toBeDisabled();
     await expect(
-      page.getByText('there are no stairs up in this room', { exact: true }),
+      dungeonControls.getByText('there are no stairs up in this room', { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByText('there are no stairs down in this room', { exact: true }),
+      dungeonControls.getByText('there are no stairs down in this room', { exact: true }),
     ).toBeVisible();
     // And an action the world always accepts is not disabled by the same machinery.
-    await expect(page.getByRole('button', { name: 'Interact (E or Space)' })).toBeEnabled();
+    await expect(dungeonControls.getByRole('button', { name: 'Interact (E or Space)' })).toBeEnabled();
     // The reasons are *on* the page, not only in an attribute a disabled control cannot
     // have announced.
-    await expect(
-      page.locator('[data-action-status="dungeon-ascend"]'),
-    ).toBeVisible();
+    await expect(dungeonControls.locator('[data-action-status="dungeon-ascend"]')).toBeVisible();
+    await dungeonControls.getByRole('button', { name: /^Close/ }).click();
+    await expect(dungeonControls).toHaveCount(0);
 
+    await page
+      .locator('.gameplay-layer--dungeon')
+      .getByRole('button', { name: 'Rooms' })
+      .click();
     const roomNavigation = page.getByRole('group', { name: 'Room navigation' });
     await expect(roomNavigation).toBeVisible();
     // Scoped to the group: the HUD has its own "Go to Village" control, and a bare
@@ -398,6 +416,8 @@ test('safe tutorial action renders the dungeon world with static-only network tr
     // exists to protect.
     const roomRowCount = await roomNavigation.getByRole('button', { name: /^Go to / }).count();
     expect(reading.roomLabels.length, 'the canvas and the DOM room list disagree').toBe(roomRowCount);
+    await page.locator('.gameplay-sheet').getByRole('button', { name: /^Close/ }).click();
+    await expect(page.locator('.gameplay-sheet')).toHaveCount(0);
 
     // Keyboard movement reaches the world.
     const before = reading.player;
@@ -1605,7 +1625,13 @@ async function ensureVillageHudOpen(page: Page): Promise<'side' | 'sheet'> {
   if ((await page.locator('[data-village-nearby="true"]').count()) > 0) {
     return (await page.locator('[data-village-surface="side"]').count()) > 0 ? 'side' : 'sheet';
   }
-  await page.getByRole('button', { name: 'Open village status and controls' }).click();
+  const villageMenu = page.getByRole('button', { name: 'Open village status and controls' });
+  if ((await villageMenu.count()) > 0) {
+    await villageMenu.click();
+    // The gameplay shell puts the nearby rows in the Nearby sheet rather than a HUD column.
+    const nearby = page.getByRole('button', { name: 'Nearby' }).first();
+    if ((await nearby.count()) > 0) await nearby.click();
+  }
   await expect(page.locator('[data-village-nearby="true"]')).toBeAttached();
   return 'sheet';
 }
@@ -4500,4 +4526,38 @@ test('every Welcome shell control meets the 44 CSS-pixel minimum touch target at
   } finally {
     await context.close();
   }
+});
+
+/**
+ * The Scribe encounter's focus contract on the normal open path.
+ *
+ * The dialog used to mount its focus effect once with `[]` dependencies while it was
+ * closed, so it never took focus and Escape only worked after the frame was focused by
+ * hand. This drives the real shell action rather than a hand-focused frame.
+ */
+test('the Scribe encounter takes focus and closes on Escape', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start Tutorial' }).click();
+  await page.waitForSelector('.pixi-dungeon-world canvas', { state: 'visible', timeout: 60_000 });
+  const onboarding = page.getByTestId('gameplay-onboarding');
+  const onboardingVisible = await onboarding
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (onboardingVisible) {
+    await onboarding.getByRole('button', { name: 'Start exploring' }).click();
+    await onboarding.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {});
+  }
+
+  await page.getByRole('button', { name: 'Interact (E or Space)' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Scribe encounter' });
+  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  const focusedInside = await page.evaluate(
+    () => document.activeElement?.closest('[role="dialog"]') !== null,
+  );
+  expect(focusedInside, 'the Scribe encounter did not take focus on open').toBe(true);
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 });

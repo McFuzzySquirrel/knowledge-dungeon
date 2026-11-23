@@ -127,6 +127,8 @@ export interface PixiDungeonRenderer extends WorldRenderer, DungeonRendererCapab
   onState(listener: (state: WorldActionState) => void): () => void;
   /** Perform a named world action the way a DOM control does. */
   activateFromDom(actionId: string): void;
+  /** Frame the visible floor. */
+  fitFloor(): void;
   /**
    * Read the dungeon's artifact surface, for a DOM surface that renders it.
    *
@@ -268,6 +270,10 @@ export function createPixiDungeonRenderer(
     },
     readArtifactSnapshot(): DungeonArtifactSnapshot {
       return scene?.readArtifactSnapshot() ?? IDLE_DUNGEON_ARTIFACT_SNAPSHOT;
+    },
+    fitFloor(): void {
+      scene?.fitFloor();
+      refreshState();
     },
     setFloorVisibility(visibility): void {
       host.capabilities?.setFloorVisibility(visibility);

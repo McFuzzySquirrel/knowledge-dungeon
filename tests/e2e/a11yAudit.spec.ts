@@ -246,8 +246,29 @@ async function openVillage(page: Page): Promise<VillageHudState> {
   await page.getByRole('heading', { level: 1, name: 'Knowledge Dungeon' }).waitFor({ timeout: 30_000 });
   await settle(page);
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
+  const onboarding = page.getByTestId('gameplay-onboarding');
+  const onboardingVisible = await onboarding
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (onboardingVisible) {
+    await onboarding.getByRole('button', { name: 'Start exploring' }).click();
+    await onboarding.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {});
+  }
   await page.getByRole('button', { name: 'Go to Village' }).click({ timeout: 60_000 });
   await page.locator('[data-world]').waitFor({ timeout: 60_000 });
+
+  const gameplayShell = page.locator('.gameplay-layer--village');
+  const hasGameplayShell = await gameplayShell
+    .waitFor({ state: 'visible', timeout: 30_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (hasGameplayShell) {
+    await gameplayShell.getByRole('button', { name: 'Nearby' }).first().click();
+    await page.locator(VILLAGE_NEARBY).waitFor({ timeout: 60_000 });
+    await settle(page);
+    return { drawerOpened: false };
+  }
 
   const drawerToggle = page.locator(HUD_DRAWER_TOGGLE);
   const drawerOpened = (await drawerToggle.count()) > 0;
@@ -474,6 +495,11 @@ test.describe('the Phase 21 automated accessibility suite', () => {
     'introduces no new violation, and Escape closes it and restores focus',
     async ({ page }, testInfo) => {
       await openVillage(page);
+      const villageMenu = page.getByRole('button', { name: 'Open village status and controls' });
+      if ((await villageMenu.count()) > 0) {
+        await villageMenu.click();
+        await settle(page);
+      }
       const settings = page.getByRole('button', { name: 'Settings' }).first();
       await settings.waitFor({ state: 'visible', timeout: 30_000 });
       await settings.click();

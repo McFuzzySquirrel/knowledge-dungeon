@@ -29,6 +29,7 @@ import { MobileTouchHint } from '@/ui/components/MobileTouchHint';
 import type { RoomTab } from '@/ui/components/RoomPanel';
 import { NoteEditorModal } from '@/ui/components/NoteEditorModal';
 import { ScribeEncounterDialog } from '@/ui/study/scribe/ScribeEncounter';
+import { DungeonGameplayHud } from '@/ui/gameplay/DungeonGameplayHud';
 import { bindArtifactCollection } from '@/store/encounterCommands';
 import { RoomNpcDialog } from '@/ui/components/RoomNpcDialog';
 import { Minimap } from '@/ui/components/Minimap';
@@ -530,6 +531,16 @@ export function GameScreen(): JSX.Element {
     rendererRef.current.restart();
   }, [sceneRestartCounter]);
 
+  // The world-first shell opens on a floor overview rather than the 1.6x room
+  // close-up. The per-room auto-zoom still applies as the player walks.
+  useEffect(() => {
+    if (!sceneReady || !pixiDungeon) return;
+    const timer = window.setTimeout(() => {
+      pixiDungeonRef.current?.fitFloor();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [pixiDungeon, sceneReady]);
+
   useEffect(() => {
     if (!sceneReady || !snapshot) return;
     const renderer = rendererRef.current;
@@ -871,7 +882,7 @@ export function GameScreen(): JSX.Element {
   );
 
   return (
-    <div className="game-shell screen-fade-in">
+    <div className="game-shell screen-fade-in" data-gameplay-shell={pixiDungeon ? 'dungeon' : undefined}>
       {isMobile ? (
         <HudDrawer>{hudContent}</HudDrawer>
       ) : (
@@ -1095,6 +1106,9 @@ export function GameScreen(): JSX.Element {
             />
           ) : null}
         </div>
+        {pixiDungeon ? (
+          <DungeonGameplayHud onFitFloor={() => pixiDungeonRef.current?.fitFloor()} />
+        ) : null}
       </div>
     </div>
   );

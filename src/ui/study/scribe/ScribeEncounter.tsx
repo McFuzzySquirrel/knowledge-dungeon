@@ -66,7 +66,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
   type ReactNode,
 } from 'react';
 
@@ -76,6 +75,7 @@ import type { RoomMetadata, SubjectSnapshot } from '@/core/validation/persistenc
 import { useProgressionStore } from '@/store/progressionStore';
 import { useSessionStore, type GamePhase } from '@/store/sessionStore';
 import { useSubjectStore } from '@/store/subjectStore';
+import { useModalFocus } from '@/ui/hooks/useModalFocus';
 import {
   composeNoteSections,
   emptyNoteSections,
@@ -523,15 +523,6 @@ export function ScribeEncounter({
 }
 
 /**
- * Focusable descendants, for the dialog's focus trap.
- *
- * `tabindex="-1"` is excluded deliberately: the dialog's own frame is programmatically
- * focusable and must not appear in its own Tab ring.
- */
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/**
  * The encounter overlay: the pre-Phase-15 mount point, holding the redesigned workspace.
  *
  * ## Why it is a dialog
@@ -568,8 +559,28 @@ export function ScribeEncounterDialog(): ReactNode {
   const collectedNotes = useProgressionStore((s) => s.collectedNotes);
 
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
-  const frameRef = useRef<HTMLDivElement | null>(null);
-  const restoreFocusTo = useRef<HTMLElement | null>(null);
+  /*
+   * Phase 21's shared modal contract, not a hand-rolled focus effect.
+   *
+   * The previous effect ran once on mount with `[]` dependencies, while `isOpen` was
+   * false and the frame did not exist, so the dialog never took focus and Escape only
+   * worked after the frame was focused by hand. `useModalFocus` is keyed on `isOpen`,
+   * traps Tab, closes on Escape, restores the opener, and participates in the shared
+   * stacking order with Settings and the village sheets.
+   *
+   * The guide conversation is a region inside this dialog and owns Escape while it is
+   * open, exactly as it did before the modal contract moved. The capture-phase modal
+   * handler must therefore decline, rather than closing the whole encounter and
+   * unmounting the guide's own focus restoration.
+   */
+  const closeFromEscape = useCallback((): void => {
+    if (document.querySelector('[aria-label^="Guide conversation about "]') !== null) return;
+    closeNoteEditor();
+  }, [closeNoteEditor]);
+  const frameRef = useModalFocus<HTMLDivElement>({
+    active: isOpen,
+    onEscape: closeFromEscape,
+  });
 
   const room = roomId === null ? null : (snapshot?.rooms[roomId] ?? null);
 
@@ -641,48 +652,12 @@ export function ScribeEncounterDialog(): ReactNode {
     };
   }, [resolveAttachmentUrl, room]);
 
-  /* Focus in on open, focus back where it came from on close. Both are DOM, not store. */
-  useEffect(() => {
-    restoreFocusTo.current = document.activeElement as HTMLElement | null;
-    frameRef.current?.focus();
-    return () => {
-      restoreFocusTo.current?.focus();
-      restoreFocusTo.current = null;
-    };
-  }, []);
-
   /*
    * Nothing to open. The pre-Phase-15 modal returned `null` in exactly these three cases,
    * and a dialog over a room that is not there is the one shape of this surface that has
    * nothing to say - so the parity is kept rather than replaced with an empty frame.
    */
   if (!isOpen || snapshot === null || room === null) return null;
-
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeNoteEditor();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-    const frame = frameRef.current;
-    if (frame === null) return;
-    const focusable = [...frame.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey) {
-      if (document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      }
-      return;
-    }
-    if (document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
 
   return (
     <div className="modal-backdrop">
@@ -694,7 +669,6 @@ export function ScribeEncounterDialog(): ReactNode {
         aria-modal="true"
         aria-label="Scribe encounter"
         tabIndex={-1}
-        onKeyDown={onKeyDown}
       >
         <ScribeEncounter
           room={room}
