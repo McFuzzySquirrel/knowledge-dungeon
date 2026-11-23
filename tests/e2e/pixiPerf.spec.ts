@@ -79,7 +79,6 @@ const MANIFEST_SCRIPT = path.join(REPO_ROOT, 'scripts', 'web-artifact-manifest.m
 
 const WORLD_SURFACE = '.pixi-dungeon-world';
 const READY_TEXT = 'Dungeon presented';
-const INTERACT_ACTION_ID = 'dungeon-zoom-in';
 
 /* -------------------------------------------------------------------------- */
 /* Page helpers                                                                */
@@ -191,6 +190,11 @@ async function enterDungeonWorld(page: Page): Promise<void> {
   await expect(
     page.locator(`${WORLD_SURFACE} [role="status"]`).filter({ hasText: READY_TEXT }).first(),
   ).toBeVisible({ timeout: 30_000 });
+  const onboarding = page.getByTestId('gameplay-onboarding');
+  if (await onboarding.isVisible().catch(() => false)) {
+    await onboarding.getByRole('button', { name: 'Start exploring' }).click();
+    await expect(onboarding).toHaveCount(0, { timeout: 20_000 });
+  }
 }
 
 /** The room rows the dungeon's DOM mirror offers. */
@@ -299,8 +303,8 @@ async function sampleFrames(
 /**
  * Times how long the DOM mirror takes to acknowledge a world action.
  *
- * The action is the scene's own "Zoom in": its published sentence embeds the zoom
- * factor (`Zoom in. Now N times.`), so the status line changes on every dispatch and
+ * The action is the scene's own "Zoom out": its published sentence embeds the zoom
+ * factor (`Zoom out. Now N times.`), so the status line changes on every dispatch and
  * "the world did the thing" and "the learner was told" are the same event. The click
  * and the observation are both in the page, so the number is the renderer's own
  * latency rather than a Playwright round trip.
@@ -310,7 +314,12 @@ async function sampleInteraction(
   samples: number,
 ): Promise<{ readonly latencies: readonly number[]; readonly acknowledged: boolean }> {
   return page.evaluate(
-    async ({ count, actionId }: { readonly count: number; readonly actionId: string }) => {
+    async ({ count }: { readonly count: number }) => {
+      const zoomInStatus = document.querySelector<HTMLElement>('[data-action-status="dungeon-zoom-in"]');
+      const zoomOutStatus = document.querySelector<HTMLElement>('[data-action-status="dungeon-zoom-out"]');
+      const factorMatch = zoomInStatus?.textContent?.match(/Now ([0-9.]+) times/) ?? zoomOutStatus?.textContent?.match(/Now ([0-9.]+) times/);
+      const factor = factorMatch === null || factorMatch === undefined ? 1 : Number(factorMatch[1]);
+      const actionId = factor >= 1 ? 'dungeon-zoom-out' : 'dungeon-zoom-in';
       const button = document.querySelector<HTMLButtonElement>(`button[data-action-id="${actionId}"]`);
       const status = document.querySelector<HTMLElement>(`[data-action-status="${actionId}"]`);
       if (button === null || status === null) return { latencies: [], acknowledged: false };
@@ -344,7 +353,7 @@ async function sampleInteraction(
       }
       return { latencies, acknowledged };
     },
-    { count: samples, actionId: INTERACT_ACTION_ID },
+    { count: samples },
   );
 }
 

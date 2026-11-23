@@ -469,6 +469,17 @@ describe('the availability marker is one channel, not two', () => {
     });
     expect(statusTextOf('dungeon-ascend')).not.toContain(DUNGEON_ACTION_UNAVAILABLE_PREFIX);
   });
+
+  it('a one-room Zoom-in dispatch publishes a changed status', async () => {
+    const mounted = await mountWorld(buildWorld(1));
+    const before = statusTextOf('dungeon-zoom-in');
+    await act(async () => {
+      mounted.handle.activateFromDom('dungeon-zoom-in');
+    });
+    await waitFor(() => {
+      expect(statusTextOf('dungeon-zoom-in')).not.toBe(before);
+    });
+  });
 });
 
 describe('the accessible surface', () => {
