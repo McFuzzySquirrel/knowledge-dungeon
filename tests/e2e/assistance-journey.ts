@@ -558,6 +558,10 @@ export async function driveMissedRecallJourney(
         // disable the charge control. The seeded fixture has to stay the only subject.
         await page.getByRole('button', { name: 'Continue to Village' }).click({ timeout: 60_000 });
         await page.locator('[data-world]').waitFor({ timeout: 60_000 });
+        const gameplayShell = page.locator('.gameplay-layer--village');
+        if ((await gameplayShell.count()) > 0) {
+          await gameplayShell.getByRole('button', { name: 'Nearby' }).first().click({ timeout: 30_000 });
+        }
         await page.locator('[data-village-nearby="true"]').waitFor({ timeout: 60_000 });
         return recallFixturePremiseFailures(await readSeededSubjectState(page)).join('\n');
       },

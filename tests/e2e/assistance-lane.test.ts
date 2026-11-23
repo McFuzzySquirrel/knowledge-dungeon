@@ -754,6 +754,12 @@ describe('the specs measure what they claim and skip nothing', () => {
     expect(defaultSpec).not.toContain('walkToStructureAndPress');
   });
 
+  it('the journey opens Nearby in both the legacy and gameplay village shells', () => {
+    expect(stripComments(journeySource)).toContain('.gameplay-layer--village');
+    expect(stripComments(journeySource)).toContain("getByRole('button', { name: 'Nearby' })");
+    expect(stripComments(journeySource)).toContain("[data-village-nearby=\"true\"]");
+  });
+
   it('neither spec contains a learner-shaped field, an external URL or a request body', () => {
     for (const [name, source] of [
       [ASSISTANCE_LANE.testFile, flaggedSpec],
