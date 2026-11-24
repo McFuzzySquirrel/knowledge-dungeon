@@ -216,13 +216,12 @@ describe('fishing lane declaration', () => {
     }
   });
 
-  it('the flag is the plan flag, its production default is now on, and this lane pins it on', () => {
+  it('the flag is the plan flag, defaults to Phaser, and this lane explicitly pins Pixi on', () => {
     expect(FISHING_FLAG).toBe('VITE_PIXI_FISHING');
     expect(RUNTIME_FLAG_ENV_KEYS.pixiFishing).toBe(FISHING_FLAG);
-    // Phase 23 makes the Pixi fishing world the production default; `false` is the
-    // one-release rollback and still disables it.
-    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(true);
-    expect(FEATURE_FLAG_MATRIX.pixiFishing.productionDefault).toBe(true);
+    // The normal presentation is Phaser; this dedicated lane explicitly opts into Pixi.
+    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(false);
+    expect(FEATURE_FLAG_MATRIX.pixiFishing.productionDefault).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_FISHING: 'false' }).pixiFishing).toBe(false);
     expect(FEATURE_FLAG_MATRIX.pixiFishing.ownerPhase).toBe(17);
     expect(FEATURE_FLAG_MATRIX.pixiFishing.valueKind).toBe('boolean');
@@ -283,9 +282,8 @@ describe('fishing lane npm scripts', () => {
   });
 
   it('the build script isolates the fishing world and the rollback script rolls everything back', () => {
-    // After the Phase 23 cutover the per-world switches default on, so the isolation has to
-    // be explicit: the world host and the two other Pixi worlds are pinned off, leaving the
-    // pond the only Pixi world on the artifact the lane measures.
+    // The isolation is explicit: the world host and the two other Pixi worlds are pinned
+    // off, leaving the pond the only Pixi world on the artifact the lane measures.
     expect(npmScripts[FISHING_LANE.buildScript]).toBe(
       'VITE_WORLD_RENDERER=phaser VITE_PIXI_FISHING=true VITE_PIXI_VILLAGE=false VITE_PIXI_DUNGEON=false npm run build:web',
     );

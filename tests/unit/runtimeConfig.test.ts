@@ -7,19 +7,14 @@ import {
 } from '@/config/runtimeConfig';
 
 describe('runtime feature configuration', () => {
-  it('uses the complete post-cutover production default matrix', () => {
-    // Phase 23 made the rebuilt stack the production default. Each cutover flag is
-    // retained as a documented one-release rollback; `audioEnabled` remains the single
-    // kill switch. `worldRenderer` is a retained host switch and does not move: it stays
-    // `phaser` (the application host), and the real PixiJS worlds come from the per-world
-    // flags below.
+  it('uses Phaser and legacy visuals by default while retaining post-cutover features', () => {
     expect(parseRuntimeConfig({})).toEqual({
       worldRenderer: 'phaser',
       storageRepository: 'v2',
-      pixiVillage: true,
-      pixiDungeon: true,
-      pixiFishing: true,
-      cozyVisuals: true,
+      pixiVillage: false,
+      pixiDungeon: false,
+      pixiFishing: false,
+      cozyVisuals: false,
       adaptiveAssistance: true,
       dataProductsV2: true,
       webShare: true,

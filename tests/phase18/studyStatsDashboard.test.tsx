@@ -1557,7 +1557,12 @@ describe('the Phase 18 rollback gate', () => {
   });
 
   it('is not a build-time feature flag, and the flag matrix is unchanged', async () => {
-    const { CUTOVER_BOOLEAN_FLAG_KEYS, NON_CUTOVER_FLAG_KEYS, FEATURE_FLAG_MATRIX } =
+    const {
+      CUTOVER_BOOLEAN_FLAG_KEYS,
+      NON_CUTOVER_FLAG_KEYS,
+      RESTORED_DEFAULT_FLAG_KEYS,
+      FEATURE_FLAG_MATRIX,
+    } =
       await import('@/config/featureFlags');
     const { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS } = await import('@/config/runtimeConfig');
 
@@ -1570,14 +1575,16 @@ describe('the Phase 18 rollback gate', () => {
     for (const key of Object.values(RUNTIME_FLAG_ENV_KEYS)) {
       expect(key).not.toMatch(/STAT/i);
     }
-    // The flags that default on are exactly the reviewed cutover booleans plus the one kill
-    // switch, so an unreviewed flag cannot quietly default on - and this phase added no flag
-    // at all.
+    // The flags that default on are the reviewed cutover booleans not restored to their
+    // prior presentation defaults, plus the one kill switch.
     const defaultsOn = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => definition.productionDefault === true)
       .map(([key]) => key)
       .sort();
-    expect(defaultsOn).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, 'audioEnabled'].sort());
+    expect(defaultsOn).toEqual([
+      ...CUTOVER_BOOLEAN_FLAG_KEYS.filter((key) => !RESTORED_DEFAULT_FLAG_KEYS.includes(key)),
+      'audioEnabled',
+    ].sort());
   });
 });
 

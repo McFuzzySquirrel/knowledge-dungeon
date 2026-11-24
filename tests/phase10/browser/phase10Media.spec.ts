@@ -366,10 +366,8 @@ async function openWelcome(page: Page, origin = PHASE10_MEDIA_PREVIEW_ORIGIN): P
 /** The tutorial subject, which is the repository's own synthetic fixture. */
 async function enterGameWorld(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
-  // The game screen mounts the dungeon in either renderer; after the Phase 23 cutover the
-  // production default is the PixiJS dungeon, and the Phaser host remains for a rollback
-  // build. Matching both keeps this readiness wait renderer-agnostic rather than pinned to
-  // a `.game-canvas-host` that no longer exists on the cutover artifact.
+  // The game screen mounts the dungeon in either renderer. Match both surfaces so this
+  // readiness wait stays valid in the normal Phaser build and Pixi-specific lanes.
   await expect(
     page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').first(),
   ).toBeVisible({ timeout: WORLD_PRESENT_TIMEOUT_MS });
@@ -1065,7 +1063,7 @@ test.describe('manual check 4: optional missing art does not break a route', () 
     ).toBeGreaterThan(0);
 
     // The route is still rendered, in the same page, after the failures. Either renderer's
-    // dungeon canvas satisfies this; the production default is the PixiJS dungeon.
+    // dungeon canvas satisfies this; the production default is the Phaser dungeon.
     await expect(
       page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').first(),
     ).toBeVisible();

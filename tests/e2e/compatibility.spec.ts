@@ -779,7 +779,7 @@ test('records the approved support-matrix lane and the recorded artifact identit
   });
 });
 
-test('renders the default Pixi world from the recorded artifact with static-only traffic', async ({
+test('renders the default Phaser world from the recorded artifact with static-only traffic', async ({
   page,
   browser,
   request,
@@ -798,10 +798,8 @@ test('renders the default Pixi world from the recorded artifact with static-only
       await page.goto('/');
       await page.getByRole('button', { name: 'Start Tutorial' }).click();
 
-      // After the Phase 23 cutover the default production dungeon is the PixiJS world on
-      // the application host, so the surface is `.pixi-dungeon-world` rather than the
-      // Phaser `.game-canvas-host`.
-      const canvas = page.locator('.pixi-dungeon-world canvas');
+      // The restored presentation default mounts the Phaser dungeon canvas.
+      const canvas = page.locator('.game-canvas-host canvas');
       await expect(canvas).toBeVisible({ timeout: 30_000 });
 
       const canvasState = await canvas.evaluate((element) => {
@@ -835,7 +833,7 @@ test('renders the default Pixi world from the recorded artifact with static-only
       );
 
       setRenderer({
-        mode: 'pixi',
+        mode: 'phaser',
         expectedMode: entry.expectedRendererMode,
         graphicsContext: canvasState.graphicsContext,
         canvas: {
@@ -847,20 +845,18 @@ test('renders the default Pixi world from the recorded artifact with static-only
         phaserChunkRequested,
       });
 
-      // The Phase 23 cutover makes the PixiJS world the production default on every
-      // approved engine: the artifact contains the Pixi runtime and requests it, the
-      // application host is not the Phase 9 test host, and no Phaser vendor chunk is
-      // emitted or fetched.
-      expect(entry.expectedRendererMode).toBe('pixi');
+      // Every approved engine loads the default Phaser world; Pixi remains an opt-in
+      // build and must not be fetched by this artifact.
+      expect(entry.expectedRendererMode).toBe('phaser');
       expect(
         rendererChunkMatchingPixi,
-        'Expected the recorded production artifact to load its named Pixi chunk.',
-      ).toBe(true);
+        'The default production artifact must not load a Pixi chunk.',
+      ).toBe(false);
       expect(
         phaserChunkRequested,
-        'The recorded production artifact must not load a Phaser vendor chunk after the cutover.',
-      ).toBe(false);
-      expect(artifact.distIncludesRendererChunkMatchingPixi).toBe(true);
+        'The default production artifact must load its Phaser vendor chunk.',
+      ).toBe(true);
+      expect(artifact.distIncludesRendererChunkMatchingPixi).toBe(false);
     },
   );
 });

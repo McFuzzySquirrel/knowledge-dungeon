@@ -168,16 +168,15 @@ function ruleBody(css: string, selector: string): string {
 }
 
 describe('Phase 8 flag gate: the flag contract', () => {
-  it('defaults VITE_COZY_VISUALS to true after the cutover and documents the false rollback', () => {
+  it('defaults to legacy themes and allows an explicit Cozy opt-in', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.cozyVisuals).toBe('VITE_COZY_VISUALS');
-    expect(parseRuntimeConfig({}).cozyVisuals).toBe(true);
+    expect(parseRuntimeConfig({}).cozyVisuals).toBe(false);
     const definition = FEATURE_FLAG_MATRIX.cozyVisuals;
-    // Phase 23 makes the Cozy visual system the production default; `false` is the
-    // one-release rollback to the legacy renderer themes.
-    expect(definition.productionDefault).toBe(true);
+    expect(definition.productionDefault).toBe(false);
     expect(definition.ownerPhase).toBe(8);
     expect(definition.rollback).toContain('VITE_COZY_VISUALS=false');
     expect(parseRuntimeConfig({ VITE_COZY_VISUALS: 'false' }).cozyVisuals).toBe(false);
+    expect(parseRuntimeConfig({ VITE_COZY_VISUALS: 'true' }).cozyVisuals).toBe(true);
   });
 
   it('leaves every legacy theme block byte-for-byte as it was', () => {

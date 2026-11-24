@@ -54,13 +54,11 @@ export type NonCutoverFlagKey = (typeof NON_CUTOVER_FLAG_KEYS)[number];
  * The retained-host classification: a flag that survives the Phase 23 cutover unchanged
  * and is removed later, rather than failing over from one behaviour to another.
  *
- * `worldRenderer` is the only one. It is a **host** switch, not a world-renderer cutover:
- * the real PixiJS worlds are selected by the per-world flags (`pixiVillage`,
- * `pixiDungeon`, `pixiFishing`) inside the screens, and `'pixi'` here selects the Phase 9
- * **test host** (`src/renderers/pixi/runtime/PixiWorldHost.tsx`), not a production world.
- * Production therefore keeps `'phaser'` (the application host) at the cutover, so the
- * dungeon route reaches the real `DungeonWorld` through `VITE_PIXI_DUNGEON`, and Phase 24
- * removes the flag when the host adapter goes.
+ * `worldRenderer` is the only one. It is a **host** switch, not a world-renderer cutover.
+ * The normal production build keeps `'phaser'` as both the application host and world
+ * renderer; setting a per-world flag opts that route into PixiJS. `'pixi'` here selects the
+ * Phase 9 **test host** (`src/renderers/pixi/runtime/PixiWorldHost.tsx`), not a production
+ * world. Phase 24 removal of this host flag is deferred while Phaser remains the default.
  *
  * Declared as data rather than left implicit, so the three-way partition can be asserted
  * and `worldRenderer`'s non-cutover status cannot be inferred away.
@@ -73,12 +71,12 @@ export type RetainedHostFlagKey = (typeof RETAINED_HOST_FLAG_KEYS)[number];
  * The Phase 23 cutover rollback contract.
  *
  * Every flag that switches an existing behaviour to a new one at a reviewed cutover is
- * declared here with the exact value that restores its pre-cutover behaviour. Before
- * the cutover that value was the `productionDefault`; after it, the flag defaults to
- * the new behaviour and this value is the reviewed rollback. The gates assert that each
- * value is still accepted by `parseRuntimeConfig` and still produces the pre-cutover
- * behaviour (`storageRepository: 'legacy'`, every boolean explicit `false`), and that the
- * flag's human-readable `rollback` string names the environment variable and value.
+ * declared here with the exact value that restores its pre-cutover behaviour. The
+ * presentation flags in `RESTORED_DEFAULT_FLAG_KEYS` now use that same value as their
+ * production default; other cutover flags still default to the delivered behaviour. The
+ * gates assert that each value is accepted by `parseRuntimeConfig` and produces the
+ * pre-cutover behaviour (`storageRepository: 'legacy'`, every boolean explicit `false`),
+ * and that the human-readable rollback string names the environment variable and value.
  *
  * `worldRenderer` is deliberately absent: it is a retained host switch, not a cutover, so
  * it is classified in `RETAINED_HOST_FLAG_KEYS` and its default does not move. The
@@ -112,6 +110,18 @@ export const CUTOVER_FLAG_KEYS: readonly CutoverFlagKey[] = Object.freeze(
 );
 
 /**
+ * Presentation cutovers whose pre-cutover values are restored in the current production
+ * defaults. They remain in `CUTOVER_FLAG_ROLLBACKS` so the full rollback artifact and its
+ * historical contract stay explicit; setting these flags to `true` opts into PixiJS/Cozy.
+ */
+export const RESTORED_DEFAULT_FLAG_KEYS: readonly CutoverFlagKey[] = Object.freeze([
+  'cozyVisuals',
+  'pixiDungeon',
+  'pixiFishing',
+  'pixiVillage',
+]);
+
+/**
  * The reviewed flag set at the Phase 23 cutover, pinned so a flag cannot be silently
  * removed (or added) without review. The gates compare the real matrix key set to this
  * list, and separately prove the three reviewed classifications - cutover rollbacks,
@@ -138,14 +148,11 @@ export const REVIEWED_FLAG_KEYS: readonly RuntimeConfigKey[] = Object.freeze([
  * Infrastructure contract for phased cutovers. This matrix is not a runtime or
  * user-facing settings surface, and flags must never contain learner data.
  *
- * After the Phase 23 cutover every cutover flag's `productionDefault` is the new
- * behaviour, and its `rollback` string names the environment variable and value that
- * restores the pre-cutover behaviour for one release. Two names are not cutover gates and
- * are declared as data rather than inferred: `audioEnabled` (Phase 10) is a kill switch
- * that defaults on, because there is no pre-phase audio behaviour for a learner to keep;
- * and `worldRenderer` is a retained host switch that keeps its `'phaser'` default because
- * the real PixiJS worlds are selected by the per-world flags. Between them the three
- * classifications are a reviewed partition rather than a quiet hole.
+ * The renderer and theme defaults have been restored to their pre-cutover values; other
+ * cutover flags continue to default to the delivered behavior. The full rollback values
+ * remain explicit for reproducible rollback builds. `audioEnabled` is a kill switch and
+ * `worldRenderer` is a retained host switch that keeps its `'phaser'` default; the real
+ * world renderer is selected by the per-world flags.
  */
 export const FEATURE_FLAG_MATRIX = {
   worldRenderer: {
@@ -171,38 +178,38 @@ export const FEATURE_FLAG_MATRIX = {
   pixiVillage: {
     environmentVariable: RUNTIME_FLAG_ENV_KEYS.pixiVillage,
     valueKind: 'boolean',
-    productionDefault: true,
+    productionDefault: false,
     ownerPhase: 11,
     purpose:
-      'Selects the PixiJS Village world, now the production default. This flag is the one-release rollback to the Phaser Village path.',
-    rollback: 'Set VITE_PIXI_VILLAGE=false to retain the Phaser Village path.',
+      'Selects the PixiJS Village world. The production default is the retained Phaser Village path; true opts into PixiJS.',
+    rollback: 'Set VITE_PIXI_VILLAGE=false to retain Phaser, or true to opt into PixiJS.',
   },
   pixiDungeon: {
     environmentVariable: RUNTIME_FLAG_ENV_KEYS.pixiDungeon,
     valueKind: 'boolean',
-    productionDefault: true,
+    productionDefault: false,
     ownerPhase: 13,
     purpose:
-      'Selects the PixiJS Dungeon world, now the production default. This flag is the one-release rollback to the Phaser Dungeon path.',
-    rollback: 'Set VITE_PIXI_DUNGEON=false to retain the Phaser Dungeon path.',
+      'Selects the PixiJS Dungeon world. The production default is the retained Phaser Dungeon path; true opts into PixiJS.',
+    rollback: 'Set VITE_PIXI_DUNGEON=false to retain Phaser, or true to opt into PixiJS.',
   },
   pixiFishing: {
     environmentVariable: RUNTIME_FLAG_ENV_KEYS.pixiFishing,
     valueKind: 'boolean',
-    productionDefault: true,
+    productionDefault: false,
     ownerPhase: 17,
     purpose:
-      'Selects the PixiJS Fishing world, now the production default. This flag is the one-release rollback to the Phaser Fishing path.',
-    rollback: 'Set VITE_PIXI_FISHING=false to retain the Phaser Fishing path.',
+      'Selects the PixiJS Fishing world. The production default is the retained Phaser Fishing path; true opts into PixiJS.',
+    rollback: 'Set VITE_PIXI_FISHING=false to retain Phaser, or true to opt into PixiJS.',
   },
   cozyVisuals: {
     environmentVariable: RUNTIME_FLAG_ENV_KEYS.cozyVisuals,
     valueKind: 'boolean',
-    productionDefault: true,
+    productionDefault: false,
     ownerPhase: 8,
     purpose:
-      'Enables the Cozy visual system, now the production default. This flag is the one-release rollback to the legacy renderer themes.',
-    rollback: 'Set VITE_COZY_VISUALS=false to retain the legacy renderer themes.',
+      'Enables the Cozy visual system. Legacy renderer themes are the production default; true opts into Cozy visuals.',
+    rollback: 'Set VITE_COZY_VISUALS=false to retain legacy themes, or true to opt into Cozy visuals.',
   },
   adaptiveAssistance: {
     environmentVariable: RUNTIME_FLAG_ENV_KEYS.adaptiveAssistance,
@@ -238,12 +245,10 @@ export const FEATURE_FLAG_MATRIX = {
     valueKind: 'boolean',
     productionDefault: true,
     ownerPhase: 10,
-    // The one flag in this matrix that is a kill switch rather than a cutover rollback,
-    // and the reason is the difference between the two. Every cutover flag now defaults
-    // to the behaviour the cutover delivered, and its reviewed pre-cutover value is its
-    // rollback. Audio has no previous behaviour to preserve - Phase 10 builds the
-    // service - so the flag does not gate its arrival, it gates its use, and the default
-    // build is the build the phase delivers.
+    // Audio is the one flag in this matrix that is a kill switch rather than a cutover
+    // rollback. It has no previous behaviour to preserve - Phase 10 builds the service -
+    // so the flag does not gate its arrival, it gates its use, and the default build is
+    // the build the phase delivers.
     purpose:
       'Enables the renderer-neutral audio service built in Phase 10: gesture-gated playback, procedural synthesis with no media files, and persisted music and SFX volume. It is a kill switch, not a cutover rollback, so it defaults on and the plan’s rollback line - disable audio independently and retain procedural art fallbacks - is a build with it off.',
     rollback:
@@ -292,8 +297,8 @@ export const FEATURE_FLAG_MATRIX = {
 } as const satisfies FeatureFlagMatrix;
 
 /**
- * The cutover flags whose value is a boolean, derived from the matrix rather than
- * re-listed, so the "flags that default on" assertion cannot drift from the declaration.
+ * The historically cutover flags whose value is a boolean, derived from the matrix rather
+ * than re-listed, so default-on assertions cannot drift from the declaration.
  * The two enum cutover flags (`worldRenderer`, `storageRepository`) are excluded because
  * their non-default value is not a boolean.
  */

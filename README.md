@@ -21,10 +21,32 @@ portal to enter a dungeon.
 Built with a simple goal: make learning feel fun again by turning note-taking,
 revision, and concept mapping into an interactive adventure instead of a static checklist.
 
-## Phase 23 Production Cutover (2026-10-08)
+## Current renderer and theme defaults (2026-11-24)
 
-The React DOM + PixiJS rebuild is the production default as of the Phase 23
-cutover. An `npm run build:web` artifact ships:
+The normal production build now uses the retained **Phaser** village, dungeon,
+and fishing worlds with the **legacy renderer themes**. The build-time flags
+`VITE_PIXI_VILLAGE`, `VITE_PIXI_DUNGEON`, `VITE_PIXI_FISHING`, and
+`VITE_COZY_VISUALS` default to `false`; set individual flags to `true` to opt
+into those PixiJS worlds or Cozy visuals.
+
+This restores the renderer and theme only. **storage-v2**, existing IndexedDB
+generations, legacy mirror writes, data products, Gentle assistance, Web Share,
+the newer workspaces, and the offline shell remain enabled. The newer React
+application shell and workspace layouts are not reverted to an earlier source
+snapshot. The renderer/theme switch does not migrate or delete learner data.
+
+`npm run build:web:rollback` remains a separate **full pre-cutover rollback**
+artifact. It also selects legacy storage and disables newer features, so it is
+not the presentation-only restore described above.
+
+Phaser is again the normal renderer, so its world chunks are part of the default
+artifact. PixiJS remains available behind the explicit per-world flags. Phaser
+removal is deferred while Phaser is the production path.
+
+## Phase 23 Production Cutover (historical, 2026-10-08)
+
+The Phase 23 cutover delivered the React DOM + PixiJS rebuild. At that time,
+`npm run build:web` shipped:
 
 - **PixiJS 8** for the village, dungeon, and fishing worlds. The per-world flags
   `VITE_PIXI_VILLAGE`, `VITE_PIXI_DUNGEON`, and `VITE_PIXI_FISHING` default to
@@ -38,10 +60,9 @@ cutover. An `npm run build:web` artifact ships:
   **Web Share**, the redesigned **Creator / Scribe / Archaeologist** workspaces,
   and the **offline static shell** - all on by default.
 
-Every one of those switches is a **cutover flag retained for one release as a
-rollback**. Its pre-cutover value is declared in `CUTOVER_FLAG_ROLLBACKS` in
-`src/config/featureFlags.ts`; the renderer rollback is a rebuild with the
-per-world flags off (`npm run build:web:rollback`).
+The later presentation restore changes only the normal renderer/theme defaults;
+the remaining cutover flags retain their documented rollback values in
+`CUTOVER_FLAG_ROLLBACKS` in `src/config/featureFlags.ts`.
 
 `VITE_WORLD_RENDERER` is **not** the world-renderer cutover. It is a retained
 host adapter switch that keeps its `'phaser'` default in production - that host
@@ -49,9 +70,9 @@ renders the real Pixi worlds through the per-world flags - while `'pixi'`
 selects the Phase 9 test host. Phase 24 removes `worldRenderer` and the test
 host.
 
-Phaser remains in the source tree as the one-release fallback and is removed in
-Phase 24; the default production artifact contains no Phaser chunk. Electron
-packaging remains deferred and is outside the web release path.
+The cutover note above records what shipped on that date, not the current
+renderer defaults. Electron packaging remains deferred and is outside the web
+release path.
 
 This note records the cutover itself. It does not claim the
 physical-device accessibility gates, the macOS/Windows automated cells, or a
@@ -205,9 +226,11 @@ it does not describe the current rebuild status.
 
 The rebuild phases through Phase 22 were delivered and accepted against the
 authoritative plan. **Phase 23, the production cutover, landed on 2026-10-08**
-(see [Phase 23 Production Cutover](#phase-23-production-cutover-2026-10-08));
-Phaser removal is Phase 24; the remaining Phase 23 work is the physical-device,
-compatibility, and performance verification.
+(see [Phase 23 Production Cutover](#phase-23-production-cutover-historical-2026-10-08)).
+The normal renderer/theme defaults were later restored to Phaser and legacy
+themes; the storage-v2 and feature cutovers remain enabled. Phaser removal is
+deferred while it is the normal renderer. The remaining Phase 23 work is the
+physical-device, compatibility, and performance verification.
 
 As of 2026-11-22 the dungeon and village use the **world-first field-rail shell**:
 a full-bleed world, a thin rail, a quest card, one primary verb pair, and on-demand
@@ -312,10 +335,9 @@ scripts and the CI build job, so no suite can decide for itself whether to rebui
 ### The storage-v2 flagged-build lane (Phase 4)
 
 A real legacy migration, a real IndexedDB transaction, and a real device-local
-attachment cannot be observed on the default build, because the default build
-never opens storage-v2: the production default is Phaser with
-`VITE_STORAGE_REPOSITORY=legacy`. So one lane builds a **second, explicitly
-flagged** artifact and runs one spec against it.
+attachment are exercised by a **separate, explicitly flagged** artifact and one
+focused spec. The normal build also uses storage-v2; this lane keeps migration
+setup isolated from the default-build smoke tests.
 
 - `playwright.storage-v2.config.ts` owns the lane. It is a separate config from
   `playwright.config.ts`, whose projects are generated from the approved support
@@ -362,7 +384,7 @@ requirement:
 | `manifestContract.test.ts` | The manifest's exact key set, its member-path rules, and its three separate version fields - with a positive control proving a conflation is caught |
 | `localDownloadOnly.test.ts` | No module reachable from `src/main.tsx` can upload, share, mail, submit, or navigate a backup anywhere, proven by this gate's own import-graph walk and a planted probe |
 | `memberPathSafety.test.ts` | Zip-slip, absolute, backslash, traversal, `Object.prototype`, and `__proto__` member names are refused on write and on read, and a legitimate member named `toString` is not mistaken for a duplicate |
-| `phase5FlagDefault.test.ts` | `VITE_DATA_PRODUCTS_V2` defaults to `false`, is owned by Phase 5, and the default build cannot reach the product |
+| `phase5FlagDefault.test.ts` | `VITE_DATA_PRODUCTS_V2` defaults to `true`, is owned by Phase 5, and the product remains behind a lazy boundary |
 | `suiteIntegrity.test.ts` | The suite accounts for itself: wiring, non-vacuity floors, registered-reproduction count, and a privacy scan of its own sources |
 
 Shared fixtures and helpers live in `tests/data/support/`. The suite is inside the
@@ -397,10 +419,9 @@ and each has a control that can fail:
 ### The fresh-profile restore lane (Phase 5)
 
 Phase 5's deliverable is a fresh-profile restore test, and its exit criterion is a
-round trip of a **populated storage-v2 state** - which the default build cannot
-produce, because it never opens storage-v2. So the lane previews the **same flagged
-artifact** the Phase 4 lane previews, and asserts in a **second, freshly created
-browser context** that the state comes back.
+round trip of a **populated storage-v2 state**. The lane previews a separately
+recorded artifact with the required data-product flags and asserts in a **second,
+freshly created browser context** that the state comes back.
 
 - `playwright.data-products.config.ts` owns the lane, with one project bound to
   `tests/e2e/dataProductsRestore.spec.ts`. It is a separate config from both
@@ -828,8 +849,8 @@ These three views are available from the room-panel **Collections** shortcuts an
 
 ## Tech stack
 
-- React 19 (DOM application shell), PixiJS 8 (village, dungeon, and fishing worlds), Zustand
-- Phaser 3 retained only as the one-release renderer rollback, removed in Phase 24
+- React 19 (DOM application shell), Zustand
+- Phaser 3 (default village, dungeon, and fishing worlds); PixiJS 8 remains an opt-in renderer
 - Vite 8, TypeScript 5
 - Electron 42 (desktop), electron-builder for mac / win / linux
 - Vitest + Testing Library for unit tests
@@ -975,7 +996,7 @@ src/
     progression/         # XP/rank/badge engine + loot system + achievements
     artifacts/           # markdown artifact generator
     review/              # archaeologist phase logic + SM-2 spaced repetition
-  game/                  # Phaser scenes + systems (one-release rollback; removed in Phase 24)
+  game/                  # Phaser scenes + systems (default worlds; maintained)
     systems/             # boss rooms, procedural textures (biomes), player classes
   renderers/pixi/        # PixiJS 8 worlds: village, dungeon, fishing, runtime host
   store/                 # Zustand stores (session, subject, progression)
@@ -1013,8 +1034,8 @@ docs/                      # plans, ADRs, and game/user guides
   subjects root or export either the full subjects directory or an individual
   subject folder for migration between machines.
 - **Web**: storage-v2 in IndexedDB is the default (`VITE_STORAGE_REPOSITORY=v2`),
-  with legacy `localStorage` mirror writes retained; `VITE_STORAGE_REPOSITORY=legacy`
-  is the one-release rollback. Import/export is supported via the persistence
+  with legacy `localStorage` mirror writes retained. Legacy storage is selected
+  only by the full rollback build; keep staged generations for recovery. Import/export is supported via the persistence
   facade and the versioned data products in the **Data Center**.
 
 > 🔒 **Privacy:** subjects, notes, progression, preferences, assistance state, and

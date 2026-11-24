@@ -71,23 +71,21 @@ function sourceFilesIn(directory: string): string[] {
   return found.sort();
 }
 
-describe('VITE_PIXI_DUNGEON is a build-time switch whose production default is now on', () => {
-  it('is declared with the Phase 13 owner and the post-cutover production default', () => {
+describe('VITE_PIXI_DUNGEON is an opt-in build-time switch', () => {
+  it('is declared with the Phase 13 owner and the Phaser production default', () => {
     const definition = FEATURE_FLAG_MATRIX.pixiDungeon;
     expect(definition.environmentVariable).toBe('VITE_PIXI_DUNGEON');
     expect(definition.valueKind).toBe('boolean');
-    // The plan's rollback line is "set VITE_PIXI_DUNGEON=false"; the Phase 23 cutover
-    // makes the Pixi dungeon the production default, so that rollback is now the off
-    // switch.
-    expect(definition.productionDefault).toBe(true);
+    // False keeps the default Phaser dungeon; true explicitly opts into Pixi.
+    expect(definition.productionDefault).toBe(false);
     expect(definition.ownerPhase).toBe(13);
     expect(definition.rollback).toContain('VITE_PIXI_DUNGEON=false');
   });
 
   it('parses exactly as the village flag parses, in all three spellings', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.pixiDungeon).toBe('VITE_PIXI_DUNGEON');
-    expect(DEFAULT_RUNTIME_CONFIG.pixiDungeon).toBe(true);
-    expect(parseRuntimeConfig({}).pixiDungeon).toBe(true);
+    expect(DEFAULT_RUNTIME_CONFIG.pixiDungeon).toBe(false);
+    expect(parseRuntimeConfig({}).pixiDungeon).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_DUNGEON: 'false' }).pixiDungeon).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_DUNGEON: 'true' }).pixiDungeon).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_DUNGEON: ' TRUE ' }).pixiDungeon).toBe(true);
@@ -129,9 +127,8 @@ describe('the flagged build has a chunk gate of its own', () => {
     const manifest = JSON.parse(
       readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
-    // After the Phase 23 cutover every per-world switch defaults on, so the isolation is
-    // explicit: the world host is pinned to `phaser` (so GameScreen, and therefore the dungeon
-    // route, stays reachable) and the other two Pixi worlds are pinned off.
+    // The host and unselected Pixi worlds are pinned explicitly so this lane stays isolated
+    // even if another renderer flag's default changes later.
     expect(manifest.scripts['build:web:pixi-dungeon']).toBe(
       'VITE_WORLD_RENDERER=phaser VITE_PIXI_DUNGEON=true VITE_PIXI_VILLAGE=false VITE_PIXI_FISHING=false npm run build:web',
     );

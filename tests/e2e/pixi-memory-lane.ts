@@ -221,7 +221,7 @@ export interface PixiMemoryLaneDeclaration {
 const EMULATION_LIMITATIONS = [
   'Not a physical device, ChromeOS, or operating-system version certification.',
   'Not a cross-engine result; Firefox, WebKit, and Edge lanes do not run this spec, so nothing here is evidence about another renderer engine.',
-  'Not the production artifact certification: build:web:pixi now produces the Phase 23 cutover default, and this lane records that artifact\'s identity but measures only the world-host mount and unmount memory property, not the application\'s whole release surface.',
+  'Not the production artifact certification: build:web:pixi selects the Phase 9 test host, and this lane records that artifact\'s identity but measures only the world-host mount and unmount memory property, not the application\'s whole release surface.',
   'Not a hardware-GPU result: the WebGL2 context the lane obtains is real, and the evidence records the unmasked renderer string, which in a headless Linux container is a software rasteriser.',
   'Not Electron; native packaging and installer workflows do not satisfy this gate and this lane does not run in them.',
 ] as const;

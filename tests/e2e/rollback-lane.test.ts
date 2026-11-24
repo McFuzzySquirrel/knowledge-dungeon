@@ -83,7 +83,7 @@ describe('the Phase 23 full-rollback build', () => {
     expect(ROLLBACK_FLAGS).not.toHaveProperty(RUNTIME_FLAG_ENV_KEYS.worldRenderer);
   });
 
-  it('is wired as its own package scripts, and does not touch the cutover default', () => {
+  it('is wired as its own package scripts and leaves the normal build defaults intact', () => {
     expect(packageJson.scripts['build:web:rollback']).toBe('node scripts/build-rollback.mjs');
     expect(packageJson.scripts['record:web-artifact:rollback']).toContain(
       'artifacts/web-artifact-manifest-rollback.json',
@@ -91,7 +91,7 @@ describe('the Phase 23 full-rollback build', () => {
     expect(packageJson.scripts['verify:web-artifact:rollback']).toContain(
       'artifacts/web-artifact-manifest-rollback.json',
     );
-    // The default build must not force any flag: it is the cutover artifact.
+    // The default build must not force any flag: its defaults are declared in runtimeConfig.
     const defaultBuild = packageJson.scripts['build:web'];
     for (const envKey of Object.values(RUNTIME_FLAG_ENV_KEYS)) {
       expect(defaultBuild, `build:web must not set ${envKey}`).not.toContain(envKey);

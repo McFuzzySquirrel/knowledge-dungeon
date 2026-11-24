@@ -104,22 +104,21 @@ function sourceFilesIn(directory: string): string[] {
   return found.sort();
 }
 
-describe('VITE_PIXI_FISHING is a build-time switch whose production default is now on', () => {
-  it('is declared with the Phase 17 owner and the post-cutover production default', () => {
+describe('VITE_PIXI_FISHING is an opt-in build-time switch', () => {
+  it('is declared with the Phase 17 owner and the Phaser production default', () => {
     const definition = FEATURE_FLAG_MATRIX.pixiFishing;
     expect(definition.environmentVariable).toBe('VITE_PIXI_FISHING');
     expect(definition.valueKind).toBe('boolean');
-    // The plan's rollback line is "set VITE_PIXI_FISHING=false"; the Phase 23 cutover makes
-    // the Pixi fishing world the production default, so that rollback is now the off switch.
-    expect(definition.productionDefault).toBe(true);
+    // False keeps the default Phaser fishing path; true explicitly opts into Pixi.
+    expect(definition.productionDefault).toBe(false);
     expect(definition.ownerPhase).toBe(17);
     expect(definition.rollback).toContain('VITE_PIXI_FISHING=false');
   });
 
   it('parses exactly as the dungeon flag parses, in all three spellings', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.pixiFishing).toBe('VITE_PIXI_FISHING');
-    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(true);
-    expect(parseRuntimeConfig({}).pixiFishing).toBe(true);
+    expect(DEFAULT_RUNTIME_CONFIG.pixiFishing).toBe(false);
+    expect(parseRuntimeConfig({}).pixiFishing).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_FISHING: 'false' }).pixiFishing).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_FISHING: 'true' }).pixiFishing).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_FISHING: ' TRUE ' }).pixiFishing).toBe(true);
@@ -347,9 +346,7 @@ describe('the flagged build has a script and a chunk gate of its own', () => {
     // The three sibling lanes each have one. The shape is load-bearing rather than
     // cosmetic: `build:web:pixi-fishing` pins the world host to `phaser` and turns the
     // village and dungeon switches off, so none of the other three chunk checks can see
-    // this build. After the Phase 23 cutover every per-world switch defaults on, so the
-    // isolation has to be explicit; that is what still makes a fishing-specific chunk
-    // gate necessary rather than redundant.
+    // this build. The isolation remains explicit so this lane does not drift with defaults.
     const manifest = JSON.parse(
       readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };

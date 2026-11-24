@@ -62,11 +62,12 @@ export const RUNTIME_FLAG_ENV_KEYS = {
 } as const satisfies Readonly<Record<RuntimeConfigKey, string>>;
 
 /**
- * Production defaults after the Phase 23 cutover. The PixiJS worlds, storage-v2, the Cozy
- * visual system, data products, Gentle assistance, Web Share, the redesigned workspaces,
- * and the offline shell are on by default. Each corresponding flag is retained for one
- * release as a documented rollback to its pre-cutover behaviour, declared in
- * `CUTOVER_FLAG_ROLLBACKS` in `./featureFlags`. `audioEnabled` is the only kill switch.
+ * The current production defaults restore the pre-cutover Phaser worlds and legacy visual
+ * themes while keeping storage-v2, data products, Gentle assistance, Web Share, redesigned
+ * workspaces, and the offline shell enabled. PixiJS and Cozy visuals remain available as
+ * explicit build-time opt-ins. The remaining cutover flags and their full rollback values
+ * are declared in `CUTOVER_FLAG_ROLLBACKS` in `./featureFlags`; `audioEnabled` is the only
+ * kill switch.
  *
  * `worldRenderer` does **not** move at the cutover: it stays `'phaser'`. It is a retained
  * host switch, not a world-renderer cutover. The real PixiJS worlds are selected by the
@@ -77,10 +78,10 @@ export const RUNTIME_FLAG_ENV_KEYS = {
 export const DEFAULT_RUNTIME_CONFIG: Readonly<RuntimeConfig> = Object.freeze({
   worldRenderer: 'phaser',
   storageRepository: 'v2',
-  pixiVillage: true,
-  pixiDungeon: true,
-  pixiFishing: true,
-  cozyVisuals: true,
+  pixiVillage: false,
+  pixiDungeon: false,
+  pixiFishing: false,
+  cozyVisuals: false,
   adaptiveAssistance: true,
   dataProductsV2: true,
   webShare: true,
