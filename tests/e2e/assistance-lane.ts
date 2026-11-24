@@ -410,10 +410,9 @@ export const ASSISTANCE_LANE: AssistanceLaneDeclaration = Object.freeze({
   ciRunScript: ASSISTANCE_CI_RUN_SCRIPT,
   expectsFlagOn: true,
   expectsCard: true,
-  // The cutover default keeps the application host, but `VITE_PIXI_VILLAGE` defaults on,
-  // so the village world is the PixiJS one.
+  // The assistance-only build preserves the default Phaser village world.
   worldRenderer: 'phaser',
-  villageRenderer: 'pixi',
+  villageRenderer: 'phaser',
   storageRepository: 'v2',
   dataProductsV2: true,
   viewport: ASSISTANCE_VIEWPORT,
@@ -611,11 +610,11 @@ export function validateAssistanceLane(
     problems.push('the assistance lane must not bind an existing suite spec file.');
   }
   if (lane.expectsFlagOn) {
-    // The Phase 23 cutover keeps the application host (`phaser`) and turns the per-world
-    // flags on, so the village world is the PixiJS one (`pixi`).
-    if (lane.worldRenderer !== 'phaser' || lane.villageRenderer !== 'pixi') {
+    // The standard build keeps the Phaser application host and Phaser village; this
+    // lane changes only the assistance feature flag.
+    if (lane.worldRenderer !== 'phaser' || lane.villageRenderer !== 'phaser') {
       problems.push(
-        'build:web:assistance produces the Phase 23 cutover default: the application host (phaser) with the PixiJS village world (pixi).',
+        'build:web:assistance preserves the default Phaser presentation while enabling assistance.',
       );
     }
     if (lane.storageRepository !== 'v2') {

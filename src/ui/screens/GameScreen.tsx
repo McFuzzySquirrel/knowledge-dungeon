@@ -58,9 +58,9 @@ import { NARROW_SHELL_QUERY, useMediaQuery } from '@/ui/hooks/useMediaQuery';
  * so a *literal* `=== 'true'` lets the bundler fold the branch and delete the other arm -
  * along with the dynamic `import()` inside it, and therefore with the whole PixiJS chunk
  * that import pulls in. A normalising call first (`String(raw).trim().toLowerCase()`)
- * reads the same at run time and defeats the folding, so the default build keeps a Pixi
- * dungeon chunk it would never fetch. This mirrors `src/ui/App.tsx`'s renderer switch and
- * `src/ui/screens/VillageScreen.tsx`'s village switch exactly.
+ * reads the same at run time and defeats the folding, so the default build cannot remove
+ * the Pixi dungeon chunk even when the flag is off. This mirrors `src/ui/App.tsx`'s
+ * renderer switch and `src/ui/screens/VillageScreen.tsx`'s village switch exactly.
  *
  * The parsed run-time value is `runtimeConfig.pixiDungeon`. The two are used for two
  * jobs, as in those files: this literal decides what the bundler may delete, and the

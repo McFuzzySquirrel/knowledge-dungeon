@@ -64,7 +64,7 @@ import '@/ui/village/villagePanels.css';
  * the other arm - along with the dynamic `import()` inside it, and therefore with
  * the whole renderer chunk that import pulls in. A normalising call first
  * (`String(raw).trim().toLowerCase()`) reads the same at run time and defeats the
- * folding, so the default build keeps a Pixi village chunk it would never fetch.
+ * folding, so the default build cannot remove the Pixi village chunk when the flag is off.
  * This mirrors `src/ui/App.tsx`'s `VITE_WORLD_RENDERER` switch exactly.
  *
  * The parsed run-time value is `runtimeConfig.pixiVillage`. The two are used for

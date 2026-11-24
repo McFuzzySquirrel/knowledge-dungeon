@@ -39,6 +39,7 @@ import {
   FEATURE_FLAG_MATRIX,
   NON_CUTOVER_FLAG_KEYS,
   RETAINED_HOST_FLAG_KEYS,
+  RESTORED_DEFAULT_FLAG_KEYS,
   REVIEWED_FLAG_KEYS,
 } from '@/config/featureFlags';
 import { DEFAULT_RUNTIME_CONFIG, RUNTIME_FLAG_ENV_KEYS, parseRuntimeConfig } from '@/config/runtimeConfig';
@@ -166,8 +167,8 @@ describe('Phase 6 verifier V9: the lazy boundary (B1)', () => {
     //   1. every key of the matrix belongs to exactly one of the three reviewed sets, so
     //      no flag is silently unclassified;
     //   2. the matrix key set is the pinned reviewed set, so no flag was removed;
-    //   3. the flags that default on are exactly the cutover booleans plus the kill
-    //      switches, so a cutover flag left off fails; and
+    //   3. the flags that default on are exactly the cutover booleans not restored to
+    //      their prior presentation defaults, plus the kill switches; and
     //   4. every cutover flag's declared rollback still parses to the pre-cutover value
     //      and is documented as an env var/value, so the rollback cannot rot.
     const matrixKeys = Object.keys(FEATURE_FLAG_MATRIX).sort();
@@ -184,7 +185,16 @@ describe('Phase 6 verifier V9: the lazy boundary (B1)', () => {
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
       .map(([key]) => key)
       .sort();
-    expect(onByDefault).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort());
+    expect([...RESTORED_DEFAULT_FLAG_KEYS].sort()).toEqual([
+      'cozyVisuals',
+      'pixiDungeon',
+      'pixiFishing',
+      'pixiVillage',
+    ]);
+    expect(onByDefault).toEqual([
+      ...CUTOVER_BOOLEAN_FLAG_KEYS.filter((key) => !RESTORED_DEFAULT_FLAG_KEYS.includes(key)),
+      ...NON_CUTOVER_FLAG_KEYS,
+    ].sort());
 
     for (const key of CUTOVER_FLAG_KEYS) {
       const rollback = CUTOVER_FLAG_ROLLBACKS[key];
@@ -193,7 +203,11 @@ describe('Phase 6 verifier V9: the lazy boundary (B1)', () => {
       expect(FEATURE_FLAG_MATRIX[key].rollback).toContain(
         `${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`,
       );
-      expect(FEATURE_FLAG_MATRIX[key].productionDefault).not.toBe(rollback);
+      if (RESTORED_DEFAULT_FLAG_KEYS.includes(key)) {
+        expect(FEATURE_FLAG_MATRIX[key].productionDefault).toBe(rollback);
+      } else {
+        expect(FEATURE_FLAG_MATRIX[key].productionDefault).not.toBe(rollback);
+      }
     }
   });
 

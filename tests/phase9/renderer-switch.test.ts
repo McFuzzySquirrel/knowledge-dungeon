@@ -165,14 +165,14 @@ describe('the renderer flag has one mechanism, and its production default is the
  * imports, so the default build can delete the Pixi arm and its chunk. The plugin's
  * own truth table lives in `tests/phase9/renderer-chunk-boundary.test.ts`.
  */
-describe('the village switch is additive to the renderer switch, and defaults on after the cutover', () => {
+describe('the village switch is additive to the renderer switch, and defaults to Phaser', () => {
   const dynamicImports = (source: string): string[] =>
     [...source.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)].map((match) => match[1]);
 
-  it('parses with the cutover default, and never moves any other flag', () => {
+  it('defaults to Phaser, parses an explicit Pixi opt-in, and never moves other flags', () => {
     expect(RUNTIME_FLAG_ENV_KEYS.pixiVillage).toBe('VITE_PIXI_VILLAGE');
-    expect(parseRuntimeConfig({}).pixiVillage).toBe(true);
-    expect(DEFAULT_RUNTIME_CONFIG.pixiVillage).toBe(true);
+    expect(parseRuntimeConfig({}).pixiVillage).toBe(false);
+    expect(DEFAULT_RUNTIME_CONFIG.pixiVillage).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'true' }).pixiVillage).toBe(true);
     expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: 'false' }).pixiVillage).toBe(false);
     expect(parseRuntimeConfig({ VITE_PIXI_VILLAGE: ' TRUE ' }).pixiVillage).toBe(true);
@@ -190,7 +190,7 @@ describe('the village switch is additive to the renderer switch, and defaults on
   it('is registered against this phase and documents its rollback', () => {
     expect(FEATURE_FLAG_MATRIX.pixiVillage.environmentVariable).toBe('VITE_PIXI_VILLAGE');
     expect(FEATURE_FLAG_MATRIX.pixiVillage.valueKind).toBe('boolean');
-    expect(FEATURE_FLAG_MATRIX.pixiVillage.productionDefault).toBe(true);
+    expect(FEATURE_FLAG_MATRIX.pixiVillage.productionDefault).toBe(false);
     expect(FEATURE_FLAG_MATRIX.pixiVillage.ownerPhase).toBe(11);
     expect(FEATURE_FLAG_MATRIX.pixiVillage.rollback).toContain('VITE_PIXI_VILLAGE=false');
   });

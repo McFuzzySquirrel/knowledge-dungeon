@@ -224,6 +224,22 @@ The physical-device accessibility gates, the macOS/Windows automated cells, and 
 deployment have not been completed and are not claimed here. No timed soak is
 required by the plan.
 
+### Amendment: renderer and theme defaults restored (2026-11-24)
+
+The current normal build restores the pre-cutover presentation: Phaser worlds and
+legacy renderer themes (`VITE_PIXI_VILLAGE`, `VITE_PIXI_DUNGEON`,
+`VITE_PIXI_FISHING`, and `VITE_COZY_VISUALS` default to `false`). Setting these
+flags to `true` remains an explicit opt-in to PixiJS/Cozy presentation.
+
+This does not revert the wider application or select legacy storage. Storage-v2,
+existing IndexedDB generations, legacy mirror writes, and the newer data products,
+assistance, sharing, workspaces, and offline shell remain enabled. The newer React
+shell and workspace layouts remain in place, and the renderer/theme change does
+not migrate or delete learner data. The separate `build:web:rollback` artifact
+still reproduces the broader pre-cutover configuration and is not the normal
+presentation build. Phaser removal is deferred while Phaser is the normal
+renderer.
+
 ### Amendment: `VITE_AUDIO_ENABLED` (Phase 10)
 
 Phase 10 added a tenth flag, which the list above does not contain:
@@ -509,12 +525,13 @@ architecture: renderer-neutral contracts, storage-v2 and its migrations, CC0
 tooling, the accessibility and responsive audit, the PixiJS runtime host and
 worlds, performance/memory/offline hardening, data products, assistance,
 statistics, and private sharing. **Phase 23 implemented the production cutover on
-2026-10-08:** Pixi, storage-v2 (with legacy mirrors), Cozy visuals, data products,
-Gentle assistance, Web Share, the redesigned workspaces, and the offline shell
-are the production defaults, and every cutover flag is retained for one release
-as a rollback. See the Phase 23 cutover note under Decision 6.
+2026-10-08.** The current renderer and theme defaults were subsequently restored
+to Phaser and legacy themes; storage-v2 and the newer feature defaults remain
+enabled. See the Phase 23 cutover note and the renderer/theme amendment under
+Decision 6.
 
-Phaser removal (Phase 24) is not done. The automated macOS, Windows, and Edge
+Phaser removal (Phase 24) is deferred while Phaser is the normal renderer. The
+automated macOS, Windows, and Edge
 lanes are runner evidence, while the physical-device, Safari, touch-platform, and
 screen-reader gates remain manual later work and are not claimed. A timed soak is
 not required by the plan. Those gates must not be treated as complete based on

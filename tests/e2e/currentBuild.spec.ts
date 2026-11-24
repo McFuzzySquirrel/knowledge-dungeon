@@ -38,9 +38,7 @@ import {
 // village resize check exercises, not a second definition of the 320px gate.
 import { supportEntryForProject } from './support-matrix';
 // The renderer variant is read from the served artifact's compiled flags, not from
-// `process.env`: after the Phase 23 cutover the default build has every per-world flag
-// on without an environment variable, so `process.env` would describe a different
-// artifact than the one this spec runs against.
+// `process.env`, which may describe a different build than the one this spec runs against.
 import { defaultDistDir, readCompiledBooleanFlag } from './baked-flag';
 // The offline static shell's exact same-origin paths, shared with the Phase 1A
 // classifier rather than restated here: after the Phase 23 cutover the production
@@ -1668,8 +1666,7 @@ async function enterDefaultVillage(page: Page): Promise<void> {
   await waitForSubjectListEntry(page, VILLAGE_SUBJECT_NAMES[0]);
   await page.getByRole('button', { name: 'Continue to Village' }).click();
 
-  // The default village is the PixiJS world after the Phase 23 cutover; the Phaser village is
-  // the rollback/isolation view. The readiness wait matches whichever mounted.
+  // The default village is Phaser; the readiness wait also supports Pixi-specific artifacts.
   await expect(
     page.locator('.village-canvas canvas, .pixi-village-world canvas').first(),
   ).toBeVisible({ timeout: 30_000 });
@@ -1954,8 +1951,7 @@ test('a real study session is recorded, ends on every signal, and its totals sur
   // ── Step 2: enter the subject.
   await page.goto('/');
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
-  // Either renderer mounts the dungeon; the production default is the PixiJS dungeon after the
-  // Phase 23 cutover and the Phaser host remains for a rollback build.
+  // Either renderer mounts the dungeon; the normal production default is Phaser.
   await expect(
     page.locator('.game-canvas-host canvas, .pixi-dungeon-world canvas').first(),
   ).toBeVisible({ timeout: 30_000 });
@@ -4533,13 +4529,16 @@ test('every Welcome shell control meets the 44 CSS-pixel minimum touch target at
  *
  * The dialog used to mount its focus effect once with `[]` dependencies while it was
  * closed, so it never took focus and Escape only worked after the frame was focused by
- * hand. This drives the real shell action rather than a hand-focused frame.
+ * hand. This focuses the canvas and uses the normal E interaction key.
  */
 test('the Scribe encounter takes focus and closes on Escape', async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto('/');
   await page.getByRole('button', { name: 'Start Tutorial' }).click();
-  await page.waitForSelector('.pixi-dungeon-world canvas', { state: 'visible', timeout: 60_000 });
+  await page.waitForSelector('.game-canvas-host canvas, .pixi-dungeon-world canvas', {
+    state: 'visible',
+    timeout: 60_000,
+  });
   const onboarding = page.getByTestId('gameplay-onboarding');
   const onboardingVisible = await onboarding
     .waitFor({ state: 'visible', timeout: 5_000 })
@@ -4550,8 +4549,12 @@ test('the Scribe encounter takes focus and closes on Escape', async ({ page }) =
     await onboarding.waitFor({ state: 'detached', timeout: 15_000 }).catch(() => {});
   }
 
-  await page.getByRole('button', { name: 'Interact (E or Space)' }).click();
   const dialog = page.getByRole('dialog', { name: 'Scribe encounter' });
+  await page
+    .locator('.game-canvas-host canvas, .pixi-dungeon-world canvas')
+    .first()
+    .click({ position: { x: 8, y: 8 } });
+  await page.keyboard.press('e');
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   const focusedInside = await page.evaluate(
     () => document.activeElement?.closest('[role="dialog"]') !== null,

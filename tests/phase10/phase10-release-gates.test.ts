@@ -61,6 +61,7 @@ import {
   FEATURE_FLAGS,
   FEATURE_FLAG_MATRIX,
   NON_CUTOVER_FLAG_KEYS,
+  RESTORED_DEFAULT_FLAG_KEYS,
 } from '@/config/featureFlags';
 import { ASSET_BUNDLE_IDS } from '@/renderers/pixi/assets/assetManifest';
 import { isSameOriginRelativeAudioUrl } from '@/services/audio/fileAudioProvider';
@@ -296,16 +297,17 @@ describe('the audio flag is a real flag with a real default', () => {
     expect(message).not.toContain(secret);
   });
 
-  it('the kill switch declares itself, and the only other flags that default on are the reviewed cutover booleans', () => {
-    // Post-Phase-23 the matrix partitions into cutover flags (which now default on and
-    // roll back to their pre-cutover value) and the non-cutover kill switches. `audioEnabled`
-    // is the only kill switch; the flags that default on are exactly those plus the
-    // reviewed cutover booleans, so a flag that defaults on outside that set fails.
+  it('the kill switch declares itself, and only the reviewed enabled flags default on', () => {
+    // The renderer/theme defaults are restored; other cutover booleans and `audioEnabled`
+    // remain on. A flag that defaults on outside the reviewed set fails.
     const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
       .map(([key]) => key)
       .sort();
-    expect(onByDefault).toEqual([...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort());
+    expect(onByDefault).toEqual([
+      ...CUTOVER_BOOLEAN_FLAG_KEYS.filter((key) => !RESTORED_DEFAULT_FLAG_KEYS.includes(key)),
+      ...NON_CUTOVER_FLAG_KEYS,
+    ].sort());
     for (const key of NON_CUTOVER_FLAG_KEYS) {
       const definition = FEATURE_FLAG_MATRIX[key];
       expect(definition.valueKind, key).toBe('boolean');

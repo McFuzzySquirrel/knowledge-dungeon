@@ -1053,8 +1053,9 @@ describe('control: every gate is green before a single mutation', () => {
     // the three cutover-flag gates read - `tests/phase5/seam.test.ts`,
     // `tests/phase6/lazyBoundary.test.ts`, and `tests/data/phase5FlagDefault.test.ts`.
     // Before the Phase 23 cutover that contract was "the set of flags whose
-    // `productionDefault` is `true` equals `NON_CUTOVER_FLAG_KEYS`". The cutover inverts
-    // the cutover flags' defaults by design, so the contract is re-founded: the matrix must
+    // `productionDefault` is `true` equals `NON_CUTOVER_FLAG_KEYS`". The cutover inverted
+    // most cutover flags; the later presentation restore makes four of those defaults
+    // equal their historical rollback values. The contract is re-founded: the matrix must
     // partition into `CUTOVER_FLAG_KEYS`, `NON_CUTOVER_FLAG_KEYS`, and
     // `RETAINED_HOST_FLAG_KEYS` (the retained `worldRenderer` host switch), the pinned
     // `REVIEWED_FLAG_KEYS` set must be intact, every cutover flag's declared
@@ -1069,6 +1070,7 @@ describe('control: every gate is green before a single mutation', () => {
       FEATURE_FLAG_MATRIX,
       NON_CUTOVER_FLAG_KEYS,
       RETAINED_HOST_FLAG_KEYS,
+      RESTORED_DEFAULT_FLAG_KEYS,
       REVIEWED_FLAG_KEYS,
     } = await import('@/config/featureFlags');
 
@@ -1097,14 +1099,24 @@ describe('control: every gate is green before a single mutation', () => {
     expect([...NON_CUTOVER_FLAG_KEYS], 'the non-cutover kill-switch list was widened').toEqual([
       'audioEnabled',
     ]);
-    // The flags that default on are exactly the cutover booleans plus the kill switches.
+    // The flags that default on are the cutover booleans not restored to prior
+    // presentation defaults, plus the kill switches.
     const onByDefault = Object.entries(FEATURE_FLAG_MATRIX)
       .filter(([, definition]) => (definition.productionDefault as boolean) === true)
       .map(([key]) => key)
       .sort();
     expect(onByDefault, 'the on-by-default set drifted from the reviewed cutover booleans').toEqual(
-      [...CUTOVER_BOOLEAN_FLAG_KEYS, ...NON_CUTOVER_FLAG_KEYS].sort(),
+      [
+        ...CUTOVER_BOOLEAN_FLAG_KEYS.filter((key) => !RESTORED_DEFAULT_FLAG_KEYS.includes(key)),
+        ...NON_CUTOVER_FLAG_KEYS,
+      ].sort(),
     );
+    expect([...RESTORED_DEFAULT_FLAG_KEYS].sort()).toEqual([
+      'cozyVisuals',
+      'pixiDungeon',
+      'pixiFishing',
+      'pixiVillage',
+    ]);
     // Every cutover flag's declared rollback still parses to the pre-cutover value, and
     // the rollback documentation names the environment variable and value.
     for (const key of CUTOVER_FLAG_KEYS) {
@@ -1116,9 +1128,14 @@ describe('control: every gate is green before a single mutation', () => {
         FEATURE_FLAG_MATRIX[key].rollback,
         `${key} does not document ${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`,
       ).toContain(`${RUNTIME_FLAG_ENV_KEYS[key]}=${rollback}`);
-      expect(FEATURE_FLAG_MATRIX[key].productionDefault, `${key} rollback equals its default`).not.toBe(
-        rollback,
-      );
+      if (RESTORED_DEFAULT_FLAG_KEYS.includes(key)) {
+        expect(FEATURE_FLAG_MATRIX[key].productionDefault, `${key} restored default`).toBe(rollback);
+      } else {
+        expect(
+          FEATURE_FLAG_MATRIX[key].productionDefault,
+          `${key} rollback equals its default`,
+        ).not.toBe(rollback);
+      }
     }
 
     // And the three gates that read this contract must still be present and must still

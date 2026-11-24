@@ -32,10 +32,11 @@
  * ## Why this exists now
  *
  * Before the Phase 23 cutover the *default* build was the rollback artifact, so a
- * rollback lane could preview `npm run build:web`. After the cutover the default
- * build is the cutover artifact, and a rollback claim verified against it would be
- * vacuous. This script is the artifact the rollback lanes preview: the same build
- * the previous release shipped, reproduced by flag rather than by reverting source.
+ * rollback lane could preview `npm run build:web`. After the cutover, rollback lanes
+ * need a separate artifact to avoid making their claims against the normal build.
+ * The current normal build restores only the Phaser/legacy-theme presentation while
+ * retaining storage-v2 and newer features; this script still reproduces the broader
+ * pre-cutover configuration by flag rather than by reverting source.
  *
  * ## Why a script and not an inline assignment
  *

@@ -117,9 +117,8 @@ export interface SupportMatrixEntry {
   /**
    * World renderer the recorded production artifact is expected to mount.
    *
-   * The application *host* stays `worldRenderer: 'phaser'` (the retained host switch);
-   * after the Phase 23 cutover the mounted world is Pixi on every approved cell, selected
-   * by the per-world flags `VITE_PIXI_VILLAGE`/`VITE_PIXI_DUNGEON`/`VITE_PIXI_FISHING`.
+   * The application host and mounted default worlds are Phaser. A compatibility lane that
+   * opts into a Pixi world records that separately from this normal production artifact.
    */
   readonly expectedRendererMode: 'phaser' | 'pixi';
   /** Bounded statement this evidence supports. */
@@ -128,7 +127,7 @@ export interface SupportMatrixEntry {
   readonly doesNotProve: readonly string[];
 }
 
-const PIXI_WORLD_RENDERER = 'pixi' as const;
+const DEFAULT_WORLD_RENDERER = 'phaser' as const;
 
 const EMULATION_LIMITATIONS = [
   'Not a physical device, ChromeOS, or operating-system version certification.',
@@ -160,7 +159,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request'],
     runnerLabels: ['ubuntu-latest'],
     installTargets: ['chromium'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'Current production build passes the Phase 1 Phaser, axe, and privacy smoke suite in a desktop Chromium viewport.',
     doesNotProve: [
@@ -185,7 +184,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request'],
     runnerLabels: ['ubuntu-latest'],
     installTargets: ['chromium'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'Current production build passes the Phase 1 smoke suite in a 1366x768 emulated viewport commonly used by Chromebook-class displays.',
     doesNotProve: [
@@ -209,7 +208,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request'],
     runnerLabels: ['ubuntu-latest'],
     installTargets: ['chromium'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'Current production build passes the Phase 1 smoke suite in an emulated tablet-portrait viewport with emulated touch input.',
     doesNotProve: [
@@ -233,7 +232,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request'],
     runnerLabels: ['ubuntu-latest'],
     installTargets: ['chromium'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'Current production build passes the Phase 1 smoke suite in an emulated tablet-landscape viewport with emulated touch input.',
     doesNotProve: [
@@ -257,7 +256,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request', 'scheduled-release'],
     runnerLabels: ['ubuntu-latest', 'macos-latest', 'windows-latest'],
     installTargets: ['chromium'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'The single recorded production web artifact loads and runs the synthetic core flow in the Playwright-bundled Chromium engine on the recorded host.',
     doesNotProve: [
@@ -282,7 +281,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request', 'scheduled-release'],
     runnerLabels: ['ubuntu-latest', 'macos-latest', 'windows-latest'],
     installTargets: ['firefox'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'The single recorded production web artifact loads and runs the synthetic core flow in the Playwright-bundled Firefox engine on the recorded host.',
     doesNotProve: [
@@ -306,7 +305,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request', 'scheduled-release'],
     runnerLabels: ['macos-latest'],
     installTargets: ['webkit'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'The single recorded production web artifact loads and runs the synthetic core flow in the Playwright-bundled WebKit engine on a macOS runner.',
     doesNotProve: [
@@ -332,7 +331,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['pull-request', 'scheduled-release'],
     runnerLabels: ['windows-latest'],
     installTargets: ['msedge'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'The single recorded production web artifact loads and runs the synthetic core flow in the installed Microsoft Edge stable channel on a Windows runner.',
     doesNotProve: [
@@ -367,7 +366,7 @@ export const SUPPORT_MATRIX: readonly SupportMatrixEntry[] = Object.freeze([
     ciLanes: ['scheduled-release'],
     runnerLabels: ['ubuntu-latest'],
     installTargets: ['chrome'],
-    expectedRendererMode: PIXI_WORLD_RENDERER,
+    expectedRendererMode: DEFAULT_WORLD_RENDERER,
     claim:
       'The single recorded production web artifact loads and runs the synthetic core flow in the installed Google Chrome stable channel on a Linux runner, and the browser reports the Google Chrome brand rather than the Playwright-bundled Chromium build.',
     doesNotProve: [
