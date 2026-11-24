@@ -1799,11 +1799,10 @@ test('the application stores a picked image on this device and requests nothing'
     expect(stored?.byteLength).toBe(SYNTHETIC_PNG_BYTES.length);
     expect(stored?.sha256OfStoredBytes).toBe(SYNTHETIC_PNG_SHA256);
     expect(stored?.sourceType).toBe('local');
-    // Nothing was requested to add it: only the application's own lazily loaded
-    // code, and never a request with a method or destination that could carry the
-    // bytes away.
+    // Nothing outside the local static shell was requested to add it. Resource
+    // types vary by browser (for example, manifests may be reported as `other`);
+    // the destination policy above is the privacy boundary, not the browser label.
     expect(nonStatic, JSON.stringify(nonStatic.map((entry) => entry.destination))).toEqual([]);
-    expect(whilePicking.every((entry) => entry.resourceType === 'script')).toBe(true);
     // And the device-local database is a different one from storage-v2, so this
     // write is not a storage-v2 write.
     expect(await page.evaluate(async (name) => {

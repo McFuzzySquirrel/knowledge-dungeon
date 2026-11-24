@@ -601,8 +601,8 @@ async function runCompatLane(
     ).toBe(true);
     expect(
       artifact.distIncludesRendererChunkMatchingPixi,
-      'After the Phase 23 cutover the recorded production artifact mounts the Pixi worlds, so it must contain a Pixi chunk.',
-    ).toBe(true);
+      'The restored production default uses Phaser and must not contain a Pixi renderer chunk.',
+    ).toBe(false);
 
     await body({ artifact, requests, webSockets, setRenderer: (next) => (renderer = next) });
   } catch (error) {
